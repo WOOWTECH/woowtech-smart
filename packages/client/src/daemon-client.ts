@@ -2700,7 +2700,7 @@ export class DaemonClient {
   // ============================================================================
 
   private readonly creations = new CreationClient({
-    supports: () => this.lastServerInfoMessage?.features?.creationLifecycle === true,
+    supports: (feature) => this.lastServerInfoMessage?.features?.[feature] === true,
     requestId: () => this.createRequestId(),
     request: (kind, input) =>
       kind === "workspace"
@@ -2736,7 +2736,6 @@ export class DaemonClient {
     },
     legacyAgent: (input) => this.createLegacyAgent(input),
     legacyWorkspace: (input) => this.createLegacyWorkspace(input, input.requestId),
-    sendMessage: (id, text, options) => this.sendMessage(id, text, options),
   });
 
   async createAgent(options: CreateAgentRequestOptions): Promise<AgentSnapshotPayload> {
@@ -2751,7 +2750,6 @@ export class DaemonClient {
   private async createLegacyAgent(
     options: CreateAgentRequestOptions,
   ): Promise<AgentSnapshotPayload> {
-    if (options.idempotencyKey !== undefined) this.requireAgentRequestReceipts();
     const requestId = this.createRequestId(options.requestId);
     const config = resolveAgentConfig(options);
 
@@ -2803,13 +2801,6 @@ export class DaemonClient {
     }
 
     return status.agent;
-  }
-
-  private requireAgentRequestReceipts(): void {
-    // COMPAT(agentRequestReceipts): added in v0.7.3; remove gate after 2027-03-05.
-    if (this.lastServerInfoMessage?.features?.agentRequestReceipts !== true) {
-      throw new Error("Update the host to use retry-safe agent creation.");
-    }
   }
 
   async deleteAgent(agentId: string): Promise<void> {
@@ -4452,19 +4443,16 @@ export class DaemonClient {
     input: CreateWorkspaceRequestOptions,
     requestId?: string,
   ): Promise<WorkspaceCreatePayload> {
-    // COMPAT(workspaceRequestReceipts): added in v0.8.0; remove gate after 2027-03-07.
-    if (
-      input.idempotencyKey !== undefined &&
-      !this.lastServerInfoMessage?.features?.workspaceRequestReceipts
-    ) {
-      throw new Error("Update the host to use retry-safe workspace creation.");
-    }
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {
         type: "workspace.create.request",
         source: input.source,
-        ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
+        // COMPAT(workspaceRequestReceipts): added in v0.8.0; remove after 2027-03-15 once the daemon floor supports workspace receipts.
+        ...(this.lastServerInfoMessage?.features?.workspaceRequestReceipts &&
+        input.idempotencyKey !== undefined
+          ? { idempotencyKey: input.idempotencyKey }
+          : {}),
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.firstAgentContext !== undefined
           ? { firstAgentContext: input.firstAgentContext }
