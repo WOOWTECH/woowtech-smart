@@ -5,7 +5,11 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { startDaemonInstance, readDaemonInstance, resolvePaseoHome } from "@getpaseo/server";
+import {
+  startDaemonInstance,
+  readDaemonInstance,
+  resolvePaseoHome,
+} from "@getpaseo/server/daemon-control";
 import { expect, test } from "vitest";
 import { connectToDaemon } from "../../utils/client.js";
 

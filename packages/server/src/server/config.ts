@@ -28,6 +28,15 @@ import type { RequestedSpeechProviders } from "./speech/speech-types.js";
 import { mergeHostnames, parseHostnamesEnv, type HostnamesConfig } from "./hostnames.js";
 import { resolveGitProcessPolicy } from "../utils/git-process-scheduler.js";
 
+export {
+  loadPersistedConfig,
+  readPersistedConfig,
+  savePersistedConfig,
+  getPersistedConfigValue,
+  editPersistedConfig,
+  type PersistedConfig,
+} from "./persisted-config.js";
+
 // woowtech smart listens on its own port, apart from an upstream Paseo daemon.
 const DEFAULT_PORT = 6770;
 const DEFAULT_TRUSTED_PROXIES = ["loopback"];
