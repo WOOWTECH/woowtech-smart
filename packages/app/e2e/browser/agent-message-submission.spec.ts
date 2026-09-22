@@ -41,6 +41,7 @@ import {
   rememberTimelineRequestCounts,
 } from "../support/helpers/timeline-resume";
 import {
+  recordPanelToasts,
   waitForWorkspaceInSidebar,
   workspaceDeckEntryLocator,
 } from "../support/helpers/workspace-ui";
@@ -1118,8 +1119,11 @@ test.describe("Agent message submission", () => {
     draftCreateScenario,
   }) => {
     test.setTimeout(120_000);
+    const toasts = await recordPanelToasts(page);
     const pending = await beginDraftCreateSubmission(page, draftCreateScenario);
     await completeDraftCreateSubmission(page, draftCreateScenario, pending);
+    // A chat this client just created is current by construction; it is never out of date.
+    await toasts.expectNeverShown("agent-updating-toast");
   });
 
   test("restores a rejected submission and accepts its retry", async ({
