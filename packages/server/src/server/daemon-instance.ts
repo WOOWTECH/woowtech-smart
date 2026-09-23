@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import {
   getPidLockInfo,
-  isPidRunning,
+  isPidLockOwnerRunning,
   isSamePidLock,
   releasePidLock,
   type PidLockInfo,
@@ -45,7 +45,7 @@ export class DaemonInstanceError extends Error {
 
 export async function readDaemonInstance(home: string): Promise<PidLockInfo | null> {
   const lock = await getPidLockInfo(home);
-  return lock && isPidRunning(lock.pid) ? lock : null;
+  return lock && isPidLockOwnerRunning(lock) ? lock : null;
 }
 
 export function daemonLogPath(home: string): string {
@@ -161,7 +161,7 @@ export async function stopDaemonInstance(
       `Supervisor changed for ${home}; refusing to stop PID ${instance.pid}.`,
     );
   }
-  if (!instance || !isPidRunning(instance.pid)) {
+  if (!instance || !isPidLockOwnerRunning(instance)) {
     if (instance)
       await releasePidLock(home, { ownerPid: instance.pid, startedAt: instance.startedAt });
     return {
@@ -176,7 +176,7 @@ export async function stopDaemonInstance(
   let { forced, usedLifecycleRpc } = await requestInstanceStop(home, instance, options);
   const waitForExit = async (waitMs: number) => {
     const exitDeadline = Date.now() + waitMs;
-    while (isPidRunning(instance.pid)) {
+    while (isPidLockOwnerRunning(instance)) {
       const current = await getPidLockInfo(home);
       if (current && !isSamePidLock(instance, current))
         throw new DaemonInstanceError(
