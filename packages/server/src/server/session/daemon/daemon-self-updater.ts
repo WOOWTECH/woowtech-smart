@@ -4,7 +4,8 @@ import {
   validateDaemonInstallOrigin,
   type DaemonInstallOriginRuntime,
 } from "./install-origin.js";
-import { npmGlobalPaseoCli, type NpmGlobalPaseoCli } from "./npm-global-cli.js";
+import type { NpmGlobalPaseoCli } from "./npm-global-cli.js";
+import { UnavailableNpmGlobalPaseoCli } from "./unavailable-npm-global-cli.js";
 
 export type DaemonSelfUpdatePhase = "starting" | "downloading" | "installing" | "complete";
 
@@ -39,7 +40,7 @@ export class DaemonSelfUpdateInProgressError extends Error {
 }
 
 const defaultRuntime: DaemonSelfUpdateRuntime = {
-  npm: npmGlobalPaseoCli,
+  npm: new UnavailableNpmGlobalPaseoCli(),
   installOrigin: daemonInstallOriginRuntime,
 };
 

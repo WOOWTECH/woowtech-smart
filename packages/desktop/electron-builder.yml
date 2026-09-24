@@ -31,10 +31,12 @@ extraResources:
     to: app-dist
   - from: assets/editor-targets
     to: editor-target-icons
+# woowtech smart: installers and update manifests go to a public releases-only
+# repo, because the packaged app cannot read releases of the private source repo.
 publish:
   provider: github
-  owner: getpaseo
-  repo: paseo
+  owner: WOOWTECH
+  repo: woowtech-smart-releases
 mac:
   artifactName: "Paseo-${version}-${arch}.${ext}"
   minimumSystemVersion: "13.0.0"

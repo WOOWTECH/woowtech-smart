@@ -38,7 +38,9 @@ export interface LocalDaemonVersionResult {
   error: string | null;
 }
 
-const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/getpaseo/paseo/releases/download";
+// woowtech smart publishes installers to a public releases-only repo; the source repo is private.
+const RELEASE_DOWNLOAD_BASE_URL =
+  "https://github.com/WOOWTECH/woowtech-smart-releases/releases/download";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

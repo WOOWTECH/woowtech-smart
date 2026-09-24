@@ -14,6 +14,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   ```bash
   git fetch upstream
   git merge upstream/main   # 或只 cherry-pick 需要的修正
+  node --test woowtech/update-sources.test.mjs   # 合併後確認沒有帶回原版的更新來源
   ```
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
@@ -56,6 +57,19 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 使用者第一次用 Claude 時，電腦要連得到 registry.npmjs.org。連不到時，對話裡會顯示錯誤，下次開對話會自動重試。
 - 關閉對話時會出現「close query interrupt … ProcessTransport is not ready for writing」的警告，這是上游原本就有的（先 close 再 interrupt），跟這項改動無關。
 
+### 4. 更新來源改成我們自己的
+
+原版有三條路會把我們的產品換回原版 Paseo，都已改掉。手機 App 沒有 OTA 更新，不受影響。
+
+- 桌面版自動更新：`packages/desktop/electron-builder.yml` 的 `publish` 改指向公開的發佈專用 repo `WOOWTECH/woowtech-smart-releases`。
+  原始碼 repo 是私有的，使用者電腦上的 App 讀不到它的 Releases，所以安裝檔要放在另一個公開 repo。這個 repo 第一次正式發佈時再建。
+- daemon 自我更新：原版會執行 `npm install -g @getpaseo/cli@latest`。
+  現在預設改用 `unavailable-npm-global-cli.ts`，一律拒絕並提示改更新桌面版，不會執行 npm。
+  v1 的 daemon 跟著桌面版一起發佈。不改成「我們自己的 npm 套件名」，是因為萬一那個名字被別人搶先註冊，對方就能把程式推到使用者電腦上。
+- 下載連結：App 的 Apple Silicon 版下載連結（`desktop-updates.ts`）、Rosetta 提示的備用網址、CLI 的 `open` 和 `onboard` 指令，都改成我們的發佈頁。
+- `woowtech/update-sources.test.mjs` 會檢查打包設定裡的每一個 `publish`，並掃描 app、cli、desktop、server 的原始碼，確認沒有原版的下載或發佈網址。
+- Apple Silicon 版的下載連結用的是 `Paseo-<版本>-arm64.dmg` 這個檔名。之後改品牌、動到 `electron-builder.yml` 的 `mac.artifactName` 時，`desktop-updates.ts` 的 `buildMacAppleSiliconDownloadUrl` 要一起改。
+
 ## Mac 開發環境
 
 `woowtech/scripts/mac/` 是在 M2、8GB RAM 的 Mac 上建置和測試用的腳本。路徑是寫死的：repo 在 `~/projects/woowtech-smart`，腳本透過 `~/.local/share/woowtech-smart/` 的 symlink 呼叫，log 和截圖也存在那裡。
@@ -89,11 +103,14 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 拿掉本地語音：語音相關 37 個測試、設定相關 82 個測試全部通過。用乾淨設定啟動 daemon，沒有下載模型，也沒有啟動語音 worker。
 - Claude SDK：載入器 4/4、`claudeQuery` 4/4、相關的 agent 和 rewind 測試 22 個全部通過。
   把 SDK 從 node_modules 移走後實際跑了一輪 Claude 對話：SDK 自動下載、通過驗證，回覆也正確。
+- 更新來源：daemon 自我更新相關測試 17 個、App 更新相關測試 49 個全部通過，`update-sources.test.mjs` 2/2。
+  防回歸檢查另外用三種寫法驗證過會失敗：平台專屬的 publish 指向原版、`publish: github` 單行簡寫、清單寫法。
 
 ## 接下來
 
-- 更新來源改成我們自己的。例如桌面版 `packages/desktop/electron-builder.yml` 的 publish 還指向 `getpaseo/paseo`，不改的話會被自動更新回原版 Paseo。
-- 品牌識別：名稱、圖示、URL scheme，以及 agent 看到的 `clientInfo.name = "Paseo"`。
+- 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
+- 品牌識別：名稱、圖示、URL scheme、安裝檔名稱，以及 agent 看到的 `clientInfo.name = "Paseo"`。
+  配對連結（`app.paseo.sh`）、Hub（`hub.paseo.sh`）、說明文件和回報問題的連結也還指向原版。
 - 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`）。
 - 繁體中文語系。
 - 商標（TIPO）與 D-U-N-S。

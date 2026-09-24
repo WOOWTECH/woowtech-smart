@@ -115,6 +115,26 @@ describe("DaemonSelfUpdater", () => {
     expect(calls).toEqual([]);
   });
 
+  test("refuses to update through npm with its default runtime", async () => {
+    const logger = createLogger();
+    const phases: DaemonSelfUpdatePhase[] = [];
+
+    const result = await new DaemonSelfUpdater().update({
+      daemonVersion: "0.8.0",
+      desktopManaged: false,
+      onProgress: (phase) => phases.push(phase),
+      logger,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error:
+        "woowtech smart does not update the daemon through npm. Update the woowtech smart desktop app on this host.",
+      newVersion: null,
+    });
+    expect(phases).not.toContain("installing");
+  });
+
   test("updates a daemon that is running from the npm global cli install", async () => {
     const calls: RuntimeCall[] = [];
     const runtime = createRuntime({
