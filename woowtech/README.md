@@ -14,6 +14,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   ```bash
   git fetch upstream
   git merge upstream/main   # 或只 cherry-pick 需要的修正
+  npx tsx woowtech/tools/generate-zh-tw.mjs   # 上游改了簡體中文就重新產生繁體
   node --test woowtech/*.test.mjs   # 合併後確認沒有帶回原版的更新來源、預設值和名稱
   ```
 
@@ -113,6 +114,25 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `fastlane/` 是上游的商店上架文案：上架前另外準備。
 - bundle id 換了，之前裝在模擬器和手機上的開發版要重新 prebuild、重新建置；新版會以另一個 App 的身分安裝。
 
+### 7. 繁體中文
+
+- 上游只把 zh、zh-CN、zh-Hans 對應到簡體中文，**系統語言是繁體（台灣、香港）的裝置原本會顯示英文**。現在所有中文系統語言都顯示繁體中文，語言選單只列「繁體中文」。
+  簡體語系（zh-CN）仍然可以載入，上游有很多測試拿它當範例，所以沒拿掉，只是不再對應也不列在選單上。
+- `packages/app/src/i18n/resources/zh-TW.ts` 是產生的檔案，不要手改。
+  - 產生方式：`woowtech/tools/generate-zh-tw.mjs` 把上游的簡體中文（連同外掛設定的翻譯）用 OpenCC 轉成台灣用語的繁體，再套 `woowtech/tools/zh-tw-terms.mjs` 的用詞修正。
+  - 要改用詞，就改修正表再重新產生。
+- 修正表處理 OpenCC 沒轉成台灣習慣的詞：
+  - 一般詞彙，例如會話→工作階段、二維碼→QR Code、許可權→權限、日誌→記錄、歸檔→封存、新建→新增、命令→指令、退出→結束、引號改成「」。
+  - 看上下文的規則：
+    - 英文原文講 tab 的「標籤」才改成「分頁」，工作區的 Labels 維持「標籤」。
+    - 「通過」後面接東西才改成「透過」，「檢查通過」不變。
+    - 插入英文詞時自動在中文前後補空格。
+- 產生器只裝在 `woowtech/tools/`（自己的 package.json），不動上游的相依套件。第一次使用先 `npm ci --prefix woowtech/tools`。
+- 上游簡體檔裡本來就有些句子是英文（沒翻譯），繁體也會照樣顯示英文。
+- 測試：
+  - `packages/app/src/i18n/zh-tw.test.ts` 檢查每個英文鍵值都有繁體、插入值的佔位符一致、沒有簡體專用字，並抽驗實際顯示的句子。
+  - `woowtech/zh-tw.test.mjs` 確認提交的繁體檔跟重新產生的一致，上游改了簡體卻沒重新產生時會失敗。
+
 ## Mac 開發環境
 
 `woowtech/scripts/mac/` 是在 M2、8GB RAM 的 Mac 上建置和測試用的腳本。路徑是寫死的：repo 在 `~/projects/woowtech-smart`，腳本透過 `~/.local/share/woowtech-smart/` 的 symlink 呼叫，log 和截圖也存在那裡。
@@ -157,5 +177,4 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 品牌識別第三步：圖示（白底藍字）與品牌色；第四步：說明與求助連結；最後：CLI 改名（連同說明文字、agent 技能說明）。
   配對連結（`app.paseo.sh`）、Hub（`hub.paseo.sh`）、說明文件和回報問題的連結也還指向原版。
 - 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`）。
-- 繁體中文語系。
 - 商標（TIPO）與 D-U-N-S。

@@ -407,6 +407,18 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.language).toBe("zh-CN");
   });
 
+  it("keeps a persisted Traditional Chinese choice", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({ language: "zh-TW" }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.language).toBe("zh-TW");
+  });
+
   it("drops an unknown persisted language back to system", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({

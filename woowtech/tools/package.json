@@ -1,0 +1,9 @@
+{
+  "name": "woowtech-smart-tools",
+  "private": true,
+  "description": "Maintenance tools for the woowtech smart fork. Not an app workspace and not shipped.",
+  "type": "module",
+  "dependencies": {
+    "opencc-js": "1.4.2"
+  }
+}

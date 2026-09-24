@@ -9,8 +9,10 @@ import {
 describe("parseAppLanguage", () => {
   it("accepts system and all supported language locales", () => {
     expect(
-      ["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"].map(parseAppLanguage),
-    ).toEqual(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"]);
+      ["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN", "zh-TW"].map(
+        parseAppLanguage,
+      ),
+    ).toEqual(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN", "zh-TW"]);
   });
 
   it("returns null for unknown values", () => {
@@ -29,7 +31,7 @@ describe("parseAppLanguage", () => {
       "ko",
       "pt-BR",
       "ru",
-      "zh-CN",
+      "zh-TW",
     ]);
   });
 });
@@ -41,7 +43,7 @@ describe("formatLanguageOptionLabel", () => {
     const korean = LANGUAGE_OPTIONS.find((option) => option.value === "ko");
     const portuguese = LANGUAGE_OPTIONS.find((option) => option.value === "pt-BR");
     const spanish = LANGUAGE_OPTIONS.find((option) => option.value === "es");
-    const chinese = LANGUAGE_OPTIONS.find((option) => option.value === "zh-CN");
+    const chinese = LANGUAGE_OPTIONS.find((option) => option.value === "zh-TW");
 
     expect([
       formatLanguageOptionLabel(arabic!, "en", "System"),
@@ -56,7 +58,7 @@ describe("formatLanguageOptionLabel", () => {
       "한국어 - Korean",
       "Português brasileiro - Brazilian Portuguese",
       "Español - Spanish",
-      "简体中文 - Simplified Chinese",
+      "繁體中文 - Traditional Chinese",
     ]);
   });
 
@@ -131,16 +133,26 @@ describe("resolveSupportedLocale", () => {
     expect(resolveSupportedLocale("system", ["en-US", "es-GB"])).toBe("en");
   });
 
-  it("maps Chinese system locales to Simplified Chinese", () => {
-    expect(resolveSupportedLocale("system", ["zh"])).toBe("zh-CN");
-    expect(resolveSupportedLocale("system", ["zh-CN"])).toBe("zh-CN");
-    expect(resolveSupportedLocale("system", ["zh-Hans-US"])).toBe("zh-CN");
+  it("maps every Chinese system locale to Traditional Chinese", () => {
+    for (const systemLocale of [
+      "zh-TW",
+      "zh-Hant",
+      "zh-Hant-TW",
+      "zh-HK",
+      "zh",
+      "zh-CN",
+      "zh-Hans-US",
+    ]) {
+      expect(resolveSupportedLocale("system", [systemLocale])).toBe("zh-TW");
+    }
   });
 
-  it("does not map Traditional Chinese system locales to Simplified Chinese", () => {
-    expect(resolveSupportedLocale("system", ["zh-TW"])).toBe("en");
-    expect(resolveSupportedLocale("system", ["zh-Hant"])).toBe("en");
-    expect(resolveSupportedLocale("system", ["zh-HK"])).toBe("en");
+  it("names languages in Traditional Chinese UI", () => {
+    const english = LANGUAGE_OPTIONS.find((option) => option.value === "en");
+    const chinese = LANGUAGE_OPTIONS.find((option) => option.value === "zh-TW");
+
+    expect(formatLanguageOptionLabel(english!, "zh-TW", "系統")).toBe("English - 英文");
+    expect(formatLanguageOptionLabel(chinese!, "zh-TW", "系統")).toBe("繁體中文");
   });
 
   it("maps unsupported or missing system locales to English", () => {
