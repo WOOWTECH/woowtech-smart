@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Paseo",
-  "short_name": "Paseo",
+  "name": "woowtech smart",
+  "short_name": "woowtech smart",
   "description": "Monitor and control local AI coding agents from anywhere.",
   "start_url": "/",
   "scope": "/",

@@ -27,7 +27,7 @@ set -euo pipefail
 W="$HOME/.local/share/woowtech-smart"
 . "$W/env.sh"
 APK="$HOME/projects/woowtech-smart/packages/app/android/app/build/outputs/apk/debug/app-debug.apk"
-PKG=sh.paseo.debug
+PKG=io.woowtech.smart.debug
 [ -f "$APK" ] || { echo "no APK at $APK — run build-android.sh first" >&2; exit 1; }
 
 up() { curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$1" 2>/dev/null || true; }

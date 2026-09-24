@@ -93,6 +93,26 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 手機 App 的 bundle id 仍在建置前由 `apply-identity.mjs` 套用。
   - Linux 的執行檔名稱含空白。Linux 不在 v1，要支援時再考慮 `linux.executableName`。
 
+### 6. 看得到的名稱（品牌識別第二步）
+
+- 介面文字：`packages/app/src/i18n/brand.ts` 在語系載入時把「Paseo」換掉，語系檔本身不動（英文語系檔上游 90 天改了 133 次）。
+  - 中文顯示「渥屋智能」，「Paseo Desktop」變成「渥屋智能桌面版」。中文字之間的空格會拿掉，與英文單字之間的空格保留。
+  - 其他語言顯示「woowtech smart」。
+  - 只替換語系資源，不動插入的值，使用者自己叫 Paseo 的專案名稱不會被改。`$PASEO_PORT`、`paseo.json` 這類全大寫或小寫的技術名稱也不受影響。
+- App 裡寫死的 4 句英文，以及網頁版的名稱和標題都已改。`git/use-actions.tsx` 裡有一句要跟 daemon 的英文錯誤訊息完全一致，是刻意保留的例外；使用者看到的是翻譯後的文字，已經替換過。
+- 安裝檔改名為 `woowtech-smart-<版本>-<架構>.dmg` 等，App 的 Apple Silicon 下載連結跟著改。Linux 套件的維護者欄位改成 WoowTech。
+- agent 透過 ACP 看到的 `clientInfo.name` 改成 `woowtech smart`。
+- 手機 App 的名稱和 bundle id 直接寫在 `app.config.js`：正式版 `io.woowtech.smart`，Debug 版 `io.woowtech.smart.debug`。
+  - 中文手機桌面顯示「渥屋智能」（Debug 版是「渥屋智能 Debug」）。iOS 用 Expo 的 `locales`；Expo 只把 `locales` 套到 iOS，Android 由 `plugins/with-localized-app-name.js` 讀同一份設定寫進 Android 資源。
+  - `apply-identity.mjs` 現在只處理 Expo 帳號相關的 owner、slug、project id。
+- App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
+- `woowtech/names.test.mjs` 檢查安裝檔名稱與下載連結一致、App 裡寫死的文字、agent 看到的名稱，並用 `expo config` 檢查手機 App 的實際設定。
+- 刻意沒改的：
+  - CLI 的說明文字：跟 CLI 改名一起處理，兩者改的是同一批檔案。
+  - `maestro/` 的 UI 測試流程還指向 `sh.paseo`：要用 Maestro 時再改 appId。
+  - `fastlane/` 是上游的商店上架文案：上架前另外準備。
+- bundle id 換了，之前裝在模擬器和手機上的開發版要重新 prebuild、重新建置；新版會以另一個 App 的身分安裝。
+
 ## Mac 開發環境
 
 `woowtech/scripts/mac/` 是在 M2、8GB RAM 的 Mac 上建置和測試用的腳本。路徑是寫死的：repo 在 `~/projects/woowtech-smart`，腳本透過 `~/.local/share/woowtech-smart/` 的 symlink 呼叫，log 和截圖也存在那裡。
@@ -134,7 +154,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 ## 接下來
 
 - 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
-- 品牌識別第二步起：介面名稱（中文顯示「渥屋智能」）、安裝檔名稱、agent 看到的 `clientInfo.name = "Paseo"`；第三步圖示（白底藍字）與品牌色；第四步說明與求助連結。
+- 品牌識別第三步：圖示（白底藍字）與品牌色；第四步：說明與求助連結；最後：CLI 改名（連同說明文字、agent 技能說明）。
   配對連結（`app.paseo.sh`）、Hub（`hub.paseo.sh`）、說明文件和回報問題的連結也還指向原版。
 - 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`）。
 - 繁體中文語系。

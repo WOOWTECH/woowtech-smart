@@ -5,6 +5,7 @@ const withAndroidAsyncStorageSize = require("./plugins/with-android-async-storag
 const withAndroidProfileable = require("./plugins/with-android-profileable");
 const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
+const withLocalizedAppName = require("./plugins/with-localized-app-name");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
@@ -66,8 +67,9 @@ function resolveSecretFile(params) {
 
 const variants = {
   production: {
-    name: "Paseo",
-    packageId: "sh.paseo",
+    name: "woowtech smart",
+    chineseName: "渥屋智能",
+    packageId: "io.woowtech.smart",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_PROD",
       fallbackRelativePath: "./.secrets/google-services.prod.json",
@@ -78,8 +80,9 @@ const variants = {
     }),
   },
   development: {
-    name: "Paseo Debug",
-    packageId: "sh.paseo.debug",
+    name: "woowtech smart Debug",
+    chineseName: "渥屋智能 Debug",
+    packageId: "io.woowtech.smart.debug",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_DEBUG",
       fallbackRelativePath: "./.secrets/google-services.debug.json",
@@ -102,6 +105,11 @@ export default {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "woowtech-smart",
+    // Chinese launchers show the Chinese name (iOS here; Android via withLocalizedAppName).
+    locales: {
+      "zh-Hans": { CFBundleDisplayName: variant.chineseName },
+      "zh-Hant": { CFBundleDisplayName: variant.chineseName },
+    },
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
@@ -141,6 +149,7 @@ export default {
     plugins: [
       "expo-router",
       withPasteInput,
+      withLocalizedAppName,
       [withAndroidAsyncStorageSize, 64],
       ...buildProfile.cameraPlugins,
       [

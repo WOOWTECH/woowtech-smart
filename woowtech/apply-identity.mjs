@@ -6,9 +6,10 @@
 // Three values in packages/app/app.config.js bind the build to the upstream
 // author's Expo account (owner, slug, extra.eas.projectId). `eas build` resolves
 // the project from those, so with the upstream values it either fails
-// authorization or tries to write into someone else's project. A fourth value,
-// packageId, becomes the iOS bundle identifier and the Android package name —
-// "sh.paseo" already exists under another Apple team, so it cannot be reused.
+// authorization or tries to write into someone else's project. They depend on
+// whose Expo account builds the app, so they are applied here rather than
+// committed. The app name, bundle ids and link scheme are committed in
+// app.config.js itself (woowtech/names.test.mjs checks them).
 //
 // The link scheme is not handled here: app.config.js already carries
 // "woowtech-smart", together with the desktop app and the daemon's fixed CORS
@@ -36,9 +37,6 @@ const OWNER = process.env.EXPO_OWNER?.trim();
 const PROJECT_ID = process.env.EAS_PROJECT_ID?.trim();
 const SLUG = process.env.EAS_SLUG?.trim() || "woowtech-smart";
 
-const BUNDLE_ID = process.env.BUNDLE_ID?.trim() || "io.woowtech.smart";
-const APP_NAME = process.env.APP_NAME?.trim() || "woowtech smart";
-
 if (!OWNER || !PROJECT_ID) {
   console.error(`
 Missing required values.
@@ -56,18 +54,13 @@ RUNNING IN A SIMULATOR? Neither value is used by a local \`expo run:ios\` /
 BUILDING THROUGH EAS? Get the real values from \`eas login\` then \`eas init\`
 inside packages/app, which creates the project and prints its id.
 
-Optional overrides: EAS_SLUG (default woowtech-smart),
-BUNDLE_ID (default io.woowtech.smart), APP_NAME (default "woowtech smart").
+Optional override: EAS_SLUG (default woowtech-smart).
 `);
   process.exit(1);
 }
 
 // Each entry: [description, exact source text, replacement]
 const edits = [
-  ["production display name", `name: "Paseo",`, `name: "${APP_NAME}",`],
-  ["production bundle id", `packageId: "sh.paseo",`, `packageId: "${BUNDLE_ID}",`],
-  ["debug display name", `name: "Paseo Debug",`, `name: "${APP_NAME} Debug",`],
-  ["debug bundle id", `packageId: "sh.paseo.debug",`, `packageId: "${BUNDLE_ID}.debug",`],
   ["expo slug", `slug: "voice-mobile",`, `slug: "${SLUG}",`],
   [
     "eas project id",
@@ -109,11 +102,10 @@ if (changed > 0) {
 console.log(`
 ${changed} applied, ${alreadyDone} already in place.
 
-  app name      ${APP_NAME}
-  bundle id     ${BUNDLE_ID}
   expo owner    ${OWNER}
   expo slug     ${SLUG}
-  scheme        woowtech-smart   (set in app.config.js itself)
+
+  App name, bundle ids and link scheme are set in app.config.js itself.
 
 Verify before building:
   cd packages/app && APP_VARIANT=production npx expo config --type public | head -20
