@@ -133,6 +133,29 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `packages/app/src/i18n/zh-tw.test.ts` 檢查每個英文鍵值都有繁體、插入值的佔位符一致、沒有簡體專用字，並抽驗實際顯示的句子。
   - `woowtech/zh-tw.test.mjs` 確認提交的繁體檔跟重新產生的一致，上游改了簡體卻沒重新產生時會失敗。
 
+### 8. 圖示與 logo（品牌識別第三步）
+
+- 採白底藍字（WOOW 標誌 #6183fc），跟 WOOW Home 的藍底白字做出區隔。桌面版的開發版用藍底白字，一眼能分辨。
+- 來源是 `woowtech/brand/woowtech-symbol.svg`：設計系統的官方字形，是 PDF 轉出的 SVG，已經裁切到字形的範圍。
+  - `woowtech/tools/flatten-symbol.py` 把它攤平成 `woowtech-symbol-path.svg`，共 10 筆路徑，畫出來跟原檔逐像素相同。
+  - 不能合成一條路徑：筆畫會重疊，合成後在非零環繞規則下，交叉處會被挖成空洞。
+- `woowtech/tools/generate-icons.mjs` 產生全部 22 個圖示，需要 Google Chrome、sips 和 iconutil。加 `--out <資料夾>` 可以只輸出預覽。
+  - iOS：1024 滿版、沒有透明通道。
+  - Android：自適應圖示的字形寬度 40%，落在安全區內，底色白色；通知圖示是白色剪影。
+  - favicon：字形放大，16px 也看得出輪廓。狀態點沿用上游的顏色，執行中是 #3b82f6、需要注意是 #22c55e。
+  - macOS：照 824/1024 的格線畫，含陰影。
+- App 裡的 logo 元件（`paseo-logo.tsx`，有 5 個地方在用）改畫 WOOW 標誌，顏色照舊跟著主題的前景色。
+- `woowtech/icons.test.mjs` 檢查以下幾件事，合併上游時如果被換回 Paseo 的圖示就會失敗：
+  - 圖示內容：有品牌藍、沒有上游的黑色方塊。
+  - 尺寸和格式。
+  - Android 的底色。
+  - logo 元件跟品牌檔一致。
+- 換 logo 的步驟：
+  1. 更新 `woowtech/brand` 裡的來源檔。
+  2. 跑 `flatten-symbol.py`。
+  3. 跑 `generate-icons.mjs`。
+  4. 更新 `paseo-logo.tsx` 的路徑（測試會提醒）。
+
 ## Mac 開發環境
 
 `woowtech/scripts/mac/` 是在 M2、8GB RAM 的 Mac 上建置和測試用的腳本。路徑是寫死的：repo 在 `~/projects/woowtech-smart`，腳本透過 `~/.local/share/woowtech-smart/` 的 symlink 呼叫，log 和截圖也存在那裡。
@@ -174,7 +197,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 ## 接下來
 
 - 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
-- 品牌識別第三步：圖示（白底藍字）與品牌色；第四步：說明與求助連結；最後：CLI 改名（連同說明文字、agent 技能說明）。
+- 品牌識別：主題強調色換成品牌藍（先在 App 裡截圖確認）；第四步：說明與求助連結；最後：CLI 改名（連同說明文字、agent 技能說明）。
   配對連結（`app.paseo.sh`）、Hub（`hub.paseo.sh`）、說明文件和回報問題的連結也還指向原版。
 - 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`）。
 - 商標（TIPO）與 D-U-N-S。

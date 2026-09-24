@@ -4,11 +4,10 @@
 //
 //   node --test woowtech/names.test.mjs
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
+import { expoPrebuildConfig } from "./expo-config.mjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
@@ -64,16 +63,6 @@ test("the daemon introduces itself to agents as woowtech smart", () => {
   );
 });
 
-/** The app config Expo builds with for one variant, plugins applied. */
-function expoPrebuildConfig(variant) {
-  const output = execFileSync("npx", ["expo", "config", "--json", "--type", "prebuild"], {
-    cwd: fileURLToPath(new URL("packages/app/", repoRoot)),
-    env: { ...process.env, APP_VARIANT: variant, EXPO_NO_TELEMETRY: "1" },
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  return JSON.parse(output);
-}
 
 test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", () => {
   for (const [variant, nameSuffix, idSuffix] of [
