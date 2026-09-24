@@ -12,6 +12,7 @@ export const pidLockInfoSchema = z.object({
   hostname: z.string(),
   uid: z.number(),
   listen: z.string().nullable(),
+  serverId: z.string().nullable().optional(),
   desktopManaged: z.boolean().optional(),
   heartbeat: z.literal(true).optional(),
 });
@@ -320,7 +321,7 @@ export function startPidLockHeartbeat(
 
 export async function updatePidLock(
   paseoHome: string,
-  patch: { listen: string | null },
+  patch: { listen: string; serverId: string } | { listen: null; serverId: null },
   options?: { ownerPid?: number },
 ): Promise<void> {
   const pidPath = getPidFilePath(paseoHome);
