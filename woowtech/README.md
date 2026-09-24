@@ -18,7 +18,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
   `packages/server/src/server/agent/providers/claude/agent.ts`、`packages/server/package.json`、`packages/server/src/server/bootstrap.ts`。
-- GitHub Actions 目前是關閉的。上游的 11 個 workflow 會在 push 時自動跑（包含 macOS runner）。要打開之前，先把 workflow 改成我們要的。
+- GitHub Actions 目前是關閉的。上游有 11 個 workflow，其中 8 個會在 push 時觸發（CI、部署 App 與網站、發佈版本等），部分用 macOS runner。要打開之前，先把 workflow 改成我們要的。
 
 ## 跟上游的差異
 
