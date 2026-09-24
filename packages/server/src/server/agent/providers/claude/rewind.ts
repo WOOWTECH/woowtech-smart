@@ -1,4 +1,6 @@
-import { forkSession as claudeForkSession, type Query } from "@anthropic-ai/claude-agent-sdk";
+import type { Query } from "@anthropic-ai/claude-agent-sdk";
+
+import { ensureClaudeAgentSdk } from "./claude-agent-sdk-runtime.js";
 
 export interface ClaudeRewindSdk {
   forkSession(
@@ -8,7 +10,10 @@ export interface ClaudeRewindSdk {
 }
 
 export const realClaudeRewindSdk: ClaudeRewindSdk = {
-  forkSession: claudeForkSession,
+  async forkSession(sessionId, options) {
+    const sdk = await ensureClaudeAgentSdk();
+    return sdk.forkSession(sessionId, options);
+  },
 };
 
 export async function revertClaudeConversation(input: {

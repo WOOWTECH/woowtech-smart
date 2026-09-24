@@ -1,5 +1,5 @@
 import { type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { query, type Options, type Query, type SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, Query, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
 
 import {
   createProviderEnv,
@@ -8,19 +8,41 @@ import {
 } from "../../provider-launch-config.js";
 import { buildSelfNodeCommand } from "../../../paseo-env.js";
 import { spawnProcess } from "../../../../utils/spawn.js";
+import {
+  type ClaudeAgentSdkModule,
+  ensureClaudeAgentSdk,
+  peekClaudeAgentSdk,
+} from "./claude-agent-sdk-runtime.js";
+import { DeferredQuery } from "./deferred-query.js";
 
-// Keep the raw SDK query import in this module only. Claude process launch behavior
+// Keep SDK query access in this module only. Claude process launch behavior
 // must stay shared between production and tests so Windows .cmd/.bat handling cannot
 // diverge from the daemon path.
 
 export type ClaudeOptions = Options;
-export type ClaudeQueryInput = Parameters<typeof query>[0] & { options: ClaudeOptions };
+export type ClaudeQueryInput = Parameters<ClaudeAgentSdkModule["query"]>[0] & {
+  options: ClaudeOptions;
+};
 export type ClaudeQueryFactory = (input: ClaudeQueryInput) => Query;
+
+/** Where claudeQuery() gets the Claude Agent SDK from; see claude-agent-sdk-runtime.ts. */
+export interface ClaudeAgentSdkSource {
+  /** The SDK if it is already loaded. */
+  peek(): ClaudeAgentSdkModule | null;
+  /** Loads the SDK, downloading it on first use. */
+  ensure(): Promise<ClaudeAgentSdkModule>;
+}
+
+const defaultSdkSource: ClaudeAgentSdkSource = {
+  peek: peekClaudeAgentSdk,
+  ensure: ensureClaudeAgentSdk,
+};
 
 export interface ClaudeQueryContext {
   runtimeSettings?: ProviderRuntimeSettings;
   launchEnv?: Record<string, string>;
   queryFactory?: ClaudeQueryFactory;
+  sdk?: ClaudeAgentSdkSource;
   /** Called with the spawned child process so the caller can tree-kill it on close. */
   onChildProcess?: (child: ChildProcess) => void;
 }
@@ -111,9 +133,17 @@ function applyRuntimeSettingsToClaudeOptions(
 }
 
 export function claudeQuery(input: ClaudeQueryInput, context: ClaudeQueryContext = {}): Query {
-  const launchQuery = context.queryFactory ?? query;
-  return launchQuery({
+  const request: ClaudeQueryInput = {
     ...input,
     options: applyRuntimeSettingsToClaudeOptions(input.options, context),
-  });
+  };
+  if (context.queryFactory) {
+    return context.queryFactory(request);
+  }
+  const source = context.sdk ?? defaultSdkSource;
+  const sdk = source.peek();
+  if (sdk) {
+    return sdk.query(request);
+  }
+  return new DeferredQuery(source.ensure().then((loaded) => () => loaded.query(request)));
 }
