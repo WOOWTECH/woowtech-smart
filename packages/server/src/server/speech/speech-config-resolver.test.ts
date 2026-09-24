@@ -15,6 +15,7 @@ describe("resolveSpeechConfig", () => {
       paseoHome,
       env,
       persisted,
+      isLocalSpeechRuntimeInstalled: () => true,
     });
 
     expect(result.openai).toBeUndefined();
@@ -88,6 +89,7 @@ describe("resolveSpeechConfig", () => {
       paseoHome: "/tmp/paseo-home",
       env,
       persisted,
+      isLocalSpeechRuntimeInstalled: () => true,
     });
 
     expect(result.speech.local).toEqual({
@@ -199,5 +201,16 @@ describe("resolveSpeechConfig", () => {
       explicit: false,
       enabled: false,
     });
+  });
+
+  test("leaves local speech unconfigured when the local speech runtime is not installed", () => {
+    const result = resolveSpeechConfig({
+      paseoHome: "/tmp/paseo-home",
+      env: {} as NodeJS.ProcessEnv,
+      persisted: PersistedConfigSchema.parse({}),
+      isLocalSpeechRuntimeInstalled: () => false,
+    });
+
+    expect(result.speech.local).toBeUndefined();
   });
 });

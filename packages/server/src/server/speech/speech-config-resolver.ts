@@ -147,6 +147,8 @@ export function resolveSpeechConfig(params: {
   paseoHome: string;
   env: NodeJS.ProcessEnv;
   persisted: PersistedConfig;
+  /** Defaults to probing for `sherpa-onnx-node`; see local-speech-runtime.ts. */
+  isLocalSpeechRuntimeInstalled?: () => boolean;
 }): {
   openai: PaseoOpenAIConfig | undefined;
   speech: PaseoSpeechConfig;
@@ -161,6 +163,7 @@ export function resolveSpeechConfig(params: {
     env: params.env,
     persisted: params.persisted,
     providers,
+    isRuntimeInstalled: params.isLocalSpeechRuntimeInstalled,
   });
 
   const openai = resolveOpenAiSpeechConfig({

@@ -13,6 +13,7 @@ import {
   type LocalSttModelId,
   type LocalTtsModelId,
 } from "./models.js";
+import { isLocalSpeechRuntimeInstalled } from "./local-speech-runtime.js";
 
 export interface LocalSpeechModelConfig {
   dictationStt: LocalSttModelId;
@@ -80,7 +81,12 @@ function shouldIncludeLocalProviderConfig(params: {
   providers: RequestedSpeechProviders;
   env: NodeJS.ProcessEnv;
   persisted: PersistedConfig;
+  runtimeInstalled: boolean;
 }): boolean {
+  if (!params.runtimeInstalled) {
+    return false;
+  }
+
   const localRequestedByFeature =
     (params.providers.dictationStt.enabled !== false &&
       params.providers.dictationStt.provider === "local") ||
@@ -194,8 +200,12 @@ export function resolveLocalSpeechConfig(params: {
   env: NodeJS.ProcessEnv;
   persisted: PersistedConfig;
   providers: RequestedSpeechProviders;
+  isRuntimeInstalled?: () => boolean;
 }): ResolvedLocalSpeechConfig {
-  const includeProviderConfig = shouldIncludeLocalProviderConfig(params);
+  const includeProviderConfig = shouldIncludeLocalProviderConfig({
+    ...params,
+    runtimeInstalled: (params.isRuntimeInstalled ?? isLocalSpeechRuntimeInstalled)(),
+  });
   const parsed = LocalSpeechResolutionSchema.parse(
     buildLocalSpeechResolutionInput({ ...params, includeProviderConfig }),
   );
