@@ -1,26 +1,19 @@
 import { useCallback } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { Heart } from "lucide-react-native";
+import { MessageCircle } from "lucide-react-native";
+import { useTranslation } from "react-i18next";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { Button } from "@/components/ui/button";
-import { GitHubIcon } from "@/components/icons/github-icon";
-import { DiscordIcon } from "@/components/icons/discord-icon";
 import { openExternalUrl } from "@/utils/open-external-url";
 
-const renderGitHubIcon = (color: string) => <GitHubIcon color={color} size={14} />;
-const renderDiscordIcon = (color: string) => <DiscordIcon color={color} size={14} />;
-
+// Upstream's row also stars and sponsors Paseo on GitHub. Ours leads only to
+// WoowTech's LINE official account, labelled as in the help menu.
 export function CommunityLinks() {
-  const handleOpenGitHub = useCallback(() => {
-    void openExternalUrl("https://github.com/getpaseo/paseo");
-  }, []);
+  const { t } = useTranslation();
 
-  const handleOpenSponsor = useCallback(() => {
-    void openExternalUrl("https://github.com/sponsors/boudra");
-  }, []);
-
-  const handleOpenDiscord = useCallback(() => {
-    void openExternalUrl("https://discord.gg/jz8T2uahpH");
+  const handleOpenCommunity = useCallback(() => {
+    void openExternalUrl(BRAND_LINKS.lineOfficialAccount);
   }, []);
 
   return (
@@ -28,29 +21,11 @@ export function CommunityLinks() {
       <Button
         variant="ghost"
         size="sm"
-        leftIcon={renderGitHubIcon}
-        onPress={handleOpenGitHub}
-        testID="community-links-github-star"
+        leftIcon={MessageCircle}
+        onPress={handleOpenCommunity}
+        testID="community-links-line"
       >
-        Star
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        leftIcon={Heart}
-        onPress={handleOpenSponsor}
-        testID="community-links-sponsor"
-      >
-        Sponsor
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        leftIcon={renderDiscordIcon}
-        onPress={handleOpenDiscord}
-        testID="community-links-discord"
-      >
-        Community
+        {t("sidebar.help.discord")}
       </Button>
     </View>
   );

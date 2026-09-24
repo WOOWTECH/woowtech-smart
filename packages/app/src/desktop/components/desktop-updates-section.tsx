@@ -1,3 +1,4 @@
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, { type ReactElement, useCallback, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
@@ -504,7 +505,7 @@ export function LocalDaemonSection() {
   );
 }
 
-const ADVANCED_DAEMON_SETTINGS_URL = "https://paseo.sh/docs/configuration";
+const ADVANCED_DAEMON_SETTINGS_URL = BRAND_LINKS.docs.configuration;
 
 const styles = StyleSheet.create((theme) => ({
   actionGroup: {

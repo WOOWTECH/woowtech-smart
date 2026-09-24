@@ -6,6 +6,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { StyleSheet } from "react-native-unistyles";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, MoreVertical, Pencil, Plus } from "lucide-react-native";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { ProjectIconView } from "@/components/project-icon-view";
 import type {
   PaseoConfigRaw,
@@ -87,7 +88,7 @@ const METADATA_PROMPT_FIELDS: Record<MetadataPromptKey, MetadataPromptField> = {
   },
 };
 
-const WORKTREE_DOCS_URL = "https://paseo.sh/docs/worktrees";
+const WORKTREE_DOCS_URL = BRAND_LINKS.docs.worktrees;
 
 type ReadProjectConfigData = Awaited<ReturnType<DaemonClient["readProjectConfig"]>>;
 

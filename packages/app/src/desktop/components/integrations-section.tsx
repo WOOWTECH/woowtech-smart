@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { ArrowUpRight, Check, Terminal } from "lucide-react-native";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { Button } from "@/components/ui/button";
 import { useCliInstall } from "@/desktop/hooks/use-install-status";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
@@ -11,7 +12,7 @@ import { settingsStyles } from "@/styles/settings";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 
-const CLI_DOCS_URL = "https://paseo.sh/docs/cli";
+const CLI_DOCS_URL = BRAND_LINKS.docs.cli;
 
 export function IntegrationsSection() {
   const { t } = useTranslation();

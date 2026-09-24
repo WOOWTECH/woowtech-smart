@@ -1,10 +1,9 @@
 import { useCallback, useState } from "react";
 import { Text, View } from "react-native";
-import { Activity, CircleHelp, Gift, Keyboard } from "lucide-react-native";
+import { Activity, CircleHelp, Gift, Keyboard, Mail, MessageCircle } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { DiscordIcon } from "@/components/icons/discord-icon";
-import { GitHubIcon } from "@/components/icons/github-icon";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,14 +26,12 @@ import { resolveAppVersion } from "@/utils/app-version";
 import { openChangelog } from "@/changelog";
 import { openExternalUrl } from "@/utils/open-external-url";
 
-const DISCORD_URL = "https://discord.gg/jz8T2uahpH";
-const GITHUB_ISSUE_URL = "https://github.com/getpaseo/paseo/issues/new";
 const ThemedActivity = withUnistyles(Activity);
 const ThemedCircleHelp = withUnistyles(CircleHelp);
 const ThemedGift = withUnistyles(Gift);
 const ThemedKeyboard = withUnistyles(Keyboard);
-const ThemedDiscordIcon = withUnistyles(DiscordIcon);
-const ThemedGitHubIcon = withUnistyles(GitHubIcon);
+const ThemedMail = withUnistyles(Mail);
+const ThemedMessageCircle = withUnistyles(MessageCircle);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundMuted,
@@ -45,11 +42,11 @@ const diagnosticLeadingIcon = (
 const shortcutsLeadingIcon = (
   <ThemedKeyboard size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
 );
-const discordLeadingIcon = (
-  <ThemedDiscordIcon size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
+const lineLeadingIcon = (
+  <ThemedMessageCircle size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
 );
-const githubLeadingIcon = (
-  <ThemedGitHubIcon size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
+const supportEmailLeadingIcon = (
+  <ThemedMail size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
 );
 const changelogLeadingIcon = (
   <ThemedGift size={ICON_SIZE.sm} uniProps={foregroundMutedColorMapping} />
@@ -89,12 +86,12 @@ export function SidebarHelpMenu() {
     setShortcutsDialogOpen(true);
   }, [setShortcutsDialogOpen]);
 
-  const openDiscord = useCallback(() => {
-    void openExternalUrl(DISCORD_URL);
+  const openLineOfficialAccount = useCallback(() => {
+    void openExternalUrl(BRAND_LINKS.lineOfficialAccount);
   }, []);
 
-  const openGitHubIssue = useCallback(() => {
-    void openExternalUrl(GITHUB_ISSUE_URL);
+  const openSupportEmail = useCallback(() => {
+    void openExternalUrl(BRAND_LINKS.supportEmail);
   }, []);
 
   return (
@@ -150,15 +147,15 @@ export function SidebarHelpMenu() {
         <DropdownMenuLabel>{t("sidebar.help.reportIssue")}</DropdownMenuLabel>
         <DropdownMenuItem
           testID="sidebar-help-discord"
-          leading={discordLeadingIcon}
-          onSelect={openDiscord}
+          leading={lineLeadingIcon}
+          onSelect={openLineOfficialAccount}
         >
           {t("sidebar.help.discord")}
         </DropdownMenuItem>
         <DropdownMenuItem
           testID="sidebar-help-github"
-          leading={githubLeadingIcon}
-          onSelect={openGitHubIssue}
+          leading={supportEmailLeadingIcon}
+          onSelect={openSupportEmail}
         >
           {t("sidebar.help.github")}
         </DropdownMenuItem>

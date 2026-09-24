@@ -4,6 +4,7 @@ import { ExternalLink, Gift } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { MarkdownRenderer } from "@/components/markdown/renderer";
 import { Alert } from "@/components/ui/alert";
@@ -25,7 +26,7 @@ import {
   type ChangelogSection,
 } from "./parse-changelog";
 
-const WEBSITE_CHANGELOG_URL = "https://paseo.sh/changelog";
+const WEBSITE_CHANGELOG_URL = BRAND_LINKS.releases;
 
 const ThemedGift = withUnistyles(Gift);
 const ThemedExternalLink = withUnistyles(ExternalLink);

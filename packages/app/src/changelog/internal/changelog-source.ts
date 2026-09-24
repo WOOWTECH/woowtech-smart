@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { parseChangelog, type ChangelogRelease } from "./parse-changelog";
 
-const CHANGELOG_URL = "https://raw.githubusercontent.com/getpaseo/paseo/main/CHANGELOG.md";
+const CHANGELOG_URL = BRAND_LINKS.changelogSource;
 
 export type ChangelogState =
   | { status: "loading" }

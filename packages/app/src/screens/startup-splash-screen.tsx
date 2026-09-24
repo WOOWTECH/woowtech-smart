@@ -12,6 +12,7 @@ import MaskedView from "@react-native-masked-view/masked-view";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 import * as Clipboard from "expo-clipboard";
 import { useTranslation } from "react-i18next";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { BookOpen, Copy, RotateCw, TriangleAlert } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -29,15 +30,15 @@ interface StartupSplashScreenProps {
   };
 }
 
-const GITHUB_ISSUE_URL = "https://github.com/getpaseo/paseo/issues/new";
-const DOCS_URL = "https://paseo.sh/docs";
+const SUPPORT_EMAIL_URL = BRAND_LINKS.supportEmail;
+const DOCS_URL = BRAND_LINKS.docs.home;
 
 const LOGO_SIZE = 96;
 const SHIMMER_PEAK_WIDTH = 120;
 const SHIMMER_DURATION_MS = 1800;
 
-function openGithubIssue(): void {
-  void openExternalUrl(GITHUB_ISSUE_URL);
+function openSupportEmail(): void {
+  void openExternalUrl(SUPPORT_EMAIL_URL);
 }
 
 function openDocs(): void {
@@ -428,8 +429,8 @@ export function StartupSplashScreen({ bootstrapState }: StartupSplashScreenProps
             <Button variant="secondary" leftIcon={copyIcon} onPress={handleCopyLogs}>
               Copy logs
             </Button>
-            <Button variant="outline" leftIcon={warningIcon} onPress={openGithubIssue}>
-              Open GitHub issue
+            <Button variant="outline" leftIcon={warningIcon} onPress={openSupportEmail}>
+              Email support
             </Button>
             <Button variant="outline" leftIcon={bookIcon} onPress={openDocs}>
               Docs

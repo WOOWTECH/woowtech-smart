@@ -15,7 +15,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   git fetch upstream
   git merge upstream/main   # 或只 cherry-pick 需要的修正
   npx tsx woowtech/tools/generate-zh-tw.mjs   # 上游改了簡體中文就重新產生繁體
-  node --test woowtech/*.test.mjs   # 合併後確認沒有帶回原版的更新來源、預設值和名稱
+  node --test woowtech/*.test.mjs   # 合併後確認沒有帶回原版的更新來源、預設值、名稱和連結
   ```
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
@@ -144,7 +144,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - Android：自適應圖示的字形寬度 40%，落在安全區內，底色白色；通知圖示是白色剪影。
   - favicon：字形放大，16px 也看得出輪廓。狀態點沿用上游的顏色，執行中是 #3b82f6、需要注意是 #22c55e。
   - macOS：照 824/1024 的格線畫，含陰影。
-- App 裡的 logo 元件（`paseo-logo.tsx`，有 5 個地方在用）改畫 WOOW 標誌，顏色照舊跟著主題的前景色。
+- App 裡的 logo 元件（`paseo-logo.tsx`，有 5 個地方在用）改畫 WOOW 標誌，顏色見第 9 節。
 - `woowtech/icons.test.mjs` 檢查以下幾件事，合併上游時如果被換回 Paseo 的圖示就會失敗：
   - 圖示內容：有品牌藍、沒有上游的黑色方塊。
   - 尺寸和格式。
@@ -166,6 +166,31 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 品牌藍只寫在 `packages/app/src/styles/brand.ts`（`BRAND_BLUE`），主題的強調色直接引用它。
 - logo 元件不管呼叫端傳什麼顏色，一律畫品牌藍，因為品牌標誌不應該跟著主題變色。
 - 測試：`styles/theme.test.ts` 檢查品牌色和中性背景，`components/icons/paseo-logo.test.tsx` 檢查 logo 一律是品牌藍。
+
+### 10. 說明與求助連結（品牌識別第四步）
+
+- 對外連結都寫在 `packages/protocol/src/brand-links.ts`（`BRAND_LINKS`），App 和 CLI 共用。要改連結，只改這個檔案。
+- 說明文件：官網 aiot.woowtech.io 還沒有說明頁，App 的 8 處和 CLI 的 2 處都先開官網首頁。哪個主題有了頁面，就改 `docs` 裡對應的那一項。
+- 回報問題：寄信到 woowtech@designsmart.com.tw。
+  上游的外部連結開啟器只放行 http/https。現在 App 的 `utils/open-external-url.ts` 和桌面版的 `features/opener.ts` 多放行 `mailto:`，`file:`、`javascript:` 照樣擋掉。
+- 社群：LINE 官方帳號 @lwo6431z。
+  - 說明選單的 Discord 改成 LINE。
+  - 設定的「關於」頁和專案首頁底部，原本有 GitHub Star、贊助上游作者、Discord 三個按鈕，現在只留 LINE。
+- 更新紀錄：App 讀發佈 repo 的 `CHANGELOG.md`，右上角的外部連結開發佈頁。發佈 repo 放上 `CHANGELOG.md` 之前，打開會顯示「無法載入更新記錄」。
+- 官網：歡迎頁的連結（只在手機上顯示）改成 aiot.woowtech.io。
+- 文案：
+  - 上游的翻譯 key 仍叫 `discord`、`github`。顯示的文字在 `packages/app/src/i18n/support-copy.ts` 換掉，10 種語言都有。上游之後新增的語言先顯示英文。
+  - 跟改名一樣在載入翻譯時套用，不改上游的語言檔。
+  - 啟動失敗畫面的按鈕本來就是寫死的英文，「Open GitHub issue」改成「Email support」。
+- 還沒改的：
+  - 外掛的相容性訊息和 `paseo plugin` 的範本仍連到 paseo.sh 的外掛文件，因為外掛 API 還是上游的。跟 CLI 改名一起處理。
+  - 配對網頁 `app.paseo.sh` 和 Hub 屬於自架 relay 那一步。
+  - 瀏覽器 e2e 測試（`packages/app/e2e/`）還在檢查上游的名稱和連結，等打開 CI 時一起更新。
+- 測試：
+  - `woowtech/help-links.test.mjs` 掃描出貨的程式，不准出現 paseo.sh 網站（子網域除外）、上游的 GitHub（含贊助頁）和 Discord 邀請連結。
+  - `changelog/internal/changelog-source.test.ts` 檢查實際抓取的網址。
+  - `utils/open-external-url.test.ts` 和桌面版的 `features/opener.test.ts` 檢查能開 mailto，也仍然擋掉 file: 和 javascript:。
+  - `i18n/brand.test.ts` 檢查每種語言的說明選單都不再提 Discord 或 GitHub。
 
 ## Mac 開發環境
 
@@ -205,11 +230,16 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   防回歸檢查另外用三種寫法驗證過會失敗：平台專屬的 publish 指向原版、`publish: github` 單行簡寫、清單寫法。
 - 共存：daemon 預設資料夾與 port、深層連結、daemon 接受的桌面版來源（smoke 測試實際啟動 daemon 驗證）、診斷報告遮罩都有行為測試；
   打包相關測試實際執行 `bin/paseo`，確認能透過 `woowtech smart Helper.app` 啟動 CLI。桌面版 378、App 154、server 85、protocol 37、CLI 12 個測試全部通過。
+- 說明與求助連結（2026-09-24）：新測試都先紅後綠。
+  9 種突變全部被抓到：帶回 Discord、paseo.sh 說明、贊助連結、上游的更新紀錄，開啟器放行任何協定或拿掉 mailto，翻譯缺語言或沒套用。
+  網頁版用繁體中文實測：說明選單的「LINE 官方帳號」開 LINE、「寄信給客服」開 mailto；關於頁的 LINE 按鈕和更新紀錄的外部連結也都正確。
 
 ## 接下來
 
 - 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
-- 品牌識別第四步：說明與求助連結；最後：CLI 改名（連同說明文字、agent 技能說明）。
-  配對連結（`app.paseo.sh`）、Hub（`hub.paseo.sh`）、說明文件和回報問題的連結也還指向原版。
-- 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`）。
+  發佈 repo 要放 `CHANGELOG.md`，App 的更新紀錄才讀得到。
+- 桌面版的版權行還是上游作者：electron-builder 預設用 `package.json` 的 author，會出現在 macOS 的「關於」視窗。
+  `author`、`homepage`、`repository` 由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步，發佈前要決定怎麼標示。
+- 品牌識別最後一步：CLI 改名（連同說明文字、agent 技能說明、外掛訊息）。
+- 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`），配對連結（`app.paseo.sh`）和 Hub（`hub.paseo.sh`）一起換。
 - 商標（TIPO）與 D-U-N-S。

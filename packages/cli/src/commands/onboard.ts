@@ -1,3 +1,4 @@
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { addLocalDaemonOptions } from "../utils/command-options.js";
 import { cancel, confirm, intro, isCancel, log, note, outro } from "@clack/prompts";
 import { Command, Option } from "commander";
@@ -120,7 +121,7 @@ function printNextSteps(pairingUrl: string | null, paseoHome: string, richUi: bo
       : "1. Open Paseo and connect to your daemon.",
     "2. Web app: https://app.paseo.sh",
     "3. Desktop app: https://github.com/WOOWTECH/woowtech-smart-releases/releases/latest",
-    "4. Docs: https://paseo.sh/docs",
+    `4. Docs: ${BRAND_LINKS.docs.home}`,
     `5. Example: paseo run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
   ];
   const quickReferenceLines = [

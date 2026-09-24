@@ -1,3 +1,4 @@
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { confirm, isCancel, log } from "@clack/prompts";
 import { Command } from "commander";
 import chalk from "chalk";
@@ -35,7 +36,7 @@ export interface PairingOffer {
 }
 
 const PAIRING_DAEMON_RPC_TIMEOUT_MS = 1500;
-const RELAY_DOCS_URL = "https://paseo.sh/docs/security";
+const RELAY_DOCS_URL = BRAND_LINKS.docs.security;
 
 function createProcessOutput(): PairCommandOutput {
   return {

@@ -53,3 +53,44 @@ describe("product name in translations", () => {
     }
   });
 });
+
+// The help menu's Discord and GitHub items open our LINE official account and
+// support email instead.
+const HELP_CHANNEL_KEYS = [
+  "sidebar.help.discord",
+  "sidebar.help.github",
+  "startup.errorDescription",
+];
+
+function upstreamHelpChannels(language: string): string[] {
+  return HELP_CHANNEL_KEYS.map((key) => i18n.t(key, { lng: language })).filter((text) =>
+    /Discord|GitHub/.test(text),
+  );
+}
+
+describe("help channels in translations", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+  });
+
+  it("names the LINE official account and support email", () => {
+    expect(i18n.t("sidebar.help.discord", { lng: "en" })).toBe("LINE official account");
+    expect(i18n.t("sidebar.help.github", { lng: "en" })).toBe("Email support");
+    expect(i18n.t("sidebar.help.discord", { lng: "zh-TW" })).toBe("LINE 官方帳號");
+    expect(i18n.t("sidebar.help.github", { lng: "zh-TW" })).toBe("寄信給客服");
+    expect(i18n.t("startup.errorDescription", { lng: "zh-TW" })).toBe(
+      "本機伺服器啟動失敗。如果持續發生，請寄信給客服並附上下方記錄。",
+    );
+  });
+
+  it("sends no language to Discord or GitHub for help", () => {
+    for (const language of Object.keys(i18n.store.data)) {
+      expect({ language, upstream: upstreamHelpChannels(language) }).toEqual({
+        language,
+        upstream: [],
+      });
+    }
+  });
+});

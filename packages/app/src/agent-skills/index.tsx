@@ -6,6 +6,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ArrowUpRight, Blocks, Check, Settings2 } from "lucide-react-native";
 import type { AgentSkillOperation, AgentSkillsStatus } from "@getpaseo/protocol/messages";
 import type { TFunction } from "i18next";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { Button } from "@/components/ui/button";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { settingsStyles } from "@/styles/settings";
@@ -24,7 +25,7 @@ const ThemedBlocks = withUnistyles(Blocks);
 const ThemedCheck = withUnistyles(Check);
 const ThemedSettings = withUnistyles(Settings2);
 const ThemedArrowUpRight = withUnistyles(ArrowUpRight);
-const SKILLS_DOCS_URL = "https://paseo.sh/docs/skills";
+const SKILLS_DOCS_URL = BRAND_LINKS.docs.skills;
 const foregroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 

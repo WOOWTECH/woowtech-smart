@@ -1,4 +1,5 @@
 import type { Resource, ResourceKey, ResourceLanguage } from "i18next";
+import { supportCopyFor } from "./support-copy";
 
 /** The product name wherever the UI is not in Chinese. */
 export const APP_NAME = "woowtech smart";
@@ -70,8 +71,40 @@ function rebrandKey(value: ResourceKey, language: string): ResourceKey {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** `tree` with the string at the dotted-key `path` set to `text`. */
+function withText(
+  tree: Record<string, unknown>,
+  path: readonly string[],
+  text: string,
+): Record<string, unknown> {
+  const [key, ...rest] = path;
+  if (key === undefined) {
+    return tree;
+  }
+  const child = tree[key];
+  return {
+    ...tree,
+    [key]: rest.length === 0 ? text : withText(isRecord(child) ? child : {}, rest, text),
+  };
+}
+
+function withSupportCopy(translation: ResourceKey, language: string): ResourceKey {
+  if (!isRecord(translation)) {
+    return translation;
+  }
+  return Object.entries(supportCopyFor(language)).reduce(
+    (tree, [key, text]) => withText(tree, key.split("."), text),
+    translation,
+  );
+}
+
 /**
- * The translations with woowtech smart's name in place of upstream Paseo's.
+ * The translations with woowtech smart's name in place of upstream Paseo's, and
+ * WoowTech's help channels in place of Paseo's Discord and GitHub.
  * Applied to the resources as they load, so strings upstream adds later are
  * covered without editing its locale files, and interpolated values (a project
  * that happens to be called Paseo) are never touched.
@@ -81,10 +114,13 @@ export function rebrandResources(resources: Resource): Resource {
     Object.entries(resources).map(([language, namespaces]): [string, ResourceLanguage] => [
       language,
       Object.fromEntries(
-        Object.entries(namespaces).map(([namespace, value]): [string, ResourceKey] => [
-          namespace,
-          rebrandKey(value, language),
-        ]),
+        Object.entries(namespaces).map(([namespace, value]): [string, ResourceKey] => {
+          const rebranded = rebrandKey(value, language);
+          return [
+            namespace,
+            namespace === "translation" ? withSupportCopy(rebranded, language) : rebranded,
+          ];
+        }),
       ),
     ]),
   );

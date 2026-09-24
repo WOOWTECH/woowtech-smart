@@ -7,6 +7,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Check, Copy, Network, RotateCw, ShieldCheck } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "@/components/ui/external-link";
@@ -21,7 +22,7 @@ import {
   type EditingTextInputHandle,
 } from "@/components/ui/text-input";
 
-const RELAY_DOCS_URL = "https://paseo.sh/docs/security";
+const RELAY_DOCS_URL = BRAND_LINKS.docs.security;
 const FLEX_ONE_STYLE = { flex: 1 } as const;
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedShieldCheck = withUnistyles(ShieldCheck);
