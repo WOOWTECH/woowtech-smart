@@ -11,13 +11,14 @@ test("Settings language selector switches General labels", async ({ page }) => {
 
   await expect(page.getByText("Default send", { exact: true }).first()).toBeVisible();
 
+  // woowtech smart offers Traditional Chinese in place of upstream's Simplified Chinese.
   await page.getByRole("button", { name: "System", exact: true }).click();
-  await page.getByRole("menuitem", { name: "简体中文 - Simplified Chinese", exact: true }).click();
+  await page.getByRole("menuitem", { name: "繁體中文 - Traditional Chinese", exact: true }).click();
 
-  await expect(page.getByText("默认发送", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("預設傳送", { exact: true }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "简体中文", exact: true }).click();
-  await page.getByRole("menuitem", { name: "English - 英语", exact: true }).click();
+  await page.getByRole("button", { name: "繁體中文", exact: true }).click();
+  await page.getByRole("menuitem", { name: "English - 英文", exact: true }).click();
 
   await expect(page.getByText("Default send", { exact: true }).first()).toBeVisible();
 });

@@ -3,14 +3,22 @@ import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { openSettingsSection } from "../support/helpers/settings";
 import { openWhatsNew, release, serveChangelog } from "../support/helpers/changelog";
 
-const DISCORD_DESTINATION =
-  /^https:\/\/(?:discord\.gg\/jz8T2uahpH|discord\.com\/invite\/jz8T2uahpH)(?:[/?#]|$)/;
-const GITHUB_ISSUE_DESTINATION =
-  /^https:\/\/github\.com\/(?:getpaseo\/paseo\/issues\/new(?:\/choose)?(?:[/?#]|$)|login\?return_to=https%3A%2F%2Fgithub\.com%2Fgetpaseo%2Fpaseo%2Fissues%2Fnew$)/;
-const CHANGELOG_DESTINATION = /^https:\/\/paseo\.sh\/changelog(?:[/?#]|$)/;
+declare global {
+  interface Window {
+    __paseoMailtoOpens?: string[];
+  }
+}
+
+// woowtech smart: the help menu's Discord item opens WoowTech's LINE official account and
+// its GitHub item writes to WoowTech support.
+const LINE_OFFICIAL_ACCOUNT_DESTINATION =
+  /^https:\/\/line\.me\/R\/ti\/p\/(?:@|%40)lwo6431z(?:[/?#]|$)/;
+const SUPPORT_EMAIL = "mailto:woowtech@designsmart.com.tw";
+const CHANGELOG_DESTINATION =
+  /^https:\/\/github\.com\/WOOWTECH\/woowtech-smart-releases\/releases(?:[/?#]|$)/;
 // The name and the version are separate cells of a key/value row, so they meet with no space
 // between them in the row's text content.
-const APP_VERSION = /^Paseo\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const APP_VERSION = /^woowtech smart\s*v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 async function openHelpMenu(page: Page): Promise<void> {
   await page.getByTestId("sidebar-help").click();
@@ -42,7 +50,36 @@ async function expectExternalPage(
   await popup.close();
 }
 
+// A mailto: link hands the address to the mail client and opens no browser page, so there is
+// no popup to wait for. Record the window.open calls the app makes for mailto: links instead.
+async function recordMailtoOpens(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const openWindow = window.open.bind(window);
+    const mailtoOpens: string[] = [];
+    window.__paseoMailtoOpens = mailtoOpens;
+    window.open = (url, target, features) => {
+      if (String(url).startsWith("mailto:")) {
+        mailtoOpens.push(String(url));
+        return null;
+      }
+      return openWindow(url, target, features);
+    };
+  });
+}
+
+async function expectMailtoLink(
+  page: Page,
+  actionTestID: string,
+  expectedUrl: string,
+): Promise<void> {
+  await page.getByTestId(actionTestID).click();
+  await expect
+    .poll(() => page.evaluate(() => window.__paseoMailtoOpens?.slice() ?? []))
+    .toEqual([expectedUrl]);
+}
+
 test("opens troubleshooting and support destinations", async ({ page }) => {
+  await recordMailtoOpens(page);
   await gotoAppShell(page);
   await expect(page.getByTestId("sidebar-help")).toBeVisible();
 
@@ -65,10 +102,10 @@ test("opens troubleshooting and support destinations", async ({ page }) => {
 
   await test.step("opens support pages", async () => {
     await openHelpMenu(page);
-    await expectExternalPage(page, "sidebar-help-discord", DISCORD_DESTINATION);
+    await expectExternalPage(page, "sidebar-help-discord", LINE_OFFICIAL_ACCOUNT_DESTINATION);
 
     await openHelpMenu(page);
-    await expectExternalPage(page, "sidebar-help-github", GITHUB_ISSUE_DESTINATION);
+    await expectMailtoLink(page, "sidebar-help-github", SUPPORT_EMAIL);
   });
 });
 

@@ -5,14 +5,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 STATE_DIR="${PASEO_COMPOSER_KEYBOARD_STATE_DIR:-${REPO_ROOT}/.dev/agent-device-composer-keyboard}"
 ARTIFACTS_DIR="${REPO_ROOT}/.dev/agent-device-artifacts/composer-keyboard-android"
 SESSION="${PASEO_COMPOSER_KEYBOARD_SESSION:-composer-keyboard-android}"
-APP_ID="${PASEO_COMPOSER_KEYBOARD_APP_ID:-sh.paseo.debug}"
+APP_ID="${PASEO_COMPOSER_KEYBOARD_APP_ID:-io.woowtech.smart.debug}"
 DEVICE="${PASEO_COMPOSER_KEYBOARD_DEVICE:-paseo-api35}"
 HELPER_IME="com.callstack.agentdevice.imehelper/.TestInputMethodService"
 GBOARD_IME="com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME"
 ASSERT="${REPO_ROOT}/packages/app/e2e/mobile/composer-keyboard/assert-composer-keyboard.mjs"
 STALL_HERMES="${REPO_ROOT}/packages/app/e2e/mobile/composer-keyboard/stall-hermes.mjs"
 METRO_PORT="${PASEO_MOBILE_E2E_METRO_PORT:-8082}"
-DAEMON_HOST="${PASEO_COMPOSER_KEYBOARD_DAEMON_HOST:-127.0.0.1:6770}"
+# The isolated daemon in DAEMON_HOME. Upstream used 6770 here; in woowtech smart 6770 is the
+# installed daemon (and 6767 an upstream Paseo's), so this script must not default to either.
+DAEMON_HOST="${PASEO_COMPOSER_KEYBOARD_DAEMON_HOST:-127.0.0.1:6771}"
 DAEMON_HOME="${PASEO_COMPOSER_KEYBOARD_DAEMON_HOME:-${REPO_ROOT}/.dev/composer-e2e-home}"
 SERVER_ID="${PASEO_COMPOSER_KEYBOARD_SERVER_ID:-}"
 MESSAGE=$'keyboard invariant line one\nline two\nline three\nline four'
@@ -175,14 +177,14 @@ sleep 3
 
 adb shell am start \
   -a android.intent.action.VIEW \
-  -d "paseo://h/${SERVER_ID}/agent/${agent_id}" \
+  -d "woowtech-smart://h/${SERVER_ID}/agent/${agent_id}" \
   "${APP_ID}" >/dev/null
 sleep 5
 # The development-client bootstrap can consume the first link while Expo Router is mounting.
 # Deliver the target again after the root navigator is live.
 adb shell am start \
   -a android.intent.action.VIEW \
-  -d "paseo://h/${SERVER_ID}/agent/${agent_id}" \
+  -d "woowtech-smart://h/${SERVER_ID}/agent/${agent_id}" \
   "${APP_ID}" >/dev/null
 ad wait "text=\"${AGENT_TITLE}\"" 45000
 ad wait 'editable=true' 10000

@@ -28,7 +28,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
 - `woowtech/apply-identity.mjs` 會把 `packages/app/app.config.js` 裡的 Expo owner、slug、EAS project id 和 bundle id 換成我們的（預設 `io.woowtech.smart`）。
   repo 裡的 `app.config.js` 仍是上游原值，建置前再執行這個腳本，用法寫在檔案開頭。
-- URL scheme 暫時保留 `paseo`，因為 daemon 寫死允許 `paseo://app` 這個 CORS 來源。改 daemon 品牌時再一起改。
+- 連結 scheme 見第 5 節。
 - `packages/app/eas.json` 多了 `preview` profile：產生內部發佈用的 release APK，並略過 lint。
 
 ### 2. 拿掉本地語音
@@ -148,7 +148,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - `woowtech/icons.test.mjs` 檢查以下幾件事，合併上游時如果被換回 Paseo 的圖示就會失敗：
   - 圖示內容：有品牌藍、沒有上游的黑色方塊。
   - 尺寸和格式。
-  - Android 的底色。
+  - Android 的底色和通知的強調色。
   - logo 元件跟品牌檔一致。
 - 換 logo 的步驟：
   1. 更新 `woowtech/brand` 裡的來源檔。
@@ -164,6 +164,8 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 深色背景上的連結用比較淡的 #8fa6fd，確保讀得清楚。
 - 預設的深色主題原本帶上游的綠色調，現在背景改成中性灰（沿用 Zinc 的灰階），紅色也改用 Zinc 那組中性紅。其他深色主題（Zinc、Midnight、Claude、Ghostty）維持原樣。
 - 品牌藍只寫在 `packages/app/src/styles/brand.ts`（`BRAND_BLUE`），主題的強調色直接引用它。
+- Android 通知的強調色也是品牌藍（上游是綠色 #20744A），通知的小圖示會染成這個顏色。
+  這個值寫在 `packages/app/app.config.js` 的 expo-notifications 外掛設定，沒有引用 `brand.ts`，改品牌藍時要一起改。
 - logo 元件不管呼叫端傳什麼顏色，一律畫品牌藍，因為品牌標誌不應該跟著主題變色。
 - 測試：`styles/theme.test.ts` 檢查品牌色和中性背景，`components/icons/paseo-logo.test.tsx` 檢查 logo 一律是品牌藍。
 
@@ -185,7 +187,9 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 還沒改的：
   - 外掛的相容性訊息和 `paseo plugin` 的範本仍連到 paseo.sh 的外掛文件，因為外掛 API 還是上游的。跟 CLI 改名一起處理。
   - 配對網頁 `app.paseo.sh` 和 Hub 屬於自架 relay 那一步。
-  - 瀏覽器 e2e 測試（`packages/app/e2e/`）還在檢查上游的名稱和連結，等打開 CI 時一起更新。
+  - e2e 測試（`packages/app/e2e/` 的瀏覽器與手機腳本、`packages/desktop/e2e/`）的預期值已改成我們的名稱、連結、port 和 scheme，但還沒實際跑過。
+    e2e 用的隔離 daemon 不准用 6767 和 6770；手機 composer 腳本的預設 port 從 6770 改成 6771，因為 6770 現在是 woowtech smart 本身的 daemon。
+    Maestro 流程（`packages/app/maestro/`）仍是上游的值。
 - 測試：
   - `woowtech/help-links.test.mjs` 掃描出貨的程式，不准出現 paseo.sh 網站（子網域除外）、上游的 GitHub（含贊助頁）和 Discord 邀請連結。
   - `changelog/internal/changelog-source.test.ts` 檢查實際抓取的網址。

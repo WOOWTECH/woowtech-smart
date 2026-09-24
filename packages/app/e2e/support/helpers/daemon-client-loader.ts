@@ -38,8 +38,8 @@ export interface ConnectDaemonClientOptions {
 
 /**
  * Connects an in-test daemon client over the isolated E2E daemon's WebSocket.
- * The port-6767 guard keeps tests off the developer daemon. Each helper passes
- * its own typed client interface as the generic.
+ * The installed-daemon port guard (6767/6770) keeps tests off the developer's
+ * daemons. Each helper passes its own typed client interface as the generic.
  */
 export async function connectDaemonClient<ClientInstance extends { connect(): Promise<void> }>(
   options: ConnectDaemonClientOptions,

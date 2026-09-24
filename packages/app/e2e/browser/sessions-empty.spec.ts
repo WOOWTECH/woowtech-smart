@@ -21,8 +21,9 @@ test("Sessions shows an empty placeholder when the host has no history", async (
       endpoint: `127.0.0.1:${daemon.port}`,
       nowIso: new Date().toISOString(),
     });
-    await page.route(/:6767\b/, (route) => route.abort());
-    await page.routeWebSocket(/:6767\b/, async (webSocket) => {
+    // Installed daemons: woowtech smart's on 6770 and an upstream Paseo's on 6767.
+    await page.route(/:(6767|6770)\b/, (route) => route.abort());
+    await page.routeWebSocket(/:(6767|6770)\b/, async (webSocket) => {
       await webSocket.close({ code: 1008, reason: "Blocked developer daemon during e2e." });
     });
     await page.addInitScript(

@@ -16,8 +16,9 @@ export interface WaitForServerOptions {
 type ServerProbe = (host: string, port: number) => Promise<void>;
 
 const RESERVED_LOCAL_PORTS = new Set([
-  6767, // Installed daemon.
+  6767, // Installed upstream Paseo daemon (it can run beside woowtech smart).
   6768, // Developer daemon.
+  6770, // Installed woowtech smart daemon.
   61680, // OpenCode's default local server.
 ]);
 

@@ -13,9 +13,10 @@ import {
 } from "../support/helpers/new-workspace";
 import { createTempDirectory, createTempGitRepo } from "../support/helpers/workspace";
 
+// Under woowtech smart's home, so screenshots stay out of an upstream Paseo install's ~/.paseo.
 const SCREENSHOT_DIRECTORY = path.join(
   process.env.HOME ?? tmpdir(),
-  ".paseo/plans/import-session-ux",
+  ".woowtech-smart/plans/import-session-ux",
 );
 const claudeConfigDirectory = mkdtempSync(path.join(tmpdir(), "paseo-import-flow-claude-"));
 const brokenProvider = "broken-acp";

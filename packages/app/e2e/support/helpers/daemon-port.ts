@@ -6,17 +6,18 @@ import { escapeRegex } from "./regex";
  * build daemon WebSocket URLs, route patterns, or host endpoints share this
  * accessor instead of re-reading the env var.
  *
- * The port-6767 guard is a hard guardrail: 6767 is the developer's default
- * daemon, which manages real agents. The e2e port is never legitimately 6767,
- * so refusing it here keeps every test off the developer daemon.
+ * The installed-daemon port guard is a hard guardrail: 6770 is woowtech smart's
+ * default daemon and 6767 an upstream Paseo daemon on the same machine, and both
+ * manage real agents. The e2e port is never legitimately either of them, so
+ * refusing them here keeps every test off the developer's daemons.
  */
 export function getE2EDaemonPort(): string {
   const port = process.env.E2E_DAEMON_PORT;
   if (!port) {
     throw new Error("E2E_DAEMON_PORT is not set (expected from the Playwright worker fixture).");
   }
-  if (port === "6767") {
-    throw new Error("E2E_DAEMON_PORT must not point at the developer daemon (6767).");
+  if (port === "6767" || port === "6770") {
+    throw new Error(`E2E_DAEMON_PORT must not point at an installed daemon (${port}).`);
   }
   return port;
 }

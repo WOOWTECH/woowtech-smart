@@ -82,8 +82,10 @@ export async function startIsolatedHostDaemon(
   options: IsolatedHostDaemonOptions = {},
 ): Promise<IsolatedHostDaemon> {
   const primaryPort = Number(process.env.E2E_DAEMON_PORT ?? 0);
+  // An upstream Paseo's installed daemon, the dev daemon, woowtech smart's installed daemon.
+  const reservedPorts = new Set([6767, 6768, 6770, primaryPort]);
   let port = await getAvailablePort();
-  while (port === 6767 || port === 6768 || port === primaryPort) port = await getAvailablePort();
+  while (reservedPorts.has(port)) port = await getAvailablePort();
 
   const metroPort = process.env.E2E_METRO_PORT;
   if (!metroPort) throw new Error("E2E_METRO_PORT is required to start an isolated host daemon");

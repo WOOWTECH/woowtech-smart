@@ -17,7 +17,15 @@ function repoPath(relative) {
 
 const images = "packages/app/assets/images";
 const desktop = "packages/desktop/assets";
-const favicons = ["", "-light", "-dark", "-light-running", "-light-attention", "-dark-running", "-dark-attention"];
+const favicons = [
+  "",
+  "-light",
+  "-dark",
+  "-light-running",
+  "-light-attention",
+  "-dark-running",
+  "-dark-attention",
+];
 
 // Icons that show the blue symbol, with their required pixel size.
 const SYMBOL_ICONS = [
@@ -50,7 +58,10 @@ const nearlyBlack = (red, green, blue) => red + green + blue < 90;
 
 function assertShowsTheBlueSymbol(image, label) {
   assert.ok(shareOfPixels(image, clearlyBlue) > 0.01, `${label} shows no brand-blue symbol`);
-  assert.ok(shareOfPixels(image, nearlyBlack) < 0.02, `${label} looks like upstream Paseo's black tile`);
+  assert.ok(
+    shareOfPixels(image, nearlyBlack) < 0.02,
+    `${label} looks like upstream Paseo's black tile`,
+  );
 }
 
 /** The largest PNG image stored in an .icns or .ico file. */
@@ -58,7 +69,11 @@ function largestEmbeddedPng(file) {
   const data = readFileSync(repoPath(file));
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
   const pngs = [];
-  for (let offset = data.indexOf(signature); offset !== -1; offset = data.indexOf(signature, offset + 8)) {
+  for (
+    let offset = data.indexOf(signature);
+    offset !== -1;
+    offset = data.indexOf(signature, offset + 8)
+  ) {
     const end = data.indexOf("IEND", offset);
     if (end !== -1) pngs.push(data.subarray(offset, end + 8));
   }
@@ -100,14 +115,28 @@ test("Android's adaptive icon sits on white", () => {
   assert.equal(adaptiveIcon.backgroundColor.toLowerCase(), "#ffffff");
 });
 
+test("Android tints the notification icon brand blue, not Paseo's green", () => {
+  const notifications = expoPrebuildConfig("production").plugins.find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === "expo-notifications",
+  );
+  assert.ok(notifications, "the expo-notifications plugin is not configured");
+  assert.equal(notifications[1]?.color?.toLowerCase(), "#6183fc");
+});
+
 test("the app's logo component draws the WOOW symbol from woowtech/brand", () => {
   const brand = readFileSync(repoPath("woowtech/brand/woowtech-symbol-path.svg"), "utf8");
-  const component = readFileSync(repoPath("packages/app/src/components/icons/paseo-logo.tsx"), "utf8");
+  const component = readFileSync(
+    repoPath("packages/app/src/components/icons/paseo-logo.tsx"),
+    "utf8",
+  );
   const viewBox = /viewBox="([^"]+)"/.exec(brand)?.[1];
   const strokes = [...brand.matchAll(/ d="([^"]+)"/g)].map((match) => match[1]);
 
   assert.ok(strokes.length > 0, "the brand symbol has no strokes");
-  assert.ok(component.includes(`viewBox="${viewBox}"`), "the logo is not drawn on the symbol's viewBox");
+  assert.ok(
+    component.includes(`viewBox="${viewBox}"`),
+    "the logo is not drawn on the symbol's viewBox",
+  );
   for (const stroke of strokes) {
     assert.ok(component.includes(stroke), "the logo is missing a stroke of the symbol");
   }

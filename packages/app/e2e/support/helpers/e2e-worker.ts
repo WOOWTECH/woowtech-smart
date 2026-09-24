@@ -20,7 +20,8 @@ export interface E2EWorkerOptions {
 function resolveOptionalHome(value: string | undefined): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
-  return resolvePaseoHomePath(trimmed === "current" ? "~/.paseo" : trimmed);
+  // "current" is the installed woowtech smart daemon's home, never an upstream Paseo's ~/.paseo.
+  return resolvePaseoHomePath(trimmed === "current" ? "~/.woowtech-smart" : trimmed);
 }
 
 async function createFakeEditorBin(): Promise<string> {
