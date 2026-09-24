@@ -39,37 +39,46 @@ function* shippedSourceFiles(dir, fileTypes) {
   }
 }
 
+function* filesToSearch(dirs, files, fileTypes) {
+  for (const dir of dirs) {
+    yield* shippedSourceFiles(path.join(repoRoot, dir), fileTypes);
+  }
+  for (const file of files) {
+    yield path.join(repoRoot, file);
+  }
+}
+
 /**
  * Every shipped source line that matches one of `patterns`, as `path:line`.
  *
  * Options narrow the search: `dirs` to scan instead of every package, `fileTypes`
- * to read, `skipPaths` (prefixes relative to the repo root), `skipComments`, and
+ * to read, `files` (single files read whatever their type, such as config files),
+ * `skipPaths` (prefixes relative to the repo root), `skipComments`, and
  * `allowLines` for individual lines that may match, each with a stated reason at
  * the call site.
  */
 export function findInShippedSources(patterns, options = {}) {
   const {
     dirs = SHIPPED_SOURCE_DIRS,
+    files = [],
     fileTypes = SOURCE_FILE,
     skipPaths = [],
     skipComments = false,
     allowLines = [],
   } = options;
   const hits = [];
-  for (const dir of dirs) {
-    for (const file of shippedSourceFiles(path.join(repoRoot, dir), fileTypes)) {
-      const relativeFile = path.relative(repoRoot, file);
-      if (skipPaths.some((skipped) => relativeFile.startsWith(skipped))) continue;
-      readFileSync(file, "utf8")
-        .split("\n")
-        .forEach((line, index) => {
-          if (skipComments && COMMENT_LINE.test(line)) return;
-          if (allowLines.some((allowed) => allowed.test(line))) return;
-          if (patterns.some((pattern) => pattern.test(line))) {
-            hits.push(`${relativeFile}:${index + 1}`);
-          }
-        });
-    }
+  for (const file of filesToSearch(dirs, files, fileTypes)) {
+    const relativeFile = path.relative(repoRoot, file);
+    if (skipPaths.some((skipped) => relativeFile.startsWith(skipped))) continue;
+    readFileSync(file, "utf8")
+      .split("\n")
+      .forEach((line, index) => {
+        if (skipComments && COMMENT_LINE.test(line)) return;
+        if (allowLines.some((allowed) => allowed.test(line))) return;
+        if (patterns.some((pattern) => pattern.test(line))) {
+          hits.push(`${relativeFile}:${index + 1}`);
+        }
+      });
   }
   return hits;
 }

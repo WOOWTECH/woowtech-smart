@@ -558,8 +558,10 @@ export function resolveConfigFromPersisted(
   const resolvedOptions = options ?? {};
   const env = configurationEnvironment(resolvedOptions.env ?? process.env);
   const cli = resolvedOptions.cli;
-  const relayEnabledFallback =
-    resolvedOptions.relayEnabledFallback ?? persisted.daemon?.relay?.enabled === undefined;
+  // woowtech smart keeps the relay off until the user turns it on. Upstream turns it
+  // on for a config without daemon.relay.enabled (the relayOptInDefault compatibility
+  // rule), which would connect such a daemon to upstream's relay.paseo.sh.
+  const relayEnabledFallback = resolvedOptions.relayEnabledFallback ?? false;
 
   const listen = resolveListenAddress(env, cli, persisted);
   const {

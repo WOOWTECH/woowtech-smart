@@ -6,11 +6,14 @@
 //   node --test woowtech/coexistence.test.mjs
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { findInShippedSources } from "./shipped-sources.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
+const desktopDir = new URL("packages/desktop/", repoRoot);
 
 function read(relativePath) {
   return readFileSync(new URL(relativePath, repoRoot), "utf8");
@@ -21,6 +24,23 @@ function capture(source, pattern, what) {
   const match = pattern.exec(source);
   assert.ok(match, `could not find ${what}`);
   return match[1];
+}
+
+/**
+ * The folder electron-updater downloads into, as the desktop package's electron-builder
+ * writes it into app-update.yml. electron-builder derives it from the packaged package
+ * name and ignores any value under `publish`, so ask electron-builder itself.
+ */
+async function builderUpdaterCacheDirName() {
+  const { AppInfo, Packager } = createRequire(new URL("package.json", desktopDir))(
+    "electron-builder",
+  );
+  const packager = new Packager({
+    projectDir: fileURLToPath(desktopDir),
+    config: "electron-builder.yml",
+  });
+  await packager.validateConfig();
+  return new AppInfo(packager, null).updaterCacheDirName;
 }
 
 const DESKTOP_APP_ID = "io.woowtech.smart.desktop";
@@ -35,7 +55,7 @@ test("shipped code defaults to our port, not upstream's 6767", () => {
   assert.deepEqual(findInShippedSources([/\b6767\b/]), []);
 });
 
-test("the desktop app has its own id, name and update cache, used consistently", () => {
+test("the desktop app has its own id, name and update cache, used consistently", async () => {
   const builder = read("packages/desktop/electron-builder.yml");
   const main = read("packages/desktop/src/main.ts");
   const updater = read("packages/desktop/src/diagnostics/updater.ts");
@@ -52,6 +72,9 @@ test("the desktop app has its own id, name and update cache, used consistently",
     capture(updater, /const SHIPIT_DIRECTORY_NAME = "(.+?)";/, "SHIPIT_DIRECTORY_NAME"),
     `${appId}.ShipIt`,
   );
+  // The official Paseo downloads updates into @getpaseodesktop-updater, named after
+  // upstream's package name.
+  assert.equal(await builderUpdaterCacheDirName(), `${appId}-updater`);
 });
 
 test("the desktop app, mobile app, deep links and daemon share one link scheme", () => {

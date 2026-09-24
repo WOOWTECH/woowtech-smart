@@ -75,19 +75,26 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
 同一台電腦裝了官方 Paseo 時，原本兩邊共用資料夾、port、連結 scheme 和桌面版身分：後啟動的 daemon 搶不到 port，App 甚至可能連到官方的 daemon。現在全部分開：
 
-| 項目               | 原版               | woowtech smart                           |
-| ------------------ | ------------------ | ---------------------------------------- |
-| daemon 資料夾      | `~/.paseo`         | `~/.woowtech-smart`                      |
-| 預設 port          | 6767               | 6770                                     |
-| 連結 scheme        | `paseo://`         | `woowtech-smart://`                      |
-| 桌面版 appId       | `sh.paseo.desktop` | `io.woowtech.smart.desktop`              |
-| 桌面版名稱／執行檔 | `Paseo`            | `woowtech smart`（`woowtech smart.app`） |
+| 項目               | 原版                       | woowtech smart                           |
+| ------------------ | -------------------------- | ---------------------------------------- |
+| daemon 資料夾      | `~/.paseo`                 | `~/.woowtech-smart`                      |
+| 預設 port          | 6767                       | 6770                                     |
+| 連結 scheme        | `paseo://`                 | `woowtech-smart://`                      |
+| 桌面版 appId       | `sh.paseo.desktop`         | `io.woowtech.smart.desktop`              |
+| 桌面版名稱／執行檔 | `Paseo`                    | `woowtech smart`（`woowtech smart.app`） |
+| 桌面版更新下載快取 | `@getpaseodesktop-updater` | `io.woowtech.smart.desktop-updater`      |
 
 - port 在 daemon、App（本機備援位址、手動新增主機的預設值）、CLI 說明和 SSH 連線的預設值都一致。
 - scheme 同時用在桌面版載入介面的來源、系統註冊的連結、手機 App、深層連結和 daemon 的 CORS 白名單。原版的 `paseo://` 連結留給官方 Paseo，我們不接；診斷報告會把兩種連結都遮掉。
 - electron-builder 用 `executableName` 命名 `.app` 和主執行檔，用 `productName` 命名 helper，所以兩個設成一樣，跟上游相同。
 - 用名稱找桌面版的地方都改了：CLI 的 `open`、`bin/paseo`（透過 helper 執行 CLI）、打包腳本、Linux 啟動器。
-- `woowtech/coexistence.test.mjs` 檢查以上所有值彼此一致，也掃描原始碼裡不能再出現 `~/.paseo` 和 6767。
+- 更新下載快取在系統的快取資料夾底下（macOS 是 `~/Library/Caches/`）。資料夾名稱由 electron-builder 從 `package.json` 的 `name` 算出來寫進 `app-update.yml`，`publish` 裡設的值會被蓋掉。
+  上游的 `@getpaseo/desktop` 會算出跟官方 Paseo 同一個資料夾，所以 `electron-builder.yml` 用 `extraMetadata.name` 把打包進去的名稱改成 appId。
+  - 跟著改成我們的：Windows 安裝時留給差異更新用的安裝檔副本、解除安裝加上 `--delete-app-data` 時清掉的 `%APPDATA%\<名稱>`。Linux deb/rpm 的套件名稱從 `woowtech smart` 變成 `io.woowtech.smart.desktop`。
+  - 不受影響：`main.ts` 一啟動就用 `app.setName` 改名，userData 和 log 資料夾看的是那個名稱。
+  - electron-builder 用套件名稱在 workspace 裡找桌面版的相依套件，改名後找不到，會改成逐一走訪 `node_modules`。兩種做法收集到的模組完全相同（277 筆，連版本和來源路徑都一樣），升級 electron-builder 後要再比對一次。
+    會退回逐一走訪，是因為在 repo 根目錄也找不到：根目錄的 `package.json` 沒有 `dependencies` 和 `optionalDependencies`（上游 2026-04 才拿掉）。合併上游後如果又出現，electron-builder 會改打包根目錄的相依套件，桌面版自己的（electron-log、electron-updater、`@getpaseo/server` 等）都不會進 app.asar，打包本身不會報錯。
+- `woowtech/coexistence.test.mjs` 檢查以上所有值彼此一致，也掃描原始碼裡不能再出現 `~/.paseo` 和 6767。快取資料夾名稱直接交給桌面版的 electron-builder 計算。
 - 還沒處理的：
   - CLI 指令仍叫 `paseo`（最後再改）。兩邊的 CLI 都裝進 PATH 時會互相覆蓋。
   - 安裝檔檔名仍是 `Paseo-…`，第二步改名稱時跟 `desktop-updates.ts` 的 DMG 連結一起改。
@@ -164,10 +171,16 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 深色背景上的連結用比較淡的 #8fa6fd，確保讀得清楚。
 - 預設的深色主題原本帶上游的綠色調，現在背景改成中性灰（沿用 Zinc 的灰階），紅色也改用 Zinc 那組中性紅。其他深色主題（Zinc、Midnight、Claude、Ghostty）維持原樣。
 - 品牌藍只寫在 `packages/app/src/styles/brand.ts`（`BRAND_BLUE`），主題的強調色直接引用它。
-- Android 通知的強調色也是品牌藍（上游是綠色 #20744A），通知的小圖示會染成這個顏色。
-  這個值寫在 `packages/app/app.config.js` 的 expo-notifications 外掛設定，沒有引用 `brand.ts`，改品牌藍時要一起改。
+  主題清單裡代表預設深色主題的色塊（上游是綠色 #2D8B62）也引用它。選單上深色主題顯示的是月亮圖示，這個色塊目前沒有畫出來。
+- 下面兩個值沒辦法引用 `brand.ts`，改品牌藍時要一起改。上游兩處都是綠色 #20744A：
+  - Android 通知的強調色，通知的小圖示會染成這個顏色。寫在 `packages/app/app.config.js` 的 expo-notifications 外掛設定。
+  - 網頁版的鍵盤焦點框。桌面版載入的是同一份網頁，所以也一起改了。寫在 `packages/app/public/index.html` 的 `*:focus-visible`。
+- 有意義的綠色維持上游原樣，色值也跟品牌綠不同：成功狀態、diff 的新增行、健康檢查通過的執行中腳本、自動接受模式（快速模式是黃色、規劃模式是藍色）、終端機的 ANSI 綠。
 - logo 元件不管呼叫端傳什麼顏色，一律畫品牌藍，因為品牌標誌不應該跟著主題變色。
-- 測試：`styles/theme.test.ts` 檢查品牌色和中性背景，`components/icons/paseo-logo.test.tsx` 檢查 logo 一律是品牌藍。
+- 測試：
+  - `styles/theme.test.ts` 檢查品牌色和中性背景，`components/icons/paseo-logo.test.tsx` 檢查 logo 一律是品牌藍。
+  - `woowtech/brand-colors.test.mjs` 掃描出貨的 App、網頁和桌面版檔案，連同 `app.config.js` 和 `electron-builder.yml`，不准出現上游的品牌綠。
+    範圍包括 #20744A、上游主題的兩個亮色（淺色 #239956、深色 #7ccba0）和代表色 #2D8B62，十六進位和 `rgb()`／`rgba()` 寫法都算。
 
 ### 10. 說明與求助連結（品牌識別第四步）
 
@@ -195,6 +208,26 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `changelog/internal/changelog-source.test.ts` 檢查實際抓取的網址。
   - `utils/open-external-url.test.ts` 和桌面版的 `features/opener.test.ts` 檢查能開 mailto，也仍然擋掉 file: 和 javascript:。
   - `i18n/brand.test.ts` 檢查每種語言的說明選單都不再提 Discord 或 GitHub。
+
+### 11. Relay 預設關閉
+
+- 原因：我們還沒有自己的 relay，上游的 relay.paseo.sh 不是我們營運的。使用者自己打開之前，daemon 不能連過去。
+- 上游只在建立新的 `config.json` 時寫入 `daemon.relay.enabled: false`。`config.json` 已經存在但沒寫這個欄位時，上游當作要開 relay（`relayOptInDefault` 相容規則，上游預計 2027-01-31 後拿掉）。
+  `scripts/dev-home.sh` 幫 dev daemon 寫的設定就沒有這個欄位，所以 dev daemon 一直連著上游的 relay，`.dev/paseo-home/daemon.log` 裡有 `relay_control_connected`。
+- 做法：`packages/server/src/server/config.ts` 的 `resolveConfigFromPersisted` 在沒寫 `daemon.relay.enabled` 時一律當作關閉，只改這一行。daemon 啟動、重新載入設定、CLI 的 `daemon pair` 和 `daemon status` 都從這裡取值。
+- 使用者打開 relay 的方法，打開後連的是上游的 relay：
+  - 桌面版「配對裝置」按「啟用中繼」，會寫進 `config.json`。
+  - `paseo daemon pair --relay` 或 `paseo onboard --relay`。
+  - 在 `config.json` 設 `daemon.relay.enabled: true`。前景執行的 `paseo daemon run` 也可以用 `PASEO_RELAY_ENABLED=true`；`paseo daemon start` 和桌面版啟動的 daemon 不看這個環境變數。
+- relay 關閉時看到的畫面都是上游原本的處理，沒有改：
+  - 桌面版「配對裝置」不產生 QR Code，顯示「啟用中繼？」和「暫不」「啟用中繼」兩個按鈕，下方提示改用直接連線。
+  - `paseo daemon pair` 印出「Relay pairing is disabled for this daemon.」，結束碼是 1。
+  - `paseo onboard` 在互動終端機裡問要不要啟用 relay（預設否）。選否，或不是互動終端機時，印出直接連線的說明。
+  - 手機 App 歡迎頁的主要按鈕仍是「掃描 QR Code」，但要先在桌面版或 CLI 打開 relay 才有 QR Code 可掃。「直接連線」隨時都能用。
+- 直接連線：daemon 預設只監聽 `127.0.0.1:6770`，模擬器連得到，實體手機連不到。要讓手機直接連，把 `daemon.listen` 改成這台電腦的區網 IP 或 Tailscale IP 加 `:6770`，並用 `paseo daemon set-password` 設密碼。
+- 測試：
+  - `packages/server/src/server/config-relay.test.ts`：什麼都沒設時 relay 是關的，包括 dev daemon 的設定、沒有 `enabled` 的 `relay: {}`，以及重新載入設定之後；`config.json` 或 `PASEO_RELAY_ENABLED` 仍然能打開。上游兩個「沒寫就開」的測試改成預期關閉。
+  - `woowtech/relay.test.mjs` 透過 tsx 直接呼叫原始碼裡的 `loadConfig`，不讀 `packages/server/dist`，因為 dist 要另外建置，合併上游後常常是舊的。
 
 ## Mac 開發環境
 
@@ -237,6 +270,14 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 說明與求助連結（2026-09-24）：新測試都先紅後綠。
   9 種突變全部被抓到：帶回 Discord、paseo.sh 說明、贊助連結、上游的更新紀錄，開啟器放行任何協定或拿掉 mailto，翻譯缺語言或沒套用。
   網頁版用繁體中文實測：說明選單的「LINE 官方帳號」開 LINE、「寄信給客服」開 mailto；關於頁的 LINE 按鈕和更新紀錄的外部連結也都正確。
+- 品牌綠（2026-09-25）：`brand-colors.test.mjs` 分兩輪，都先紅後綠。第一輪紅燈指到 `index.html:80` 的焦點框，第二輪指到 `theme.ts:777` 的代表色。
+  2 種突變都被抓到：焦點框改回 `rgba(32, 116, 74, 0.8)`、深色連結色改回上游的 #7ccba0。`theme.test.ts` 12/12 通過。還沒在瀏覽器裡實際看過焦點框。
+- Relay 預設關閉（2026-09-25）：`config-relay.test.ts` 改寫和新增的 3 個測試先紅後綠，紅燈都是 `expected true to be false`，全檔 24/24；`relay.test.mjs` 先紅後綠，2/2。
+  2 種突變都被抓到：改回上游「沒寫就開」的規則、忽略 `config.json` 的 `enabled: true`。config 11、persisted-config 44、daemon-config-store 34、relay-runtime 2、daemon-session 11 個測試全部通過。
+  還沒實際啟動 daemon 確認它不再連到 relay.paseo.sh。
+- 更新下載快取（2026-09-25）：`coexistence.test.mjs` 先紅後綠，紅燈是 electron-builder 算出 `'@getpaseodesktop-updater'`，跟官方 Paseo 的 `app-update.yml` 相同。
+  突變被抓到：拿掉 `extraMetadata`、改在 `publish` 設 `updaterCacheDirName`，electron-builder 照樣算出上游的名稱。`auto-updater` 12、`updater` 5、`desktop-packaging` 11 個測試通過，`update-sources.test.mjs` 2/2。
+  沒有實際打包，是用 electron-builder 自己的函式確認 mac、Windows、Linux 的 `app-update.yml` 都會寫 `io.woowtech.smart.desktop-updater`。
 
 ## 接下來
 

@@ -21,9 +21,39 @@ describe("daemon relay config", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
-  test("preserves implicit relay-on for a legacy config without enabled", async () => {
+  // woowtech smart keeps the relay off until the user turns it on. Upstream turns it
+  // on for a config without daemon.relay.enabled, which connects to relay.paseo.sh.
+  test("keeps relay off when no config, env var or flag turns it on", async () => {
+    // The config scripts/dev-home.sh writes for dev daemons: no daemon.relay at all.
+    const home = await createPaseoHome({
+      version: 1,
+      daemon: { listen: "127.0.0.1:6768", cors: { allowedOrigins: ["*"] } },
+    });
+    const config = loadConfig(home, { env: {} });
+
+    expect(config.relayEnabled).toBe(false);
+    expect(config.relayEnabledMutable).toBe(true);
+    expect(resolveConfigFromPersisted(home, { version: 1 }, { env: {} }).relayEnabled).toBe(false);
+  });
+
+  test("keeps relay off for a config whose relay block omits enabled", async () => {
     const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
-    expect(loadConfig(home, { env: {} }).relayEnabled).toBe(true);
+    expect(loadConfig(home, { env: {} }).relayEnabled).toBe(false);
+  });
+
+  test("turns relay on when config.json or PASEO_RELAY_ENABLED asks for it", async () => {
+    const configHome = await createPaseoHome({
+      version: 1,
+      daemon: { relay: { enabled: true } },
+    });
+    const fromConfig = loadConfig(configHome, { env: {} });
+    expect(fromConfig.relayEnabled).toBe(true);
+    expect(fromConfig.relayEnabledMutable).toBe(true);
+
+    const envHome = await createPaseoHome({ version: 1 });
+    const fromEnv = loadConfig(envHome, { env: { PASEO_RELAY_ENABLED: "true" } });
+    expect(fromEnv.relayEnabled).toBe(true);
+    expect(fromEnv.relayEnabledMutable).toBe(false);
   });
 
   test("keeps explicit persisted relay state and marks it mutable", async () => {
@@ -54,7 +84,7 @@ describe("daemon relay config", () => {
     expect(reloaded.relayEnabled).toBe(false);
   });
 
-  test("legacy configs retain relay-on compatibility when enabled remains absent", async () => {
+  test("a config that never set enabled keeps relay off across reloads", async () => {
     const home = await createPaseoHome({ version: 1, daemon: { relay: {} } });
     const startup = loadConfig(home, { env: {} });
     const reloaded = resolveConfigFromPersisted(
@@ -66,7 +96,7 @@ describe("daemon relay config", () => {
       },
     );
 
-    expect(reloaded.relayEnabled).toBe(true);
+    expect(reloaded.relayEnabled).toBe(false);
   });
 
   test("marks environment relay overrides immutable", async () => {

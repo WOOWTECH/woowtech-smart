@@ -774,7 +774,7 @@ export const THEME_OPTIONS = [
     group: "primary",
     unistylesName: "dark",
     theme: darkTheme,
-    swatch: "#2D8B62",
+    swatch: BRAND_ACCENT,
   },
   { name: "auto", group: "primary" },
   {

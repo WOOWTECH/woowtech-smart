@@ -2,6 +2,10 @@ npmRebuild: false
 appId: io.woowtech.smart.desktop
 productName: woowtech smart
 executableName: woowtech smart
+# woowtech smart: electron-builder names electron-updater's download cache after the
+# package name, and @getpaseo/desktop gives the official Paseo's @getpaseodesktop-updater.
+extraMetadata:
+  name: io.woowtech.smart.desktop
 protocols:
   - name: woowtech smart agent link
     schemes:
