@@ -715,8 +715,8 @@ export async function createPaseoDaemon(
 
   // CORS - allow same-origin + configured origins
   const fixedAllowedOrigins = [
-    // Packaged desktop renderers use the custom paseo:// protocol scheme.
-    "paseo://app",
+    // Packaged woowtech smart desktop renderers use the custom woowtech-smart:// scheme.
+    "woowtech-smart://app",
     // For TCP, add localhost variants
     ...(listenTarget.type === "tcp"
       ? [

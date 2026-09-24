@@ -80,6 +80,27 @@ describe("paseo daemon bootstrap", () => {
     }
   });
 
+  test("admits the woowtech smart desktop renderer origin, not upstream Paseo's", async () => {
+    const daemonHandle = await createTestPaseoDaemon();
+    async function allowedOriginFor(origin: string): Promise<string | null> {
+      const response = await fetch(`http://127.0.0.1:${daemonHandle.port}/api/health`, {
+        headers: {
+          Origin: origin,
+          ...(daemonHandle.agentMcpAuthHeader
+            ? { Authorization: daemonHandle.agentMcpAuthHeader }
+            : {}),
+        },
+      });
+      return response.headers.get("access-control-allow-origin");
+    }
+    try {
+      expect(await allowedOriginFor("woowtech-smart://app")).toBe("woowtech-smart://app");
+      expect(await allowedOriginFor("paseo://app")).toBeNull();
+    } finally {
+      await daemonHandle.close();
+    }
+  });
+
   test("keeps timeline activity in memory and removes obsolete timeline files at startup", async () => {
     const paseoHomeRoot = await mkdtemp(path.join(os.tmpdir(), "paseo-timeline-cleanup-"));
     const paseoHome = path.join(paseoHomeRoot, ".paseo");

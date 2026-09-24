@@ -14,7 +14,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   ```bash
   git fetch upstream
   git merge upstream/main   # 或只 cherry-pick 需要的修正
-  node --test woowtech/update-sources.test.mjs   # 合併後確認沒有帶回原版的更新來源
+  node --test woowtech/*.test.mjs   # 合併後確認沒有帶回原版的更新來源、預設值和名稱
   ```
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
@@ -70,6 +70,29 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - `woowtech/update-sources.test.mjs` 會檢查打包設定裡的每一個 `publish`，並掃描 app、cli、desktop、server 的原始碼，確認沒有原版的下載或發佈網址。
 - Apple Silicon 版的下載連結用的是 `Paseo-<版本>-arm64.dmg` 這個檔名。之後改品牌、動到 `electron-builder.yml` 的 `mac.artifactName` 時，`desktop-updates.ts` 的 `buildMacAppleSiliconDownloadUrl` 要一起改。
 
+### 5. 跟官方 Paseo 共存（品牌識別第一步）
+
+同一台電腦裝了官方 Paseo 時，原本兩邊共用資料夾、port、連結 scheme 和桌面版身分：後啟動的 daemon 搶不到 port，App 甚至可能連到官方的 daemon。現在全部分開：
+
+| 項目               | 原版               | woowtech smart                           |
+| ------------------ | ------------------ | ---------------------------------------- |
+| daemon 資料夾      | `~/.paseo`         | `~/.woowtech-smart`                      |
+| 預設 port          | 6767               | 6770                                     |
+| 連結 scheme        | `paseo://`         | `woowtech-smart://`                      |
+| 桌面版 appId       | `sh.paseo.desktop` | `io.woowtech.smart.desktop`              |
+| 桌面版名稱／執行檔 | `Paseo`            | `woowtech smart`（`woowtech smart.app`） |
+
+- port 在 daemon、App（本機備援位址、手動新增主機的預設值）、CLI 說明和 SSH 連線的預設值都一致。
+- scheme 同時用在桌面版載入介面的來源、系統註冊的連結、手機 App、深層連結和 daemon 的 CORS 白名單。原版的 `paseo://` 連結留給官方 Paseo，我們不接；診斷報告會把兩種連結都遮掉。
+- electron-builder 用 `executableName` 命名 `.app` 和主執行檔，用 `productName` 命名 helper，所以兩個設成一樣，跟上游相同。
+- 用名稱找桌面版的地方都改了：CLI 的 `open`、`bin/paseo`（透過 helper 執行 CLI）、打包腳本、Linux 啟動器。
+- `woowtech/coexistence.test.mjs` 檢查以上所有值彼此一致，也掃描原始碼裡不能再出現 `~/.paseo` 和 6767。
+- 還沒處理的：
+  - CLI 指令仍叫 `paseo`（最後再改）。兩邊的 CLI 都裝進 PATH 時會互相覆蓋。
+  - 安裝檔檔名仍是 `Paseo-…`，第二步改名稱時跟 `desktop-updates.ts` 的 DMG 連結一起改。
+  - 手機 App 的 bundle id 仍在建置前由 `apply-identity.mjs` 套用。
+  - Linux 的執行檔名稱含空白。Linux 不在 v1，要支援時再考慮 `linux.executableName`。
+
 ## Mac 開發環境
 
 `woowtech/scripts/mac/` 是在 M2、8GB RAM 的 Mac 上建置和測試用的腳本。路徑是寫死的：repo 在 `~/projects/woowtech-smart`，腳本透過 `~/.local/share/woowtech-smart/` 的 symlink 呼叫，log 和截圖也存在那裡。
@@ -105,11 +128,13 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   把 SDK 從 node_modules 移走後實際跑了一輪 Claude 對話：SDK 自動下載、通過驗證，回覆也正確。
 - 更新來源：daemon 自我更新相關測試 17 個、App 更新相關測試 49 個全部通過，`update-sources.test.mjs` 2/2。
   防回歸檢查另外用三種寫法驗證過會失敗：平台專屬的 publish 指向原版、`publish: github` 單行簡寫、清單寫法。
+- 共存：daemon 預設資料夾與 port、深層連結、daemon 接受的桌面版來源（smoke 測試實際啟動 daemon 驗證）、診斷報告遮罩都有行為測試；
+  打包相關測試實際執行 `bin/paseo`，確認能透過 `woowtech smart Helper.app` 啟動 CLI。桌面版 378、App 154、server 85、protocol 37、CLI 12 個測試全部通過。
 
 ## 接下來
 
 - 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
-- 品牌識別：名稱、圖示、URL scheme、安裝檔名稱，以及 agent 看到的 `clientInfo.name = "Paseo"`。
+- 品牌識別第二步起：介面名稱（中文顯示「渥屋智能」）、安裝檔名稱、agent 看到的 `clientInfo.name = "Paseo"`；第三步圖示（白底藍字）與品牌色；第四步說明與求助連結。
   配對連結（`app.paseo.sh`）、Hub（`hub.paseo.sh`）、說明文件和回報問題的連結也還指向原版。
 - 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`）。
 - 繁體中文語系。

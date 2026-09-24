@@ -10,12 +10,9 @@
 // packageId, becomes the iOS bundle identifier and the Android package name —
 // "sh.paseo" already exists under another Apple team, so it cannot be reused.
 //
-// Everything else is left ALONE on purpose. This is a test build: the goal is a
-// binary on a real device, not a finished rebrand. In particular `scheme` stays
-// "paseo", because the daemon keeps a non-configurable CORS origin of
-// "paseo://app" (bootstrap.ts fixedAllowedOrigins) and changing the scheme
-// before the daemon side is rebranded turns every desktop request into a silent
-// CORS 403. Rename the scheme in the same change that rebrands the daemon.
+// The link scheme is not handled here: app.config.js already carries
+// "woowtech-smart", together with the desktop app and the daemon's fixed CORS
+// origin (woowtech/coexistence.test.mjs keeps them in step).
 //
 // Edits are exact string replacements, not line numbers: the upstream repo
 // moves ~100 commits/week and line numbers drift within days.
@@ -116,7 +113,7 @@ ${changed} applied, ${alreadyDone} already in place.
   bundle id     ${BUNDLE_ID}
   expo owner    ${OWNER}
   expo slug     ${SLUG}
-  scheme        paseo   (deliberately unchanged — see the comment at the top)
+  scheme        woowtech-smart   (set in app.config.js itself)
 
 Verify before building:
   cd packages/app && APP_VARIANT=production npx expo config --type public | head -20

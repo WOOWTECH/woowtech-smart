@@ -27,6 +27,15 @@ describe("server config", () => {
     expect(standaloneConfig.desktopManaged).toBe(false);
   });
 
+  test("listens on 127.0.0.1:6770 by default, apart from an upstream Paseo daemon", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-default-listen-"));
+    roots.push(paseoHome);
+
+    const config = loadConfig(paseoHome, { env: {} });
+
+    expect(config.listen).toBe("127.0.0.1:6770");
+  });
+
   test("loads the provider catalog refresh timeout", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-provider-timeout-"));
     roots.push(paseoHome);
