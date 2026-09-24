@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   darkPureBlackTheme,
   darkTheme,
+  darkZincTheme,
   FONT_SIZE,
   getNextThemePreference,
   lightTheme,
@@ -41,6 +42,24 @@ describe("Theme catalog", () => {
   });
 });
 
+describe("woowtech smart brand colors", () => {
+  it("highlights in the brand blue in the default light and dark themes", () => {
+    expect(lightTheme.colors.accent).toBe("#6183fc");
+    expect(lightTheme.colors.accentBright).toBe("#6183fc");
+    expect(darkTheme.colors.accent).toBe("#6183fc");
+  });
+
+  it("keeps links readable on dark surfaces with a lighter blue", () => {
+    expect(darkTheme.colors.accentBright).toBe("#8fa6fd");
+  });
+
+  it("keeps the default dark surfaces neutral gray", () => {
+    for (const surface of ["surface0", "surface1", "surface2", "surface3"] as const) {
+      expect(darkTheme.colors[surface]).toBe(darkZincTheme.colors[surface]);
+    }
+  });
+});
+
 describe("Pure black theme", () => {
   it("uses a pure black application and terminal background", () => {
     expect(darkPureBlackTheme.colors.surface0).toBe("#000000");
@@ -48,9 +67,9 @@ describe("Pure black theme", () => {
     expect(darkPureBlackTheme.colors.terminal.background).toBe("#000000");
   });
 
-  it("uses Paseo's muted green accent", () => {
-    expect(darkPureBlackTheme.colors.accent).toBe("#20744A");
-    expect(darkPureBlackTheme.colors.accentBright).toBe("#7ccba0");
+  it("uses the woowtech smart brand blue accent", () => {
+    expect(darkPureBlackTheme.colors.accent).toBe("#6183fc");
+    expect(darkPureBlackTheme.colors.accentBright).toBe("#8fa6fd");
   });
 
   it("derives sidebar interaction surfaces from the surface scale", () => {

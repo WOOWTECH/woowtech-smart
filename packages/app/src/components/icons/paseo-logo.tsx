@@ -1,8 +1,11 @@
+import React from "react";
 import Svg, { Path } from "react-native-svg";
-import { useUnistyles } from "react-native-unistyles";
+
+import { BRAND_BLUE } from "@/styles/brand";
 
 interface PaseoLogoProps {
   size?: number;
+  /** Ignored: the WOOW symbol is a brand mark, always drawn in the brand blue. */
   color?: string;
 }
 
@@ -21,14 +24,11 @@ const SYMBOL_STROKES = [
   "M 105.129 83.345 L 99.785 83.345 L 99.785 41.683 L 105.129 41.683 Z",
 ];
 
-export function PaseoLogo({ size = 64, color }: PaseoLogoProps) {
-  const { theme } = useUnistyles();
-  const fill = color ?? theme.colors.foreground;
-
+export function PaseoLogo({ size = 64 }: PaseoLogoProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 105.2 83.4" fill="none">
       {SYMBOL_STROKES.map((stroke) => (
-        <Path key={stroke} d={stroke} fill={fill} />
+        <Path key={stroke} d={stroke} fill={BRAND_BLUE} />
       ))}
     </Svg>
   );

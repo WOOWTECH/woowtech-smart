@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
+import { BRAND_BLUE } from "./brand";
 
 export const baseColors = {
   // Base colors
@@ -305,6 +306,11 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
   };
 }
 
+// woowtech smart's brand blue for highlights: buttons, toggles, selection. Links on dark
+// surfaces use a lighter step so they stay readable there.
+const BRAND_ACCENT = BRAND_BLUE;
+const BRAND_ACCENT_ON_DARK = "#8fa6fd";
+
 const lightSemanticColors = buildLightSemanticColors({
   surface0: "#ffffff",
   surface1: "#fafafa",
@@ -318,8 +324,8 @@ const lightSemanticColors = buildLightSemanticColors({
   foregroundExtraMuted: "#a1a1aa",
   border: "#e4e4e7",
   borderAccent: "#ececf1",
-  accent: "#20744A",
-  accentBright: "#239956",
+  accent: BRAND_ACCENT,
+  accentBright: BRAND_ACCENT,
   accentForeground: "#ffffff",
   primary: "#18181b",
   primaryForeground: "#fafafa",
@@ -440,24 +446,24 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
 // Dark tint definitions
 // ---------------------------------------------------------------------------
 
-// Paseo — subtle teal-green tint (default)
+// woowtech smart — neutral gray surfaces (Zinc's) with the brand blue accent (default)
 const paseoDarkColors = buildDarkSemanticColors({
-  surface0: "#181B1A",
-  surface1: "#1E2120",
-  surface2: "#272A29",
-  surface3: "#434645",
-  surface4: "#595B5B",
-  surfaceDiffEmpty: "#252827",
-  surfaceSidebar: "#141716",
-  foregroundMuted: "#A1A5A4",
-  foregroundExtraMuted: "#717574",
-  border: "#252B2A",
-  borderAccent: "#2F3534",
-  accent: "#20744A",
-  accentBright: "#7ccba0",
-  destructive: "#c64f43", // warm red, hue ~7 — reads as red (not pink) against the green tint
-  terminalBlack: "#141716",
-  terminalBrightBlack: "#434645",
+  surface0: "#18181b",
+  surface1: "#1f1f22",
+  surface2: "#27272a",
+  surface3: "#3f3f46",
+  surface4: "#52525b",
+  surfaceDiffEmpty: "#242427",
+  surfaceSidebar: "#131316",
+  foregroundMuted: "#a1a1aa",
+  foregroundExtraMuted: "#71717a",
+  border: "#27272a",
+  borderAccent: "#303036",
+  accent: BRAND_ACCENT,
+  accentBright: BRAND_ACCENT_ON_DARK,
+  destructive: "#c44a4a", // neutral red, hue 0 — clearly red without screaming
+  terminalBlack: "#131316",
+  terminalBrightBlack: "#3f3f46",
 });
 
 // Zinc — neutral gray, no tint
@@ -707,8 +713,8 @@ const pureBlackDarkColors = buildDarkSemanticColors({
   foregroundExtraMuted: "#71717a",
   border: "#1c1c1c",
   borderAccent: "#242424",
-  accent: "#20744A",
-  accentBright: "#7ccba0",
+  accent: BRAND_ACCENT,
+  accentBright: BRAND_ACCENT_ON_DARK,
   destructive: "#c44a4a",
   terminalBlack: "#595959",
   terminalBrightBlack: "#8a8a8a",
