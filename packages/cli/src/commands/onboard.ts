@@ -251,7 +251,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   const alreadyRunning = await readDaemonInstance(paseoHome);
   persistSetupChoices(paseoHome, options);
   if (richUi) {
-    renderNote(paseoHome, "woowtech smart home");
+    renderNote(paseoHome, "Daemon data folder");
   }
 
   const voiceEnabled = await resolveAndPersistVoice(paseoHome, options);
