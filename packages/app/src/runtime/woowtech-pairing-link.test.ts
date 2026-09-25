@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { handlePairingLink, type PairingLinkHandlers } from "./woowtech-pairing-link";
+import { HostRuntimeStore, type HostRuntimeControllerDeps } from "./host-runtime";
+import {
+  handlePairingLink,
+  type HostRegistry,
+  type PairingLinkHandlers,
+} from "./woowtech-pairing-link";
 
 const OFFER = {
   v: 2,
@@ -9,11 +14,18 @@ const OFFER = {
 };
 const APP_LINK = `woowtech-smart:///#offer=${Buffer.from(JSON.stringify(OFFER)).toString("base64url")}`;
 
+// A host store that has loaded the saved hosts, as it has once the app is up.
+const LOADED_HOSTS: HostRegistry = {
+  isHostRegistryLoaded: () => true,
+  subscribeHostList: () => () => undefined,
+};
+
 /** OfferLinkListener's side of a link: what it imported, where it went, what it warned. */
 function listener(importOffer: PairingLinkHandlers["importOffer"]) {
   const events: string[] = [];
   let cancelled = false;
   const handlers: PairingLinkHandlers = {
+    hosts: LOADED_HOSTS,
     importOffer: async (url) => {
       events.push(`import ${url}`);
       return importOffer(url);
@@ -106,5 +118,108 @@ describe("a link the app is opened with", () => {
     await handled;
 
     expect(app.events).toEqual([`import ${APP_LINK}`]);
+  });
+});
+
+const REGISTRY_KEY = "@paseo:daemon-registry";
+
+const SAVED_HOST = {
+  serverId: "srv_saved",
+  label: "Studio Mac",
+  connections: [
+    {
+      id: "relay:wss:relay.woowtech.io:443",
+      type: "relay",
+      relayEndpoint: "relay.woowtech.io:443",
+      useTls: true,
+      daemonPublicKeyB64: "pk_saved",
+    },
+  ],
+  preferredConnectionId: "relay:wss:relay.woowtech.io:443",
+  createdAt: "2026-09-01T00:00:00.000Z",
+  updatedAt: "2026-09-01T00:00:00.000Z",
+};
+
+// No daemon answers in these tests; the hosts are only saved.
+const NO_DAEMONS: HostRuntimeControllerDeps = {
+  createClient: () => {
+    throw new Error("no daemon connections in this test");
+  },
+  connectToDaemon: async () => {
+    throw new Error("no daemon connections in this test");
+  },
+  getClientId: async () => "cid_pairing_link",
+};
+
+/** A host store over in-memory storage that already holds `hosts`. */
+function storeWithSavedHosts(hosts: unknown[]) {
+  const values = new Map<string, string>([
+    [REGISTRY_KEY, JSON.stringify(hosts)],
+    // Ends the boot after the saved hosts load, before it probes localhost for a daemon.
+    ["@paseo:e2e", "1"],
+  ]);
+  const store = new HostRuntimeStore({
+    deps: NO_DAEMONS,
+    storage: {
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        values.set(key, value);
+      },
+      removeItem: async (key) => {
+        values.delete(key);
+      },
+    },
+  });
+  return {
+    store,
+    inMemory: () => store.getHosts().map((host) => host.serverId),
+    saved: () =>
+      (JSON.parse(values.get(REGISTRY_KEY) ?? "[]") as { serverId: string }[]).map(
+        (host) => host.serverId,
+      ),
+  };
+}
+
+async function settle(): Promise<void> {
+  for (let turn = 0; turn < 5; turn += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+describe("a pairing link that starts the app", () => {
+  it("keeps the saved hosts when the link arrives before they load", async () => {
+    const hosts = storeWithSavedHosts([SAVED_HOST]);
+    const app = listener((url) => hosts.store.upsertConnectionFromOfferUrl(url));
+
+    // A cold start through the camera: React runs OfferLinkListener's effect (a child's) before
+    // HostRuntimeBootstrapProvider's, so Linking.getInitialURL() is asked before the store boots.
+    const handled = Promise.resolve(APP_LINK).then((url) =>
+      handlePairingLink(url, { ...app.handlers, hosts: hosts.store }),
+    );
+    const booted = hosts.store.boot();
+    await Promise.all([handled, booted]);
+    await settle();
+
+    expect({ inMemory: hosts.inMemory(), saved: hosts.saved() }).toEqual({
+      inMemory: ["srv_saved", "srv_offer"],
+      saved: ["srv_saved", "srv_offer"],
+    });
+    expect(app.events).toEqual([`import ${APP_LINK}`, "open project"]);
+    hosts.store.syncHosts([]);
+  });
+
+  it("pairs at once when the saved hosts have loaded", async () => {
+    const hosts = storeWithSavedHosts([SAVED_HOST]);
+    await hosts.store.boot();
+    const app = listener((url) => hosts.store.upsertConnectionFromOfferUrl(url));
+
+    await handlePairingLink(APP_LINK, { ...app.handlers, hosts: hosts.store });
+    await settle();
+
+    expect({ inMemory: hosts.inMemory(), saved: hosts.saved() }).toEqual({
+      inMemory: ["srv_saved", "srv_offer"],
+      saved: ["srv_saved", "srv_offer"],
+    });
+    hosts.store.syncHosts([]);
   });
 });
