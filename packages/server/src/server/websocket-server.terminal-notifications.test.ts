@@ -18,6 +18,7 @@ import { asInternals, createStub } from "./test-utils/class-mocks.js";
 import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
 import type { PushNotificationSender, PushPayload } from "./push/index.js";
 import type { WorkspaceAutoName } from "./workspace-auto-name.js";
+import { relayReasonFor } from "@getpaseo/protocol/woowtech-push";
 
 const wsModuleMock = vi.hoisted(() => {
   class MockWebSocketServer {
@@ -501,18 +502,24 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
     });
   });
 
-  // woowtech smart: the push that leaves the machine picks its sentence from the reason
-  // (push/woowtech-push-content.ts), so a finished terminal must not read "needs attention".
+  // woowtech smart: the push relay picks its sentence from the reason (push/woowtech-relay.ts),
+  // so a finished terminal must not read "needs your attention".
   it.each([
-    ["idle", "finished"],
-    ["attention", "needs_input"],
-  ] as const)("tells the push why when the terminal turns %s", async (state, reason) => {
-    const { manager, emit } = createTerminalManager();
-    const { pushNotifications } = createServer(manager);
+    ["idle", "finished", "finished"],
+    ["attention", "needs_input", "attention"],
+  ] as const)(
+    "tells the push why when the terminal turns %s",
+    async (state, reason, relayReason) => {
+      const { manager, emit } = createTerminalManager();
+      const { pushNotifications } = createServer(manager);
 
-    emit(transition({ previousState: "working", previousChangedAt: 0, state, changedAt: 15000 }));
-    await flushAsync();
+      emit(transition({ previousState: "working", previousChangedAt: 0, state, changedAt: 15000 }));
+      await flushAsync();
 
-    expect(pushNotifications.sent.map((payload) => payload.data?.reason)).toEqual([reason]);
-  });
+      expect(pushNotifications.sent.map((payload) => payload.data?.reason)).toEqual([reason]);
+      expect(pushNotifications.sent.map((payload) => relayReasonFor(payload.data))).toEqual([
+        relayReason,
+      ]);
+    },
+  );
 });

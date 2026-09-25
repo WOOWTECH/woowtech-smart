@@ -19,6 +19,7 @@ import {
   type PushPayload,
 } from "./push/index.js";
 import type { WorkspaceAutoName } from "./workspace-auto-name.js";
+import { parseServerInfoStatusPayload } from "@getpaseo/protocol/messages";
 
 const WORKSPACE_ID = "workspace-1";
 
@@ -368,6 +369,18 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
     expect(pushNotifications.sent).toEqual([]);
+  });
+
+  // woowtech smart: the app registers its push token only with a daemon that pushes through
+  // WoowTech's push relay (woowtech/README.md, 16).
+  it("tells the app that its pushes go through WoowTech's push relay", () => {
+    const { server } = createServer();
+
+    const serverInfo = asInternals<{
+      buildServerInfoStatusPayload(session: { getPermissions(): string[] }): unknown;
+    }>(server).buildServerInfoStatusPayload({ getPermissions: () => [] });
+
+    expect(parseServerInfoStatusPayload(serverInfo)?.features?.woowtechPush).toBe(true);
   });
 
   // woowtech smart: a connected app gets the preview (the desktop app shows it as an OS

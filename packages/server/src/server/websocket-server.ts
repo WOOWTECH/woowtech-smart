@@ -1717,6 +1717,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.advertiseRelayConfig ? { relayConfig: true } : {}),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
         pushTokenRevocation: true,
+        // woowtech smart: pushes go through WoowTech's push relay (push/woowtech-relay.ts).
+        woowtechPush: true,
         // COMPAT(plugins): added in v0.3.0, remove gate after 2027-08-07.
         plugins: true,
         pluginManagement: true,
