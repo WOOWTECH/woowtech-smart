@@ -12,6 +12,7 @@ import type { ManagedAgent } from "../../agent/agent-manager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 export interface DaemonRuntimeConfig {
   listen: string | null;
@@ -302,7 +303,7 @@ export class DaemonSession {
         type: "diagnostics.response",
         payload: {
           requestId: msg.requestId,
-          diagnostic: `Paseo diagnostics\n  Error: ${
+          diagnostic: `${PRODUCT_NAME} diagnostics\n  Error: ${
             error instanceof Error ? error.message : String(error)
           }`,
         },

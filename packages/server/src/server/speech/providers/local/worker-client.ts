@@ -24,6 +24,7 @@ import type {
   LocalSpeechWorkerToParentMessage,
 } from "./worker-protocol.js";
 import { bufferToWorkerBytes, workerBytesToBuffer } from "./worker-bytes.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const DEFAULT_IDLE_TTL_MS = 5 * 60 * 1000;
@@ -170,7 +171,7 @@ function buildWorkerExitMessage(params: {
       : "";
   const stderr = params.stderrTail
     ? ` Last stderr: ${truncateStart(params.stderrTail, USER_ERROR_STDERR_MAX_CHARS)}`
-    : " Check daemon.log and macOS DiagnosticReports for Paseo Voice crash details.";
+    : ` Check daemon.log and macOS DiagnosticReports for ${PRODUCT_NAME} Voice crash details.`;
   return `Local speech worker exited (${formatExitStatus(params.code, params.signal)})${pending}.${stderr}`;
 }
 

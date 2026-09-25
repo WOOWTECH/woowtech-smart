@@ -16,6 +16,7 @@ import type {
 } from "../messages.js";
 import type { AgentManager, AgentSubscriber, SubscribeOptions } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 interface CreateAgentLifecycleDispatchDependencies {
   paseoHome: string;
@@ -195,7 +196,7 @@ export class CreateAgentLifecycleDispatch {
       worktreesRoot: this.dependencies.worktreesRoot,
     });
     if (!ownership.allowed) {
-      throw new Error("Auto-created worktree is not a Paseo-owned worktree");
+      throw new Error(`Auto-created worktree is not managed by ${PRODUCT_NAME}`);
     }
 
     await archiveByScope(

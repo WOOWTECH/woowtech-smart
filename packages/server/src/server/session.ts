@@ -14,6 +14,7 @@ import { basename, resolve, sep } from "path";
 import { homedir } from "node:os";
 import { CLIENT_CAPS, type ClientCapability } from "@getpaseo/protocol/client-capabilities";
 import { formatPluginSourceReference } from "@getpaseo/protocol/plugin-source-reference";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import {
   serializeAgentStreamEvent,
   type AgentSnapshotPayload,
@@ -7908,7 +7909,7 @@ export class Session {
                     timestamp: new Date().toISOString(),
                     item: {
                       type: "assistant_message",
-                      text: "Please upgrade the Paseo app to view this subagent conversation.",
+                      text: `Please upgrade the ${PRODUCT_NAME} app to view this subagent conversation.`,
                     },
                   },
                 ],
@@ -8346,8 +8347,7 @@ export class Session {
     const legacySnapshot = {
       ...snapshot,
       status: "failed" as const,
-      error:
-        "Workspace setup is blocked pending approval of code from a fork pull request. Update Paseo to review and run setup.",
+      error: `Workspace setup is blocked pending approval of code from a fork pull request. Update ${PRODUCT_NAME} to review and run setup.`,
     };
     return message.type === "workspace_setup_progress"
       ? { ...message, payload: { ...message.payload, ...legacySnapshot } }

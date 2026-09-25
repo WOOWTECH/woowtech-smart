@@ -67,6 +67,47 @@ test("the daemon's processes are titled woowtech smart in Activity Monitor and p
     "woowtech smart Supervisor",
   );
   assert.equal(titleIn("packages/server/src/server/daemon-worker.ts"), "woowtech smart Daemon");
+  // The local speech worker, which runs only where local speech is installed.
+  assert.equal(
+    titleIn("packages/server/src/server/speech/providers/local/worker-process.ts"),
+    "woowtech smart Voice",
+  );
+});
+
+test("the daemon's messages name woowtech smart", () => {
+  // Errors and upgrade prompts the app and the CLI show, the diagnostics report
+  // people send us, and the text of pull requests the daemon opens on GitHub. They
+  // name the product with PRODUCT_NAME (packages/protocol/src/brand-name.ts).
+  const naming = findInShippedSources([/\bPaseo\b/], {
+    dirs: ["packages/server/src"],
+    skipComments: true,
+    skipPaths: [
+      // Tool descriptions and results that only agents read. Agents reach these tools
+      // through the MCP server named paseo, which upstream's tool-name handling needs.
+      "packages/server/src/server/agent/tools/paseo-tools.ts",
+      "packages/server/src/server/browser-tools/tools.ts",
+      // Voice-mode instructions for the agent. Voice mode needs local speech, which
+      // woowtech smart does not ship.
+      "packages/server/src/server/voice-config.ts",
+    ],
+    allowLines: [
+      // Upstream's plugin API: its name, and the Paseo versions plugins are written for.
+      /Plugin Paseo (?:API|session host)/,
+      /made for an older version of Paseo and cannot run on Paseo v/,
+      // Text written for an agent: a forked agent's chat history, review comments, and
+      // errors from the bridges between the daemon and a provider's own plugin.
+      /Chat history from a previous Paseo agent/,
+      /Paseo review attachment/,
+      /before Paseo tools were registered/,
+      /Internal Paseo [\w ]+ bridge/,
+      /Paseo OpenCode bridge failed/,
+      /not bound to a Paseo agent|Paseo tools are disabled for this session/,
+      // daemon.log
+      /\blogger\.(?:trace|debug|info|warn|error)\(/,
+    ],
+  });
+
+  assert.deepEqual(naming, []);
 });
 
 test("the daemon introduces itself to agents as woowtech smart", () => {

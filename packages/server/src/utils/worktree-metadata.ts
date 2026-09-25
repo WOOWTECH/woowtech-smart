@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { isAbsolute, join, resolve } from "path";
 import { z } from "zod";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 const ChangeRequestLookupTargetSchema = z.object({
   headRef: z.string().min(1),
@@ -316,7 +317,7 @@ export function requirePaseoWorktreeBaseRefName(worktreeRoot: string): string {
   const metadataPath = getPaseoWorktreeMetadataPath(worktreeRoot);
   const metadata = readPaseoWorktreeMetadata(worktreeRoot);
   if (!metadata) {
-    throw new Error(`Missing Paseo worktree base metadata: ${metadataPath}`);
+    throw new Error(`Missing ${PRODUCT_NAME} worktree base metadata: ${metadataPath}`);
   }
   return metadata.baseRefName;
 }

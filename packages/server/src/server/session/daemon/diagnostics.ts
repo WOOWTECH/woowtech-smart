@@ -1,6 +1,7 @@
 import { open, statfs } from "node:fs/promises";
 import { cpus, freemem, loadavg, platform, release, totalmem, type } from "node:os";
 import path from "node:path";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 import type pino from "pino";
 
@@ -62,7 +63,7 @@ const LOG_TAIL_MAX_BYTES = 64 * 1024;
 
 export async function collectDaemonDiagnostics(options: DaemonDiagnosticsOptions): Promise<string> {
   const sections: string[] = [
-    formatSection("Paseo diagnostics", [
+    formatSection(`${PRODUCT_NAME} diagnostics`, [
       { label: "Collected at", value: new Date().toISOString() },
       { label: "Server ID", value: options.serverId ?? "unknown" },
       { label: "Daemon version", value: options.daemonVersion ?? "unknown" },
@@ -133,7 +134,7 @@ function collectProcessEntries(options: DaemonDiagnosticsOptions): DiagnosticEnt
     { label: "PATH", value: getEnvValue("PATH", "Path") ?? "unset" },
     { label: "Shell", value: formatDaemonShell() },
     { label: "Uptime", value: formatDurationMs(process.uptime() * 1000) },
-    { label: "Paseo home", value: options.paseoHome },
+    { label: "Daemon data folder", value: options.paseoHome },
     { label: "RSS", value: formatBytes(memory.rss) },
     {
       label: "Heap used",

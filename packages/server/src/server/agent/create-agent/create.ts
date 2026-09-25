@@ -26,6 +26,7 @@ import {
   emitLiveTimelineItemIfAgentKnown,
 } from "../timeline-append.js";
 import { resolveCreateAgentIntent } from "./intent.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 export interface CreateAgentSessionWorktreeResult {
   sessionConfig: AgentSessionConfig;
@@ -590,7 +591,7 @@ async function createMcpWorktree(
 ): Promise<CreatePaseoWorktreeWorkflowResult> {
   try {
     if (!options.createPaseoWorktree) {
-      throw new Error("Paseo worktree service is not configured");
+      throw new Error(`${PRODUCT_NAME} worktree service is not configured`);
     }
     return await options.createPaseoWorktree(options.input, {
       ...(options.resolveDefaultBranch

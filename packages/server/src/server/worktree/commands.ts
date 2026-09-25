@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 import { getPaseoWorktreesRoot, isPaseoOwnedWorktreeCwd } from "../../utils/worktree.js";
 import {
@@ -70,7 +71,7 @@ export async function createPaseoWorktreeCommand<Result extends CreatePaseoWorkt
 ): Promise<CreatePaseoWorktreeCommandResult<Result>> {
   try {
     if (!dependencies.createPaseoWorktreeWorkflow) {
-      throw new Error("Paseo worktree service is not configured");
+      throw new Error(`${PRODUCT_NAME} worktree service is not configured`);
     }
 
     const createdWorktree = await dependencies.createPaseoWorktreeWorkflow({
@@ -134,7 +135,7 @@ export async function archiveCommand(
       return {
         ok: false,
         code: "NOT_ALLOWED",
-        message: "Worktree is not a Paseo-owned worktree",
+        message: `Worktree is not managed by ${PRODUCT_NAME}`,
         removedAgents: [],
       };
     }
@@ -195,7 +196,7 @@ async function resolveArchiveTarget(
     const worktrees = await dependencies.workspaceGitService.listWorktrees(repoRoot);
     const match = worktrees.find((entry) => entry.branchName === input.branchName);
     if (!match) {
-      throw new Error(`Paseo worktree not found for branch ${input.branchName}`);
+      throw new Error(`${PRODUCT_NAME} worktree not found for branch ${input.branchName}`);
     }
     return match.path;
   }

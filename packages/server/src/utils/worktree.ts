@@ -44,6 +44,7 @@ import { createExternalProcessEnv } from "../server/paseo-env.js";
 import { parseGitRevParsePath, resolveGitRevParsePath } from "./git-rev-parse-path.js";
 import { expandTilde, getRealpathAwareRelativePath, isPathInsideRoot } from "./path.js";
 import { terminateWithTreeKill } from "./tree-kill.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 export { slugify, validateBranchSlug } from "@getpaseo/protocol/branch-slug";
 
@@ -1090,7 +1091,7 @@ export async function deletePaseoWorktree({
   } else if (cwd) {
     resolvedWorktreesRoot = await getPaseoWorktreesRoot(cwd, paseoHome, worktreesBaseRoot);
   } else {
-    throw new Error("cwd or worktreesRoot is required to delete a Paseo worktree");
+    throw new Error(`cwd or worktreesRoot is required to delete a ${PRODUCT_NAME} worktree`);
   }
 
   const requestedPath = worktreePath ?? join(resolvedWorktreesRoot, worktreeSlug!);
@@ -1107,7 +1108,7 @@ export async function deletePaseoWorktree({
     resolvedWorktree,
   );
   if (relativeWorktreePath === null || relativeWorktreePath === "") {
-    throw new Error("Refusing to delete non-Paseo worktree");
+    throw new Error(`Refusing to delete a worktree not managed by ${PRODUCT_NAME}`);
   }
 
   if (await pathExists(resolvedWorktree)) {
@@ -1603,10 +1604,10 @@ async function validateGitBranchName(cwd: string, branchName: string): Promise<v
 function normalizeRequiredBaseBranch(baseBranch: string): string {
   const normalizedBaseBranch = normalizeBaseRefName(baseBranch);
   if (!normalizedBaseBranch) {
-    throw new Error("Base branch is required when creating a Paseo worktree");
+    throw new Error(`Base branch is required when creating a ${PRODUCT_NAME} worktree`);
   }
   if (normalizedBaseBranch === "HEAD") {
-    throw new Error("Base branch cannot be HEAD when creating a Paseo worktree");
+    throw new Error(`Base branch cannot be HEAD when creating a ${PRODUCT_NAME} worktree`);
   }
   return normalizedBaseBranch;
 }
