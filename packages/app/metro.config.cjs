@@ -2,6 +2,7 @@ const { getDefaultConfig } = require("expo/metro-config");
 const { resolve } = require("metro-resolver");
 const fs = require("fs");
 const path = require("path");
+const { withNativeRnFirebaseModules } = require("./plugins/woowtech-metro-resolver");
 
 const projectRoot = __dirname;
 const appNodeModulesRoot = path.resolve(projectRoot, "node_modules");
@@ -92,6 +93,8 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 
   return resolveWithCustomWebOverlay(context, moduleName, platform);
 };
+// woowtech push: keep the Firebase JS SDK out of the iOS bundle (plugins/woowtech-metro-resolver.js).
+config.resolver.resolveRequest = withNativeRnFirebaseModules(config.resolver.resolveRequest);
 
 if (process.env.PASEO_SERVE_SIM_PREVIEW === "1") {
   const { simMiddleware } = require("serve-sim/middleware");
