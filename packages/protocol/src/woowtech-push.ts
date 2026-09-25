@@ -36,7 +36,9 @@ const LOWERCASE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 // The shapes the daemon generates each id in. Anything else could be the user's text:
 // PASEO_SERVER_ID sets any server id, and workspaces created before upstream made their
 // ids opaque (2026-06-14) keep their folder path as their id. Such an id stays on the
-// machine, and the tap opens less deeply.
+// machine, and the tap opens less deeply. A shape cannot tell who chose an id: a
+// PASEO_SERVER_ID that happens to be srv_ and 12 URL-safe characters (srv_alexs-laptop)
+// is sent like a generated one.
 const TARGET_ID_SHAPES: Record<keyof RelayTarget, RegExp> = {
   serverId: /^srv_[A-Za-z0-9_-]{12}$/, // packages/server/src/server/server-id.ts
   workspaceId: /^wks_[0-9a-f]{16}$/, // packages/server/src/server/workspace-registry-model.ts

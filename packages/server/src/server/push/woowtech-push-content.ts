@@ -45,6 +45,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * in the shape the daemon generates each id. Anything else could be text: workspaces created
  * before upstream made their ids opaque (2026-06-14) keep their folder path as their id, and
  * PASEO_SERVER_ID sets any server id. Such an id stays here; the tap then opens less deeply.
+ * A PASEO_SERVER_ID in the generated shape (srv_ and 12 URL-safe characters) is kept.
  */
 const ROUTING_IDS = {
   serverId: /^srv_[A-Za-z0-9_-]{12}$/, // server-id.ts

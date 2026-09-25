@@ -130,6 +130,13 @@ describe("where a tapped push opens (the target sent to the relay)", () => {
     }
   });
 
+  it("cannot tell a server id set through PASEO_SERVER_ID from a generated one of the same shape", () => {
+    // srv_ and 12 URL-safe characters: a name like this leaves the machine as the server id.
+    expect(relayTargetFor({ serverId: "srv_alexs-laptop" })).toEqual({
+      serverId: "srv_alexs-laptop",
+    });
+  });
+
   it("names an agent or a terminal, not both, and the app opens the agent then", () => {
     expect(
       relayTargetFor({

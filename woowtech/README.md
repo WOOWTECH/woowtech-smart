@@ -508,7 +508,7 @@ token 字串：
   | terminal 等輸入          | `needs_input` | `attention`  |
   | 其他或沒有原因           | —             | `attention`  |
 
-- `target`：一定送，可能是 `{}`，只放 daemon 產生格式的 ID：`serverId` 是 `srv_` 加 12 個字元、`workspaceId` 是 `wks_` 加 16 個十六進位數字、`agentId` 和 `terminalId` 是小寫 UUID，後兩者最多一個（都有時留 agent）。不合格的 ID 不送：2026-06-14 以前，上游把工作區的資料夾路徑當成工作區 ID，舊的 ID 不會重新產生；`PASEO_SERVER_ID` 也能設成任何文字。少了 ID，點通知就開得淺一點。
+- `target`：一定送，可能是 `{}`，只放 daemon 產生格式的 ID：`serverId` 是 `srv_` 加 12 個字元、`workspaceId` 是 `wks_` 加 16 個十六進位數字、`agentId` 和 `terminalId` 是小寫 UUID，後兩者最多一個（都有時留 agent）。不合格的 ID 不送：2026-06-14 以前，上游把工作區的資料夾路徑當成工作區 ID，舊的 ID 不會重新產生；`PASEO_SERVER_ID` 也能設成任何文字。少了 ID，點通知就開得淺一點。格式分不出 ID 是誰取的：`PASEO_SERVER_ID`（上游說是給測試用，設過一次就寫進 `$PASEO_HOME/server-id`，之後不設也沿用）剛好是 `srv_` 加 12 個 URL 安全字元時，例如 `srv_alexs-laptop`，會跟產生的 ID 一樣送出。
 - 不會離開電腦的：推播的標題和內文（agent 回覆預覽、權限要求、terminal 名稱）、`data.cwd` 和其他路徑、專案和工作區名稱，以及不合格的 ID。
 
 daemon：`packages/server/src/server/push/woowtech-relay.ts`
