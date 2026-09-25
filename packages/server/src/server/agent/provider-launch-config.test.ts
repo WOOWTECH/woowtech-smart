@@ -265,6 +265,52 @@ describe("createProviderEnv", () => {
     expect(env.CLAUDE_AGENT_SDK_VERSION).toBeUndefined();
     expect(env.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING).toBe("true");
   });
+
+  test("drops what a parent Claude Code session hands its subprocesses and keeps user configuration", () => {
+    // A daemon started from a Claude Code Bash command or hook inherits these. They
+    // name or reach that one session, not the agent the daemon launches.
+    const parentSession = {
+      CLAUDECODE: "1",
+      CLAUDE_CODE_ENTRYPOINT: "cli",
+      CLAUDE_CODE_SSE_PORT: "11803",
+      CLAUDE_AGENT_SDK_VERSION: "0.2.71",
+      CLAUDE_CODE_SESSION_ID: "parent-session",
+      CLAUDE_CODE_CHILD_SESSION: "1",
+      CLAUDE_CODE_SESSION_ATTENDED: "1",
+      CLAUDE_PID: "4242",
+      CLAUDE_EFFORT: "high",
+      CLAUDE_CODE_EXECPATH: "/parent/claude",
+      CLAUDE_CODE_INVOKED_SKILLS: "parent-skill",
+      AI_AGENT: "claude-code_2-1-282_agent",
+      CLAUDE_CODE_MESSAGING_SOCKET: "/tmp/parent-inbox.sock",
+      CLAUDE_CODE_MESSAGING_TOKEN: "parent-inbox-token",
+      CLAUDE_CODE_BRIDGE_SESSION_ID: "session_parent",
+      CLAUDE_JOB_DIR: "/parent/jobs/1",
+      CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR: "3",
+      CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR: "4",
+      CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR: "5",
+      CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR: "6",
+    };
+    const userConfiguration = {
+      CLAUDE_CODE_OAUTH_TOKEN: "user-oauth-token",
+      CLAUDE_CODE_USE_BEDROCK: "1",
+      CLAUDE_CODE_USE_VERTEX: "1",
+      ANTHROPIC_MODEL: "user-model",
+      CLAUDE_CODE_MAX_OUTPUT_TOKENS: "64000",
+      CLAUDE_CODE_SUBAGENT_MODEL: "haiku",
+      CLAUDE_CODE_EFFORT_LEVEL: "high",
+      CLAUDE_CONFIG_DIR: "/home/user/.claude-work",
+      CLAUDE_CODE_TMPDIR: "/home/user/tmp",
+      CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY: "1",
+    };
+
+    const env = createProviderEnv({
+      baseEnv: { PATH: "/usr/bin", ...parentSession, ...userConfiguration },
+    });
+
+    expect(Object.keys(parentSession).filter((key) => key in env)).toEqual([]);
+    expect(env).toMatchObject({ PATH: "/usr/bin", ...userConfiguration });
+  });
 });
 
 describe("ProviderOverrideSchema", () => {

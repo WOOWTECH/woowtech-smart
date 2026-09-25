@@ -4,6 +4,9 @@
 // English source matches, for words whose meaning depends on the context.
 
 const HAN = /[㐀-鿿]/;
+// Chinese characters and the full-width punctuation around them.
+const CJK = /[　-〿㐀-鿿＀-￯]/;
+const LATIN = /[A-Za-z0-9]/;
 
 /** A Latin term in place of `find`, spaced from the Chinese characters around it. */
 function latin(find, term) {
@@ -15,6 +18,46 @@ function latin(find, term) {
       return `${before && HAN.test(before) ? " " : ""}${term}${after && HAN.test(after) ? " " : ""}`;
     },
   };
+}
+
+/** The space between `left` and `right`: none within Chinese, one between Chinese and Latin. */
+function spacing(left, right, original) {
+  if (!left || !right) return "";
+  if (CJK.test(left) && CJK.test(right)) return "";
+  if ((HAN.test(left) && LATIN.test(right)) || (LATIN.test(left) && HAN.test(right))) return " ";
+  return original;
+}
+
+/**
+ * The English `words` (regular expression source) as a word of the sentence, not
+ * part of a path, file or host name (a "." and a letter follow), command or
+ * {{placeholder}}.
+ */
+export function asWord(words) {
+  return `(?<![\\w./~$@\`'{}-])(?:${words})(?![\\w/\`'{}-]|\\.\\w)`;
+}
+
+/**
+ * `term` in place of the English `words` (regular expression source) upstream's
+ * Simplified Chinese left inside a Chinese sentence, spaced like the sentence.
+ * Strings with no Chinese stay English, and so do words that are part of a path,
+ * file name, command or {{placeholder}}.
+ */
+function inChinese(words, term, flags = "gi") {
+  return {
+    find: new RegExp(`( ?)${asWord(words)}( ?)`, flags),
+    replace: (match, before, after, offset, text) => {
+      if (!HAN.test(text)) return match;
+      const left = text[offset - 1];
+      const right = text[offset + match.length];
+      return `${spacing(left, term[0], before)}${term}${spacing(term.at(-1), right, after)}`;
+    },
+  };
+}
+
+/** `term` for a label upstream left as just the English word. */
+function label(words, term) {
+  return { find: new RegExp(`^(?:${words})$`), replace: term };
 }
 
 const aboutTabs = ({ key, english }) => /tab/i.test(key) || /\btabs?\b/i.test(english);
@@ -84,4 +127,84 @@ export const TERM_FIXES = [
   { find: "”", replace: "」" },
   { find: "‘", replace: "『" },
   { find: "’", replace: "』" },
+  // Network addresses and timeouts.
+  { find: "地址", replace: "位址" },
+  { find: "超時", replace: "逾時" },
+  { find: /主機名(?!稱)/g, replace: "主機名稱" },
+  // English nouns upstream's Simplified Chinese keeps inside Chinese sentences, and
+  // labels it leaves as just the English noun. These stay English: the named terms
+  // Agent, Host, Daemon and worktree; Git commands (commit, push, pull, merge, stash)
+  // and forge terms (PR, MR, issue, pull request); diff, hooks, tokens, acronyms, and
+  // product and brand names. Phrases come before the words they contain.
+  inChinese("System Settings > Notifications", "「系統設定」>「通知」"),
+  inChinese("host/port", "Host、連接埠"),
+  inChinese("system prompts?", "系統提示詞"),
+  inChinese("realtime voice", "即時語音"),
+  inChinese("web runtime", "網頁執行環境"),
+  inChinese("desktop app", "桌面版 App"),
+  inChinese("projects?", "專案"),
+  inChinese("workspaces?", "工作區"),
+  inChinese("providers?", "供應商"),
+  inChinese("servers?", "伺服器"),
+  inChinese("terminals?", "終端機"),
+  inChinese("models?", "模型"),
+  inChinese("scripts?", "腳本"),
+  inChinese("clients?", "用戶端"),
+  inChinese("relays?", "中繼"),
+  inChinese("repository|repositories", "儲存庫"),
+  inChinese("branch(?:es)?", "分支"),
+  inChinese("remotes?", "遠端"),
+  inChinese("modes?", "模式"),
+  inChinese("features?", "功能"),
+  inChinese("thinking", "思考"),
+  inChinese("runtimes?", "執行環境"),
+  inChinese("prompts?", "提示詞"),
+  inChinese("sub-?agents?", "子 Agent"),
+  inChinese("reviews?", "審查"),
+  inChinese("drafts?", "草稿"),
+  inChinese("skills?", "技能"),
+  inChinese("tools", "工具"),
+  // Lowercase only: Command is the macOS key in "Command/Ctrl+Enter".
+  inChinese("commands", "指令", "g"),
+  inChinese("setup", "初始化"),
+  inChinese("teardown", "清理"),
+  inChinese("turn", "回合", "g"),
+  // The named terms, capitalized and singular: Chinese has no plural.
+  inChinese("[Aa]gents|agent", "Agent", "g"),
+  inChinese("[Hh]osts|host", "Host", "g"),
+  inChinese("app", "App", "g"),
+  label("Agents", "Agent"),
+  label("Hosts", "Host"),
+  label("Providers?", "供應商"),
+  label("Workspaces?", "工作區"),
+  label("Terminals?", "終端機"),
+  label("Model", "模型"),
+  label("Mode", "模式"),
+  label("Thinking", "思考"),
+  label("Features", "功能"),
+  label("Scripts", "腳本"),
+  label("Client", "用戶端"),
+  label("Relay", "中繼"),
+  label("Skills", "技能"),
+  label("Subagent", "子 Agent"),
+  label("Setup", "初始化"),
+  label("Teardown", "清理"),
+  label("Reviews", "審查"),
+  label("Draft", "草稿"),
+  label("Prompt", "提示詞"),
+  label("\\{\\{scriptName\\}\\} script", "{{scriptName}} 腳本"),
+  label("Prompt \\{\\{name\\}\\}", "給 {{name}} 的提示詞"),
 ];
+
+/** `text` after OpenCC, with every fix that applies to its `{ key, english }` context. */
+export function fixTerms(text, context) {
+  let fixed = text;
+  for (const fix of TERM_FIXES) {
+    if (fix.when && !fix.when(context)) continue;
+    fixed =
+      typeof fix.find === "string"
+        ? fixed.replaceAll(fix.find, fix.replace)
+        : fixed.replace(fix.find, fix.replace);
+  }
+  return fixed;
+}

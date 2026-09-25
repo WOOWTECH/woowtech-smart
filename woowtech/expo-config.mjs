@@ -4,13 +4,25 @@ import { fileURLToPath } from "node:url";
 
 const appDir = fileURLToPath(new URL("../packages/app/", import.meta.url));
 
-/** The resolved config for one app variant, with plugins applied. */
-export function expoPrebuildConfig(variant) {
-  const output = execFileSync("npx", ["expo", "config", "--json", "--type", "prebuild"], {
+function expoConfig(variant, type) {
+  const output = execFileSync("npx", ["expo", "config", "--json", "--type", type], {
     cwd: appDir,
     env: { ...process.env, APP_VARIANT: variant, EXPO_NO_TELEMETRY: "1" },
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });
   return JSON.parse(output);
+}
+
+/** The resolved config for one app variant, with plugins applied. */
+export function expoPrebuildConfig(variant) {
+  return expoConfig(variant, "prebuild");
+}
+
+/**
+ * The config after Expo's introspectable mods ran, so `ios.infoPlist` is the
+ * Info.plist prebuild writes, template defaults included.
+ */
+export function expoIntrospectedConfig(variant) {
+  return expoConfig(variant, "introspect");
 }

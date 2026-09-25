@@ -101,8 +101,10 @@ function applyRuntimeSettingsToClaudeOptions(
         runtimeSettings,
         overlays: [launchEnv],
       });
+      // buildSelfNodeCommand starts again from the daemon's own environment, so
+      // unset the parent Claude Code session's variables there too.
       const selfNodeCommand = isDefaultRuntime
-        ? buildSelfNodeCommand(resolved.args, providerEnv)
+        ? buildSelfNodeCommand(resolved.args, { ...providerEnv, ...providerEnvSpec.envOverlay })
         : null;
       const command = selfNodeCommand?.command ?? resolved.command;
       const args = selfNodeCommand?.args ?? resolved.args;

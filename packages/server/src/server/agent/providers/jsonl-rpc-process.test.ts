@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import pino from "pino";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { JsonlRpcProcess, type JsonlRpcExit } from "./jsonl-rpc-process.js";
 
@@ -51,6 +51,21 @@ readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line
     process.stderr.write("child exploded");
     setTimeout(() => process.exit(7), 5);
   }
+});
+`;
+
+const ENV_CHILD_SOURCE = String.raw`
+const readline = require("node:readline");
+
+readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", (line) => {
+  const command = JSON.parse(line);
+  process.stdout.write(JSON.stringify({
+    type: "response",
+    id: command.id,
+    command: command.type,
+    success: true,
+    data: Object.fromEntries(command.names.map((name) => [name, process.env[name] ?? null])),
+  }) + "\n");
 });
 `;
 
@@ -137,6 +152,40 @@ describe("JsonlRpcProcess", () => {
       ]);
     } finally {
       await transport.close();
+    }
+  });
+
+  test("keeps a parent Claude Code session's variables from the agent it launches", async () => {
+    // Pi and OMP start through this transport. A daemon started from a Claude Code
+    // Bash command would otherwise hand them that session's identity and inbox token.
+    vi.stubEnv("CLAUDECODE", "1");
+    vi.stubEnv("CLAUDE_CODE_SESSION_ID", "parent-session");
+    vi.stubEnv("CLAUDE_CODE_MESSAGING_TOKEN", "parent-inbox-token");
+    vi.stubEnv("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "64000");
+    const transport = startProcess({ source: ENV_CHILD_SOURCE });
+
+    try {
+      await expect(
+        transport.request({
+          type: "env",
+          names: [
+            "CLAUDECODE",
+            "CLAUDE_CODE_SESSION_ID",
+            "CLAUDE_CODE_MESSAGING_TOKEN",
+            "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+            "JSONL_RPC_TEST_VALUE",
+          ],
+        }),
+      ).resolves.toEqual({
+        CLAUDECODE: null,
+        CLAUDE_CODE_SESSION_ID: null,
+        CLAUDE_CODE_MESSAGING_TOKEN: null,
+        CLAUDE_CODE_MAX_OUTPUT_TOKENS: "64000",
+        JSONL_RPC_TEST_VALUE: "resolved-env",
+      });
+    } finally {
+      await transport.close();
+      vi.unstubAllEnvs();
     }
   });
 
