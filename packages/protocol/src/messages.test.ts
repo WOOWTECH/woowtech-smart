@@ -361,6 +361,30 @@ describe("agent detach RPC", () => {
   });
 });
 
+// woowtech smart: the app registers a push token only with a daemon that sends pushes
+// through WoowTech's push relay (woowtech/README.md, 16).
+describe("woowtech smart push feature gate", () => {
+  test("parses the woowtechPush server feature gate", () => {
+    const parsed = parseServerInfoStatusPayload({
+      status: "server_info",
+      serverId: "srv-test",
+      features: { pushTokenRevocation: true, woowtechPush: true },
+    });
+
+    expect(parsed?.features).toEqual({ pushTokenRevocation: true, woowtechPush: true });
+  });
+
+  test("still parses server info without it, from official Paseo or an older daemon", () => {
+    const parsed = parseServerInfoStatusPayload({
+      status: "server_info",
+      serverId: "srv-test",
+      features: { pushTokenRevocation: true },
+    });
+
+    expect(parsed?.features).toEqual({ pushTokenRevocation: true });
+  });
+});
+
 describe("agent setting action responses", () => {
   test("parses optional provider notices on mode and thinking responses", () => {
     const mode = SessionOutboundMessageSchema.parse({

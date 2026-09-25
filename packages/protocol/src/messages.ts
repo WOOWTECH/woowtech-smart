@@ -3560,6 +3560,9 @@ export const ServerInfoStatusPayloadSchema = z
         relayConfig: z.boolean().optional(),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
         pushTokenRevocation: z.boolean().optional(),
+        // woowtech smart (fork-owned, not upstream): pushes go through WoowTech's relay, so
+        // the app may register wsp1 push tokens (woowtech-push.ts). Never set by Paseo.
+        woowtechPush: z.boolean().optional(),
         // COMPAT(plugins): added in v0.3.0, remove gate after 2027-08-07.
         plugins: z.boolean().optional(),
         // COMPAT(pluginManagement): added in v0.4.0, remove gate after 2027-08-14.
