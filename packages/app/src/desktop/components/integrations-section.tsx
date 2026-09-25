@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { ArrowUpRight, Check, Terminal } from "lucide-react-native";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { Button } from "@/components/ui/button";
 import { useCliInstall } from "@/desktop/hooks/use-install-status";
@@ -63,6 +64,8 @@ export function IntegrationsSection() {
             <Text style={settingsStyles.rowHint}>
               {t("settings.integrations.commandLine.description")}
             </Text>
+            {/* What Install puts on the PATH; the official Paseo's command is paseo. */}
+            <Text style={styles.command}>{CLI_COMMAND}</Text>
           </View>
           {status?.installed ? (
             <View style={styles.installedLabel}>
@@ -86,4 +89,10 @@ const styles = StyleSheet.create((theme) => ({
   rowTitleRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing[2] },
   installedLabel: { flexDirection: "row", alignItems: "center", gap: 4 },
   mutedText: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.base },
+  command: {
+    color: theme.colors.foregroundMuted,
+    fontFamily: theme.fontFamily.mono,
+    fontSize: theme.fontSize.sm,
+    marginTop: theme.spacing[1],
+  },
 }));
