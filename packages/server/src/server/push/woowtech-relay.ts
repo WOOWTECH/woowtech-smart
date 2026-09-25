@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import type pino from "pino";
 import {
   parsePushToken,
@@ -206,4 +207,29 @@ export function createWoowtechRelayDeliver(options: WoowtechRelayDeliverOptions)
     }
     await Promise.all([...phones.values()].map((phone) => notify(phone, payload.data)));
   };
+}
+
+export const DEFAULT_WOOWTECH_PUSH_RELAY_URL = "https://push.woowtech.io/api/smart/v1/notify";
+
+/** WOOWTECH_PUSH_RELAY_URL points the daemon at another relay, for tests and staging. */
+export function woowtechPushRelayUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return env.WOOWTECH_PUSH_RELAY_URL?.trim() || DEFAULT_WOOWTECH_PUSH_RELAY_URL;
+}
+
+export interface DaemonRelayDeliverOptions {
+  logger: pino.Logger;
+  revoke: (token: string) => void;
+}
+
+/** The daemon's deliver: the relay from the environment, the global fetch and real timers. */
+export function createDaemonRelayDeliver(options: DaemonRelayDeliverOptions): PushDeliver {
+  return createWoowtechRelayDeliver({
+    relayUrl: woowtechPushRelayUrl(),
+    // Looked up per request, as upstream's Expo sender did.
+    fetch: (input, init) => fetch(input, init),
+    logger: options.logger,
+    revoke: options.revoke,
+    // A pending retry does not keep a stopping daemon alive.
+    sleep: (ms) => delay(ms, undefined, { ref: false }),
+  });
 }

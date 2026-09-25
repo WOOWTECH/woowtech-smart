@@ -1,8 +1,9 @@
 import type pino from "pino";
 
-import { PushService, type PushPayload } from "./push-service.js";
+import type { PushPayload } from "./push-service.js";
 import { PushTokenStore } from "./token-store.js";
 import { toRemotePushPayload, type PushLanguage } from "./woowtech-push-content.js";
+import { createDaemonRelayDeliver } from "./woowtech-relay.js";
 
 export type { PushPayload };
 
@@ -25,10 +26,13 @@ export function createPushNotifications(options: {
 }): PushNotifications {
   const now = options.now ?? Date.now;
   const store = new PushTokenStore(options.logger, options.filePath, now, PUSH_TOKEN_LEASE_MS);
-  const service = new PushService(options.logger, (token) => store.revokeToken(token));
+  // woowtech smart: pushes go through WoowTech's push relay, never Expo (woowtech/README.md, 16).
   const deliver =
     options.deliver ??
-    ((tokens: string[], payload: PushPayload) => service.sendPush(tokens, payload));
+    createDaemonRelayDeliver({
+      logger: options.logger,
+      revoke: (token) => store.revokeToken(token),
+    });
 
   return {
     renew(token) {

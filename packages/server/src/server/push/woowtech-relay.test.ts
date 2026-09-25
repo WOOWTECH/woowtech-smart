@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
+import diagnosticsChannel from "node:diagnostics_channel";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type pino from "pino";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
+import { createPushNotifications } from "./index.js";
 import type { PushPayload } from "./push-service.js";
 import { createWoowtechRelayDeliver } from "./woowtech-relay.js";
 
@@ -31,11 +36,16 @@ interface FakeRelay {
 }
 
 const servers: Server[] = [];
+const homes: string[] = [];
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const server of servers.splice(0)) {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+  }
+  for (const home of homes.splice(0)) {
+    rmSync(home, { recursive: true, force: true });
   }
 });
 
@@ -189,7 +199,11 @@ describe("pushes through WoowTech's push relay", () => {
     await deliver([`wsp1:zh-TW:${PHONE}`], finishedAgent());
 
     expect(
-      relay.requests.map(({ method, path, contentType }) => ({ method, path, contentType })),
+      relay.requests.map((request) => ({
+        method: request.method,
+        path: request.path,
+        contentType: request.contentType,
+      })),
     ).toEqual([{ method: "POST", path: "/api/smart/v1/notify", contentType: "application/json" }]);
     expect(relay.requests[0]?.raw.toString("utf8")).toBe(
       JSON.stringify({
@@ -460,5 +474,78 @@ describe("pushes through WoowTech's push relay", () => {
     expect(calls.filter(({ level }) => level === "warn")).toEqual([
       { level: "warn", args: [{ failed: 1 }, "Failed to revoke push tokens"] },
     ]);
+  });
+});
+
+/**
+ * Every HTTP request this process starts while `run` runs, as origin and path: fetch
+ * announces each request on undici:request:create before it resolves the host, and node:http
+ * on http.client.request.start.
+ */
+async function outgoingRequestsDuring(run: () => Promise<void>): Promise<string[]> {
+  const requests: string[] = [];
+  const onFetch = (message: unknown) => {
+    const { request } = message as { request: { origin: unknown; path: string } };
+    requests.push(`${String(request.origin)}${request.path}`);
+  };
+  const onHttp = (message: unknown) => {
+    const { request } = message as { request: { protocol: string; host: string; path: string } };
+    requests.push(`${request.protocol}//${request.host}${request.path}`);
+  };
+  diagnosticsChannel.subscribe("undici:request:create", onFetch);
+  diagnosticsChannel.subscribe("http.client.request.start", onHttp);
+  try {
+    await run();
+  } finally {
+    diagnosticsChannel.unsubscribe("undici:request:create", onFetch);
+    diagnosticsChannel.unsubscribe("http.client.request.start", onHttp);
+  }
+  return requests;
+}
+
+describe("the daemon's push notifications", () => {
+  test("go to WOOWTECH_PUSH_RELAY_URL when nothing else is injected, and nowhere else", async () => {
+    const relay = await startFakeRelay();
+    vi.stubEnv("WOOWTECH_PUSH_RELAY_URL", relay.url);
+    const home = mkdtempSync(path.join(tmpdir(), "woowtech-push-relay-"));
+    homes.push(home);
+    const filePath = path.join(home, "push-tokens.json");
+    const push = createPushNotifications({
+      logger: recordingLogger().logger,
+      filePath,
+      language: "en",
+    });
+    push.renew("ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]");
+    push.renew(`wsp1:zh-TW:${PHONE}`);
+
+    const requests = await outgoingRequestsDuring(() =>
+      push.send({
+        title: "Rotate Acme credentials finished",
+        body: "Rotated the Acme database password",
+        data: {
+          serverId: SERVER_ID,
+          workspaceId: WORKSPACE_ID,
+          agentId: AGENT_ID,
+          cwd: "/Users/alex/secret-project",
+          reason: "finished",
+        },
+      }),
+    );
+
+    expect(requests).toEqual([relay.url]);
+    expect(bodiesOf(relay)).toEqual([
+      {
+        token: PHONE,
+        locale: "zh-TW",
+        reason: "finished",
+        target: { serverId: SERVER_ID, workspaceId: WORKSPACE_ID, agentId: AGENT_ID },
+      },
+    ]);
+    // The Expo token is gone from the store, so the next push does not look at it again.
+    expect(
+      JSON.parse(readFileSync(filePath, "utf8")).subscriptions.map(
+        (subscription: { token: string }) => subscription.token,
+      ),
+    ).toEqual([`wsp1:zh-TW:${PHONE}`]);
   });
 });
