@@ -64,6 +64,48 @@ test("terminal hooks keep upstream's exact text, so both apps install the same h
   }
 });
 
+test("hints the CLI prints or returns itself name the woowtech-smart command", () => {
+  // Errors go through the CLI's renderError, which names our command. These
+  // hints are printed directly or returned as result fields, so they spell out
+  // CLI_COMMAND.
+  const printsHints = [
+    "packages/cli/src/commands/onboard.ts",
+    "packages/cli/src/commands/daemon/config.ts",
+    "packages/cli/src/commands/daemon/pair.ts",
+    "packages/cli/src/commands/daemon/reload.ts",
+    "packages/cli/src/commands/daemon/set-password.ts",
+    "packages/cli/src/commands/agent/attach.ts",
+    "packages/cli/src/commands/agent/logs.ts",
+    "packages/cli/src/commands/agent/wait.ts",
+  ];
+  assert.deepEqual(
+    findInShippedSources([/(?:^|[\s"'`(])paseo (?:[a-z]|-)/], {
+      dirs: [],
+      files: printsHints,
+      skipComments: true,
+    }),
+    [],
+  );
+});
+
+test("the CLI's own messages name woowtech smart", () => {
+  const naming = findInShippedSources([/\bPaseo\b(?! Hub\b)/], {
+    dirs: ["packages/cli/src"],
+    skipComments: true,
+    // The plugin template is written against upstream's plugin API.
+    skipPaths: ["packages/cli/src/commands/plugin/scaffold.ts"],
+    allowLines: [
+      // Help text, which packages/cli/src/brand.ts rewrites as it prints.
+      /\.(?:description|option|requiredOption|argument|summary)\(/,
+      // Paseo Hub's chat bot, renamed with our own Hub.
+      /@Paseo have a look/,
+      // The relay's operator, which is upstream until we run our own relay.
+      /Paseo cannot read your code or messages/,
+    ],
+  });
+  assert.deepEqual(naming, []);
+});
+
 test("the desktop's CLI install names only woowtech-smart, never Paseo's command", () => {
   assert.deepEqual(
     findInShippedSources([/["'`]paseo(?:\.cmd)?["'`]/, /\.local[/\\]bin[/\\]paseo\b/], {

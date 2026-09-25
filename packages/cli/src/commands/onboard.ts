@@ -1,4 +1,5 @@
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { addLocalDaemonOptions } from "../utils/command-options.js";
 import { cancel, confirm, intro, isCancel, log, note, outro } from "@clack/prompts";
 import { Command, Option } from "commander";
@@ -117,18 +118,18 @@ function printNextSteps(pairingUrl: string | null, paseoHome: string, richUi: bo
   const daemonLogPath = path.join(paseoHome, "daemon.log");
   const nextStepsLines = [
     pairingUrl
-      ? "1. Open Paseo and scan the QR code above, or paste the pairing link."
-      : "1. Open Paseo and connect to your daemon.",
+      ? "1. Open woowtech smart and scan the QR code above, or paste the pairing link."
+      : "1. Open woowtech smart and connect to your daemon.",
     "2. Web app: https://app.paseo.sh",
     "3. Desktop app: https://github.com/WOOWTECH/woowtech-smart-releases/releases/latest",
     `4. Docs: ${BRAND_LINKS.docs.home}`,
-    `5. Example: paseo run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
+    `5. Example: ${CLI_COMMAND} run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
   ];
   const quickReferenceLines = [
-    "1. paseo --help",
-    `2. paseo ls --home ${JSON.stringify(paseoHome)}`,
-    `3. paseo run --home ${JSON.stringify(paseoHome)} "your prompt"`,
-    `4. paseo status --home ${JSON.stringify(paseoHome)}`,
+    `1. ${CLI_COMMAND} --help`,
+    `2. ${CLI_COMMAND} ls --home ${JSON.stringify(paseoHome)}`,
+    `3. ${CLI_COMMAND} run --home ${JSON.stringify(paseoHome)} "your prompt"`,
+    `4. ${CLI_COMMAND} status --home ${JSON.stringify(paseoHome)}`,
     `5. Daemon logs: ${daemonLogPath}`,
   ];
 
@@ -235,7 +236,7 @@ function persistSetupChoices(paseoHome: string, options: OnboardOptions): void {
 export async function runOnboard(options: OnboardOptions): Promise<void> {
   const richUi = process.stdin.isTTY && process.stdout.isTTY;
   if (richUi) {
-    intro("Welcome to Paseo");
+    intro("Welcome to woowtech smart");
   }
 
   if (options.listen && options.port) {
@@ -250,7 +251,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   const alreadyRunning = await readDaemonInstance(paseoHome);
   persistSetupChoices(paseoHome, options);
   if (richUi) {
-    renderNote(paseoHome, "Paseo home");
+    renderNote(paseoHome, "woowtech smart home");
   }
 
   const voiceEnabled = await resolveAndPersistVoice(paseoHome, options);
@@ -277,7 +278,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   if (options.relay === false) {
     log.message("Relay pairing skipped because --no-relay was provided.");
     printNextSteps(null, paseoHome, richUi);
-    if (richUi) outro("Paseo daemon is running.");
+    if (richUi) outro("woowtech smart daemon is running.");
     return;
   }
 
@@ -291,7 +292,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
     if (!shouldEnable) {
       printDirectConnectionGuidance();
       printNextSteps(null, paseoHome, richUi);
-      if (richUi) outro("Paseo daemon is running.");
+      if (richUi) outro("woowtech smart daemon is running.");
       return;
     }
     pairing = await resolveLocalPairingOffer({ paseoHome, enableRelay: true });
@@ -302,7 +303,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
     log.warn("Relay pairing URL is unavailable for this daemon configuration.");
     printNextSteps(null, paseoHome, richUi);
     if (richUi) {
-      outro("Paseo daemon is running.");
+      outro("woowtech smart daemon is running.");
     }
     return;
   }
@@ -316,6 +317,6 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   );
   printNextSteps(pairing.url, paseoHome, richUi);
   if (richUi) {
-    outro("Paseo is ready!");
+    outro("woowtech smart is ready!");
   }
 }

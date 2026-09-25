@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import path from "node:path";
 import type { Command } from "commander";
 import { isCancel, password as passwordPrompt } from "@clack/prompts";
@@ -100,8 +101,8 @@ export async function setDaemonPasswordInConfig(
   return {
     action: "password_set",
     configPath,
-    restartCommand: `paseo daemon restart --home ${JSON.stringify(paseoHome)}`,
-    message: `Password written to ${configPath}\nRestart the daemon for the change to take effect.\nRun: paseo daemon restart --home ${JSON.stringify(paseoHome)}`,
+    restartCommand: `${CLI_COMMAND} daemon restart --home ${JSON.stringify(paseoHome)}`,
+    message: `Password written to ${configPath}\nRestart the daemon for the change to take effect.\nRun: ${CLI_COMMAND} daemon restart --home ${JSON.stringify(paseoHome)}`,
   };
 }
 

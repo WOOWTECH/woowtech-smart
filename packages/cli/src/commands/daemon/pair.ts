@@ -1,4 +1,5 @@
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { confirm, isCancel, log } from "@clack/prompts";
 import { Command } from "commander";
 import chalk from "chalk";
@@ -108,7 +109,7 @@ async function resolveDaemonPairingOffer(
   try {
     const serverInfo = client.getLastServerInfoMessage();
     if (serverInfo?.features?.daemonStatusRpc !== true) {
-      throw new Error("Update the Paseo daemon before pairing from this command.");
+      throw new Error("Update the woowtech smart daemon before pairing from this command.");
     }
 
     let offer = await client.getDaemonPairingOffer({
@@ -116,7 +117,9 @@ async function resolveDaemonPairingOffer(
     });
     if (!offer.relayEnabled && enableRelay) {
       if (serverInfo.features.relayConfig !== true) {
-        throw new Error("Update the Paseo daemon before enabling relay from this command.");
+        throw new Error(
+          "Update the woowtech smart daemon before enabling relay from this command.",
+        );
       }
       await client.patchDaemonConfig({ relay: { enabled: true } });
       try {
@@ -168,7 +171,7 @@ export async function runPairCommand(options: PairOptions): Promise<void> {
 
   if (offline)
     output.writeStderr(
-      `Offline pairing offer. Start with: paseo daemon start --home ${JSON.stringify(target.kind === "instance" ? target.home : "")}\n`,
+      `Offline pairing offer. Start with: ${CLI_COMMAND} daemon start --home ${JSON.stringify(target.kind === "instance" ? target.home : "")}\n`,
     );
 
   outputPairingResult(pairing, options, output);
@@ -185,12 +188,14 @@ function outputPairingResult(
         `${JSON.stringify({
           code: "RELAY_DISABLED",
           message: "Relay pairing is disabled for this daemon.",
-          action: "Run paseo daemon pair --relay --json to enable it explicitly.",
+          action: `Run ${CLI_COMMAND} daemon pair --relay --json to enable it explicitly.`,
         })}\n`,
       );
     } else {
       output.writeStderr(`${chalk.red("Relay pairing is disabled for this daemon.")}\n`);
-      output.writeStderr(`${chalk.yellow("Run paseo daemon pair --relay to enable it.")}\n`);
+      output.writeStderr(
+        `${chalk.yellow(`Run ${CLI_COMMAND} daemon pair --relay to enable it.`)}\n`,
+      );
     }
     output.setExitCode(1);
     return;
