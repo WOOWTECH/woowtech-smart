@@ -55,6 +55,10 @@ function spawnRelayDevServer(port: number): ChildProcess {
     [
       wranglerCliPath,
       "dev",
+      // woowtech smart tests the Worker it deploys. Upstream's wrangler.toml forwards
+      // every request to upstream's relay on Fly.
+      "--config",
+      "wrangler.woowtech.toml",
       "--local",
       "--ip",
       "127.0.0.1",

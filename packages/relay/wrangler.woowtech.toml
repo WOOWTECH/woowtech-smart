@@ -1,0 +1,28 @@
+# woowtech smart's relay, in WoowTech's Cloudflare account. The Worker runs the relay
+# itself: upstream's wrangler.toml, next to this file, sets PASEO_RELAY_UPSTREAM to
+# forward every request to upstream's relay on Fly, and this config never sets it.
+# woowtech/relay-worker.test.mjs guards that, the account and the domain.
+#
+# Deploy from packages/relay (steps and rollback: woowtech/README.md, section 11):
+#   npx wrangler deploy --config wrangler.woowtech.toml
+name = "woowtech-smart-relay"
+account_id = "9c27f623ee596e0b67be56263bcb1974"
+main = "src/cloudflare-adapter.ts"
+compatibility_date = "2024-12-01"
+
+# relay.woowtech.io is the only address: a custom domain, with its DNS record and
+# certificate created by the deploy. No <name>.<subdomain>.workers.dev address.
+workers_dev = false
+routes = [{ pattern = "relay.woowtech.io", custom_domain = true }]
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "RelayDurableObject"
+
+# SQLite-backed Durable Objects, which the Workers Free plan supports.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayDurableObject"]
