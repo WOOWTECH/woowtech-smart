@@ -116,7 +116,13 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
     async function sync(): Promise<void> {
       await disableExpoRegistrationOnce();
       if (stopped || !client.isConnected) return;
-      if (client.getLastServerInfoMessage()?.features?.woowtechPush !== true) return;
+      const features = client.getLastServerInfoMessage()?.features;
+      if (features?.woowtechPush !== true) {
+        // Such a daemon pushes to Expo with the agent's reply: revoke the Expo token an older
+        // build registered with it. No permission prompt, no Firebase.
+        if (features?.pushTokenRevocation === true) await forgetCachedToken(client, key);
+        return;
+      }
       const mayAsk = !askedPermission;
       askedPermission = true;
       if (!(await dependencies.notificationPermission({ mayAsk }))) {

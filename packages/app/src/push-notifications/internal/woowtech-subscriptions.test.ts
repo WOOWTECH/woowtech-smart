@@ -199,6 +199,37 @@ describe("woowtech push subscription", () => {
     expect(phone.events).toEqual(["disableExpoServerRegistration"]);
   });
 
+  it("revokes the Expo token an older build registered with a daemon that does not relay, asking nothing", async () => {
+    // Such a daemon (the official Paseo one, or ours from before the relay) sends each push with
+    // the agent's reply to Expo, for as long as the old token's 48-hour lease lasts.
+    const phone = createPhone();
+    phone.storage.set(CACHE_KEY, "ExponentPushToken[old-test-build]");
+    const client = new FakeDaemonClient(PASEO_DAEMON);
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+
+    expect(client.received).toEqual(["revoke ExponentPushToken[old-test-build]"]);
+    expect(phone.storage.has(CACHE_KEY)).toBe(false);
+    expect(phone.events).toEqual(["disableExpoServerRegistration"]);
+  });
+
+  it("keeps the cached string for a daemon that can neither relay pushes nor revoke tokens", async () => {
+    const phone = createPhone();
+    phone.storage.set(CACHE_KEY, "ExponentPushToken[old-test-build]");
+    const client = new FakeDaemonClient({});
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+
+    expect(client.received).toEqual([]);
+    expect(phone.storage.get(CACHE_KEY)).toBe("ExponentPushToken[old-test-build]");
+  });
+
   it("registers wsp1:<language>:<FCM token> with a woowtech daemon, cached under upstream's key", async () => {
     const phone = createPhone();
     const client = new FakeDaemonClient(WOOWTECH_DAEMON);
