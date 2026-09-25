@@ -56,13 +56,25 @@ test("app text outside the translations names woowtech smart", () => {
   assert.deepEqual(naming, []);
 });
 
+test("the daemon's processes are titled woowtech smart in Activity Monitor and ps", () => {
+  // The official Paseo's are "Paseo Supervisor" and "Paseo Daemon": the same
+  // titles made the two apps' daemons look alike, and `pkill -f 'Paseo Daemon'`
+  // stopped both. Nothing looks the daemon up by its title.
+  const titleIn = (relativePath) => /^process\.title = "(.+?)";$/m.exec(read(relativePath))?.[1];
+
+  assert.equal(
+    titleIn("packages/server/scripts/supervisor-entrypoint.ts"),
+    "woowtech smart Supervisor",
+  );
+  assert.equal(titleIn("packages/server/src/server/daemon-worker.ts"), "woowtech smart Daemon");
+});
+
 test("the daemon introduces itself to agents as woowtech smart", () => {
   assert.deepEqual(
     findInShippedSources([/clientInfo:\s*\{\s*name:\s*"Paseo/], { dirs: ["packages/server/src"] }),
     [],
   );
 });
-
 
 test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", () => {
   for (const [variant, nameSuffix, idSuffix] of [

@@ -89,6 +89,9 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - App 自己啟動時就帶著的值照樣有效，桌面版的 e2e 和 smoke 測試靠這個指定暫存 home。
   - 寫在 `packages/desktop/src/login-shell-daemon-target.ts`，測試是旁邊的 `login-shell-env.daemon-target.test.ts`。
   - CLI 仍然照 `PASEO_HOME`、`PASEO_HOST` 走：在 export 了這兩個值的 shell 裡執行 `woowtech-smart`，會連到它們指的 daemon。
+- daemon 的行程名是 `woowtech smart Supervisor` 和 `woowtech smart Daemon`，官方的是 `Paseo Supervisor` 和 `Paseo Daemon`。在活動監視器和 `ps` 裡分得出來，`pkill -f 'Paseo Daemon'` 也不會停掉我們的。沒有程式用行程名找 daemon。
+  - 本地語音的 worker 仍叫 `Paseo Voice`，本地語音已拿掉（第 2 節），平常不會啟動。
+  - `woowtech/names.test.mjs` 檢查這兩個行程名。
 - scheme 同時用在桌面版載入介面的來源、系統註冊的連結、手機 App、深層連結和 daemon 的 CORS 白名單。原版的 `paseo://` 連結留給官方 Paseo，我們不接；診斷報告會把兩種連結都遮掉。
 - electron-builder 用 `executableName` 命名 `.app` 和主執行檔，用 `productName` 命名 helper，所以兩個設成一樣，跟上游相同。
 - 用名稱找桌面版的地方都改了：CLI 的 `open`、`bin/paseo`（透過 helper 執行 CLI）、打包腳本、Linux 啟動器。
