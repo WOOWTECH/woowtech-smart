@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "./i18next";
-import { en } from "./resources/en";
 
 function flattenStrings(value: unknown, prefix = "", out = new Map<string, string>()) {
   if (typeof value === "string") {
@@ -30,6 +29,11 @@ function traditional(): Map<string, string> {
   return flattenStrings(i18n.getResourceBundle("zh-TW", "translation"));
 }
 
+/** English as loaded: upstream's strings and woowtech smart's own. */
+function english(): Map<string, string> {
+  return flattenStrings(i18n.getResourceBundle("en", "translation"));
+}
+
 function inTraditional(key: string, options: Record<string, unknown> = {}): string {
   return i18n.t(key, { lng: "zh-TW", ...options });
 }
@@ -42,13 +46,13 @@ describe("Traditional Chinese (zh-TW)", () => {
   });
 
   it("translates every English string", () => {
-    expect([...traditional().keys()].sort()).toEqual([...flattenStrings(en).keys()].sort());
+    expect([...traditional().keys()].sort()).toEqual([...english().keys()].sort());
   });
 
   it("keeps every interpolation placeholder", () => {
-    const english = flattenStrings(en);
+    const source = english();
     const mismatched = [...traditional()].filter(
-      ([key, text]) => placeholders(text) !== placeholders(english.get(key) ?? ""),
+      ([key, text]) => placeholders(text) !== placeholders(source.get(key) ?? ""),
     );
     expect(mismatched).toEqual([]);
   });

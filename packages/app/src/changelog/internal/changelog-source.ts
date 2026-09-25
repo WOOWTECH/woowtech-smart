@@ -7,7 +7,12 @@ const CHANGELOG_URL = BRAND_LINKS.changelogSource;
 export type ChangelogState =
   | { status: "loading" }
   | { status: "ready"; releases: ChangelogRelease[] }
+  | { status: "empty" }
   | { status: "error" };
+
+// The releases repository has no CHANGELOG.md, or one without a release, until the
+// first release ships. That is not a connection problem.
+class NoReleaseNotesYet extends Error {}
 
 // Survives close/reopen so the second look paints without a spinner. The raw
 // text is kept alongside the releases so an unchanged revalidation can be
@@ -43,17 +48,18 @@ export function useChangelog(enabled: boolean): Changelog {
     void (async () => {
       try {
         const response = await fetch(CHANGELOG_URL, { signal: controller.signal });
+        if (response.status === 404) throw new NoReleaseNotesYet();
         if (!response.ok) throw new Error(`Changelog request failed: ${response.status}`);
         const markdown = await response.text();
         if (cached?.markdown === markdown) return;
         const releases = parseChangelog(markdown);
-        if (releases.length === 0) throw new Error("Changelog has no releases");
+        if (releases.length === 0) throw new NoReleaseNotesYet();
         cached = { markdown, releases };
         setState({ status: "ready", releases });
-      } catch {
+      } catch (error) {
         if (controller.signal.aborted) return;
         if (cached) return;
-        setState({ status: "error" });
+        setState({ status: error instanceof NoReleaseNotesYet ? "empty" : "error" });
       }
     })();
 

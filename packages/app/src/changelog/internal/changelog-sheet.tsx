@@ -18,6 +18,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { resolveAppVersion } from "@/utils/app-version";
 import { openExternalUrl } from "@/utils/open-external-url";
+import { ChangelogEmpty } from "./changelog-empty";
 import { useChangelog, type ChangelogState } from "./changelog-source";
 import { useRevealedReleases } from "./use-revealed-releases";
 import {
@@ -107,6 +108,10 @@ function ChangelogBody({ state, shownReleases, onShowMore, onRetry }: ChangelogB
         <ThemedLoadingSpinner size="large" uniProps={mutedColorMapping} />
       </View>
     );
+  }
+
+  if (state.status === "empty") {
+    return <ChangelogEmpty />;
   }
 
   if (state.status === "error") {

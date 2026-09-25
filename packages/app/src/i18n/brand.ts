@@ -1,5 +1,6 @@
 import type { Resource, ResourceKey, ResourceLanguage } from "i18next";
 import { supportCopyFor } from "./support-copy";
+import { woowtechCopyFor } from "./woowtech-copy";
 
 /** The product name wherever the UI is not in Chinese. */
 export const APP_NAME = "woowtech smart";
@@ -102,9 +103,17 @@ function withSupportCopy(translation: ResourceKey, language: string): ResourceKe
   );
 }
 
+function withWoowtechCopy(translation: ResourceKey, language: string): ResourceKey {
+  if (!isRecord(translation)) {
+    return translation;
+  }
+  return { ...translation, woowtech: woowtechCopyFor(language) };
+}
+
 /**
- * The translations with woowtech smart's name in place of upstream Paseo's, and
- * WoowTech's help channels in place of Paseo's Discord and GitHub.
+ * The translations with woowtech smart's name in place of upstream Paseo's,
+ * WoowTech's help channels in place of Paseo's Discord and GitHub, and
+ * woowtech smart's own text under `woowtech`.
  * Applied to the resources as they load, so strings upstream adds later are
  * covered without editing its locale files, and interpolated values (a project
  * that happens to be called Paseo) are never touched.
@@ -118,7 +127,9 @@ export function rebrandResources(resources: Resource): Resource {
           const rebranded = rebrandKey(value, language);
           return [
             namespace,
-            namespace === "translation" ? withSupportCopy(rebranded, language) : rebranded,
+            namespace === "translation"
+              ? withWoowtechCopy(withSupportCopy(rebranded, language), language)
+              : rebranded,
           ];
         }),
       ),
