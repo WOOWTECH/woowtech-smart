@@ -112,6 +112,7 @@ test("skills name our command, daemon, app and help channels", () => {
       "`~/Library/Logs/woowtech smart/main.log`",
       "`/Applications/woowtech smart.app/Contents/Resources/bin/woowtech-smart`",
       '"$PASEO_CLI"',
+      "WoowTech's relay at `relay.woowtech.io`, which is on unless the user turned it off",
       "woowtech-smart daemon pair --relay",
       "https://aiot.woowtech.io",
       "mailto:woowtech@designsmart.com.tw",
@@ -227,6 +228,7 @@ test("the rewriter keeps upstream's services and API but renames skill invocatio
     daemonHome: "~/.woowtech-smart",
     port: "6770",
     productName: "woowtech smart",
+    relayHost: "relay.woowtech.io",
     upstreamSkills: ["paseo", "paseo-help", "paseo-plugin"],
   });
   assert.equal(

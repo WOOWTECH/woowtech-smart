@@ -121,17 +121,17 @@ try {
     console.log("✓ daemon --help shows subcommands\n");
   }
 
-  // Test 2: non-interactive pairing keeps relay disabled by default
+  // Test 2: woowtech smart turns the relay on in new homes, so pairing needs no consent
   {
-    console.log("Test 2: daemon pair requires explicit relay consent");
+    console.log("Test 2: daemon pair prints an offline offer without relay consent");
     const result = await daemonCommand(["pair"]);
-    assert.strictEqual(result.exitCode, 1, "daemon pair should require relay consent");
+    assert.strictEqual(result.exitCode, 0, "daemon pair should print an offer");
     assert(
-      result.stderr.includes("Relay pairing is disabled"),
-      "output should explain that relay pairing is disabled",
+      result.stderr.includes("Offline pairing offer"),
+      "output should say the offer is offline",
     );
-    assert(!result.stdout.includes("#offer="), "output should not include a pairing offer");
-    console.log("✓ daemon pair requires explicit relay consent\n");
+    assert(result.stdout.includes("#offer="), "output should include a pairing offer");
+    console.log("✓ daemon pair prints an offline offer without relay consent\n");
   }
 
   // Test 3: daemon status reports stopped when daemon not running
@@ -145,17 +145,18 @@ try {
     console.log("✓ daemon status reports stopped when not running\n");
   }
 
-  // Test 4: daemon pair --json exposes the machine-readable disabled state
+  // Test 4: daemon pair --json exposes an offer for WoowTech's relay
   {
-    console.log("Test 4: daemon pair --json reports relay disabled");
+    console.log("Test 4: daemon pair --json returns an offer for relay.woowtech.io");
     const result = await daemonCommand(["pair", "--json"]);
-    assert.strictEqual(result.exitCode, 1, "daemon pair --json should require relay consent");
-    const errorLine = result.stderr.split("\n").find((line) => line.startsWith("{"));
-    assert(errorLine, "stderr should include a structured error");
-    const error = JSON.parse(errorLine);
-    assert.strictEqual(error.code, "RELAY_DISABLED", "error should identify relay state");
-    assert(!result.stdout.includes("#offer="), "output should not include a pairing offer");
-    console.log("✓ daemon pair --json reports relay disabled\n");
+    assert.strictEqual(result.exitCode, 0, "daemon pair --json should return an offer");
+    const pairing = JSON.parse(result.stdout);
+    assert.strictEqual(pairing.relayEnabled, true, "the relay should be on");
+    const offer = JSON.parse(
+      Buffer.from(pairing.url.split("#offer=")[1], "base64url").toString("utf8"),
+    );
+    assert.deepStrictEqual(offer.relay, { endpoint: "relay.woowtech.io:443", useTls: true });
+    console.log("✓ daemon pair --json returns an offer for relay.woowtech.io\n");
   }
 
   // Test 5: daemon status --json outputs valid JSON

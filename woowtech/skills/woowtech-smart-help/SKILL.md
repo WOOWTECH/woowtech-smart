@@ -27,7 +27,7 @@ Establish two facts:
    - **Docker:** the daemon, its home, provider CLIs, credentials, and code mounts live in the container runtime.
 2. **How the affected client reaches it**
    - same-machine local connection
-   - relay connection, which is off until the user enables it with **Pair a device → Enable relay** in the desktop app or `woowtech-smart daemon pair --relay`
+   - relay connection through WoowTech's relay at `relay.woowtech.io`, which is on unless the user turned it off (`daemon.relay.enabled: false` in `config.json`); turn it back on with **Pair a device → Enable relay** in the desktop app or `woowtech-smart daemon pair --relay`
    - direct LAN, VPN, or Tailscale connection; the daemon listens only on `127.0.0.1:6770` unless `daemon.listen` in its `config.json` names another address
    - daemon-served web UI
 

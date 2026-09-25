@@ -10,7 +10,7 @@
  * Passages rewritten by hand. Each must appear exactly once in its upstream
  * skill: when upstream edits one, generation stops until it is updated here.
  */
-function passageRewrites({ cliCommand, links, port, productName }) {
+function passageRewrites({ cliCommand, links, port, productName, relayHost }) {
   const cliFallback = [
     `The CLI command is \`${cliCommand}\`. If it is not on \`PATH\`, run \`"$PASEO_CLI"\``,
     "instead when that variable is set; the desktop app sets it to its bundled CLI for the",
@@ -62,11 +62,12 @@ function passageRewrites({ cliCommand, links, port, productName }) {
       replace: "- A standalone daemon follows its own CLI lifecycle",
     },
     {
-      // Our relay is off by default, and the daemon listens on loopback only.
+      // Our relay is on unless the user turned it off, and the daemon listens on
+      // loopback only.
       skill: "paseo-help",
       find: "   - relay connection\n   - direct LAN, VPN, or Tailscale connection\n",
       replace: [
-        `   - relay connection, which is off until the user enables it with **Pair a device → Enable relay** in the desktop app or \`${cliCommand} daemon pair --relay\``,
+        `   - relay connection through WoowTech's relay at \`${relayHost}\`, which is on unless the user turned it off (\`daemon.relay.enabled: false\` in \`config.json\`); turn it back on with **Pair a device → Enable relay** in the desktop app or \`${cliCommand} daemon pair --relay\``,
         `   - direct LAN, VPN, or Tailscale connection; the daemon listens only on \`127.0.0.1:${port}\` unless \`daemon.listen\` in its \`config.json\` names another address`,
         "",
       ].join("\n"),

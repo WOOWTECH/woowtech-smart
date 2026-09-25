@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,11 @@ describe("daemon commands tell you what to run next with woowtech-smart", () => 
 
   beforeEach(async () => {
     home = await mkdtemp(path.join(tmpdir(), "woowtech-next-command-"));
+    // The relay hints print for a home that turned the relay off; new homes have it on.
+    await writeFile(
+      path.join(home, "config.json"),
+      JSON.stringify({ version: 1, daemon: { relay: { enabled: false } } }),
+    );
   });
 
   afterEach(async () => {

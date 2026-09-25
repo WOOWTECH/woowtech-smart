@@ -26,6 +26,7 @@ const { default: relayWorker } = await tsImport(
   "../packages/relay/src/cloudflare-adapter.ts",
   import.meta.url,
 );
+const { BRAND_RELAY } = await tsImport("../packages/protocol/src/brand-relay.ts", import.meta.url);
 
 function readConfig(configPath) {
   return unstable_readConfig({ config: configPath }, { hideWarnings: true });
@@ -67,6 +68,13 @@ test("our Worker config deploys the relay to WoowTech's account at relay.woowtec
   assert.equal(config.account_id, WOOWTECH_ACCOUNT_ID);
   assert.deepEqual(config.routes, [{ pattern: RELAY_HOST, custom_domain: true }]);
   assert.equal(config.workers_dev, false, "no second address on workers.dev");
+});
+
+test("daemons and pairing offers use this Worker's domain", () => {
+  // packages/protocol/src/brand-relay.ts sets the daemon's default relay endpoint.
+  const [route] = readConfig(OUR_CONFIG).routes;
+  assert.equal(BRAND_RELAY.host, route.pattern);
+  assert.equal(BRAND_RELAY.endpoint, `${route.pattern}:443`);
 });
 
 test("our Worker config never forwards to upstream's relay", async () => {

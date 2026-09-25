@@ -662,11 +662,12 @@ describe("PersistedConfigSchema voice mode config", () => {
 });
 
 describe("loadPersistedConfig", () => {
-  test("materializes relay disabled for a new Paseo home", () => {
+  // woowtech smart runs its own relay, so a new home turns it on; the user can turn it off.
+  test("materializes relay enabled for a new woowtech smart home", () => {
     const home = createTempHome();
     try {
       const config = loadPersistedConfig(home);
-      expect(config.daemon?.relay?.enabled).toBe(false);
+      expect(config.daemon?.relay?.enabled).toBe(true);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

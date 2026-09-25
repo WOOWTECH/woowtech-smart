@@ -38,7 +38,7 @@ export function HostStatusDotSlot({ serverId }: { serverId: string }): ReactElem
 }
 
 // Standard secure/plain web ports carry no information in the host display, so
-// "relay.paseo.sh:443" reads as "relay.paseo.sh" while "127.0.0.1:6770" is kept.
+// "relay.woowtech.io:443" reads as "relay.woowtech.io" while "127.0.0.1:6770" is kept.
 function formatConnectionEndpoint(endpoint: string): string {
   return endpoint.replace(/:(?:443|80)$/, "");
 }

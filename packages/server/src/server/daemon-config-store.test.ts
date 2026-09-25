@@ -193,6 +193,11 @@ describe("DaemonConfigStore", () => {
   test("rolls back config when a field transition fails", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);
+    // woowtech smart: new homes start with the relay on, so save it off explicitly.
+    writeFileSync(
+      path.join(paseoHome, "config.json"),
+      `${JSON.stringify({ version: 1, daemon: { relay: { enabled: false } } })}\n`,
+    );
     const store = new DaemonConfigStore(paseoHome, {
       relay: { enabled: false },
       mcp: { injectIntoAgents: false },
@@ -1150,7 +1155,7 @@ describe("DaemonConfigStore reload", () => {
     });
     writeConfig(paseoHome, {
       ...persisted,
-      daemon: { ...persisted.daemon, relay: { enabled: true } },
+      daemon: { ...persisted.daemon, relay: { enabled: !persisted.daemon?.relay?.enabled } },
     });
     store.patch({ appendSystemPrompt: "patched elsewhere" });
 

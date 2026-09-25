@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 
 import { CLI_COMMAND, withCliCommand } from "../../packages/protocol/src/brand-cli.ts";
 import { BRAND_LINKS } from "../../packages/protocol/src/brand-links.ts";
+import { BRAND_RELAY } from "../../packages/protocol/src/brand-relay.ts";
 import { brandSkillName } from "../../packages/protocol/src/brand-skills.ts";
 import { DEFAULT_PASEO_HOME } from "../../packages/server/src/server/paseo-home.ts";
 import { createSkillRewriter } from "./skill-rewrites.mjs";
@@ -70,6 +71,7 @@ function generate() {
     daemonHome: DEFAULT_PASEO_HOME,
     port: daemonPort(),
     productName: PRODUCT_NAME,
+    relayHost: BRAND_RELAY.host,
     upstreamSkills,
   });
   const files = new Map();

@@ -20,6 +20,7 @@ import type {
 } from "./agent/provider-launch-config.js";
 import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
+import { DEFAULT_RELAY_ENDPOINT } from "@getpaseo/protocol/daemon-endpoints";
 import { hashDaemonPassword } from "./auth.js";
 import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
@@ -28,7 +29,6 @@ import { resolveGitProcessPolicy } from "../utils/git-process-scheduler.js";
 
 // woowtech smart listens on its own port, apart from an upstream Paseo daemon.
 const DEFAULT_PORT = 6770;
-const DEFAULT_RELAY_ENDPOINT = "relay.paseo.sh:443";
 const DEFAULT_APP_BASE_URL = "https://app.paseo.sh";
 const DEFAULT_TRUSTED_PROXIES = ["loopback"];
 
@@ -558,10 +558,11 @@ export function resolveConfigFromPersisted(
   const resolvedOptions = options ?? {};
   const env = configurationEnvironment(resolvedOptions.env ?? process.env);
   const cli = resolvedOptions.cli;
-  // woowtech smart keeps the relay off until the user turns it on. Upstream turns it
-  // on for a config without daemon.relay.enabled (the relayOptInDefault compatibility
-  // rule), which would connect such a daemon to upstream's relay.paseo.sh.
-  const relayEnabledFallback = resolvedOptions.relayEnabledFallback ?? false;
+  // woowtech smart runs its own relay, so it is on unless the user turns it off: a
+  // config without daemon.relay.enabled gets it, at startup and after a reload.
+  // Upstream turns it on only for configs that omitted the field at startup (the
+  // relayOptInDefault compatibility rule) and plans to turn that off.
+  const relayEnabledFallback = resolvedOptions.relayEnabledFallback ?? true;
 
   const listen = resolveListenAddress(env, cli, persisted);
   const {

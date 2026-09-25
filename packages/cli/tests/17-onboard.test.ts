@@ -26,6 +26,17 @@ try {
     paseoHome,
   ]);
   assert.strictEqual(configured.exitCode, 0, configured.stderr);
+  // woowtech smart turns the relay on in new homes; this onboarding runs with it off.
+  const relayOff = await runLocalPaseo([
+    "daemon",
+    "config",
+    "set",
+    "daemon.relay.enabled",
+    "false",
+    "--home",
+    paseoHome,
+  ]);
+  assert.strictEqual(relayOff.exitCode, 0, relayOff.stderr);
 
   console.log("Test 1: `paseo` runs blocking onboarding without implicit relay pairing");
   const onboard = await $`PASEO_HOME=${paseoHome} PASEO_PAIRING_QR=0 npx paseo`.nothrow();

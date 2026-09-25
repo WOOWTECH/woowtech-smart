@@ -351,8 +351,9 @@ const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
     cors: {
       allowedOrigins: ["https://app.paseo.sh"],
     },
+    // woowtech smart runs its own relay, so new homes start with it on.
     relay: {
-      enabled: false,
+      enabled: true,
     },
   },
   app: {
