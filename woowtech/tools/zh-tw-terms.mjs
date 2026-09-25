@@ -29,6 +29,15 @@ function spacing(left, right, original) {
 }
 
 /**
+ * The English `words` (regular expression source) as a word of the sentence, not
+ * part of a path, file or host name (a "." and a letter follow), command or
+ * {{placeholder}}.
+ */
+export function asWord(words) {
+  return `(?<![\\w./~$@\`'{}-])(?:${words})(?![\\w/\`'{}-]|\\.\\w)`;
+}
+
+/**
  * `term` in place of the English `words` (regular expression source) upstream's
  * Simplified Chinese left inside a Chinese sentence, spaced like the sentence.
  * Strings with no Chinese stay English, and so do words that are part of a path,
@@ -36,7 +45,7 @@ function spacing(left, right, original) {
  */
 function inChinese(words, term, flags = "gi") {
   return {
-    find: new RegExp(`( ?)(?<![\\w./~$@\`'{}-])(?:${words})(?![\\w/\`'{}-])( ?)`, flags),
+    find: new RegExp(`( ?)${asWord(words)}( ?)`, flags),
     replace: (match, before, after, offset, text) => {
       if (!HAN.test(text)) return match;
       const left = text[offset - 1];
@@ -186,3 +195,16 @@ export const TERM_FIXES = [
   label("\\{\\{scriptName\\}\\} script", "{{scriptName}} 腳本"),
   label("Prompt \\{\\{name\\}\\}", "給 {{name}} 的提示詞"),
 ];
+
+/** `text` after OpenCC, with every fix that applies to its `{ key, english }` context. */
+export function fixTerms(text, context) {
+  let fixed = text;
+  for (const fix of TERM_FIXES) {
+    if (fix.when && !fix.when(context)) continue;
+    fixed =
+      typeof fix.find === "string"
+        ? fixed.replaceAll(fix.find, fix.replace)
+        : fixed.replace(fix.find, fix.replace);
+  }
+  return fixed;
+}

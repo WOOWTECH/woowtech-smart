@@ -12,7 +12,7 @@
 import { writeFileSync } from "node:fs";
 import * as OpenCC from "opencc-js";
 
-import { TERM_FIXES } from "./zh-tw-terms.mjs";
+import { fixTerms } from "./zh-tw-terms.mjs";
 import { UNTRANSLATED } from "./zh-tw-untranslated.mjs";
 
 const resourcesDir = new URL("../../packages/app/src/i18n/resources/", import.meta.url);
@@ -20,15 +20,7 @@ const target = new URL("zh-TW.ts", resourcesDir);
 const toTaiwanese = OpenCC.Converter({ from: "cn", to: "twp" });
 
 function convertText(text, context) {
-  let converted = toTaiwanese(text);
-  for (const fix of TERM_FIXES) {
-    if (fix.when && !fix.when(context)) continue;
-    converted =
-      typeof fix.find === "string"
-        ? converted.replaceAll(fix.find, fix.replace)
-        : converted.replace(fix.find, fix.replace);
-  }
-  return converted;
+  return fixTerms(toTaiwanese(text), context);
 }
 
 /** Converts every string, telling each fix the key path and the English source. */

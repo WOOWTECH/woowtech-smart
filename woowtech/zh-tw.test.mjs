@@ -11,6 +11,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
+import { asWord, fixTerms } from "./tools/zh-tw-terms.mjs";
 import { KEEP_ENGLISH } from "./tools/zh-tw-untranslated.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -49,8 +50,9 @@ function flatten(value, path = "", strings = new Map()) {
 }
 
 const HAN = /[㐀-鿿]/;
-// Not a word of the sentence: part of a path, file name, command or {{placeholder}}.
-const WORD = (words) => `(?<![\\w./~$@\`'{}-])(?:${words})(?![\\w/\`'{}-])`;
+// A word of the sentence, as zh-tw-terms.mjs finds one: a word inside a path, file
+// name, command or {{placeholder}} is not one.
+const WORD = asWord;
 // Common nouns zh-tw-terms.mjs gives a Taiwanese term, in any case and number.
 const ENGLISH_NOUN = new RegExp(
   WORD(
@@ -104,6 +106,23 @@ test("Traditional Chinese uses Taiwanese terms, not English nouns", () => {
     return ENGLISH_NOUN.test(words) || MISSPELLED_NAMED_TERM.test(words);
   });
   assert.deepEqual(english, []);
+});
+
+// Upstream's Simplified Chinese can name a file or a host inside a sentence. Those are
+// names, and a term there breaks them: app.paseo.sh would read App.paseo.sh.
+test("the term fixes leave file and domain names alone", () => {
+  const context = { key: "", english: "" };
+  for (const text of [
+    "開啟 app.paseo.sh 完成配對",
+    "編輯 agents.md 檔案",
+    "請檢查 project.json",
+    "執行 setup.sh 腳本",
+  ]) {
+    assert.equal(fixTerms(text, context), text);
+  }
+  // The same word still takes its term before an ellipsis or at the end of a sentence.
+  assert.equal(fixTerms("正在載入 workspace...", context), "正在載入工作區...");
+  assert.equal(fixTerms("新增 project.", context), "新增專案.");
 });
 
 // A string with no Chinese at all is one upstream's Simplified Chinese left in
