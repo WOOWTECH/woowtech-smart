@@ -136,6 +136,42 @@ test("the app registers the link's scheme and routes the link to its start scree
   }
 });
 
+// The app hands each link it is opened with to handlePairingLink (runtime/woowtech-pairing-link.ts,
+// which its unit tests cover). Upstream's own pairing links only ever reach its web app, so a merge
+// that limits OfferLinkListener to the web, or makes it parse links with the URL class, would stop
+// pairing through the phone's camera without failing anything else.
+test("the app hands every link it is opened with to handlePairingLink, on every platform", () => {
+  const layoutPath = "packages/app/src/app/_layout.tsx";
+  const layout = readFileSync(path.join(repoRoot, layoutPath), "utf8");
+
+  const mounts = layout.split("\n").filter((line) => line.includes("<OfferLinkListener"));
+  assert.equal(mounts.length, 1, `${layoutPath} mounts OfferLinkListener ${mounts.length} times`);
+  assert.match(
+    mounts[0],
+    /^\s*<OfferLinkListener\b[^{}]*=\{\w+\}\s*\/>$/,
+    `OfferLinkListener is mounted under a condition: ${mounts[0].trim()}`,
+  );
+
+  const listener = /^function OfferLinkListener\([\s\S]*?^\}$/m.exec(layout)?.[0];
+  assert.ok(listener, `OfferLinkListener is gone from ${layoutPath}`);
+  for (const call of [
+    "Linking.getInitialURL()",
+    'Linking.addEventListener("url"',
+    "handlePairingLink(",
+  ]) {
+    assert.ok(listener.includes(call), `OfferLinkListener no longer calls ${call}`);
+  }
+  assert.doesNotMatch(
+    listener,
+    /Platform\.|isWeb|isNative|getIsElectron|new URL\(/,
+    "OfferLinkListener depends on the platform or reads links with the URL class",
+  );
+  assert.ok(
+    layout.includes('import { handlePairingLink } from "@/runtime/woowtech-pairing-link";'),
+    `${layoutPath} does not import handlePairingLink`,
+  );
+});
+
 test("homes created with upstream's default app.baseUrl get the app link; other values stay", async () => {
   for (const upstreamDefault of ["https://app.paseo.sh", "https://app.paseo.sh/"]) {
     const link = await pairingLinkOf(daemonHome({ version: 1, app: { baseUrl: upstreamDefault } }));

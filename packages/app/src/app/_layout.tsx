@@ -111,6 +111,7 @@ import {
   useHosts,
 } from "@/runtime/host-runtime";
 import { getDaemonStartService } from "@/runtime/daemon-start-service";
+import { handlePairingLink } from "@/runtime/woowtech-pairing-link";
 import { usePanelStore } from "@/stores/panel-store";
 import { flushDraftPersistStorage } from "@/stores/draft-store";
 import { getNextThemePreference } from "@/styles/theme";
@@ -708,22 +709,13 @@ function OfferLinkListener({
 
   useEffect(() => {
     let cancelled = false;
-    const handleUrl = (url: string | null) => {
-      if (!url) return;
-      if (!url.includes("#offer=")) return;
-      void upsertDaemonFromOfferUrl(url)
-        .then((profile) => {
-          if (cancelled) return;
-          const serverId = (profile as { serverId?: unknown } | null)?.serverId;
-          if (typeof serverId !== "string" || !serverId) return;
-          router.replace(buildOpenProjectRoute());
-          return;
-        })
-        .catch((error) => {
-          if (cancelled) return;
-          console.warn("[Linking] Failed to import pairing offer", error);
-        });
-    };
+    // woowtech smart: pairing links open the app (runtime/woowtech-pairing-link.ts).
+    const handleUrl = (url: string | null) =>
+      void handlePairingLink(url, {
+        importOffer: upsertDaemonFromOfferUrl,
+        openProject: () => router.replace(buildOpenProjectRoute()),
+        isCancelled: () => cancelled,
+      });
 
     void Linking.getInitialURL()
       .then(handleUrl)
