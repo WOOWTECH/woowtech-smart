@@ -26,6 +26,10 @@ const { buildAgentAttentionNotificationPayload } = await tsImport(
   "../packages/protocol/src/agent-attention-notification.ts",
   import.meta.url,
 );
+const { VoiceAssistantWebSocketServer } = await tsImport(
+  "../packages/server/src/server/websocket-server.ts",
+  import.meta.url,
+);
 
 const RELAY_URL = "https://push.woowtech.io/api/smart/v1/notify";
 // Shaped like tokens the phones register. Fake.
@@ -182,6 +186,90 @@ for (const locale of ["zh-TW", "en"]) {
     });
   });
 }
+
+// send() rewrites every push before a deliver sees it (woowtech-push-content.ts), so a deliver
+// injected in a test or wired in later cannot get the user's text either.
+test("send() hands a deliver a generic sentence, the reason and the ids, nothing else", async () => {
+  const home = mkdtempSync(path.join(tmpdir(), "woowtech-push-content-"));
+  homes.push(home);
+  const delivered = [];
+  const push = createPushNotifications({
+    logger: silentLogger,
+    filePath: path.join(home, "push-tokens.json"),
+    language: "en",
+    deliver: async (tokens, payload) => {
+      delivered.push({ tokens, payload });
+    },
+  });
+  push.renew(`wsp1:en:${FCM_TOKEN}`);
+
+  const pushes = [
+    finishedAgent(SECRET.assistantMessage),
+    finishedAgent("Something else entirely"),
+    permissionRequest(),
+    terminalNeedsInput(),
+  ];
+  for (const payload of pushes) await push.send(payload);
+
+  assert.equal(delivered.length, pushes.length);
+  for (const { payload } of delivered) {
+    const text = JSON.stringify(payload);
+    for (const [field, secret] of Object.entries(SECRET)) {
+      assert.ok(!text.includes(secret), `the ${field} reached the deliver: ${text}`);
+    }
+    assert.deepEqual(
+      Object.keys(payload.data).filter(
+        (key) => !["serverId", "workspaceId", "agentId", "terminalId", "reason"].includes(key),
+      ),
+      [],
+      `data beyond the ids and the reason: ${text}`,
+    );
+  }
+  const [finished, finishedAgain, permission, terminal] = delivered.map(({ payload }) => payload);
+  assert.deepEqual(finishedAgain, finished, "the sentence does not depend on the work");
+  assert.deepEqual(finished.data, { ...IDS, reason: "finished" });
+  assert.deepEqual(permission.data, { ...IDS, reason: "permission" });
+  assert.deepEqual(terminal.data, {
+    serverId: IDS.serverId,
+    workspaceId: IDS.workspaceId,
+    terminalId: TERMINAL_ID,
+    reason: "needs_input",
+  });
+  assert.notEqual(permission.body, finished.body, "one sentence per reason");
+});
+
+// Upstream's terminal pushes carried no reason, and the relay reads a missing reason as
+// "needs your attention": a finished terminal must say so (websocket-server.ts).
+test("a terminal's push names why it asks for attention", async () => {
+  const sent = [];
+  const daemon = {
+    sessions: new Map(),
+    serverId: IDS.serverId,
+    logger: silentLogger,
+    pushNotificationSender: {
+      send: async (payload) => {
+        sent.push(payload);
+      },
+    },
+  };
+  for (const reason of ["finished", "needs_input"]) {
+    await VoiceAssistantWebSocketServer.prototype.broadcastTerminalAttention.call(daemon, {
+      terminalId: TERMINAL_ID,
+      cwd: SECRET.folder,
+      workspaceId: IDS.workspaceId,
+      terminalName: SECRET.terminalName,
+      reason,
+    });
+  }
+
+  assert.deepEqual(
+    sent.map(({ data }) => data.reason),
+    ["finished", "needs_input"],
+  );
+  // One at a time: each swaps the global fetch for its recorder.
+  assert.equal((await requestToRelay(sent[0], "en")).reason, "finished");
+  assert.equal((await requestToRelay(sent[1], "en")).reason, "attention");
+});
 
 test("WOOWTECH_PUSH_RELAY_URL points the daemon at another relay, still not at Expo", async () => {
   const staging = "https://staging.example.invalid/api/smart/v1/notify";

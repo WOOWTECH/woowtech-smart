@@ -532,9 +532,9 @@ daemon：`packages/server/src/server/push/woowtech-relay.ts`
   | 其他，包括轉址（3xx，不跟著轉）                           | 記 warn，不重試                           |
 
 - log 只記數量和結果代碼，不記 token。要追查時開 debug：每支手機一行「The push relay answered」，用 FCM token 的 SHA-256 前 8 碼代表那支手機。
-- `send()` 裡照樣先跑 `woowtech-push-content.ts`：交給任何 `deliver` 的推播都已經換成產品名和每種原因一句的通用句子，`data` 只留 ID 和 `reason`。手機上顯示的是中繼的句子，所以這一步的句子和它的語言判斷（依序看 `LC_ALL`、`LC_MESSAGES`、`LANG`，macOS 讀系統語言）現在只影響注入的 `deliver`。留著是多一層保護：測試注入的、或以後改接的送出器也拿不到使用者的內容。
+- `send()` 裡照樣先跑 `woowtech-push-content.ts`：交給任何 `deliver` 的推播都已經換成產品名和每種原因一句的通用句子，`data` 只留 ID 和 `reason`。手機上顯示的是中繼的句子，所以這一步的句子和它的語言判斷（依序看 `LC_ALL`、`LC_MESSAGES`、`LANG`，macOS 讀系統語言）現在只影響注入的 `deliver`。留著是多一層保護：測試注入的、或以後改接的送出器也拿不到使用者的內容。中繼的送出器不讀文字，中繼收到的位元組有沒有這一步都一樣，所以守門另外注入記錄用的 `deliver` 來釘住這一步。
 - `server_info.features.woowtechPush`：`packages/protocol/src/messages.ts` 加了一個 optional 的旗標（註解標明 fork 自有），`websocket-server.ts` 設成 `true`（2 行）。舊 App 看不到就忽略；沒有這個旗標的 daemon（官方 Paseo，或這個改版以前的我們），新 App 不註冊推播，照 `docs/protocol-compatibility.md` 不做退路。
-- 上游 terminal 的推播沒有帶原因，`websocket-server.ts` 加了一行 `reason`。沒有它，terminal 完成時中繼也會說「需要你的注意」。
+- 上游 terminal 的推播沒有帶原因，`websocket-server.ts` 加了一行 `reason`（main 上就有）。沒有它，terminal 完成時中繼也會說「需要你的注意」。
 
 App：`packages/app/src/push-notifications/internal/woowtech-subscriptions.ts`
 
@@ -590,7 +590,7 @@ Android：
 - App：`push-notifications/index.native.ts`（1 行）、`app.config.js`（2 行 require、plist 改由 `woowtech-ios-firebase.js` 決定、外掛 1 行、`expo-build-properties` 的 `ios` 區塊）、`metro.config.cjs`（3 行）、`package.json`（2 個相依）、`package-lock.json`（只有新增）。
 - `knip.json`：server 的 `ignore` 放 `push-service.ts`（它還提供 `PushPayload` 型別，但 `PushService` 沒人用），App 的 `ignoreFiles` 放 `subscriptions.ts`，knip 才不會建議刪掉這兩個上游的檔。`npm run knip` 本身在 main 也會停在 knip 的 Expo 外掛（`app.config.js` 的外掛有函式，knip 5.86 當成字串處理），要看報告就分 workspace 跑，packages/app 要先在暫時的設定裡關掉 Expo 外掛。
 - App 根目錄的新檔 `react-native.config.js` 和 `firebase.json` 上游沒有；上游以後加了同名檔會衝突，合併時把兩邊的設定合在一起。
-- 上游的測試檔加了案例：`protocol/src/messages.test.ts`（1 組）、`websocket-server.notifications.test.ts`（2 個）、`websocket-server.terminal-notifications.test.ts`（1 組）。合併時衝突的話，可以先放掉我們加的測試：守門涵蓋 `send()`、`woowtechPush` 旗標和 App 的接點，terminal 的 `reason` 除外。
+- 上游的測試檔加了案例：`protocol/src/messages.test.ts`（1 組）、`websocket-server.notifications.test.ts`（2 個）、`websocket-server.terminal-notifications.test.ts`（1 組）。合併時衝突的話，可以先放掉我們加的測試：守門涵蓋 `send()` 的改寫、terminal 推播的 `reason`、`woowtechPush` 旗標和 App 的接點。
 - fork 自有的檔（各自附測試）：protocol 的 `woowtech-push.ts`；server 的 `push/woowtech-relay.ts`、`push/woowtech-push-content.ts`；App 的 `push-notifications/internal/` 裡的 `woowtech-subscriptions.ts`、`fcm-token-source.ts`、`fcm-token.ts`、`fcm-token.ios.ts`、`fcm-token.android.ts`，`plugins/` 裡的 `with-woowtech-push.js`、`woowtech-ios-firebase.js`、`woowtech-metro-resolver.js`；守門 `woowtech/push.test.mjs`、`woowtech/push-content.test.mjs`。
 
 測試：
@@ -603,7 +603,7 @@ Android：
   - `plugins/with-woowtech-push.test.ts`：外掛只加 iOS 的設定，沒有 plist 時什麼都不做。`plugins/woowtech-metro-resolver.test.ts`：用真的 `metro-resolver` 確認包裝前會解析到網頁版的 `nativeModule.js`，包裝後是平台的檔。
   - `src/push-notifications/internal/` 的 `fcm-token.test.ts`、`fcm-token.ios.test.ts`、`fcm-token.android.test.ts`、`woowtech-subscriptions.test.ts`：注入有型別的假模組，不用 `vi.mock`。訂閱的測試涵蓋上面 App 的每一條規則。
   - `src/utils/notification-routing.woowtech-push.test.ts`：兩種點擊資料都開到那個 agent 或 terminal，中繼的每日上限通知開到 `/`。
-- 守門 `woowtech/push-content.test.mjs`：從原始碼跑沒有注入 `deliver` 的 `createPushNotifications`，`fetch` 換成記錄器，中英文各一次：只有一個請求，打到 `https://push.woowtech.io/api/smart/v1/notify`；位元組裡沒有 agent 名稱、回覆、權限內容、資料夾、terminal 名稱和工作區名稱；本文不隨內容改變；Expo token 被撤銷；`WOOWTECH_PUSH_RELAY_URL` 蓋得掉網址。另外掃描出貨的原始碼：Expo 的網址只在 `push-service.ts`，沒有任何地方 `new PushService` 或呼叫 `.sendPush(`，`push.woowtech.io` 只在 `woowtech-relay.ts`。
+- 守門 `woowtech/push-content.test.mjs`：從原始碼跑沒有注入 `deliver` 的 `createPushNotifications`，`fetch` 換成記錄器，中英文各一次：只有一個請求，打到 `https://push.woowtech.io/api/smart/v1/notify`；位元組裡沒有 agent 名稱、回覆、權限內容、資料夾、terminal 名稱和工作區名稱；本文不隨內容改變；Expo token 被撤銷；`WOOWTECH_PUSH_RELAY_URL` 蓋得掉網址。注入記錄用的 `deliver`：交給它的標題和內文不含任何使用者的內容、不隨內容改變，`data` 只有 ID 和 `reason`（拿掉 `send()` 裡的 `toRemotePushPayload` 時，只有這一項會失敗）。用最小的 `this` 呼叫 `websocket-server.ts` 的 `broadcastTerminalAttention`：terminal 完成和等輸入的推播帶著 `reason`，中繼分別收到 `finished` 和 `attention`。另外掃描出貨的原始碼：Expo 的網址只在 `push-service.ts`，沒有任何地方 `new PushService` 或呼叫 `.sendPush(`，`push.woowtech.io` 只在 `woowtech-relay.ts`。
 - 守門 `woowtech/push.test.mjs`，6 項，接點被蓋回上游時失敗：
   - 沒注入 `deliver` 的 `createPushNotifications` 只打 `WOOWTECH_PUSH_RELAY_URL`（本機的 `node:http` 假中繼），本文正好是那四個欄位，沒有放在標題、內文和 `cwd` 的標記字串。`fetch` 在載入原始碼之前就換掉，只放行假中繼，其他位址在本機回應並記下，接點被改回 Expo 時也不會真的送到 `exp.host`；`diagnostics_channel` 另外記下 undici 和 `node:http` 開出的請求。
   - daemon 的 server_info（從原始碼呼叫 `buildServerInfoStatusPayload`）經 protocol 的 `parseServerInfoStatusPayload` 解析後 `woowtechPush` 是 `true`。
