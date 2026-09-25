@@ -1002,6 +1002,11 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - `npm run build:server` 重建 protocol、client、server、CLI 的 dist 之後：守門 `node --test woowtech/*.test.mjs` 16 檔 76/76；這個分支改過的 22 個 vitest 檔逐檔跑，357 個全過（App 12 檔 124、CLI 2 檔 3、protocol 3 檔 179、server 5 檔 51）；第 16 節「合併上游之後」的三條 vitest 指令照寫的跑也全過；完整 typecheck 通過。守門和測試都在乾淨環境（`env -i`、Node 22）和只准連 loopback 的 `sandbox-exec` 裡跑。
   - `npm run lint` 有 3 個錯、`npm run format:check` 有 2 個檔不過，都在這個分支沒動的檔：`woowtech/png.mjs`、`woowtech/tools/generate-icons.mjs` 和上游的 `packages/server/src/server/agent/providers/test-utils/echo-client-info-acp-agent.mjs`。這些檔、`.oxlintrc.json`、`.oxfmtrc.json` 和兩個工具的版本都跟 main 相同，main 上一樣不過。這個分支改過的 58 個檔 lint 和排版都乾淨。
   - 契約 fixture 跟中繼 repo 的仍相同（中繼 `smart-mode` 已到 `dff78a1`，fixture 從 `3363c60` 之後沒改）。
+- 三份獨立審查（隱私與 daemon、App 原生、配對與合併）的修正（2026-09-25，分支 `woowtech/push`）：行為改動都先紅後綠，守門和上游接點的新檢查都用突變確認會失敗，改完用備份還原。
+  - 紅燈原因：中繼回 307、308 時另一個位址收到 `POST /collect`（含 FCM token），302 收到 GET；App 換語言又換回、兩次撤銷沒送到時，中繼收到 `en`；Android 取 token 也發事件，10 輪註冊 10 次（拿掉比對的突變在「事件先到」時 worker 記憶體耗盡）；iOS 已註冊過時 `getToken` 失敗、兩個訂閱同時要 token 時一個拿到 null、沒有重試、warn 沒有錯誤代碼；沒有 `woowtechPush` 的 daemon 收不到舊 Expo token 的撤銷；`turnOffExpoPushRegistration` 不存在、`index.native.ts` 載入時不呼叫；冷啟動先讀配對連結再 `boot()`，記憶體只剩舊主機、存檔只剩新主機。
+  - 守門新增 6 項（`push-content` 2、`push` 3、`pairing` 1），配對掃描多讀 3 個套件；突變都被抓到：拿掉 `send()` 的 `toRemotePushPayload`、拿掉 terminal 推播的 `reason`、schema 或 handler 只收 Expo token、拿掉 `withWoowtechPush`、`useFrameworks` 改 dynamic、`forceStaticLinking` 少 `react-native-paste-input`、plist 改回讀 `variant.googleServiceInfoPlist`、拿掉 Metro 包裝、`OfferLinkListener` 加平台條件或改用 URL 類別或不交給 `handlePairingLink`、plugin／highlight／expo-two-way-audio 的原始碼出現 app.paseo.sh。
+  - `npm run build:server` 之後：守門 `node --test woowtech/*.test.mjs` 82/82；第 16 節「合併上游之後」的三條 vitest 指令 protocol 2 檔 177、server 6 檔 72、App 8 檔 59；第 19 節的配對指令 protocol 3、server 12、CLI 3、App 4 檔 84；完整 typecheck 通過；這個分支改過的檔 lint 和排版都乾淨。
+  - 沒改的：已存在的 home 的 CORS 白名單（owner 待決定，見「接下來」）。要實機確認的：iOS 第二次啟動拿得到 token（滑掉重開）、冷啟動掃 QR Code 後兩台主機都在。
 
 ## 接下來
 
