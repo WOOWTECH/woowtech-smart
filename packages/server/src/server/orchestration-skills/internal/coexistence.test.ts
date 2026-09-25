@@ -7,6 +7,7 @@ import { createSkillsController, type SkillsController } from "./controller";
 import type { SkillSelection, SkillTargets } from "./operations";
 import { resolveSkillTargets } from "./paths";
 import { coerceSkillSelection, type SkillSelectionStore } from "./selection-store";
+import { beginSkillsTransaction } from "./transaction";
 
 // The official Paseo installs these into the same agent homes, and older
 // versions of it installed the retired ones.
@@ -185,5 +186,60 @@ describe("orchestration skills beside the official Paseo's", () => {
     expect(saved.confirmationRequired).toBeNull();
     expect(saved.installed).toEqual(["woowtech-smart"]);
     expect(await readSkills(targets, official)).toEqual(before);
+  });
+
+  it("stages a save in a folder named for woowtech smart", async () => {
+    await controller.install();
+    const parent = path.dirname(targets.agentsDir);
+
+    const transaction = await beginSkillsTransaction(
+      targets,
+      { mode: "all" },
+      { mode: "custom", skills: ["woowtech-smart"] },
+      [{ kind: "delete", name: "woowtech-smart-advisor" }],
+    );
+    const staged = (await readdir(parent)).filter((entry) => entry.includes("-skills-"));
+    await transaction.rollback();
+
+    expect(staged).toEqual([expect.stringMatching(/^\.woowtech-smart-skills-transaction-/)]);
+  });
+
+  it("leaves the official Paseo's interrupted saves for the official Paseo", async () => {
+    // Saves the official app was interrupted in while capturing: one that was
+    // switching to the selection we have, and one that matches neither of ours.
+    const parent = path.dirname(targets.agentsDir);
+    const interrupted = [
+      { next: { mode: "all" }, id: "0b7f3f5e-7a6c-4a4e-9d3e-1f2a3b4c5d6e" },
+      {
+        next: { mode: "custom", skills: ["paseo-help"] },
+        id: "5c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+      },
+    ].map(({ next, id }) => ({
+      manifest: path.join(parent, `.paseo-skills-transaction-${id}`, "transaction.json"),
+      contents: `${JSON.stringify({
+        owner: "paseo-skills-transaction",
+        version: 1,
+        phase: "capturing",
+        previousSelection: { mode: "custom", skills: ["paseo"] },
+        nextSelection: next,
+        entries: [],
+      })}\n`,
+    }));
+    for (const { manifest, contents } of interrupted) {
+      await mkdir(path.dirname(manifest), { recursive: true });
+      await writeFile(manifest, contents);
+    }
+
+    await controller.install();
+    await controller.save({
+      mode: "custom",
+      skills: ["woowtech-smart"],
+      confirmedRemovals: OUR_SKILLS,
+    });
+    await controller.uninstall();
+
+    for (const { manifest, contents } of interrupted) {
+      expect(await readFile(manifest, "utf8")).toBe(contents);
+    }
   });
 });

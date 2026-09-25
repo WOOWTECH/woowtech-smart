@@ -13,6 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 
 import {
   listManagedSkillNames,
@@ -53,8 +54,10 @@ interface CapturedDirectory {
 
 const MANIFEST_OWNER = "paseo-skills-transaction";
 const MANIFEST_FILENAME = "transaction.json";
-const TRANSACTION_PREFIX = ".paseo-skills-transaction-";
-const RECOVERED_PREFIX = ".paseo-skills-recovered-";
+// Named for woowtech smart: the official Paseo stages and recovers
+// .paseo-skills-transaction-* beside the same agent homes.
+const TRANSACTION_PREFIX = `.${CLI_COMMAND}-skills-transaction-`;
+const RECOVERED_PREFIX = `.${CLI_COMMAND}-skills-recovered-`;
 const BACKUP_DIRNAME = "backup";
 const MANAGED_FILES_MANIFEST = ".paseo-managed-files.json";
 
