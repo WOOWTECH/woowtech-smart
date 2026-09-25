@@ -15,6 +15,9 @@ const resolvePackageEntry = (packageName: string) => {
 export default defineConfig({
   test: {
     environment: "node",
+    // woowtech smart: CI sets this on GitHub's 2-core runner, where a beforeAll that imports
+    // a large module graph takes longer than 10 s. Projects ignore --hookTimeout.
+    hookTimeout: Number(process.env.PASEO_APP_TEST_HOOK_TIMEOUT_MS) || 10_000,
     exclude: [...configDefaults.exclude, "e2e/**"],
     projects: [
       {
