@@ -108,6 +108,9 @@ describe("host settings in Traditional Chinese", () => {
     ).toBeTruthy();
     expect(screen.getByLabelText("啟用終端機 Agent hooks")).toBeTruthy();
     expect(screen.queryByText(/terminal agent/i)).toBeNull();
+    // Upstream's own strings on this page, which its Simplified Chinese leaves in English.
+    expect(screen.getByText("終端機設定檔")).toBeTruthy();
+    expect(screen.getByText("還沒有設定檔。新增一個，就能用指定的指令啟動終端機。")).toBeTruthy();
   });
 
   it("describes archiving merged pull request workspaces in Chinese", () => {

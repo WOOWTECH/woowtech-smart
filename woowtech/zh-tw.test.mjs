@@ -11,6 +11,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
+import { KEEP_ENGLISH } from "./tools/zh-tw-untranslated.mjs";
+
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 
 test("Traditional Chinese is regenerated from upstream's current Simplified Chinese", () => {
@@ -100,6 +102,16 @@ test("Traditional Chinese uses Taiwanese terms, not English nouns", () => {
       return ENGLISH_LABEL.test(words.trim()) || MISSPELLED_LABEL.test(words.trim());
     }
     return ENGLISH_NOUN.test(words) || MISSPELLED_NAMED_TERM.test(words);
+  });
+  assert.deepEqual(english, []);
+});
+
+// A string with no Chinese at all is one upstream's Simplified Chinese left in
+// English; tools/zh-tw-untranslated.mjs translates it or keeps it on purpose.
+test("Traditional Chinese has no English string left over from upstream", () => {
+  const english = [...committedTraditional()].filter(([key, text]) => {
+    const words = text.replace(/\{\{[^}]*\}\}/g, " ");
+    return !HAN.test(words) && /[A-Za-z]{2}/.test(words) && !KEEP_ENGLISH.has(key);
   });
   assert.deepEqual(english, []);
 });
