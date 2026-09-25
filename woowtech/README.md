@@ -75,21 +75,23 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
 同一台電腦裝了官方 Paseo 時，原本兩邊共用資料夾、port、連結 scheme 和桌面版身分：後啟動的 daemon 搶不到 port，App 甚至可能連到官方的 daemon。現在全部分開：
 
-| 項目               | 原版                       | woowtech smart                           |
-| ------------------ | -------------------------- | ---------------------------------------- |
-| daemon 資料夾      | `~/.paseo`                 | `~/.woowtech-smart`                      |
-| 預設 port          | 6767                       | 6770                                     |
-| 連結 scheme        | `paseo://`                 | `woowtech-smart://`                      |
-| 桌面版 appId       | `sh.paseo.desktop`         | `io.woowtech.smart.desktop`              |
-| 桌面版名稱／執行檔 | `Paseo`                    | `woowtech smart`（`woowtech smart.app`） |
-| 桌面版更新下載快取 | `@getpaseodesktop-updater` | `io.woowtech.smart.desktop-updater`      |
+| 項目               | 原版                               | woowtech smart                                       |
+| ------------------ | ---------------------------------- | ---------------------------------------------------- |
+| daemon 資料夾      | `~/.paseo`                         | `~/.woowtech-smart`                                  |
+| 預設 port          | 6767                               | 6770                                                 |
+| 連結 scheme        | `paseo://`                         | `woowtech-smart://`                                  |
+| 桌面版 appId       | `sh.paseo.desktop`                 | `io.woowtech.smart.desktop`                          |
+| 桌面版名稱／執行檔 | `Paseo`                            | `woowtech smart`（`woowtech smart.app`）             |
+| 桌面版更新下載快取 | `@getpaseodesktop-updater`         | `io.woowtech.smart.desktop-updater`                  |
+| CLI 指令           | `paseo`（`~/.local/bin/paseo`）    | `woowtech-smart`（`~/.local/bin/woowtech-smart`）    |
+| daemon 行程名      | `Paseo Supervisor`、`Paseo Daemon` | `woowtech smart Supervisor`、`woowtech smart Daemon` |
 
 - port 在 daemon、App（本機備援位址、手動新增主機的預設值）、CLI 說明和 SSH 連線的預設值都一致。
 - 桌面版啟動時會併入登入 shell 的環境變數，但不採用其中的 `PASEO_HOME` 和 `PASEO_HOST`。使用官方 Paseo 的人可能在 shell 設定檔 export 這兩個值，指向官方的 `~/.paseo` 或 daemon；採用的話，我們的 daemon 會搬進官方的資料夾，桌面版呼叫的 CLI 也會連到官方的 daemon。
   - App 自己啟動時就帶著的值照樣有效，桌面版的 e2e 和 smoke 測試靠這個指定暫存 home。
   - 寫在 `packages/desktop/src/login-shell-daemon-target.ts`，測試是旁邊的 `login-shell-env.daemon-target.test.ts`。
   - CLI 仍然照 `PASEO_HOME`、`PASEO_HOST` 走：在 export 了這兩個值的 shell 裡執行 `woowtech-smart`，會連到它們指的 daemon。
-- daemon 的行程名是 `woowtech smart Supervisor` 和 `woowtech smart Daemon`，官方的是 `Paseo Supervisor` 和 `Paseo Daemon`。在活動監視器和 `ps` 裡分得出來，`pkill -f 'Paseo Daemon'` 也不會停掉我們的。沒有程式用行程名找 daemon。
+- daemon 的行程名不同，在活動監視器和 `ps` 裡分得出來，`pkill -f 'Paseo Daemon'` 也不會停掉我們的。沒有程式用行程名找 daemon。
   - 本地語音的 worker 仍叫 `Paseo Voice`，本地語音已拿掉（第 2 節），平常不會啟動。
   - `woowtech/names.test.mjs` 檢查這兩個行程名。
 - scheme 同時用在桌面版載入介面的來源、系統註冊的連結、手機 App、深層連結和 daemon 的 CORS 白名單。原版的 `paseo://` 連結留給官方 Paseo，我們不接；診斷報告會把兩種連結都遮掉。
@@ -274,6 +276,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `cli/tests/17-onboard.test.ts` 的速查預期值已改成 `woowtech-smart`。這是會啟動 daemon 的 e2e，還沒跑過。
   - `desktop/src/integrations/cli-install/install.test.ts` 用暫存 HOME 測安裝：官方 Paseo 的 `paseo` 連結不動、不算我們的；指向別處的 `woowtech-smart` 算沒裝；透過安裝的連結執行時，會經由 `woowtech smart Helper` 啟動 CLI，`PASEO_CLI` 是 App 內的 `woowtech-smart`。
   - `server/src/terminal/terminal-cli-env.test.ts` 確認 `PASEO_CLI` 叫 `woowtech-smart` 時，終端機的 `PASEO_HOOK_CLI` 和 PATH 都指到它。
+  - `desktop/e2e/packaged-app-smoke.js` 改成執行打包後的 `bin/woowtech-smart`，打包設定有沒有真的產生這個檔案，只有它會實際確認。要打包後才能跑，還沒跑過。
   - `woowtech/cli-name.test.mjs` 檢查打包設定的兩個 shim 名字、cli-install 沒有寫到 `paseo`，以及 hooks 文字和 OpenCode 外掛仍是上游的原文。
     另外掃描原始碼：直接印提示的那幾個檔案和 server 不准出現 `paseo <指令>`（hooks 標記除外）；CLI 除了說明文字、Hub、relay 說明和外掛範本以外，不准出現產品名 Paseo。上游合併帶回舊字串時會失敗。
 
@@ -327,12 +330,18 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   突變被抓到：拿掉 `extraMetadata`、改在 `publish` 設 `updaterCacheDirName`，electron-builder 照樣算出上游的名稱。`auto-updater` 12、`updater` 5、`desktop-packaging` 11 個測試通過，`update-sources.test.mjs` 2/2。
   沒有實際打包，是用 electron-builder 自己的函式確認 mac、Windows、Linux 的 `app-update.yml` 都會寫 `io.woowtech.smart.desktop-updater`。
 
+- CLI 改名第一部分（2026-09-25，分支 `woowtech/cli-rename`）：指令名、CLI 輸出、桌面版安裝 CLI、登入 shell 環境、行程名。新測試都先紅後綠。
+  - 紅燈原因：桌面版把官方 Paseo 的 `paseo` 連結當成已安裝、裝成 `paseo`、rc 註解寫 Paseo；CLI 程式名是 paseo，說明有 138 行上游名字，錯誤沒有改寫；Hub 精靈 6 個案例；直接印出的提示 20 行、CLI 自己寫的產品名 19 行；daemon 訊息 2 個測試和 3 行；登入 shell 的 `~/.paseo` 會滲入，還會蓋掉 App 自己啟動時帶的值；行程名是 `Paseo Supervisor`。
+  - 14 種突變都被抓到：安裝狀態改回只看檔案在不在、目標檔名改回 paseo、hooks 不跟 `PASEO_CLI`、OpenCode 外掛改名、改寫規則放寬成任何小寫字、拿掉 `renderError` 的改寫、Hub 停止訊息不改寫、拿掉 `applyCliBrand`、拿掉說明改寫、pair 提示改回、onboard 歡迎詞改回、daemon 訊息改回（兩處）、只丟 `PASEO_HOME`、Daemon 行程名改回。
+  - 跑過的測試：protocol 5、CLI 14 檔 86 個、desktop 8 檔 48 個、server 5 檔 41 個；守門測試 cli-name 6、coexistence 5、names 5、help-links 1、update-sources 2、brand-colors 1、relay 2。
+  - 沒跑的：CLI 的 e2e（`tests/17-onboard.test.ts` 只改了預期值）和桌面版打包 smoke。沒有實際打包，也沒有在真的 HOME 裡安裝 CLI。
+
 ## 接下來
 
 - 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
   發佈 repo 要放 `CHANGELOG.md`，App 的更新紀錄才讀得到。
 - 桌面版的版權行還是上游作者：electron-builder 預設用 `package.json` 的 author，會出現在 macOS 的「關於」視窗。
   `author`、`homepage`、`repository` 由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步，發佈前要決定怎麼標示。
-- 品牌識別最後一步：CLI 改名（連同說明文字、agent 技能說明、外掛訊息）。
+- 品牌識別最後一步的其餘部分：agent 技能改名成 `woowtech-smart*`（內容指向我們的指令、6770、`~/.woowtech-smart` 和求助管道），App 翻譯裡的 `paseo daemon status` 提示，外掛訊息。
 - 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`），配對連結（`app.paseo.sh`）和 Hub（`hub.paseo.sh`）一起換。
 - 商標（TIPO）與 D-U-N-S。
