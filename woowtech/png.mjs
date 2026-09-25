@@ -17,12 +17,23 @@ export function readPng(fileOrBuffer) {
     const type = data.toString("ascii", offset + 4, offset + 8);
     const body = data.subarray(offset + 8, offset + 8 + length);
     if (type === "IHDR") {
-      header = { width: body.readUInt32BE(0), height: body.readUInt32BE(4), depth: body[8], colorType: body[9], interlace: body[12] };
+      header = {
+        width: body.readUInt32BE(0),
+        height: body.readUInt32BE(4),
+        depth: body[8],
+        colorType: body[9],
+        interlace: body[12],
+      };
     }
     if (type === "IDAT") idat.push(body);
     offset += 12 + length;
   }
-  if (!header || header.depth !== 8 || header.interlace !== 0 || ![2, 6].includes(header.colorType)) {
+  if (
+    !header ||
+    header.depth !== 8 ||
+    header.interlace !== 0 ||
+    ![2, 6].includes(header.colorType)
+  ) {
     throw new Error(`${file}: only 8-bit, non-interlaced RGB or RGBA PNGs are supported`);
   }
   const channels = header.colorType === 6 ? 4 : 3;
@@ -45,7 +56,10 @@ export function readPng(fileOrBuffer) {
         const byLeft = Math.abs(estimate - left);
         const byUp = Math.abs(estimate - up);
         const byUpLeft = Math.abs(estimate - upLeft);
-        line[x] = (line[x] + (byLeft <= byUp && byLeft <= byUpLeft ? left : byUp <= byUpLeft ? up : upLeft)) & 255;
+        line[x] =
+          (line[x] +
+            (byLeft <= byUp && byLeft <= byUpLeft ? left : byUp <= byUpLeft ? up : upLeft)) &
+          255;
       }
     }
     previous = line;
@@ -78,7 +92,9 @@ export function encodeOpaquePng({ width, height, rgba }) {
       const source = (y * width + x) * 4;
       const alpha = rgba[source + 3] / 255;
       for (let channel = 0; channel < 3; channel += 1) {
-        rows[row + 1 + x * 3 + channel] = Math.round(rgba[source + channel] * alpha + 255 * (1 - alpha));
+        rows[row + 1 + x * 3 + channel] = Math.round(
+          rgba[source + channel] * alpha + 255 * (1 - alpha),
+        );
       }
     }
   }
