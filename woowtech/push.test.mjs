@@ -58,7 +58,10 @@ const { createPushNotifications } = await importSource("packages/server/src/serv
 const { VoiceAssistantWebSocketServer } = await importSource(
   "packages/server/src/server/websocket-server.ts",
 );
-const { parseServerInfoStatusPayload } = await importSource("packages/protocol/src/messages.ts");
+const { Session } = await importSource("packages/server/src/server/session.ts");
+const { parseServerInfoStatusPayload, WSInboundMessageSchema } = await importSource(
+  "packages/protocol/src/messages.ts",
+);
 const { validateRelayNotifyBody } = await importSource("packages/protocol/src/woowtech-push.ts");
 
 // Shaped like what the phones register and the daemon generates. Fake.
@@ -191,6 +194,40 @@ test("the daemon's server_info tells the app that it pushes through the relay", 
     true,
     "server_info.features.woowtechPush, without which the app registers no push token",
   );
+});
+
+test("the daemon stores the app's register_push_token string as it is, a wsp1 string too", async () => {
+  // As DaemonClient.registerPushToken sends it, and as websocket-server.ts parses it.
+  const token = `wsp1:en:${FCM_TOKEN}`;
+  const parsed = WSInboundMessageSchema.safeParse({
+    type: "session",
+    message: { type: "register_push_token", token },
+  });
+  assert.ok(parsed.success, `the daemon refuses the app's register_push_token: ${parsed.error}`);
+
+  const delivered = [];
+  const push = createPushNotifications({
+    logger: silentLogger,
+    filePath: path.join(tempDir("woowtech-push-register-"), "push-tokens.json"),
+    language: "en",
+    deliver: async (tokens) => {
+      delivered.push(tokens);
+    },
+  });
+  // The session's message dispatch, with the few fields it reads for this message.
+  const clientMetadata = { pushToken: null };
+  const session = {
+    pushNotifications: push,
+    sessionLogger: silentLogger,
+    currentClientMetadata: () => clientMetadata,
+    handleRegisterPushToken: Session.prototype.handleRegisterPushToken,
+    emit() {},
+  };
+  await Session.prototype.dispatchMiscMessage.call(session, parsed.data.message);
+  await push.send({ title: "t", body: "b", data: { ...IDS, reason: "finished" } });
+
+  assert.deepEqual(delivered, [[token]], "the push store's tokens at the next push");
+  assert.equal(clientMetadata.pushToken, token, "the string the heartbeat renews");
 });
 
 // The phone apps' code, as Metro bundles it from the app's entry point.
