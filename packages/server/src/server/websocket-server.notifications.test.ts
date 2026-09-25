@@ -1,4 +1,7 @@
 import { SessionDelivery } from "./session/owned-subscriptions/index.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Server as HTTPServer } from "http";
 import type pino from "pino";
@@ -10,7 +13,11 @@ import type { ScheduleService } from "./schedule/service.js";
 import type { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { asInternals, createStub } from "./test-utils/class-mocks.js";
 import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
-import type { PushNotificationSender, PushPayload } from "./push/index.js";
+import {
+  createPushNotifications,
+  type PushNotificationSender,
+  type PushPayload,
+} from "./push/index.js";
 import type { WorkspaceAutoName } from "./workspace-auto-name.js";
 
 const WORKSPACE_ID = "workspace-1";
@@ -361,5 +368,84 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
     expect(pushNotifications.sent).toEqual([]);
+  });
+
+  // woowtech smart: a connected app gets the preview (the desktop app shows it as an OS
+  // notification), while the push that leaves the machine says a generic sentence
+  // (push/woowtech-push-content.ts).
+  it("keeps the preview on the machine and pushes without it", async () => {
+    const agentId = "1b4e28ba-2fa1-41d2-883f-0016d3cca427";
+    const workspaceId = "wks_0123456789abcdef";
+    const { server } = createServer({
+      getAgent: vi.fn(() => ({
+        config: { title: "Rotate the Acme password" },
+        cwd: "/Users/alex/secret-project",
+        workspaceId,
+        pendingPermissions: new Map(),
+      })),
+      getLastAssistantMessage: vi.fn(async () => "Rotated the Acme database password."),
+    });
+    const home = mkdtempSync(path.join(tmpdir(), "woowtech-push-split-"));
+    const leftTheMachine: PushPayload[] = [];
+    const push = createPushNotifications({
+      logger: createStub<pino.Logger>(createLogger()),
+      filePath: path.join(home, "push-tokens.json"),
+      language: "en",
+      deliver: async (_tokens, payload) => {
+        leftTheMachine.push(payload);
+      },
+    });
+    push.renew("ExponentPushToken[phone]");
+    asInternals<{ pushNotificationSender: PushNotificationSender }>(server).pushNotificationSender =
+      push;
+    // A current app that has never sent a heartbeat: it gets the event, and the phone gets
+    // the push.
+    const ws = createOpenSocket();
+    const delivery = new SessionDelivery(() => {});
+    delivery.attach(ws, true);
+    const publishToSource = vi.fn();
+    asInternals<WebSocketServerInternals>(server).sessions.set(ws, {
+      kind: "trusted",
+      session: {
+        delivery,
+        getClientActivity: vi.fn(() => null),
+        wantsSourceEvent: () => true,
+        wantsSourceNotification: () => true,
+        publishToSource,
+      },
+      clientId: "client-test",
+      appVersion: null,
+      connectionLogger: createLogger(),
+      sockets: new Set([ws]),
+      externalDisconnectCleanupTimeout: null,
+    });
+
+    try {
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId,
+        provider: "claude",
+        reason: "finished",
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(publishToSource).toHaveBeenCalledTimes(1);
+      const [, message] = publishToSource.mock.calls[0] ?? [];
+      expect(message.type).toBe("agent_attention_required");
+      expect(message.payload.notification).toEqual({
+        title: "Agent finished",
+        body: "Rotated the Acme database password.",
+        data: { serverId: "srv-test", workspaceId, agentId, reason: "finished" },
+      });
+      // srv-test is not an id the daemon generates, so it stays on the machine as well.
+      expect(leftTheMachine).toEqual([
+        {
+          title: "woowtech smart",
+          body: "Work finished — tap to see the result.",
+          data: { workspaceId, agentId, reason: "finished" },
+        },
+      ]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

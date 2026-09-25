@@ -500,4 +500,19 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
       workspaceId: "ws-1",
     });
   });
+
+  // woowtech smart: the push that leaves the machine picks its sentence from the reason
+  // (push/woowtech-push-content.ts), so a finished terminal must not read "needs attention".
+  it.each([
+    ["idle", "finished"],
+    ["attention", "needs_input"],
+  ] as const)("tells the push why when the terminal turns %s", async (state, reason) => {
+    const { manager, emit } = createTerminalManager();
+    const { pushNotifications } = createServer(manager);
+
+    emit(transition({ previousState: "working", previousChangedAt: 0, state, changedAt: 15000 }));
+    await flushAsync();
+
+    expect(pushNotifications.sent.map((payload) => payload.data?.reason)).toEqual([reason]);
+  });
 });

@@ -2628,6 +2628,7 @@ export class VoiceAssistantWebSocketServer {
             terminalId: params.terminalId,
             cwd: params.cwd,
             ...(workspaceId ? { workspaceId } : {}),
+            reason: params.reason,
           },
         })
         .catch((err) => {

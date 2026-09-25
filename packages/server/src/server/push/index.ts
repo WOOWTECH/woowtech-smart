@@ -2,6 +2,7 @@ import type pino from "pino";
 
 import { PushService, type PushPayload } from "./push-service.js";
 import { PushTokenStore } from "./token-store.js";
+import { toRemotePushPayload, type PushLanguage } from "./woowtech-push-content.js";
 
 export type { PushPayload };
 
@@ -20,6 +21,7 @@ export function createPushNotifications(options: {
   filePath: string;
   now?: () => number;
   deliver?: (tokens: string[], payload: PushPayload) => Promise<void>;
+  language?: PushLanguage;
 }): PushNotifications {
   const now = options.now ?? Date.now;
   const store = new PushTokenStore(options.logger, options.filePath, now, PUSH_TOKEN_LEASE_MS);
@@ -39,7 +41,8 @@ export function createPushNotifications(options: {
       const tokens = store.getActiveTokens();
       options.logger.info({ tokenCount: tokens.length }, "Sending push notification");
       if (tokens.length === 0) return;
-      await deliver(tokens, payload);
+      // woowtech smart: a push leaves the machine without the user's text (woowtech/README.md, 16).
+      await deliver(tokens, await toRemotePushPayload(payload, options.language));
     },
   };
 }
