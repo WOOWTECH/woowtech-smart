@@ -6,6 +6,7 @@ const withAndroidProfileable = require("./plugins/with-android-profileable");
 const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const withLocalizedAppName = require("./plugins/with-localized-app-name");
+const withWoowtechPush = require("./plugins/with-woowtech-push");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
@@ -172,6 +173,7 @@ export default {
         },
       ],
       ...buildProfile.notificationPlugins,
+      [withWoowtechPush, { disableSPM: true }],
       "expo-audio",
       [
         "expo-gradle-jvmargs",
@@ -188,6 +190,15 @@ export default {
             kotlinVersion: "2.1.20",
             // Allow HTTP connections for local network hosts in release builds
             usesCleartextTraffic: true,
+          },
+          ios: {
+            // woowtech push: the Firebase SDK comes from CocoaPods (disableSPM above) as static
+            // frameworks. Expo 54's precompiled React Native keeps some pods as static libraries,
+            // which rules out dynamic frameworks; RNFirebase's pods are listed with them.
+            // react-native-paste-input stays a static library so the bridging header's
+            // <react-native-paste-input/PasteInputModule.h> import (with-paste-input) still resolves.
+            useFrameworks: "static",
+            forceStaticLinking: ["RNFBApp", "RNFBMessaging", "react-native-paste-input"],
           },
         },
       ],
