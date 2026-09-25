@@ -88,6 +88,23 @@ test("hints the CLI prints or returns itself name the woowtech-smart command", (
   );
 });
 
+test("the daemon's messages name the woowtech-smart command", () => {
+  // The CLI and the desktop app show the daemon's messages as they are.
+  assert.deepEqual(
+    findInShippedSources([/(?:^|[\s"'`(])paseo (?:[a-z]|-)/], {
+      dirs: ["packages/server/src"],
+      skipComments: true,
+      allowLines: [
+        // Upstream's hook marker; terminal hooks keep upstream's text.
+        /hookMarker: "paseo hooks opencode"/,
+        // The contents of a file the file watcher probe writes.
+        /"paseo watcher liveness canary\\n"/,
+      ],
+    }),
+    [],
+  );
+});
+
 test("the CLI's own messages name woowtech smart", () => {
   const naming = findInShippedSources([/\bPaseo\b(?! Hub\b)/], {
     dirs: ["packages/cli/src"],

@@ -256,17 +256,19 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `hub init` 精靈不經過 `renderError`，自己印訊息，所以它的出口（`reportMessage` 和停止時的 `cancel`）也套同一個改寫。
   - 直接印出或放在結果欄位裡的下一步提示，不經過上面兩個出口，逐條改用 `CLI_COMMAND`：`onboard` 的下一步和 CLI 速查、`daemon pair` 的離線與 relay 提示、`daemon config` 的 `nextCommand`、`daemon reload` 和 `daemon set-password` 的 `restartCommand`、`wait` 逾時訊息（agent 會照著再跑），以及 `attach`、`logs` 找不到 agent 時的提示。
   - CLI 自己寫的產品名也逐條改成 woowtech smart：`onboard` 的歡迎和完成訊息、`daemon pair` 要求更新 daemon 的錯誤、`open` 找不到桌面版、`script` 找不到工作區、`heartbeat` 和 `schedule --target self` 要在 agent 裡執行、`clone` 要求更新主機、`plugin install` 的信任提醒、`hub connect` 要求更新。
+  - daemon 的訊息：`server/src/server/daemon-instance.ts` 在 daemon 沒啟動、沒準備好、supervisor 沒發布 lock 時提示的指令直接用 `CLI_COMMAND`，CLI 和桌面版都照原文顯示。server 其他提到 Paseo 產品名的訊息這次沒改。
   - 刻意保留 Paseo 的：Paseo Hub 和它的聊天機器人 `@Paseo`；relay 的加密說明「Paseo cannot read your code or messages」（relay 目前仍是上游經營的）；`onboard` 裡的 `https://app.paseo.sh`；外掛範本（`plugin/scaffold.ts`，外掛 API 仍是上游的）。這些跟自架 relay 和 Hub 一起換。
 - 測試：
   - `protocol/src/brand-cli.test.ts`：哪些 `paseo` 會換、哪些不動。
   - `cli/src/brand.test.ts`：程式名和 Usage 行；每個指令的說明都沒有上游的指令和產品名（Paseo Hub 除外）；錯誤在表格、JSON、YAML 都換；子指令清單跟 CLI 一致。
   - `cli/src/commands/hub/init-flow.test.ts`、`init-brand.test.ts`：Hub 精靈的提示和停止訊息。
   - `cli/src/commands/daemon/next-command.test.ts`：`daemon pair` 在暫存 home 印出的下一步（一般輸出和 `--json`）。
+  - `server/src/server/daemon-instance.commands.test.ts`：daemon 沒在跑、沒準備好時訊息裡的指令。
   - `cli/tests/17-onboard.test.ts` 的速查預期值已改成 `woowtech-smart`。這是會啟動 daemon 的 e2e，還沒跑過。
   - `desktop/src/integrations/cli-install/install.test.ts` 用暫存 HOME 測安裝：官方 Paseo 的 `paseo` 連結不動、不算我們的；指向別處的 `woowtech-smart` 算沒裝；透過安裝的連結執行時，會經由 `woowtech smart Helper` 啟動 CLI，`PASEO_CLI` 是 App 內的 `woowtech-smart`。
   - `server/src/terminal/terminal-cli-env.test.ts` 確認 `PASEO_CLI` 叫 `woowtech-smart` 時，終端機的 `PASEO_HOOK_CLI` 和 PATH 都指到它。
   - `woowtech/cli-name.test.mjs` 檢查打包設定的兩個 shim 名字、cli-install 沒有寫到 `paseo`，以及 hooks 文字和 OpenCode 外掛仍是上游的原文。
-    另外掃描原始碼：直接印提示的那幾個檔案不准出現 `paseo <指令>`；CLI 除了說明文字、Hub、relay 說明和外掛範本以外，不准出現產品名 Paseo。上游合併帶回舊字串時會失敗。
+    另外掃描原始碼：直接印提示的那幾個檔案和 server 不准出現 `paseo <指令>`（hooks 標記除外）；CLI 除了說明文字、Hub、relay 說明和外掛範本以外，不准出現產品名 Paseo。上游合併帶回舊字串時會失敗。
 
 ## Mac 開發環境
 

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import {
   getPidLockInfo,
   isPidRunning,
@@ -66,7 +67,7 @@ export async function waitForDaemonReady(
     if (!instance)
       throw new DaemonInstanceError(
         "DAEMON_NOT_RUNNING",
-        `Daemon is not running for ${home}. Start with: paseo daemon start --home ${JSON.stringify(home)}`,
+        `Daemon is not running for ${home}. Start with: ${CLI_COMMAND} daemon start --home ${JSON.stringify(home)}`,
       );
     if (options.instance && !isSamePidLock(instance, options.instance)) {
       throw new DaemonInstanceError(
@@ -83,7 +84,7 @@ export async function waitForDaemonReady(
 function notReady(home: string, instance: PidLockInfo): DaemonInstanceError {
   return new DaemonInstanceError(
     "DAEMON_NOT_READY",
-    `Daemon PID ${instance.pid} remains running but is not ready for ${home}.\nLogs: ${daemonLogPath(home)}\nStatus: paseo daemon status --home ${JSON.stringify(home)}\nStop: paseo daemon stop --home ${JSON.stringify(home)}`,
+    `Daemon PID ${instance.pid} remains running but is not ready for ${home}.\nLogs: ${daemonLogPath(home)}\nStatus: ${CLI_COMMAND} daemon status --home ${JSON.stringify(home)}\nStop: ${CLI_COMMAND} daemon stop --home ${JSON.stringify(home)}`,
   );
 }
 
@@ -278,7 +279,7 @@ export async function startDaemonInstance(input: {
         if (acquired) throw notReady(input.home, acquired);
         throw new DaemonInstanceError(
           "DAEMON_NOT_READY",
-          `Supervisor PID ${child.pid} remains running but has not published its lock for ${input.home}. Logs: ${daemonLogPath(input.home)}. Check paseo daemon status --home ${JSON.stringify(input.home)}. Stop with paseo daemon stop --home ${JSON.stringify(input.home)} once its lock is published, or signal this PID.`,
+          `Supervisor PID ${child.pid} remains running but has not published its lock for ${input.home}. Logs: ${daemonLogPath(input.home)}. Check ${CLI_COMMAND} daemon status --home ${JSON.stringify(input.home)}. Stop with ${CLI_COMMAND} daemon stop --home ${JSON.stringify(input.home)} once its lock is published, or signal this PID.`,
         );
       }
       await delay(100, undefined, { signal });
