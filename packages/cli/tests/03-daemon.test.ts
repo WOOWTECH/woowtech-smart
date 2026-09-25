@@ -7,7 +7,7 @@
  *
  * Tests:
  * - daemon --help shows subcommands
- * - daemon pair does not create a relay offer without explicit consent
+ * - daemon pair prints an offline offer for WoowTech's relay in a new home
  * - daemon status reports stopped when daemon not running
  * - daemon status --json outputs valid JSON
  * - daemon stop handles daemon not running gracefully
