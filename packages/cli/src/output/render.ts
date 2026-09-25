@@ -11,6 +11,7 @@ import { renderTable } from "./table.js";
 import { renderJson } from "./json.js";
 import { renderYaml } from "./yaml.js";
 import { renderQuiet } from "./quiet.js";
+import { withCliCommandInError } from "../brand.js";
 
 /** Default output options */
 export const defaultOutputOptions: OutputOptions = {
@@ -81,8 +82,12 @@ function isCommandError(error: unknown): error is CommandError {
 }
 
 /** Render an error to string based on output options */
-export function renderError(error: CommandError, options: Partial<OutputOptions> = {}): string {
+export function renderError(
+  commandError: CommandError,
+  options: Partial<OutputOptions> = {},
+): string {
   const opts: OutputOptions = { ...defaultOutputOptions, ...options };
+  const error = withCliCommandInError(commandError);
 
   if (opts.format === "json") {
     return JSON.stringify({ error }, null, 2);

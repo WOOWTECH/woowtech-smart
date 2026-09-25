@@ -1,3 +1,4 @@
+import { CLI_COMMAND, withCliCommand } from "@getpaseo/protocol/brand-cli";
 import type { DaemonTarget } from "../../utils/daemon-target.js";
 import { withGlobalOptions } from "../../utils/command-options.js";
 import type { CommandOptions } from "../../output/index.js";
@@ -97,10 +98,10 @@ export function addHubInitCommand(
           await runHubInit({ ...environment, daemonTarget: options.daemonTarget });
         } catch (error) {
           if (error instanceof HubInitCancelledError) {
-            cancel(error.message);
+            cancel(withCliCommand(error.message));
             return;
           }
-          cancel(initErrorMessage(error));
+          cancel(withCliCommand(initErrorMessage(error)));
           process.exitCode = 1;
         }
       }),
@@ -393,7 +394,7 @@ function reportStarterTriggerConnections(
   environment: HubGuidedSetupEnvironment,
   connections: readonly HubStarterTriggerConnection[],
 ): void {
-  const details = `${connections.map(({ label }) => label).join("\n")}\n\nOnly configured connections are shown. To add another, open Hub → Apps, then run \`paseo hub init\` again.`;
+  const details = `${connections.map(({ label }) => label).join("\n")}\n\nOnly configured connections are shown. To add another, open Hub → Apps, then run \`${CLI_COMMAND} hub init\` again.`;
   if (environment.prompts === undefined) {
     note(details, "Hub app connections ready for this trigger");
     return;
@@ -771,8 +772,8 @@ function requireInteractiveTerminal(
 
 function reportMessage(environment: HubGuidedSetupEnvironment, message: string): void {
   if (environment.prompts === undefined) {
-    log.message(message);
+    log.message(withCliCommand(message));
     return;
   }
-  environment.prompts.message(message);
+  environment.prompts.message(withCliCommand(message));
 }

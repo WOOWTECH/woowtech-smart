@@ -39,6 +39,7 @@ import {
   withGlobalOptions,
 } from "./utils/command-options.js";
 import { resolveCliVersion } from "./version.js";
+import { applyCliBrand } from "./brand.js";
 
 const VERSION = resolveCliVersion();
 
@@ -175,5 +176,5 @@ export function createCli(): Command {
     command.commands.forEach(enforceSelectorDuplicates);
   };
   enforceSelectorDuplicates(program);
-  return program;
+  return applyCliBrand(program);
 }
