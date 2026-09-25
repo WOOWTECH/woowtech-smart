@@ -1,5 +1,6 @@
 import type { ConnectionState, DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { describe, expect, it } from "vitest";
+import { createAndroidFcmTokenSource, type ExpoPushTokens } from "./fcm-token.android";
 import {
   createWoowtechPushSubscriptions,
   type PushDaemonClient,
@@ -149,6 +150,40 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
+/** Several macrotask turns: long enough for a sync that schedules itself to run again, and again. */
+async function settleTurns(turns: number): Promise<void> {
+  for (let turn = 0; turn < turns; turn += 1) await settle();
+}
+
+type DevicePushToken = Awaited<ReturnType<ExpoPushTokens["getDevicePushTokenAsync"]>>;
+
+/**
+ * expo-notifications on Android as its PushTokenModule.kt behaves (0.32): getDevicePushTokenAsync
+ * resolves with the FCM token, then emits onDevicePushToken with that same token. The bridge may
+ * deliver the event to JS before or after the promise.
+ */
+function androidExpoNotifications(
+  fcmToken: () => string,
+  eventArrives: "after" | "before" = "after",
+): ExpoPushTokens {
+  const listeners = new Set<(token: DevicePushToken) => void>();
+  const emit = (token: DevicePushToken) => {
+    for (const listener of listeners) listener(token);
+  };
+  return {
+    getDevicePushTokenAsync: async () => {
+      const token: DevicePushToken = { type: "android", data: fcmToken() };
+      if (eventArrives === "before") emit(token);
+      else setImmediate(() => emit(token));
+      return token;
+    },
+    addPushTokenListener: (listener) => {
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    },
+  };
+}
+
 describe("woowtech push subscription", () => {
   it("registers nothing with a daemon that does not push through WoowTech's relay", async () => {
     const phone = createPhone();
@@ -243,6 +278,51 @@ describe("woowtech push subscription", () => {
       "wsp1:zh-TW:dGVzdC1pbnN0YWxsYXRpb24:APA91bH-refreshed_token",
     );
   });
+
+  it.each([
+    { eventArrives: "after", newTokenRegistrations: 1 },
+    { eventArrives: "before", newTokenRegistrations: 2 },
+  ] as const)(
+    "registers once per connection on Android, where getting the token also reports it as new (event $eventArrives the token)",
+    async ({ eventArrives, newTokenRegistrations }) => {
+      const phone = createPhone();
+      let fcmToken = FCM_TOKEN;
+      const expoNotifications = androidExpoNotifications(() => fcmToken, eventArrives);
+      const { startSubscription } = createWoowtechPushSubscriptions({
+        ...phone.dependencies,
+        fcmTokens: createAndroidFcmTokenSource(
+          () => expoNotifications,
+          () => undefined,
+        ),
+      });
+      const client = new FakeDaemonClient(WOOWTECH_DAEMON);
+
+      startSubscription({ client, serverId: SERVER_ID });
+      client.connect();
+      await settleTurns(10);
+      expect(client.received).toEqual([`register wsp1:zh-TW:${FCM_TOKEN}`]);
+
+      client.disconnect();
+      client.connect();
+      await settleTurns(10);
+      expect(client.received).toEqual([
+        `register wsp1:zh-TW:${FCM_TOKEN}`,
+        `register wsp1:zh-TW:${FCM_TOKEN}`,
+      ]);
+
+      // A token Firebase really replaced still moves the registration, and then it rests. When
+      // the new token's event comes first, it asks for one more sync, which registers the same
+      // string again.
+      fcmToken = "dGVzdC1pbnN0YWxsYXRpb24:APA91bH-refreshed_token";
+      phone.changeLanguage("en");
+      await settleTurns(20);
+      expect(client.received.slice(2)).toEqual([
+        `revoke wsp1:zh-TW:${FCM_TOKEN}`,
+        ...Array.from({ length: newTokenRegistrations }, () => `register wsp1:en:${fcmToken}`),
+      ]);
+      expect(phone.storage.get(CACHE_KEY)).toBe(`wsp1:en:${fcmToken}`);
+    },
+  );
 
   it("moves the registration to English when the app switches to English", async () => {
     const phone = createPhone();

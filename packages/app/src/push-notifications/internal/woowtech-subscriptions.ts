@@ -110,6 +110,7 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
     let stopped = false;
     let askedPermission = false;
     let stopFollowingRefreshes: (() => void) | null = null;
+    let lastFcmToken: string | null = null;
     let queue: Promise<void> = Promise.resolve();
 
     async function sync(): Promise<void> {
@@ -133,8 +134,13 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
         );
         return;
       }
-      // Firebase can replace the token at any time; follow it once the phone has one.
-      stopFollowingRefreshes ??= dependencies.fcmTokens.onTokenRefresh(() => scheduleSync());
+      // Firebase can replace the token at any time; follow it once the phone has one. Only a
+      // different token counts: on Android, expo-notifications reports every token it hands out as
+      // a new one (PushTokenModule.kt), and syncing on that would get the token again, forever.
+      lastFcmToken = fcmToken;
+      stopFollowingRefreshes ??= dependencies.fcmTokens.onTokenRefresh((refreshed) => {
+        if (refreshed !== lastFcmToken) scheduleSync();
+      });
       const token = encodePushToken({
         locale: pushLocaleFor(dependencies.appLanguage.current()),
         fcmToken,
