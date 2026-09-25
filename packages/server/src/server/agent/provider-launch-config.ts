@@ -4,6 +4,7 @@ import {
   findExecutable,
 } from "../../executable-resolution/executable-resolution.js";
 import { createExternalProcessEnv, type ProcessEnvRecord } from "../paseo-env.js";
+import { PARENT_CLAUDE_SESSION_ENV_VARS } from "./parent-claude-session-env.js";
 export {
   AgentProviderRuntimeSettingsMapSchema,
   ProviderCommandSchema,
@@ -208,6 +209,7 @@ const PARENT_SESSION_ENV_VARS = [
   "CLAUDE_CODE_ENTRYPOINT",
   "CLAUDE_CODE_SSE_PORT",
   "CLAUDE_AGENT_SDK_VERSION",
+  ...PARENT_CLAUDE_SESSION_ENV_VARS,
 ];
 
 export interface ProviderEnvOptions {

@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 
 import { spawnProcess } from "../../../utils/spawn.js";
 import { terminateWithTreeKill } from "../../../utils/tree-kill.js";
+import { createProviderEnvSpec } from "../provider-launch-config.js";
 import { JsonlFrameDecoder } from "./jsonl-frame-decoder.js";
 export { supportsJsonlRpcProtocolV2 } from "./jsonl-frame-decoder.js";
 
@@ -65,7 +66,7 @@ function assertChildWithPipes(
 function spawnJsonlRpcProcess(launch: JsonlRpcLaunch): ChildProcessWithoutNullStreams {
   const child = spawnProcess(launch.command, launch.args, {
     cwd: launch.cwd,
-    envOverlay: launch.env,
+    ...createProviderEnvSpec({ overlays: [launch.env] }),
     stdio: ["pipe", "pipe", "pipe"],
   });
   assertChildWithPipes(child);
