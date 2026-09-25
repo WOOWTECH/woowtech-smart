@@ -272,6 +272,22 @@ test("CI gives a cold Metro bundle ten minutes, not 30, 90 or 120 seconds", () =
   );
 });
 
+test("the desktop browser E2E retries a screenshot the tab has not painted yet", () => {
+  // CI run 2: the hidden window had not painted within the desktop's 5 s capture, and
+  // browser_screenshot answered screenshot_no_frame, retryable. verifyHiddenBrowserScreenshots
+  // called it once. Every call goes through an ...UntilReady helper, which retries retryable
+  // errors until the script's timeout and returns any other answer.
+  const code = readRepoCode("packages/desktop/e2e/browser-tabs.e2e.mjs");
+  const callers = [
+    ...code.matchAll(/(\w+)\((?:\s*client,)?(?:\s*\{\s*name:)?\s*"browser_screenshot"/g),
+  ].map(([, caller]) => caller);
+  assert.ok(callers.length >= 2, "the browser_screenshot calls were not found");
+  assert.deepEqual(
+    callers.filter((caller) => !caller.endsWith("UntilReady")),
+    [],
+  );
+});
+
 test("CI gives Metro in the Playwright shards a 4 GB heap", () => {
   // CI run 2's shard 4: Metro, holding the app and the second entry root-error-recovery.spec.ts
   // asks for, reached Node's default heap limit, about 1.8 GB on the 7 GB runner (4 GB on
