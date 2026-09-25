@@ -1,8 +1,10 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  # woowtech smart: weekly instead of on every push to main, to fit GitHub Free's
+  # 2,000 private-repo minutes a month (woowtech/README.md section 18).
+  schedule:
+    - cron: "17 18 * * 0" # Sunday 18:17 UTC, Monday 02:17 in Taiwan
   pull_request:
     branches: [main]
   merge_group:
@@ -170,7 +172,8 @@ jobs:
   server-tests-windows:
     name: server-tests (windows-latest)
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' || needs.changes.outputs.hub != 'false') }}
+    # woowtech smart: Windows is out of v1. The repository variable WOOWTECH_CI_WINDOWS=true runs it.
+    if: ${{ vars.WOOWTECH_CI_WINDOWS == 'true' && !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.server != 'false' || needs.changes.outputs.hub != 'false') }}
     runs-on: windows-latest
     steps: *server_test_steps
 
@@ -305,7 +308,8 @@ jobs:
   desktop-tests-windows:
     name: desktop-tests (windows-latest)
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.desktop != 'false') }}
+    # woowtech smart: Windows is out of v1. The repository variable WOOWTECH_CI_WINDOWS=true runs it.
+    if: ${{ vars.WOOWTECH_CI_WINDOWS == 'true' && !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.desktop != 'false') }}
     runs-on: windows-latest
     timeout-minutes: 30
     permissions:
