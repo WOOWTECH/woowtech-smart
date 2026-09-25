@@ -18,7 +18,7 @@ vi.mock("@/runtime/host-runtime", () => ({
     getLastServerInfoMessage: () => ({ features: { daemonStatusRpc: true, relayConfig: true } }),
     getDaemonPairingOffer: async () =>
       daemon.relayEnabled
-        ? { relayEnabled: true, url: "https://app.paseo.sh/#offer=e30", qr: null }
+        ? { relayEnabled: true, url: "woowtech-smart:///#offer=e30", qr: null }
         : { relayEnabled: false, url: "", qr: null },
   }),
   useHostRuntimeSnapshot: () => ({ connectionStatus: "online" }),

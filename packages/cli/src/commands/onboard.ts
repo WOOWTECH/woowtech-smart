@@ -120,10 +120,9 @@ function printNextSteps(pairingUrl: string | null, paseoHome: string, richUi: bo
     pairingUrl
       ? "1. Open woowtech smart and scan the QR code above, or paste the pairing link."
       : "1. Open woowtech smart and connect to your daemon.",
-    "2. Web app: https://app.paseo.sh",
-    "3. Desktop app: https://github.com/WOOWTECH/woowtech-smart-releases/releases/latest",
-    `4. Docs: ${BRAND_LINKS.docs.home}`,
-    `5. Example: ${CLI_COMMAND} run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
+    "2. Desktop app: https://github.com/WOOWTECH/woowtech-smart-releases/releases/latest",
+    `3. Docs: ${BRAND_LINKS.docs.home}`,
+    `4. Example: ${CLI_COMMAND} run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
   ];
   const quickReferenceLines = [
     `1. ${CLI_COMMAND} --help`,

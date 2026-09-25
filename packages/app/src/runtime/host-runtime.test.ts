@@ -3553,6 +3553,53 @@ describe("HostRuntimeStore", () => {
     store.syncHosts([]);
   });
 
+  // woowtech smart: OfferLinkListener hands the app's own links (woowtech-smart:///#offer=…)
+  // to this method, which reads the offer without React Native's URL class.
+  it("imports a pairing link in the app's own scheme", async () => {
+    const linksGivenToUrl: string[] = [];
+    vi.stubGlobal(
+      "URL",
+      class extends URL {
+        constructor(input: string | URL, base?: string | URL) {
+          super(input, base);
+          if (String(input).includes("#offer=")) linksGivenToUrl.push(String(input));
+        }
+      },
+    );
+    const store = new HostRuntimeStore({
+      deps: {
+        createClient: () => new FakeDaemonClient() as unknown as DaemonClient,
+        connectToDaemon: async ({ host }) => ({
+          client: makeConnectedProbeClient(5) as unknown as DaemonClient,
+          serverId: host.serverId,
+          hostname: host.label ?? null,
+        }),
+        getClientId: async () => "cid_test_runtime",
+      },
+    });
+    const offer = makeOffer({ relay: { endpoint: "relay.woowtech.io:443", useTls: true } });
+    const appLink = `woowtech-smart:///#offer=${Buffer.from(JSON.stringify(offer)).toString("base64url")}`;
+
+    try {
+      await store.upsertConnectionFromOfferUrl(appLink, "mbp");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(store.getHosts().find((host) => host.serverId === "srv_offer")?.connections).toEqual([
+      {
+        id: "relay:wss:relay.woowtech.io:443",
+        type: "relay",
+        relayEndpoint: "relay.woowtech.io:443",
+        useTls: true,
+        daemonPublicKeyB64: "pk_test_offer",
+      },
+    ]);
+    expect(linksGivenToUrl).toEqual([]);
+
+    store.syncHosts([]);
+  });
+
   it("preserves the existing host label when re-pairing an existing relay host", async () => {
     const store = new HostRuntimeStore({
       deps: {
