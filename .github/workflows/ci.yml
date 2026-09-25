@@ -49,6 +49,8 @@ jobs:
 
       - name: Detect affected CI contracts
         id: filter
+        # woowtech smart: a schedule event has no default branch to compare with; every job runs.
+        if: github.event_name != 'schedule'
         uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
         with:
           filters: .github/ci-paths.yml

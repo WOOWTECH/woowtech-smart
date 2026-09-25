@@ -93,6 +93,19 @@ test("CI runs weekly, on pull requests and on demand, not on every push to main"
   );
 });
 
+test("CI's weekly run skips change detection, which has no default branch to compare with", () => {
+  // dorny/paths-filter reads the default branch from the event payload, and a
+  // schedule event's payload does not carry the repository, so the action fails
+  // there. Outside pull requests every job runs whatever it detects.
+  const pathFilters = workflow("ci.yml").jobs.changes.steps.filter(({ uses }) =>
+    String(uses).startsWith("dorny/paths-filter@"),
+  );
+  assert.deepEqual(
+    pathFilters.map((step) => step.if),
+    ["github.event_name != 'schedule'"],
+  );
+});
+
 test("CI jobs run on Ubuntu, and on Windows only when WOOWTECH_CI_WINDOWS is true", () => {
   // The repository variable is unset, so a gated job is skipped without a runner.
   const windowsGate = /^\$\{\{\s*vars\.WOOWTECH_CI_WINDOWS == 'true' && /;
