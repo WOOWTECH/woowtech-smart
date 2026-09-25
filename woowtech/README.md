@@ -485,39 +485,72 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
   - `woowtech/agent-env.test.mjs` 透過 tsx 直接呼叫原始碼，檢查前兩個接點和終端機。合併上游後，如果清單沒展開、Pi 和 OMP 又繞過 `createProviderEnvSpec`，或 `buildTerminalEnvironment` 被改回上游，這個測試就會失敗。
   - 前兩個是上游的測試檔，這次共加了 96 行，合併上游時可能衝突。衝突時可以放掉這兩個檔案裡我們加的測試，`agent-env.test.mjs` 涵蓋同樣兩個接點。
 
-### 16. 推播不帶使用者的內容
+### 16. 推播走 WoowTech 的推播中繼，不帶使用者的內容
 
-- 原因：手機推播經過 Expo、Apple、Google 才送到手機，會離開使用者的電腦。上游的推播帶著 agent 回覆的前 220 字、權限要求的標題和說明（沒有的話是指令內容），terminal 的推播帶著 terminal 名稱和資料夾路徑。owner 決定推播不帶任何使用者的內容：沒有 agent 名稱、回覆預覽、權限內容，也沒有專案、工作區和檔案名稱。
-- 做法：fork 的 `packages/server/src/server/push/woowtech-push-content.ts` 在送出前把推播換成對外的版本。接點是 `push/index.ts` 的 `send()`，上游 90 天只改過這個檔案 1 次；daemon 的每一則推播都經過這裡，之後新增的推播也一樣。
-  - 標題是產品名，內文是每種原因一句固定的句子：
+- 原因：手機推播要經過 Google（FCM）和 Apple（APNs）才到手機，會離開使用者的電腦。上游經 Expo（`exp.host`）送出，帶著 agent 回覆的前 220 字、權限要求的標題和說明（沒有的話是指令內容），terminal 的推播帶著 terminal 名稱和資料夾路徑。owner 決定：
+  - 推播不帶任何使用者的內容：沒有 agent 名稱、回覆預覽、權限內容，也沒有專案、工作區和檔案名稱。
+  - 不用 Expo。兩個平台都經 WoowTech 的推播中繼（`woowtech-push-relay` repo 的 smart 模式）用 FCM 送出，daemon 從不連 `exp.host`。
+  - 通知文字由中繼組：每種原因一句固定的句子，語言跟著手機 App 的介面語言（繁中或英文）。用字寫在中繼的 `smart-messages.js`。
+- 整條路：
+  1. App 取得 FCM token，把 `wsp1:<zh-TW|en>:<FCM token>` 經既有的 `register_push_token` 交給 daemon，訊息格式不變。只對 `server_info.features.woowtechPush === true` 的 daemon 註冊：官方 Paseo 的 daemon 沒有這個旗標，token 交給它的話，它會連同 agent 的回覆送到 Expo。
+  2. daemon 把整個字串當成不透明的 token，照舊存在 `push-tokens.json`，48 小時租約。
+  3. 有推播時，daemon 對每支手機發一個 `POST https://push.woowtech.io/api/smart/v1/notify`，本文只有 `{ token, locale, reason, target }`。
+  4. 中繼驗證格式、查每個 token 的上限、挑句子，用 FCM 送出；iOS 由 FCM 經 APNs 轉送。
+- 字串和契約：`packages/protocol/src/woowtech-push.ts`（fork 自有，App 和 daemon 共用，只有它讀寫這個字串）。
+  - `wsp1` 是 woowtech smart push 第 1 版。解析時只切前兩個冒號，因為 FCM token 本身含冒號。
+  - FCM token：20 到 512 字元，只能有英數字、`_`、`-`、`:`，而且要含冒號。語言只有 `zh-TW` 和 `en`：中文（`zh` 開頭，簡體也算，跟 App 一樣，第 7 節）對到 `zh-TW`，其他對到 `en`。
+  - 送給中繼的 `reason`：
 
-    | 原因                                                                    | 中文（渥屋智能）               | 英文（woowtech smart）                         |
-    | ----------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------- |
-    | agent 或 terminal 完成（`finished`）                                    | 工作完成了，點一下查看結果。   | Work finished — tap to see the result.         |
-    | agent 要權限（`permission`）                                            | 需要你的授權，點一下查看要求。 | Permission needed — tap to review the request. |
-    | 其他：terminal 等輸入（`needs_input`）、agent 出錯（`error`）、沒有原因 | 需要你的注意，點一下查看。     | Needs your attention — tap to take a look.     |
+    | 推播                     | `data.reason` | `reason`     |
+    | ------------------------ | ------------- | ------------ |
+    | agent 完成               | `finished`    | `finished`   |
+    | agent 要權限             | `permission`  | `permission` |
+    | agent 出錯（目前不推播） | `error`       | `attention`  |
+    | terminal 完成            | `finished`    | `finished`   |
+    | terminal 等輸入          | `needs_input` | `attention`  |
+    | 其他或沒有原因           | —             | `attention`  |
 
-  - 用字還沒請 owner 確認。要改就改這個檔案的 `SENTENCE`，`woowtech-push-content.test.ts` 的預期值一起改。agent 出錯目前不推播（`agent-attention-policy.ts`）。
-  - `data` 只留 App 點通知時導頁用的 `serverId`、`workspaceId`、`agentId`、`terminalId`（`app/src/utils/notification-routing.ts` 只讀這四個），加上固定代碼 `reason`，之後自己的推播中繼要靠它挑句子。資料夾路徑 `cwd` 和其他欄位都不送。
-  - ID 要符合 daemon 產生的格式才送：`srv_` 加 12 個字元、`wks_` 加 16 個十六進位數字、UUID。2026-06-14 以前，上游把工作區的資料夾路徑當成工作區 ID，舊的 ID 不會重新產生；`PASEO_SERVER_ID` 也能設成任何文字。不合格的 ID 不送，點通知時就開得淺一點：少了 `workspaceId` 開主機首頁，少了 `serverId` 開 App 首頁。
-  - 上游 terminal 的推播沒有帶原因，`websocket-server.ts` 加了一行 `reason`。沒有它，terminal 完成時也會顯示「需要你的注意」。
+  - `target` 一定送，可能是 `{}`，只放 daemon 產生格式的 ID：`serverId` 是 `srv_` 加 12 個字元、`workspaceId` 是 `wks_` 加 16 個十六進位數字、`agentId` 和 `terminalId` 是小寫 UUID，後兩者最多一個（都有時留 agent）。不合格的 ID 不送：2026-06-14 以前，上游把工作區的資料夾路徑當成工作區 ID，舊的 ID 不會重新產生；`PASEO_SERVER_ID` 也能設成任何文字。少了 ID，點通知就開得淺一點。
+  - 契約 fixture：`packages/protocol/tests/fixtures/smart-notify-v1.fixtures.json` 是中繼 repo `functions/test/fixtures/smart-notify-v1.fixtures.json` 的逐位元組副本（對應中繼 `smart-mode` 分支的 `3363c60`）。不要在這裡改：契約由中繼那邊改，改完把整份複製過來，兩份的 `shasum -a 256` 要相同。protocol 的測試跑每一個案例：合法的通過 `validateRelayNotifyBody`，而且就是 daemon 會送的位元組；不合法的在中繼回報的同一個欄位被擋，daemon 也送不出來。這份檔案不會打包進 npm 套件（`files` 只有 `dist`）。
 
-- 語言看 daemon 所在的電腦：
-  - 依序看 `LC_ALL`、`LC_MESSAGES`、`LANG`。都沒設、或是 `C`、`POSIX` 時，macOS 讀系統語言（`defaults read -g AppleLanguages` 的第一個），其他平台用 Node 的預設語系。
-  - 中文（`zh` 開頭，簡體也算，跟 App 一樣，第 7 節）顯示「渥屋智能」和繁體中文，其他語言顯示「woowtech smart」和英文。
-  - 要讀 macOS 系統語言，是因為桌面版啟動的 daemon 沒有 `LANG`，Node 這時不管系統是什麼語言都回報 en-US。
-  - 每一則推播都重新判斷，改了系統語言不用重啟 daemon。在這台 Mac 上讀一次 `defaults` 約 10 毫秒。
-  - 跟 App 裡選的介面語言無關，daemon 不知道手機的設定。
+- daemon：`packages/server/src/server/push/woowtech-relay.ts`
+  - 接點：`push/index.ts` 的 `createPushNotifications` 沒注入 `deliver` 時用 `createDaemonRelayDeliver`，上游 90 天只改過這個檔案 1 次。上游的 Expo 送出器 `push-service.ts` 留著不動，沒有人呼叫，`index.ts` 只從它拿 `PushPayload` 型別。
+  - 網址寫死 `https://push.woowtech.io/api/smart/v1/notify`。環境變數 `WOOWTECH_PUSH_RELAY_URL` 可以蓋掉，給測試和預備環境用，daemon 啟動時讀一次。
+  - 不是 `wsp1:` 的字串（官方 App 或舊測試版註冊的 Expo token）和格式不合的 `wsp1:` 字串：從 store 撤銷，不送。
+  - 同一個 FCM token 只送一次。換語言時 App 會先撤銷舊字串；撤銷沒送到、兩個字串並存時，用最後註冊的那個。
+  - 送出前再用 `validateRelayNotifyBody` 檢查一次，送的是檢查後只剩四個欄位的那份。完全不讀 `title`、`body` 和 `data.cwd`。
+  - 中繼的回應，逾時 10 秒：
+
+    | 回應                                                      | daemon                                    |
+    | --------------------------------------------------------- | ----------------------------------------- |
+    | 201                                                       | 完成                                      |
+    | 410 `token_invalid`                                       | 撤銷這個 FCM token 的每一個字串           |
+    | 503、網路錯誤、逾時                                       | 2 到 4 秒後重試一次，再失敗就丟棄（warn） |
+    | 400、413                                                  | 記 error，代表 daemon 有 bug，不重試      |
+    | 403                                                       | 記 error，不重試                          |
+    | 429                                                       | 丟棄（info），不重試                      |
+    | 502 `upstream_auth`（APNs 金鑰，或說不清的 FCM 權限錯誤） | 記 warn，不重試，不撤銷                   |
+    | 其他                                                      | 記 warn，不重試                           |
+
+  - log 只記數量和結果代碼，不記 token。要追查時開 debug：每支手機一行「The push relay answered」，用 FCM token 的 SHA-256 前 8 碼代表那支手機。
+  - `send()` 裡照樣先跑 `woowtech-push-content.ts`：交給任何 `deliver` 的推播都已經換成產品名和每種原因一句的通用句子，`data` 只留 ID 和 `reason`。中繼的送出器只讀 `reason` 和 ID，手機上顯示的是中繼的句子，所以這一步的句子和它的語言判斷（依序看 `LC_ALL`、`LC_MESSAGES`、`LANG`，macOS 讀系統語言）現在只影響注入的 `deliver`。留著是多一層保護：測試注入的、或以後改接的送出器也拿不到使用者的內容。
+  - `server_info.features.woowtechPush`：`packages/protocol/src/messages.ts` 加了一個 optional 的旗標（註解標明 fork 自有），`websocket-server.ts` 設成 `true`（2 行）。舊 App 看不到就忽略；沒有這個旗標的 daemon（官方 Paseo，或這個改版以前的我們），新 App 不註冊推播，照 `docs/protocol-compatibility.md` 不做退路。
+  - 上游 terminal 的推播沒有帶原因，`websocket-server.ts` 加了一行 `reason`。沒有它，terminal 完成時中繼也會說「需要你的注意」。
+
+- 各種組合：新 App 加新 daemon 正常；新 App 加官方 daemon，不註冊、不推播；官方 App 或舊測試版加新 daemon，它們註冊的 Expo token 在第一次推播時被撤銷，不送出，更新 App 後重新註冊。
 - 留在電腦上的通知照舊有內容：桌面版的系統通知和 App 裡的提醒，用的是 daemon 經自己的連線（直接連線，或端對端加密的 relay）送給 App 的 attention 訊息，裡面仍有回覆預覽和 terminal 名稱。手機 App 不顯示本機通知，只收推播。
 - 測試：
-  - `push/woowtech-push-content.test.ts`：用 protocol 組出帶回覆預覽、權限標題和說明的推播，以及照 `websocket-server.ts` 組的 terminal 推播，檢查交給 Expo 的內容正好是產品名、原因對應的句子和合格的 ID；中文四種原因；不認得的原因不送；不合格的 ID 不送；語言的判斷（環境變數的順序、`C`、macOS 系統語言、讀不到時用 Node 的語系），以及 daemon 不指定語言時照 `LC_ALL`。
-  - `websocket-server.notifications.test.ts`（上游的檔，加 1 個）：同一個 agent 完成事件，新版 App 收到的 attention 訊息有回覆預覽，離開電腦的推播只有通用句子。
-  - `websocket-server.terminal-notifications.test.ts`（上游的檔，加 1 組）：terminal 完成和等輸入時，推播帶著 `reason`。
-  - `woowtech/push-content.test.mjs`：
-    - 從原始碼跑沒有注入 `deliver` 的 `createPushNotifications`，也就是真的會打 Expo 的那一條，把 `fetch` 換成記錄器。中英文各跑一次：送出的位元組裡沒有 agent 名稱、回覆、權限內容、資料夾、terminal 名稱和工作區名稱；標題是產品名；同一個原因的內文不隨內容改變，三種原因是三句不同的話；`data` 只有 ID 和 `reason`。
-    - 掃描出貨的原始碼：Expo 的網址只出現在 `push-service.ts`，`new PushService` 只在 `push/index.ts`，`.sendPush(` 只呼叫一次（預設的 `deliver`）。上游新增一條繞過 `send()` 的推播路徑時會失敗。
-  - 上游的兩個測試檔合併時衝突的話，可以先放掉我們加的測試；守門涵蓋 `send()` 的接點，terminal 的 `reason` 除外。
-- 之後改用 WoowTech 自己的推播中繼時，這一步照樣在 `send()` 裡先做，中繼的送出器只需要 `reason` 和 ID。守門裡跟 Expo 有關的掃描要跟著改。
+  - protocol `woowtech-push.test.ts`：字串來回和冒號、語言、token 契約（長度、字元、冒號）、`reason` 和 `target` 的對應、不帶文字，以及契約 fixture 的每一個案例。
+  - protocol `messages.test.ts`（上游的檔，加 1 組）：帶 `woowtechPush` 的 server_info 解析得到值；不帶的照樣解析。
+  - server `push/woowtech-relay.test.ts`：用本機的 `node:http` 伺服器當假中繼，檢查收到的原始位元組。只有四個欄位；標題、內文、`cwd` 裡的標記字串不外流；Expo token 撤銷不送；同一支手機兩種語言只送一次；410 撤銷；503、連線被切、連不到、逾時各重試一次；400、403、413、429、502 不重試也不撤銷；log 沒有 token，debug 只有雜湊前 8 碼；store 撤銷失敗不影響其他手機。另一個測試不注入 `deliver`、`WOOWTECH_PUSH_RELAY_URL` 指向假中繼，用 `diagnostics_channel`（`undici:request:create`、`http.client.request.start`）記下 `send()` 期間程序發出的每一個請求：只有假中繼那一個。
+  - `websocket-server.notifications.test.ts`（上游的檔，加 2 個）：daemon 的 server_info 經 protocol 解析後 `woowtechPush` 是 `true`；同一個 agent 完成事件，新版 App 收到的 attention 訊息有回覆預覽，交給 `deliver` 的推播只有通用句子。
+  - `websocket-server.terminal-notifications.test.ts`（上游的檔，加 1 組）：terminal 完成時推播帶 `finished`、中繼收到 `finished`；等輸入時帶 `needs_input`、中繼收到 `attention`。
+  - `push/woowtech-push-content.test.ts`：通用句子、ID 格式和語言判斷。
+  - 守門 `woowtech/push-content.test.mjs`：
+    - 從原始碼跑沒有注入 `deliver` 的 `createPushNotifications`。`fetch` 在建立推播之前就換成記錄器，照中繼的方式回 201，不會連網路。中英文各跑一次：只有一個請求，打到 `https://push.woowtech.io/api/smart/v1/notify`；位元組裡沒有 agent 名稱、回覆、權限內容、資料夾、terminal 名稱和工作區名稱；本文正好是 token、語言、`reason` 和 `target`，不隨內容改變；一起註冊的 Expo token 被撤銷。`WOOWTECH_PUSH_RELAY_URL` 蓋得掉網址。
+    - 掃描出貨的原始碼：Expo 的網址只在 `push-service.ts`，沒有任何地方 `new PushService` 或呼叫 `.sendPush(`，`push.woowtech.io` 只在 `woowtech-relay.ts`。合併上游時把預設的 `deliver` 改回 Expo，或多一條送出推播的路，就會失敗。
+  - 上游的測試檔合併時衝突的話，可以先放掉我們加的測試；守門涵蓋 `send()` 的接點，terminal 的 `reason` 和 `woowtechPush` 旗標除外。
+- 還沒做的：App 端（取得 FCM token、註冊和撤銷 `wsp1:` 字串、點通知導頁）和中繼的部署，見「接下來」。
 
 ### 17. daemon 自己的訊息用 woowtech smart
 
@@ -777,6 +810,14 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 守門 64 個通過 63 個。沒過的 zh-TW 守門是 worktree 沒裝 OpenCC；產生器只讀 `zh-CN.ts` 和 `en.ts`，這個分支都沒動。
   - 沒跑的：`lifecycle.e2e.test.ts`，收尾任務在最後一次改它、重建 dist 之後跑過（15 通過、1 略過），`resolvePaseoHome({})` 的資料夾名稱確認是 `.woowtech-smart`；CLI e2e 03 和 17，會啟動真的 daemon 並連 relay。
   - 順手改的：`03-daemon.test.ts` 開頭的說明還寫著沒同意就不產生配對連結；第 11 節補上關掉 Workers Logs 時守門要一起改。
+- 推播走 WoowTech 的推播中繼，protocol 和 daemon（2026-09-25，分支 `woowtech/push`，第 16 節）：新測試都先紅後綠；一到場就綠的都用突變確認會失敗。
+  - 紅燈原因，依切片順序：`encodePushToken` 收下 `zh-CN`；`validateRelayNotifyBody` 不存在；server_info 的 `woowtechPush` 被 zod 剝掉；`woowtech-relay.ts` 不存在；Expo token 沒撤銷；同一支手機送兩次；410 沒撤銷；503 沒重試；連線被切、連不到時 `fetch failed` 直接丟出；中繼不回應時卡到測試逾時（30 秒）；400、403、413、429、502 沒有 log；debug 沒有手機的雜湊；沒注入 `deliver` 時推播打到 `https://exp.host/--/api/v2/push/send`；daemon 的 server_info 沒有 `woowtechPush`。
+  - 沒注入 `deliver` 的那個紅燈會真的打 Expo，所以用只准連 loopback 的 `fetch` 當安全網跑（`NODE_OPTIONS=--import`，先用 `.invalid` 網址確認它在 vitest 的 fork 裡有效）。紅燈時被擋下的就是 `exp.host`，沒有任何請求離開本機。
+  - 上一個工作階段留下的 P1 草稿（18 個測試）用 7 種突變確認：切最後一個冒號、上限改回 4096、UUID 不分大小寫、agent 和 terminal 都留、只認 `zh-TW`、`reason` 原樣送、不要求冒號，都被抓到。
+  - 其他突變都被抓到：fixture 那幾組（agent 和 terminal 都留、送出 `title`、`error` 原樣送、ID 順序改變、App 端上限改回 4096）；送出器帶上 `title` 和 `cwd`；拿掉 store 撤銷失敗的保護；守門那邊把 `push/index.ts` 換回 main 版（預設送 Expo），守門 4/4 失敗。
+  - 跑過的測試：protocol 3 檔 186 個（`woowtech-push` 151、`messages` 25、`ws-outbound` 10）；重建 server 的 dist 之後，server 7 檔 93 個（`woowtech-relay` 19、`woowtech-push-content` 24、`push/index` 2、`token-store` 3、`websocket-server.notifications` 8、`websocket-server.terminal-notifications` 12、`websocket-server.relay-reconnect` 25）；守門 65 個全過（`push-content` 4，zh-TW 守門也過）；每個 commit 的完整 typecheck。
+  - 兩個 package 的測試檔不在 typecheck 範圍，新測試檔另外用 `tsc` 檢查過，沒有錯誤。
+  - 沒做的：沒有連真的 push.woowtech.io（還沒部署）；沒有實機；App 端還沒做。
 
 ## 接下來
 
@@ -800,6 +841,10 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
 - 配對連結的主機和 CORS 白名單裡的 app.paseo.sh 待 owner 決定（第 11 節）；Hub（`hub.paseo.sh`）仍是上游的。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
-- 推播的句子（第 16 節的表）請 owner 確認用字。實機測試時確認：通知只顯示產品名和通用句子、點下去開到那個 agent 或 terminal，桌面版的系統通知仍有回覆預覽。
+- 推播（第 16 節）：protocol 和 daemon 做完了（分支 `woowtech/push`），接下來：
+  - App 端：取得 FCM token（iOS 用 RNFirebase，Android 用 `expo-notifications`），只對 `woowtechPush` 的 daemon 註冊 `wsp1:` 字串；換 token、換語言、通知權限被拒時先撤銷舊字串；啟動時關掉 Expo 的自動回報。
+  - 部署中繼的 smart 模式和 push.woowtech.io。新版 App 註冊 `wsp1:` 字串之前，daemon 不會發出任何推播請求；之後、中繼部署之前，推播會在連不上或逾時、重試一次後被丟棄。
+  - 通知用字寫在中繼的 `smart-messages.js`，請 owner 確認。
+  - 都完成後用實機驗收：通知只顯示中繼的句子，點下去開到那個 agent 或 terminal，換語言後只收到一則新語言的通知，解除安裝後中繼回 410、daemon 刪掉那筆；桌面版的系統通知仍有回覆預覽。
 - 打開 GitHub Actions：照第 18 節的步驟設定權限、停用 10 個 workflow，手動跑一次 CI，用實際的分鐘數和結果（桌面版 job 的 30 分鐘上限、Playwright 的 120 秒打包）更新第 18 節。
 - 商標（TIPO）與 D-U-N-S。

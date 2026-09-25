@@ -3,13 +3,15 @@ import { promisify } from "node:util";
 
 import type { PushPayload } from "./push-service.js";
 
-// woowtech smart: a push notification leaves this machine through Expo, Apple and
-// Google, so it carries none of the user's text: no agent title, message preview or
-// permission details, and no project, workspace or file names. It says one generic
-// sentence per reason in the host's language and keeps only the ids the app routes a
-// tap with. Notifications that stay on the machine (the desktop app's OS
-// notifications, in-app) are built before this step and keep their content.
-// woowtech/README.md explains the choices; woowtech/push-content.test.mjs guards them.
+// woowtech smart: every push is rewritten here before any deliver sees it, so it carries
+// none of the user's text: no agent title, message preview or permission details, and no
+// project, workspace or file names. It says one generic sentence per reason in the host's
+// language and keeps only the reason and the ids the app routes a tap with. The daemon's
+// deliver (woowtech-relay.ts) then sends WoowTech's push relay the reason and the ids
+// alone; the relay writes the sentence the phone shows, in the phone's language.
+// Notifications that stay on the machine (the desktop app's OS notifications, in-app) are
+// built before this step and keep their content. woowtech/README.md explains the choices;
+// woowtech/push-content.test.mjs guards them.
 
 export type PushLanguage = "zh-TW" | "en";
 
