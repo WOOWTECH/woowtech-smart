@@ -72,7 +72,8 @@ vi.mock("@/desktop/components/desktop-updates-section", () => ({ LocalDaemonSect
 vi.mock("@/desktop/components/pair-device-modal", () => ({ PairDeviceModal: () => null }));
 
 // host-page's JSX compiles to React.createElement, some of it at module scope, so
-// React has to be global before the page loads.
+// React has to be global before the page loads. Loading it compiles the page's
+// imports, which takes longer than a hook's default 10 seconds on a busy machine.
 let pages: typeof import("./host-page");
 let browserTools: typeof import("./browser-tools-card");
 

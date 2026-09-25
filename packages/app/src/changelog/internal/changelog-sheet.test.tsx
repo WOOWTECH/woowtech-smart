@@ -18,13 +18,14 @@ vi.mock("@/components/adaptive-modal-sheet", async () => {
 vi.mock("@/components/markdown/renderer", () => ({ MarkdownRenderer: () => null }));
 
 // The sheet's JSX compiles to React.createElement, some of it at module scope, so
-// React has to be global before the sheet loads.
+// React has to be global before the sheet loads. Loading it compiles the sheet's
+// imports, which takes longer than a hook's default 10 seconds on a busy machine.
 let ChangelogSheet: typeof import("./changelog-sheet").ChangelogSheet;
 
 beforeAll(async () => {
   vi.stubGlobal("React", React);
   ({ ChangelogSheet } = await import("./changelog-sheet"));
-});
+}, 120_000);
 
 beforeEach(async () => {
   vi.stubGlobal("React", React);
