@@ -193,10 +193,11 @@ test("a new home lets no web app origin in", () => {
 });
 
 // Shipped: the source folders of every package that goes into the phone app, the
-// desktop app, the daemon, the CLI and the relay Worker, the agent skills the daemon
-// installs, and the app's config (app.config.js, eas.json, plugins/, public/). The
-// app's translations are part of packages/app/src (src/i18n). Left out, as not
-// shipped: tests, e2e suites and test utilities (shipped-sources.mjs), docs/,
+// desktop app, the daemon, the CLI and the relay Worker (shipped-sources.mjs, plus the
+// relay, plugin, highlight and expo-two-way-audio packages the app and the daemon depend
+// on), the agent skills the daemon installs, and the app's config (app.config.js,
+// eas.json, plugins/, public/). The app's translations are part of packages/app/src
+// (src/i18n). Left out, as not shipped: tests, e2e suites and test utilities, docs/,
 // public-docs/, SECURITY.md, CHANGELOG.md and other Markdown, scripts/, nix/,
 // packages/website (upstream's website) and woowtech/ apart from its skills.
 test("no shipped source names upstream's web app", () => {
@@ -213,7 +214,14 @@ test("no shipped source names upstream's web app", () => {
       skipPaths: [MIGRATION_SOURCE],
     }),
     ...findInShippedSources([UPSTREAM_WEB_APP], {
-      dirs: ["packages/relay/src", "packages/app/plugins", "woowtech/skills"],
+      dirs: [
+        "packages/relay/src",
+        "packages/plugin/src",
+        "packages/highlight/src",
+        "packages/expo-two-way-audio/src",
+        "packages/app/plugins",
+        "woowtech/skills",
+      ],
       fileTypes: /\.(?:[cm]?[jt]sx?|json|md)$/,
     }),
   ];
