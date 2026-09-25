@@ -1097,6 +1097,13 @@ async function main() {
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
     const page = await waitForAppPage(browser, expoPort);
     const status = await waitForDesktopStatus(page);
+    // The first load waits for Metro's cold bundle; slow runners set E2E_METRO_WARMUP_TIMEOUT_MS.
+    const firstLoadTimeout = Number(process.env.E2E_METRO_WARMUP_TIMEOUT_MS);
+    if (firstLoadTimeout > 0) {
+      await page
+        .getByRole("button", { name: "Settings", exact: true })
+        .waitFor({ timeout: firstLoadTimeout });
+    }
 
     const settingsMemory = await runSettingsMemoryRegression(page);
     if (process.env.PASEO_DESKTOP_SETTINGS_MEMORY_ONLY === "1") {

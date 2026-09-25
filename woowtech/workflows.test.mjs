@@ -177,12 +177,14 @@ function readRepoCode(path) {
   return source.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/.*/g, "");
 }
 
-test("CI gives a cold Metro bundle ten minutes, not 90 or 120 seconds", () => {
+test("CI gives a cold Metro bundle ten minutes, not 30, 90 or 120 seconds", () => {
   // Every Playwright shard stopped in globalSetup with the web bundle at 91% after 120 s.
-  // The desktop job's lifecycle E2E compiles the same bundle while its window waits 90 s.
+  // The desktop job's lifecycle E2E compiles the same bundle while its window waits 90 s,
+  // and its browser E2E starts another Metro and waits Playwright's default 30 s for Settings.
   for (const file of [
     "packages/app/e2e/support/global-setup.ts",
     "packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs",
+    "packages/desktop/e2e/browser-tabs.e2e.mjs",
   ]) {
     assert.match(
       readRepoCode(file),
