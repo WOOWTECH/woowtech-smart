@@ -129,11 +129,12 @@ function patternRewrites({
     // The skill's own name.
     (text) =>
       text.replace(/^(name: )(paseo(?:-[a-z]+)*)$/m, (_, key, name) => `${key}${skillName(name)}`),
-    // Another skill: **paseo-help**, /paseo-advisor or "the paseo skill".
+    // Another skill: **paseo-help**, /paseo-advisor or "the paseo skill". A
+    // slash before a file name, as in /paseo-plugin.json, is a path.
     (text) => text.replace(/\*\*(paseo(?:-[a-z]+)*)\*\*/g, (_, name) => `**${skillName(name)}**`),
     (text) =>
       text.replace(
-        /(?<=^|[\s`(])\/(paseo(?:-[a-z]+)+)(?![\w-])/g,
+        /(?<=^|[\s`(])\/(paseo(?:-[a-z]+)*)(?![\w-]|\.\w)/g,
         (_, name) => `/${skillName(name)}`,
       ),
     (text) =>
@@ -144,8 +145,9 @@ function patternRewrites({
     // The daemon's home and port.
     (text) => text.replace(/~\/\.paseo\b/g, daemonHome),
     (text) => text.replace(/\b6767\b/g, port),
-    // The product; the Paseo SDK is the plugin API's name.
-    (text) => text.replace(/\bPaseo\b(?! SDK\b)/g, productName),
+    // The product. Paseo Hub stays upstream's service until we run our own, as
+    // in the CLI, and the Paseo SDK is the plugin API's name.
+    (text) => text.replace(/\bPaseo\b(?! (?:Hub|SDK)\b)/g, productName),
   ];
 }
 

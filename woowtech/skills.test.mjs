@@ -51,7 +51,7 @@ const UPSTREAM_LEFTOVERS = [
   // the plugin API, which is upstream's.
   /(?<![\w.@/-])paseo(?= +(?:[a-z<]|-))/,
   /(?<![\w.@/-])\/?paseo-(?:advisor|chat|committee|epic|handoff|help|orchestrate|orchestrator|plugin)\b(?!\.json)/,
-  /\*\*paseo\*\*|\bpaseo skill\b|^name: paseo\b/,
+  /\*\*paseo\*\*|\bpaseo skill\b|^name: paseo\b|(?<=^|[\s`(])\/paseo(?![\w-]|\.\w)/,
   /discord/i,
   /github\.com\/getpaseo\/paseo\/(?:issues|discussions)|\bGitHub (?:Issues|Discussions)\b/i,
 ];
@@ -139,4 +139,27 @@ test("the server's build ships woowtech/skills, not upstream's skills", () => {
     /fs\.cpSync\('\.\.\/\.\.\/woowtech\/skills','dist\/server\/skills',/,
   );
   assert.doesNotMatch(scripts["build:lib"], /'\.\.\/\.\.\/skills'/);
+});
+
+test("the rewriter keeps upstream's services and API but renames skill invocations", async () => {
+  // Text upstream's skills may add later; today's skills cover the rest.
+  const { createSkillRewriter } = await import("./tools/skill-rewrites.mjs");
+  const rewriter = createSkillRewriter({
+    cliCommand: "woowtech-smart",
+    withCliCommand: (text) => text,
+    brandSkillName: (name) => name.replace(/^paseo/, "woowtech-smart"),
+    links: { docs: { home: "" }, supportEmail: "", lineOfficialAccount: "" },
+    daemonHome: "~/.woowtech-smart",
+    port: "6770",
+    productName: "woowtech smart",
+    upstreamSkills: ["paseo", "paseo-help", "paseo-plugin"],
+  });
+  assert.equal(
+    rewriter.rewrite(
+      "paseo-committee",
+      "SKILL.md",
+      "Run `/paseo` or /paseo-help. Paseo Hub and the Paseo SDK stay upstream's; Paseo is ours. Keep `/paseo-plugin.json`.",
+    ),
+    "Run `/woowtech-smart` or /woowtech-smart-help. Paseo Hub and the Paseo SDK stay upstream's; woowtech smart is ours. Keep `/paseo-plugin.json`.",
+  );
 });
