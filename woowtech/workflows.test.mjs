@@ -281,3 +281,18 @@ test("CI's RPM smoke first removes the deb package our desktop build installed",
   );
   assert.deepEqual(removed, [await debPackageName()]);
 });
+
+test("the pre-commit hook formats and lints .mjs files, as CI does", () => {
+  // CI checks the whole repo. Without mjs in these globs the hook skipped every .mjs file,
+  // and CI run 1's format and lint jobs failed on three of them.
+  const hook = YAML.parse(readFileSync(new URL("../lefthook.yml", import.meta.url), "utf8"));
+  assert.deepEqual(
+    hook["pre-commit"].jobs
+      .filter(({ name }) => name === "format" || name === "lint")
+      .map(({ name, glob }) => [name, /\bmjs\b/.test(glob)]),
+    [
+      ["format", true],
+      ["lint", true],
+    ],
+  );
+});
