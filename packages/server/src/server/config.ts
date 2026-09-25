@@ -21,6 +21,7 @@ import type {
 import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
 import { DEFAULT_RELAY_ENDPOINT } from "@getpaseo/protocol/daemon-endpoints";
+import { appBaseUrlFromConfig } from "./app-base-url.js";
 import { hashDaemonPassword } from "./auth.js";
 import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
@@ -29,7 +30,6 @@ import { resolveGitProcessPolicy } from "../utils/git-process-scheduler.js";
 
 // woowtech smart listens on its own port, apart from an upstream Paseo daemon.
 const DEFAULT_PORT = 6770;
-const DEFAULT_APP_BASE_URL = "https://app.paseo.sh";
 const DEFAULT_TRUSTED_PROXIES = ["loopback"];
 
 interface ResolveBundledWebUiDistDirInput {
@@ -540,7 +540,7 @@ function resolveStaticLoadConfigSettings(
       cli?.hostnames,
     ]),
     trustedProxies: resolveTrustedProxiesConfig(env, persisted),
-    appBaseUrl: env.PASEO_APP_BASE_URL ?? persisted.app?.baseUrl ?? DEFAULT_APP_BASE_URL,
+    appBaseUrl: env.PASEO_APP_BASE_URL ?? appBaseUrlFromConfig(persisted.app?.baseUrl),
   };
 }
 

@@ -17,6 +17,7 @@ import {
   TerminalProfileSchema,
 } from "@getpaseo/protocol/messages";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
+import { BRAND_PAIRING } from "@getpaseo/protocol/brand-pairing";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
 export const LogFormatSchema = z.enum(["pretty", "json"]);
@@ -348,8 +349,9 @@ const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
   version: 1,
   daemon: {
     listen: "127.0.0.1:6770",
+    // woowtech smart's pairing links open the app, so no web app origin is let in.
     cors: {
-      allowedOrigins: ["https://app.paseo.sh"],
+      allowedOrigins: [],
     },
     // woowtech smart runs its own relay, so new homes start with it on.
     relay: {
@@ -357,7 +359,7 @@ const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
     },
   },
   app: {
-    baseUrl: "https://app.paseo.sh",
+    baseUrl: BRAND_PAIRING.appBaseUrl,
   },
 }) as PersistedConfig;
 

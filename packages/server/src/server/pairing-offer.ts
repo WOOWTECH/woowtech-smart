@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
 import { DEFAULT_RELAY_ENDPOINT } from "@getpaseo/protocol/daemon-endpoints";
+import { BRAND_PAIRING } from "@getpaseo/protocol/brand-pairing";
 
 import { createConnectionOfferV2, encodeOfferToFragmentUrl } from "./connection-offer.js";
 import { loadOrCreateDaemonKeyPair } from "./daemon-keypair.js";
@@ -36,7 +37,7 @@ export async function generateLocalPairingOffer(args: {
   const relayPublicEndpoint = args.relayPublicEndpoint ?? relayEndpoint;
   const relayUseTls = args.relayUseTls ?? relayEndpoint === DEFAULT_RELAY_ENDPOINT;
   const relayPublicUseTls = args.relayPublicUseTls ?? relayUseTls;
-  const appBaseUrl = args.appBaseUrl ?? "https://app.paseo.sh";
+  const appBaseUrl = args.appBaseUrl ?? BRAND_PAIRING.appBaseUrl;
   const serverId = getOrCreateServerId(args.paseoHome, { logger: args.logger });
   const daemonKeyPair = await loadOrCreateDaemonKeyPair(args.paseoHome, args.logger);
   const offer = await createConnectionOfferV2({
