@@ -20,7 +20,7 @@ export interface PairingLinkHandlers {
 }
 
 /** Resolves once the store has loaded the saved hosts (HostRuntimeStore.boot). */
-export function whenHostRegistryLoaded(hosts: HostRegistry): Promise<void> {
+function whenHostRegistryLoaded(hosts: HostRegistry): Promise<void> {
   if (hosts.isHostRegistryLoaded()) return Promise.resolve();
   return new Promise((resolve) => {
     const unsubscribe = hosts.subscribeHostList(() => {
