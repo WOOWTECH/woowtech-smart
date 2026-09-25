@@ -129,6 +129,24 @@ test("CI jobs run on Ubuntu, and on Windows only when WOOWTECH_CI_WINDOWS is tru
   );
 });
 
+test("CI's Ubuntu jobs name an Ubuntu version, not ubuntu-latest", () => {
+  // GitHub moves ubuntu-latest to Ubuntu 26 from 2026-10-19. With a version, the image
+  // changes when we change the label, not under a weekly run. Two job names still say
+  // (ubuntu-latest): they are upstream's check names, which scripts/ci-workflow.test.mjs pins.
+  const labels = (value) =>
+    typeof value === "string" ? [value] : Object.values(value ?? {}).flatMap(labels);
+  const latest = [];
+  for (const name of ENABLED) {
+    for (const [id, job] of Object.entries(workflow(name).jobs)) {
+      // A matrix job lists its runners in the matrix.
+      for (const label of labels([job["runs-on"], job.strategy?.matrix])) {
+        if (/\bubuntu-latest\b/.test(label)) latest.push(`${name} ${id}: ${label}`);
+      }
+    }
+  }
+  assert.deepEqual(latest, [], "Pin each Ubuntu runner to a version, such as ubuntu-24.04.");
+});
+
 test("CI can neither deploy nor publish: no credentials but the test keys, no write access", () => {
   // Deploying or publishing takes a credential: a Cloudflare, Expo, npm or Apple
   // secret, a bot key, or a GITHUB_TOKEN that can write. Upstream's CI passes three
