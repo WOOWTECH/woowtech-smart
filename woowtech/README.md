@@ -101,7 +101,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - daemon 的行程名不同，在活動監視器和 `ps` 裡分得出來，`pkill -f 'Paseo Daemon'` 也不會停掉我們的。沒有程式用行程名找 daemon。
   - 本地語音的 worker 叫 `woowtech smart Voice`（上游是 `Paseo Voice`）。本地語音已拿掉（第 2 節），平常不會啟動；企業版裝回去時名稱就是對的。
   - `woowtech/names.test.mjs` 檢查這三個行程名。
-- scheme 同時用在桌面版載入介面的來源、系統註冊的連結、手機 App、深層連結和 daemon 的 CORS 白名單。原版的 `paseo://` 連結留給官方 Paseo，我們不接；診斷報告會把兩種連結都遮掉。
+- scheme 同時用在桌面版載入介面的來源、系統註冊的連結、手機 App、深層連結、配對連結（第 19 節）和 daemon 的 CORS 白名單。原版的 `paseo://` 連結留給官方 Paseo，我們不接；診斷報告會把兩種連結都遮掉。
 - electron-builder 用 `executableName` 命名 `.app` 和主執行檔，用 `productName` 命名 helper，所以兩個設成一樣，跟上游相同。
 - 用名稱找桌面版的地方都改了：CLI 的 `open`、`bin/paseo`（透過 helper 執行 CLI）、打包腳本、Linux 啟動器。
 - 更新下載快取在系統的快取資料夾底下（macOS 是 `~/Library/Caches/`）。資料夾名稱由 electron-builder 從 `package.json` 的 `name` 算出來寫進 `app-update.yml`，`publish` 裡設的值會被蓋掉。
@@ -237,7 +237,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 啟動失敗畫面的按鈕本來就是寫死的英文，「Open GitHub issue」改成「Email support」。
 - 還沒改的：
   - 外掛的相容性訊息和 `plugin init` 的範本仍連到 paseo.sh 的外掛文件。外掛 API 還是上游的，CLI 改名時決定保留。
-  - 配對網頁 `app.paseo.sh` 待 owner 決定（第 11 節的「配對連結的主機」）；Hub（`hub.paseo.sh`）仍是上游的。
+  - Hub（`hub.paseo.sh`）仍是上游的。配對連結已不再用上游的網頁版（第 19 節）。
   - e2e 測試（`packages/app/e2e/` 的瀏覽器與手機腳本、`packages/desktop/e2e/`）的預期值已改成我們的名稱、連結、port 和 scheme，但還沒實際跑過。
     e2e 用的隔離 daemon 不准用 6767 和 6770；手機 composer 腳本的預設 port 從 6770 改成 6771，因為 6770 現在是 woowtech smart 本身的 daemon。
     Maestro 流程（`packages/app/maestro/`）仍是上游的值。
@@ -303,25 +303,7 @@ daemon 的預設：
 - 先部署 relay，再發佈這一版：relay.woowtech.io 還沒有 DNS 時，daemon 連不上，每 1～30 秒重試一次，log 裡一直有連線錯誤。
 - 直接連線不受影響：daemon 預設只監聽 `127.0.0.1:6770`。要讓手機直接連，把 `daemon.listen` 改成區網或 Tailscale 的位址，並用 `woowtech-smart daemon set-password` 設密碼。
 
-配對連結的主機（待 owner 決定，還沒改）：
-
-- 配對連結是 `<app.baseUrl>/#offer=<base64url JSON>`（`connection-offer.ts` 的 `encodeOfferToFragmentUrl`），QR Code 的內容就是它。JSON 裡有 serverId、daemon 的公鑰和 relay 端點，拿到連結就能連上這個 daemon。
-- `app.baseUrl` 預設 `https://app.paseo.sh`：新 home 的 `config.json` 會寫入，`config.ts`、`pairing-offer.ts`、`bootstrap.ts` 也各有一份預設，`PASEO_APP_BASE_URL` 可以覆寫，執行中也能改。
-- App 內的掃描器（`app/pair-scan.tsx`）和「貼上配對連結」（`components/pair-link-modal.tsx`）只找 `#offer=`，不看主機；`_layout.tsx` 的 `OfferLinkListener` 也處理從外部打開的連結。所以換成什麼主機，App 內都能配對。
-- 用手機的相機 App 掃 QR Code 時，打開的是 app.paseo.sh：那是上游用 `deploy-app.yml` 在發版 tag 時部署到自己 Cloudflare Pages（專案 `paseo-app`）的網頁版 App（`expo export --platform web`）。我們沒有 universal link 或 App Links，不會叫起我們的 App。上游的網頁版會讀 `#offer=`、存下這台主機，並經由我們的 relay 連上使用者的 daemon：配對憑證交到上游的網頁程式手上，使用者在上游品牌的網頁裡操作我們的 daemon。relay 預設開啟後，桌面版一打開「配對裝置」就顯示這個 QR Code，這條路更容易被走到。
-- 新 home 的 `config.json` 也把 `https://app.paseo.sh` 寫進 `daemon.cors.allowedOrigins`：上游網站上的程式可以從使用者的瀏覽器直接連本機的 daemon（HTTP 和 WebSocket 都看這份白名單），而 daemon 預設沒有密碼。我們的產品用不到：桌面版的來源 `woowtech-smart://app` 和 daemon 自己的網頁版是固定放行的。
-- 使用者看得到 app.paseo.sh 的另外兩處：`onboard` 的下一步「Web app: https://app.paseo.sh」，和 App「貼上配對連結」的範例文字。
-- 選項：
-  - (a) 在 app.woowtech.io 自架網頁版（Cloudflare Pages）：相機掃描後在瀏覽器就有完整、我們品牌的網頁版；同網域之後可以放 `apple-app-site-association` 和 `assetlinks.json`，裝了 App 就直接開 App。代價是多維運一個能操作使用者 daemon 的網頁 App：每次發版都要更新、顧及 protocol 相容、供應鏈和 CSP；這台 Mac 建置網頁版要好幾分鐘；Pages 專案、DNS、憑證要在帳號上操作。
-  - (b) 配對連結改用 `woowtech-smart://`：不用部署，憑證不經過任何網頁，相機掃描會叫起我們的 App。但沒裝 App 時掃了沒反應，也沒有安裝引導；Android 各家相機對自訂 scheme 的處理不一致；自訂 scheme 別的 App 也能註冊；在電腦上點只會打開桌面版，而桌面版只處理 agent 連結；已存在的 home 仍寫著 app.paseo.sh，要另外遷移；一定要實機驗證，這次不做實機測試。
-  - (c) 指向 aiot.woowtech.io 的一頁（例如 `/pair`）：頁面讀 `#offer=`，提供「在渥屋智能中開啟」（轉成 `woowtech-smart://…#offer=…`）和商店連結。相機掃描落在我們的網域和品牌，沒裝 App 有引導，fragment 不會送到伺服器。但頁面的程式會碰到配對憑證，官網上的分析、追蹤或 session replay 可能記下完整網址，這一頁不能載入任何第三方程式；官網由誰維護、能不能放自訂程式要先確認；仍要多點一下。
-  - (d) 同 (c)，但這一頁由 relay 的 Worker 提供（`https://relay.woowtech.io/pair#offer=…`）：fork 自己的 Worker 入口處理 `/pair`（之後加 `/.well-known/`），其他請求交給上游的 relay。頁面完全由我們控制，不用新的基礎設施，之後可以在同網域做 universal links。代價是 relay 和網頁放在同一個 Worker（頁面的程式要極簡），要改 Worker 並多部署一次。
-  - (e) 維持 app.paseo.sh：不用做事，但上面的問題都在，而且上游隨時可能改或停掉那個網站。
-- 建議：
-  - 不管選哪個，先把 `https://app.paseo.sh` 從新 home 的 CORS 白名單拿掉（有自己的網頁版時換成它的網址），並決定要不要替已存在的 `config.json` 拿掉。
-  - 主機短期用 (d)，官網能保證那一頁沒有第三方程式時也可以用 (c)；需要網頁版時再做 (a)。universal links 和 App Links 要在 Apple Developer 開 Associated Domains、用 Play 的簽章指紋寫 `assetlinks.json`，並重新建置 App。
-  - (b) 不用部署，但要等實機驗證後再考慮。
-- 決定後要一起改的：`persisted-config.ts` 的 `app.baseUrl` 和 CORS 預設、`config.ts`、`pairing-offer.ts`、`bootstrap.ts` 的預設、`onboard` 的下一步、`pair-link-modal.tsx` 的範例文字，以及要不要遷移已存在的 `config.json`。
+配對連結的主機：owner 決定直接叫起 App，配對連結和 QR Code 改成 `woowtech-smart:///#offer=…`，新 home 的 CORS 白名單也拿掉上游的網頁版，見第 19 節。當時比較過的其他做法也記在那裡。
 
 測試：
 
@@ -374,7 +356,6 @@ daemon 的預設：
   - App 內的 `bin/paseo`（見上面的 shim），和 `packages/cli` 的 `paseo` bin：後者只給 workspace 開發和 CLI 的 e2e（`packages/cli/tests/` 用 zx 執行 `paseo`）。我們不發 npm 套件，它不會進使用者的 PATH。
   - 終端機活動 hooks 的文字和 OpenCode 外掛，原因見上面。
   - Paseo Hub（`hub.paseo.sh`）和它的聊天機器人 `@Paseo`：Hub 仍是上游經營的，跟自架 Hub 一起換。
-  - `onboard` 裡的 `https://app.paseo.sh`：跟配對連結的主機一起決定（第 11 節）。relay 的加密說明已改成「WoowTech cannot read your code or messages」，因為 relay 現在是我們的。
   - 外掛範本（`plugin/scaffold.ts`）和外掛文件連結 `paseo.sh/docs/plugins`：外掛 API 仍是上游的（第 10 節）。
   - agent 看到的 MCP server 名 `paseo`：protocol 的工具名稱轉換（`tool-name-normalization.ts`）靠它辨識。
 - 沒寫遷移：之前的內部測試版按過「安裝 CLI」的電腦，`~/.local/bin/paseo` 會指向 `woowtech smart.app` 裡的 `bin/paseo`，新版不會動它，要手動刪。刪之前先用 `readlink ~/.local/bin/paseo` 確認指向的不是 `Paseo.app`。
@@ -630,6 +611,71 @@ secret 和外部服務：
   - 然後把檔名和原因加進守門的 `DISABLED_IN_UI`；CI 需要它的話，改加進 `ENABLED`。
 - 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；開著的 workflow 只用那三把 key、不要求寫入權限；RPM smoke 移除的是 electron-builder 算出的 deb 名稱。上游改到這些時會失敗，照訊息改回來。
 
+### 19. 配對連結直接叫起 App
+
+owner 的決定是「直接叫起 App」：配對連結和 QR Code 打開渥屋智能本身，不再打開上游在 app.paseo.sh 的網頁版。之前用手機相機掃 QR Code 會進到上游的網頁版，配對憑證交到上游的網頁程式手上，使用者在上游品牌的網頁裡操作我們的 daemon。
+
+連結格式：
+
+- `woowtech-smart:///#offer=<base64url JSON>`。JSON 跟以前一樣（serverId、daemon 公鑰、relay 端點），拿到連結就能連上這個 daemon，所以連結要當密碼看待。只換了 `#offer=` 前面的網址，組法仍是 `connection-offer.ts` 的 `encodeOfferToFragmentUrl`：`app.baseUrl` 去掉一個結尾斜線，再接 `/#offer=`。
+- 三條斜線是 App 的根網址。Expo Router 把自訂 scheme 連結的 host 和路徑當成路由，fragment 不算：`woowtech-smart:///` 落在 index 路由，這也是 Expo 在一般啟動時用的網址（`Linking.createURL("/")`）。index 不在 `Stack.Protected` 裡，store 還沒準備好的冷啟動也找得到。寫成 `woowtech-smart://pair#offer=…` 的話，`pair` 會變成路由，打開的是找不到頁面的畫面。
+- App 收到連結後，`_layout.tsx` 的 `OfferLinkListener` 找 `#offer=`、存下這台主機，再轉到「開啟專案」。App 內的掃描器（`app/pair-scan.tsx`）和「貼上配對連結」（`components/pair-link-modal.tsx`）也只找 `#offer=`。三個都用字串運算，不經過 URL 類別：React Native 內建的 URL 對自訂 scheme 讀不準 host 和路徑，fragment 也靠不住。App 裡的 URL 目前被 Expo 換成完整的實作，但不要依賴它。
+- 帶 `#offer=` 的 https 連結照樣能配對，例如 `app.baseUrl` 設成 daemon 自己的網頁版時。程式沒有寫死任何主機。
+- 在電腦上點連結只會打開桌面版：macOS 的 `open-url` 只處理 agent 連結，配對連結直接忽略。Windows 和 Linux（不在 v1）的 second-instance 會多開一個視窗，跟上游處理不認得的連結一樣。
+
+預設值和遷移：
+
+- 常數在 `packages/protocol/src/brand-pairing.ts`：`BRAND_PAIRING.appBaseUrl` 是 `woowtech-smart:///`，`linkExample` 是「貼上配對連結」的範例文字。scheme 要跟 `app.config.js` 的 `scheme` 一致（第 5 節）。改了這個檔案，要重建 protocol 和 server 的 dist。
+- 新 home 的 `config.json` 寫入 `app.baseUrl: "woowtech-smart:///"`；`config.ts`、`pairing-offer.ts`、`bootstrap.ts`（三處）的預設也讀這個常數。
+- `config.json` 的 `app.baseUrl` 正好是上游的預設 `https://app.paseo.sh`（有沒有結尾斜線都算）時，當成沒設，用我們的預設：那是之前的內部測試版寫進去的，不是使用者選的。其他值都照用，連 app.paseo.sh 底下的路徑也是；`PASEO_APP_BASE_URL` 照樣優先。
+  - 寫在 fork 的 `packages/server/src/server/app-base-url.ts`（`appBaseUrlFromConfig`），`config.ts` 解析設定時呼叫。daemon 重新載入設定、CLI 的離線 `daemon pair` 都走這裡。
+  - 不改寫 `config.json`，跟 relay 的預設（第 11 節）一樣只在解析時處理：`woowtech-smart daemon config get app.baseUrl` 仍顯示檔案裡的上游網址，實際的連結看 `woowtech-smart daemon pair`。
+
+CORS：
+
+- 新 home 的 `daemon.cors.allowedOrigins` 改成空的，不再放行 `https://app.paseo.sh`。原本上游網站上的程式可以從使用者的瀏覽器直接連本機的 daemon（HTTP 和 WebSocket 都看這份白名單），而 daemon 預設沒有密碼。
+- daemon 自己固定放行的照舊（`bootstrap.ts`）：桌面版的 `woowtech-smart://app`、daemon 自己的位址（`http://127.0.0.1:<port>`、`http://localhost:<port>`），WebSocket 另外接受同源。開發用的也照舊：`scripts/dev-home.sh` 寫的 `"*"`、`scripts/dev-daemon.sh` 的 `PASEO_CORS_ORIGINS`。
+- 已存在的 home 不動：內部測試版建立的 `config.json` 還列著 `https://app.paseo.sh`，要自己拿掉，例如 `woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`。要不要自動拿掉還沒決定（接下來）。
+
+文案：
+
+- `onboard` 的下一步拿掉「Web app: https://app.paseo.sh」，後面重新編號。
+- 「貼上配對連結」的範例改成 `woowtech-smart:///#offer=...`，由 `BRAND_PAIRING.linkExample` 提供。範例是連結，每種語言都一樣，所以不放進翻譯：`woowtech-copy.ts` 的測試要求每種語言有自己的譯文。這個視窗的其他文字（「請貼上配對連結（.../#offer=...）」等）本來就沒有提到主機，繁中不用改。
+
+取捨：
+
+- 沒裝 App 時掃了沒反應，也沒有安裝引導；Android 各家相機對自訂 scheme 的處理不一致；別的 App 也能註冊同一個 scheme。這些要在實機驗收時確認。
+- 當時比較過的其他做法，相機叫不起 App 時再考慮：
+  - 在我們的網域放一頁（官網 aiot.woowtech.io 的 `/pair`，或 relay 的 Worker 提供 `https://relay.woowtech.io/pair`）：頁面讀 `#offer=`，提供「在渥屋智能中開啟」和商店連結，沒裝 App 有引導；之後同網域可以做 universal links 和 App Links（要開 Associated Domains、用 Play 的簽章指紋寫 `assetlinks.json`、重新建置 App）。頁面的程式會碰到配對憑證，不能載入任何第三方程式。
+  - 在 app.woowtech.io 自架網頁版：要多維運一個能操作使用者 daemon 的網頁 App，每次發版都要更新。
+  - 維持 app.paseo.sh：上游隨時可能改或停掉那個網站。
+
+接點（上游的檔）：`persisted-config.ts`（4 行）、`config.ts`（3 行）、`pairing-offer.ts`（2 行）、`bootstrap.ts`（4 行，熱檔）、`protocol/src/connection-offer.ts`（1 行註解）、`cli/src/commands/onboard.ts`（4 行）、`app/src/components/pair-link-modal.tsx`（2 行），以及上游測試 `app/src/runtime/host-runtime.test.ts` 加的 1 個測試。
+
+測試：
+
+- server `pairing-link.test.ts`：新 home 的連結（整段比對 offer）；沒給 `app.baseUrl` 的連結；上游預設兩種寫法的遷移；自己設的值不動（daemon 的網頁版、自己的網站、app.paseo.sh 底下的路徑）；`PASEO_APP_BASE_URL` 優先；`daemon config set` 後重新載入。
+- server `cors-defaults.test.ts`：新 home 沒有 web origin、dev 的 `"*"` 和 `PASEO_CORS_ORIGINS` 照舊；實際起 daemon，上游網頁版的 HTTP 拿不到 CORS 標頭、WebSocket 回 403，桌面版和 daemon 自己的網頁版照樣連得上。
+- CLI `commands/daemon/pair.app-link.test.ts`：新 home 和寫著上游預設的 home，`daemon pair` 的連結都是 `woowtech-smart:///`。`utils/daemon-target.app-link.test.ts`：`--host` 帶配對連結時，訊息裡的 offer 會遮掉。
+- App：`host-runtime.test.ts` 的新測試是 `OfferLinkListener` 用的匯入；`components/pair-link-modal.app-link.test.tsx` 和 `components/pair-scan.app-link.test.tsx`（掃描器是 `src/app` 裡的路由，測試放外面，因為 Expo Router 會把 `src/app` 裡的每個檔案當成路由）：貼上和掃描新連結都能配對，範例文字是新連結。三個都把 URL 類別換成會記錄的版本，確認配對連結沒有交給它。
+- protocol `brand-pairing.test.ts`：CLI 的 `--host` 和 daemon 匯出的解析函式讀得到新連結的 offer。
+- 守門 `woowtech/pairing.test.mjs`，5 項：
+  - 從原始碼跑 daemon 的設定和配對：新 home 的連結是 `woowtech-smart:///#offer=`，offer 是這個 home 的；沒給 `app.baseUrl` 也一樣。
+  - 用 expo-router 自己的函式（`build/fork/extractPathFromURL`）確認連結落在 index 路由；用 `expo config --type introspect` 確認正式版和 Debug 版在 iOS（`CFBundleURLSchemes`）和 Android（VIEW + BROWSABLE，沒有 host 或路徑限制的 intent filter）都註冊了 `woowtech-smart`。
+  - 上游預設的 home 改用 App 連結，自己設的值不動。
+  - 新 home 沒有 web origin，CLI 讀的預設（`readPersistedConfig` 的 `defaultsIfMissing`）也沒有。
+  - 出貨的原始碼不准出現 app.paseo.sh。「出貨的原始碼」是 `shipped-sources.mjs` 的 app、cli、client、desktop、protocol、server 的 `src`（含 App 的翻譯 `src/i18n`），加上 relay 的 `src`、App 的 `plugins/`、`woowtech/skills`，以及 `app.config.js`、`eas.json`、`public/index.html`、`public/manifest.json`、`electron-builder.yml`、`wrangler.woowtech.toml`。不掃：測試、e2e、test-utils，`docs/`、`public-docs/`、`SECURITY.md`、`CHANGELOG.md` 這些說明文件，`scripts/`、`nix/`，以及上游的官網 `packages/website`。唯一的例外是 `app-base-url.ts` 辨認上游預設的那一行，守門也檢查它只有那一行。
+  - 突變都被抓到：新 home 的 `app.baseUrl` 或 CORS 改回、`config.ts` 不遷移、遷移少了結尾斜線那種寫法、`pairing-offer.ts` 或 `bootstrap.ts` 的預設改回、`onboard` 加回 Web app、範例文字改回、`app.config.js` 的 scheme 改掉、`BRAND_PAIRING` 改成有 host 的網址（要重建 protocol 的 dist）、`app-base-url.ts` 多一行提到 app.paseo.sh。
+
+上游合併後要再確認：
+
+- 守門的出貨原始碼掃描失敗時，看新出現的地方是誰在用：預設值改用 `BRAND_PAIRING`，給人看的文字改成我們的。
+- 上游改了 `encodeOfferToFragmentUrl` 的組法或 `config.ts` 的 `app.baseUrl` 解析：守門第 1、3 項會失敗。照新的組法調整 `BRAND_PAIRING.appBaseUrl`，保持連結是 `woowtech-smart:///#offer=…`。
+- 升級 expo-router：守門直接讀 `expo-router/build/fork/extractPathFromURL`，搬家時會失敗。確認新版仍把 `woowtech-smart:///` 對到 index，再改守門的路徑。
+- 上游新增 `src/app/+native-intent.tsx`、改了 `src/app/index.tsx`，或把 index 放進 `Stack.Protected`：連結可能不再落在啟動畫面，要在模擬器上用 `xcrun simctl openurl` 和 `adb shell am start` 重新確認。
+- 上游讓 `OfferLinkListener`、掃描器或「貼上配對連結」改用 URL 類別讀 fragment：三個 App 測試會失敗，改回字串運算。
+- 上游在新 home 的 CORS 預設或 `bootstrap.ts` 的固定清單加回網頁版：`cors-defaults.test.ts` 和守門會失敗。
+
 ## Mac 開發環境
 
 `woowtech/scripts/mac/` 是在 M2、8GB RAM 的 Mac 上建置和測試用的腳本。路徑是寫死的：repo 在 `~/projects/woowtech-smart`，腳本透過 `~/.local/share/woowtech-smart/` 的 symlink 呼叫，log 和截圖也存在那裡。
@@ -777,6 +823,13 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 守門 64 個通過 63 個。沒過的 zh-TW 守門是 worktree 沒裝 OpenCC；產生器只讀 `zh-CN.ts` 和 `en.ts`，這個分支都沒動。
   - 沒跑的：`lifecycle.e2e.test.ts`，收尾任務在最後一次改它、重建 dist 之後跑過（15 通過、1 略過），`resolvePaseoHome({})` 的資料夾名稱確認是 `.woowtech-smart`；CLI e2e 03 和 17，會啟動真的 daemon 並連 relay。
   - 順手改的：`03-daemon.test.ts` 開頭的說明還寫著沒同意就不產生配對連結；第 11 節補上關掉 Workers Logs 時守門要一起改。
+- 配對連結直接叫起 App（2026-09-25，分支 `woowtech/pairing-scheme`，第 19 節）：行為改動都先紅後綠，到場就綠的都用突變確認會失敗。
+  - 紅燈原因，依切片順序：新 home 和沒給 `app.baseUrl` 的連結開頭是 `https://app.paseo.sh/`；寫著上游預設（兩種寫法）的 home 和重新載入後照用上游網址；CLI 的 `daemon pair` 對舊的 server dist 也是 `https://app.paseo.sh/`；「貼上配對連結」的範例是 `https://app.paseo.sh/#offer=...`；新 home 的 CORS 白名單有 app.paseo.sh，daemon 對它回 CORS 標頭；守門的出貨原始碼掃描紅在 `onboard.ts:123` 和 `connection-offer.ts:49` 的註解。
+  - 到場就綠的：消費端（`OfferLinkListener` 用的匯入、掃描器、「貼上配對連結」、protocol 的解析、CLI 的遮罩）本來就只找 `#offer=`；自己設的 `app.baseUrl` 和 `PASEO_APP_BASE_URL` 照用；dev 的 CORS 設定。突變都被抓到：只收 https 連結（protocol、貼上、掃描）、用 URL 類別讀 fragment（host-runtime、貼上、掃描）、CLI 不遮 fragment、遷移改成整個上游網域、一律用預設、忽略 `PASEO_APP_BASE_URL`、拿掉桌面版的固定來源、固定清單加回上游網頁版。
+  - 守門 `pairing.test.mjs` 5 項，11 種突變都被抓到（列在第 19 節），每次只改一個地方，改完用 `cmp` 確認還原。
+  - 跑過的測試，都用 `env -i` 的乾淨環境、一次一個檔、`npm run build:server` 之後：server 18 檔 193 個（含 `bootstrap.smoke` 22、`websocket-server.origin` 4）、CLI 10 檔 24 個、App 6 檔 91 個（`host-runtime.test.ts` 72）、protocol 3 檔 13 個；守門 `node --test woowtech/*.test.mjs` 69/69；完整 typecheck。
+  - 在這台 Mac 上確認過：`expo config --type introspect` 的正式版和 Debug 版，iOS 的 `CFBundleURLSchemes` 和 Android `MainActivity` 的 VIEW + BROWSABLE intent filter 都有 `woowtech-smart`；expo-router 把 `woowtech-smart:///#offer=…` 對到空路徑（index）。
+  - 沒做的：沒有模擬器或實機測試（相機掃描、`simctl openurl`、`adb shell am start`），沒有實際啟動 6770 的 daemon，CLI e2e 沒跑。已存在的 home 的 CORS 白名單沒有遷移。
 
 ## 接下來
 
@@ -798,7 +851,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 第 15 節「還沒處理的」兩項（`GIT_EDITOR`、其他 agent 宿主的變數）要不要處理，還沒決定。終端機的環境已處理。
 - 在模擬器上確認：英文系統的主畫面標籤、「新功能」的空狀態、繁中的設定頁和側欄。
 - 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
-- 配對連結的主機和 CORS 白名單裡的 app.paseo.sh 待 owner 決定（第 11 節）；Hub（`hub.paseo.sh`）仍是上游的。
+- 配對連結直接叫起 App（第 19 節）的實機驗收：iOS 和 Android 的相機掃 QR Code、`xcrun simctl openurl`、`adb shell am start`，冷啟動和 App 已開著各一次；沒裝 App 時掃描的反應；桌面版點連結不會有反應。Android 相機叫不起 App 時，照第 19 節的「取捨」決定要不要改成在我們網域放一頁。
+- 已存在的 home 的 `config.json` 還在 CORS 白名單列著 `https://app.paseo.sh`，要不要自動拿掉，還沒決定（第 19 節）。Hub（`hub.paseo.sh`）仍是上游的。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 推播的句子（第 16 節的表）請 owner 確認用字。實機測試時確認：通知只顯示產品名和通用句子、點下去開到那個 agent 或 terminal，桌面版的系統通知仍有回覆預覽。
 - 打開 GitHub Actions：照第 18 節的步驟設定權限、停用 10 個 workflow，手動跑一次 CI，用實際的分鐘數和結果（桌面版 job 的 30 分鐘上限、Playwright 的 120 秒打包）更新第 18 節。
