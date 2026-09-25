@@ -575,7 +575,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - 2 核心的時間設定，第一次執行後加的（見下面）。上游的 CI 在公開 repo 的 4 核心 runner 上跑，這些上限在那裡夠用；變數沒設時照上游：
   - Playwright 的 4 個分片和桌面版 job 設 `E2E_METRO_WARMUP_TIMEOUT_MS=600000`，網頁版冷打包最多等 10 分鐘。讀它的是 Playwright 的 globalSetup（`packages/app/e2e/support/global-setup.ts`，上游 120 秒，桌面版的 renderer E2E 也用它）和桌面版 lifecycle E2E 第一次開視窗（`packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs`，上游 90 秒）。
   - 桌面版 job 的上限從 30 分鐘改成 60 分鐘。
-  - app-tests 設 `PASEO_APP_TEST_HOOK_TIMEOUT_MS=120000`，`packages/app/vitest.config.ts` 讀它，hook 的上限從 10 秒改成 2 分鐘。在命令列加 `--hookTimeout` 沒用：vitest 4.1.7 只把固定幾個命令列選項傳給 projects，`hookTimeout` 不在裡面。
+  - app-tests 設 `PASEO_APP_TEST_HOOK_TIMEOUT_MS=120000`，`packages/app/vitest.config.ts` 讀它，unit 和 browser 兩個 project 的 hook 上限（vitest 預設 10 秒和 30 秒）都改成 2 分鐘。沒設時設定檔不給值，照 vitest 的預設；給 10 秒當預設值會把 browser 的 30 秒一起降成 10 秒。在命令列加 `--hookTimeout` 沒用：vitest 4.1.7 只把固定幾個命令列選項傳給 projects，`hookTimeout` 不在裡面。
   - cli-tests 設 `PASEO_CLI_TEST_CONCURRENCY=2`，CLI 的 e2e 一次跑 2 個檔（上游預設 4 個）。分片維持 3 個，job 名稱和上游的 `ci-workflow.test.mjs` 都不用改。
   - Metro 的快取不跨次保存：GitHub 會刪掉 7 天沒用到的快取，每週一次的排程幾乎都拿不到。
 
@@ -635,6 +635,7 @@ secret 和外部服務：
 - 桌面版 job 在 run 1 停在單元測試。後面的 lifecycle、renderer、browser E2E，Linux 打包（AppImage、deb、rpm、tar.gz）和三次安裝 smoke 都還沒在我們的 repo 跑過；`desktopName` 的修正到 smoke 才看得到，60 分鐘夠不夠也是。
 - Playwright 的測試一個都還沒跑過，每個 test 60 秒的上限在 2 核心上夠不夠還不知道。
 - 冷打包 10 分鐘夠不夠。
+- 桌面版 browser E2E（`packages/desktop/e2e/browser-tabs.e2e.mjs`）不讀 `E2E_METRO_WARMUP_TIMEOUT_MS`：它自己起 Metro，視窗出來後第一次點 Settings 只等 Playwright 預設的 30 秒，靠的是前面 lifecycle、renderer 兩步留在 `/tmp/metro-cache` 的轉譯快取。守門只檢查這一步拿得到變數，不檢查它有沒有讀。
 - CLI 一次跑 2 個檔後，`03-daemon` Test 8 能不能在 1.5 秒內拿到狀態、`25-daemon-restart-supervisor` 的新 worker 能不能在 20 秒內起來。還是失敗的話，改成一次 1 個，或加分片（加分片要一起改上游 `ci-workflow.test.mjs` 裡的 job 名稱）。
 - 全部跑完用掉的分鐘數。
 - GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑；`ubuntu-latest` 從 2026-10-19 起改指 Ubuntu 26，除了固定用 `ubuntu-24.04` 的桌面版 job，其他 job 都會換。
@@ -655,7 +656,7 @@ secret 和外部服務：
   - 這次 push 不會觸發它（只有手動、tag 或 PR）：照常 push，再到 Actions 停用它。
   - 這次 push 會觸發它：先在 Settings → Actions → General 選「Disable actions」，push 完選回原本的設定（確認允許清單還在），再停用它。
   - 然後把檔名和原因加進守門的 `DISABLED_IN_UI`；CI 需要它的話，改加進 `ENABLED`。
-- 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；開著的 workflow 只用那三把 key、不要求寫入權限；RPM smoke 移除的是 electron-builder 算出的 deb 名稱；上面 2 核心的時間設定都在，程式也還在讀那些變數。上游改到這些時會失敗，照訊息改回來。
+- 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；開著的 workflow 只用那三把 key、不要求寫入權限；RPM smoke 移除的是 electron-builder 算出的 deb 名稱；上面 2 核心的時間設定都在，程式碼（不算註解）也還在讀那些變數；app 的 hook 上限請 vitest 自己解析設定：設了變數時每個 project 都是 2 分鐘，沒設時照 vitest 的預設。上游改到這些時會失敗，照訊息改回來。
 
 ## Mac 開發環境
 
@@ -814,6 +815,14 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - `workflows.test.mjs` 新的 4 項先紅後綠，10/10；CI 第一個 job 跑的三個 node 測試 27/27。
   - 跑過的：守門 68 個全過（`node --test woowtech/*.test.mjs`，含 zh-TW）；改過或受影響的 vitest 檔逐一跑；`npm run lint`、`npm run format:check`、`npm run typecheck` 全 repo 通過。
   - 沒跑的：Linux 上的一切和 GitHub 上的執行，見第 18 節「下一次執行才能確認的」。
+- `woowtech/ci-green` 獨立驗證（2026-09-25）：
+  - 重跑：整個 repo 的 `npm run lint`、`npm run format:check`、`npm run typecheck` 通過，守門 68 個全過。main 的副本 lint 3 個錯、format 2 個檔，跟 run 1 相同。
+  - `readPng`：main 版和分支版比對 664 個輸入（repo 的 64 張 PNG、400 張合成圖、200 個壞檔），結果和錯誤訊息都相同；`encodeOpaquePng` 200/200 相同。排版那個 commit 前後的語法樹相同。
+  - Linux 桌面版：electron-builder 自己的 `LinuxPackager` 算出執行檔 `woowtech smart`、安裝在 `/opt/woowtech smart`、`desktopName` 是 `woowtech smart.desktop`，跟 after-pack、launcher、`bin/paseo`、CLI 安裝和打包 smoke 用的一致。`process.platform` 設成 linux：main 的兩個測試檔 12 個失敗，分支 14 個過 13 個，剩下的要讀 `/proc/self/status`。
+  - `ci.yml`：展開 anchor 後跟 main 只差這 10 處時間設定，觸發和 Windows 的條件沒變。每個變數都有程式在讀，Playwright 和桌面版 renderer E2E 經過 `globalSetup`，lifecycle E2E 在第一次點 Settings；browser E2E 不讀，記在第 18 節。
+  - 發現並修正：`vitest.config.ts` 沒設變數時給 10 秒，browser project 的 hook 上限從 vitest 預設的 30 秒變成 10 秒。守門改成請 vitest 解析設定，先紅（browser 10000）後綠；設了變數時兩個 project 都是 120000。
+  - 守門突變：`ci.yml` 的設定刪掉或改弱 9 種、`vitest.config.ts` 改回 10 秒或刪掉那行、`electron-builder.yml` 拿掉 `desktopName`，都紅。程式不讀變數、只剩註解提到的 2 種原本抓不到；守門改成只看程式碼後抓得到，`run-all.ts` 讀別的名稱也紅。每次都用 sha256 確認改回原檔。
+  - 沒做的：同第 18 節「下一次執行才能確認的」；run 1 各 job 的時間和原因沒有到 GitHub 上核對。
 
 ## 接下來
 
