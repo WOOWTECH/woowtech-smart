@@ -1,5 +1,26 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "./i18next";
+
+// Text upstream hardcodes in English, which these files now read from the
+// woowtech.* translations. An upstream merge can bring a literal back.
+const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
+  "components/left-sidebar.tsx": [">Workspaces<", '"Display preferences"'],
+  "screens/settings/browser-tools-card.tsx": ['"Enable browser tools"'],
+  "screens/settings/host-page.tsx": [
+    ">Archive merged PR workspaces<",
+    '"Archive merged PR workspaces"',
+    "Automatically archive clean",
+    '"Unable to update workspaces"',
+    ">Enable terminal agent hooks<",
+    '"Enable terminal agent hooks"',
+    "Get notifications and status from terminal agents",
+    '"Unable to update terminal agent hooks"',
+    '"Terminal agents"',
+    '"Unknown error"',
+  ],
+};
 
 function strings(value: unknown, prefix = ""): [string, string][] {
   if (typeof value === "string") {
@@ -40,5 +61,16 @@ describe("woowtech smart's own text", () => {
       );
       expect({ language, untranslated }).toEqual({ language, untranslated: [] });
     }
+  });
+
+  it("replaces upstream's hardcoded English", () => {
+    const hardcoded: string[] = [];
+    for (const [file, literals] of Object.entries(REPLACED_ENGLISH)) {
+      const source = readFileSync(join(__dirname, "..", file), "utf8");
+      for (const literal of literals) {
+        if (source.includes(literal)) hardcoded.push(`${file}: ${literal}`);
+      }
+    }
+    expect(hardcoded).toEqual([]);
   });
 });

@@ -44,11 +44,11 @@ export function BrowserToolsOptInCard({ serverId }: { serverId: string }) {
     <View style={settingsStyles.card} testID="host-page-browser-tools-card">
       <View style={settingsStyles.row}>
         <View style={settingsStyles.rowContent}>
-          <Text style={settingsStyles.rowTitle}>{state.title}</Text>
-          <Text style={settingsStyles.rowHint}>{state.warning}</Text>
+          <Text style={settingsStyles.rowTitle}>{t("woowtech.settings.browserTools.title")}</Text>
+          <Text style={settingsStyles.rowHint}>{t("woowtech.settings.browserTools.warning")}</Text>
           {mutationView.loadingText ? (
             <Text style={settingsStyles.rowHint} testID="host-page-browser-tools-loading">
-              {mutationView.loadingText}
+              {t("woowtech.settings.browserTools.updating")}
             </Text>
           ) : null}
           {mutationView.errorText ? (
@@ -61,7 +61,7 @@ export function BrowserToolsOptInCard({ serverId }: { serverId: string }) {
           value={state.isEnabled}
           onValueChange={handleValueChange}
           disabled={mutationView.isSwitchDisabled}
-          accessibilityLabel="Enable browser tools"
+          accessibilityLabel={t("woowtech.settings.browserTools.enable")}
           testID="host-page-browser-tools-switch"
         />
       </View>
