@@ -4,19 +4,22 @@ import { fileURLToPath } from "node:url";
 
 const appDir = fileURLToPath(new URL("../packages/app/", import.meta.url));
 
-function expoConfig(variant, type) {
+function expoConfig(variant, type, env = {}) {
   const output = execFileSync("npx", ["expo", "config", "--json", "--type", type], {
     cwd: appDir,
-    env: { ...process.env, APP_VARIANT: variant, EXPO_NO_TELEMETRY: "1" },
+    env: { ...process.env, APP_VARIANT: variant, EXPO_NO_TELEMETRY: "1", ...env },
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });
   return JSON.parse(output);
 }
 
-/** The resolved config for one app variant, with plugins applied. */
-export function expoPrebuildConfig(variant) {
-  return expoConfig(variant, "prebuild");
+/**
+ * The resolved config for one app variant, with plugins applied. `env` adds variables, such as
+ * the GoogleService-Info.plist a build uses.
+ */
+export function expoPrebuildConfig(variant, env = {}) {
+  return expoConfig(variant, "prebuild", env);
 }
 
 /**

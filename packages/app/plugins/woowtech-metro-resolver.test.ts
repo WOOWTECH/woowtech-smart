@@ -88,6 +88,13 @@ describe("withNativeRnFirebaseModules", () => {
     expect(resolvedFile(resolveRequest, "android")).toBe("nativeModule.android.js");
   });
 
+  it("is what the app's Metro config resolves with", () => {
+    const { resolver } = require("../metro.config.cjs");
+
+    expect(resolvedFile(resolver.resolveRequest, "ios")).toBe("nativeModule.ios.js");
+    expect(resolvedFile(resolver.resolveRequest, "android")).toBe("nativeModule.android.js");
+  });
+
   it("leaves the web and every other import alone", () => {
     const requests: string[] = [];
     const resolveRequest = withNativeRnFirebaseModules(

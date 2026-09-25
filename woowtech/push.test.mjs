@@ -28,8 +28,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 
+import { expoPrebuildConfig } from "./expo-config.mjs";
 import { findInShippedSources, repoRoot } from "./shipped-sources.mjs";
-import { importSource } from "./source-modules.mjs";
+import { importSource, requireSource } from "./source-modules.mjs";
 
 // Every fetch the code under test makes lands here, before any source is loaded. Only the
 // local stand-in for the relay is reached; any other address is answered here the way the
@@ -351,10 +352,6 @@ const { resolveReactNativeModule } = appRequire(
  * them when it loads). The plist is a path to a file that exists or not.
  */
 function autolinkedRnFirebase(platform, { variant, plist }) {
-  const plistVariable =
-    variant === "development"
-      ? "GOOGLE_SERVICE_INFO_PLIST_DEBUG"
-      : "GOOGLE_SERVICE_INFO_PLIST_PROD";
   const stdout = execFileSync(
     process.execPath,
     ["-e", AUTOLINKING_CHILD, APP_ROOT, platform, ...RN_FIREBASE],
@@ -363,7 +360,7 @@ function autolinkedRnFirebase(platform, { variant, plist }) {
         PATH: process.env.PATH,
         HOME: process.env.HOME,
         APP_VARIANT: variant,
-        [plistVariable]: plist,
+        [plistVariableOf(variant)]: plist,
       },
       encoding: "utf8",
       // The resolver warns about a missing plist; the checks read only stdout.
@@ -402,6 +399,63 @@ test("React Native Firebase links on iOS only, and only with a GoogleService-Inf
     `iOS build phases without [RNFB] Core Configuration: [${ios["@react-native-firebase/app"].scriptPhases.join(", ")}]`,
   );
   assert.equal(ios["@react-native-firebase/messaging"]?.podspec, "RNFBMessaging.podspec");
+});
+
+/** The GoogleService-Info.plist variable app.config.js reads for `variant`. */
+function plistVariableOf(variant) {
+  return variant === "development"
+    ? "GOOGLE_SERVICE_INFO_PLIST_DEBUG"
+    : "GOOGLE_SERVICE_INFO_PLIST_PROD";
+}
+
+// app.config.js: React Native Firebase's iOS plugin (FirebaseApp.configure() in the AppDelegate,
+// the plist, the Podfile's SPM switch) and the one set of build properties the iOS build spike
+// found to build: static frameworks from CocoaPods. Without the plugin, iOS still links
+// React Native Firebase but never configures Firebase, and the app registers no push token.
+test("app.config.js builds iOS with React Native Firebase from CocoaPods, and its plist if any", () => {
+  const dir = tempDir("woowtech-push-config-");
+  const plist = path.join(dir, "GoogleService-Info.plist");
+  writeFileSync(plist, "<plist/>");
+  const missing = path.join(dir, "missing.plist");
+
+  for (const variant of ["production", "development"]) {
+    const withPlist = expoPrebuildConfig(variant, { [plistVariableOf(variant)]: plist });
+    const withoutPlist = expoPrebuildConfig(variant, { [plistVariableOf(variant)]: missing });
+    assert.equal(withPlist.ios.googleServicesFile, plist, `${variant}: the plist it was given`);
+    assert.equal(withoutPlist.ios.googleServicesFile, undefined, `${variant}: a missing plist`);
+
+    for (const config of [withPlist, withoutPlist]) {
+      const plugin = (name) =>
+        config.plugins.find((entry) => Array.isArray(entry) && entry[0] === name)?.[1];
+      assert.deepEqual(plugin("withWoowtechPush"), { disableSPM: true }, `${variant}: plugins`);
+      const ios = plugin("expo-build-properties")?.ios;
+      assert.equal(ios?.useFrameworks, "static", `${variant}: ios.useFrameworks`);
+      for (const pod of ["RNFBApp", "RNFBMessaging", "react-native-paste-input"]) {
+        assert.ok(
+          ios.forceStaticLinking?.includes(pod),
+          `${variant}: ios.forceStaticLinking without ${pod}`,
+        );
+      }
+    }
+  }
+});
+
+test("metro.config.cjs resolves with the wrapper that keeps the Firebase JS SDK out of iOS", () => {
+  // plugins/woowtech-metro-resolver.test.ts checks what the wrapper resolves; this checks that
+  // the app's Metro config resolves with it, after every other change to resolveRequest.
+  const wrapped = Symbol("withNativeRnFirebaseModules");
+  const config = requireSource("packages/app/metro.config.cjs", {
+    "./plugins/woowtech-metro-resolver": {
+      withNativeRnFirebaseModules: (resolveRequest) =>
+        Object.assign((...args) => resolveRequest(...args), { [wrapped]: true }),
+    },
+  });
+
+  assert.equal(
+    config.resolver.resolveRequest[wrapped],
+    true,
+    "metro.config.cjs resolves without withNativeRnFirebaseModules",
+  );
 });
 
 const CONTRACT_FIXTURE = "packages/protocol/tests/fixtures/smart-notify-v1.fixtures.json";
