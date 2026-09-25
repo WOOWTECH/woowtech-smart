@@ -207,7 +207,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 跟改名一樣在載入翻譯時套用，不改上游的語言檔。
   - 啟動失敗畫面的按鈕本來就是寫死的英文，「Open GitHub issue」改成「Email support」。
 - 還沒改的：
-  - 外掛的相容性訊息和 `paseo plugin` 的範本仍連到 paseo.sh 的外掛文件，因為外掛 API 還是上游的。跟 CLI 改名一起處理。
+  - 外掛的相容性訊息和 `plugin init` 的範本仍連到 paseo.sh 的外掛文件。外掛 API 還是上游的，CLI 改名時決定保留。
   - 配對網頁 `app.paseo.sh` 和 Hub 屬於自架 relay 那一步。
   - e2e 測試（`packages/app/e2e/` 的瀏覽器與手機腳本、`packages/desktop/e2e/`）的預期值已改成我們的名稱、連結、port 和 scheme，但還沒實際跑過。
     e2e 用的隔離 daemon 不准用 6767 和 6770；手機 composer 腳本的預設 port 從 6770 改成 6771，因為 6770 現在是 woowtech smart 本身的 daemon。

@@ -19,8 +19,8 @@ const DISCORD_INVITE = /discord\.(?:gg|com\/invite)\//;
 
 test("shipped code links to WoowTech, not to Paseo's website, GitHub or Discord", () => {
   const hits = findInShippedSources([PASEO_WEBSITE, PASEO_GITHUB, DISCORD_INVITE], {
-    // The plugin API is still upstream's: plugin authors need Paseo's plugin
-    // docs until the CLI rename gives plugins our name.
+    // The plugin API is still upstream's, so plugin authors keep Paseo's
+    // plugin docs.
     skipPaths: ["packages/cli/src/commands/plugin/scaffold.ts"],
     allowLines: [/paseo\.sh\/docs\/plugins\//],
   });
