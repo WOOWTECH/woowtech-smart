@@ -85,6 +85,13 @@ describe("Traditional Chinese (zh-TW)", () => {
     expect(inTraditional("pairing.direct.helper")).toBe("輸入渥屋智能伺服器的位址。");
   });
 
+  it("says a daemon the desktop attached to is 已連線, as every other connection is", () => {
+    expect(inTraditional("desktop.daemon.lifecycle.attached")).toBe("已連線到現有的 daemon");
+    expect(inTraditional("desktop.daemon.lifecycle.pauseAttached")).toBe(
+      "要暫停自動管理 daemon 嗎？已連線的 daemon 會繼續執行。",
+    );
+  });
+
   it("calls browser tabs 分頁 and workspace labels 標籤", () => {
     expect(inTraditional("workspace.tabs.menu.closeOthers")).toBe("關閉其他分頁");
     expect(inTraditional("workspaceLabels.manage.open")).toBe("管理標籤…");

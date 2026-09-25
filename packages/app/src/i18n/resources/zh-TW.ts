@@ -1272,7 +1272,7 @@ export const zhTW: TranslationResources = {
     daemon: {
       lifecycle: {
         owned: "由這個桌面版工作階段啟動",
-        attached: "連接到現有的 daemon",
+        attached: "已連線到現有的 daemon",
         ownedMessage: "這個 daemon 是由這個桌面版工作階段啟動的。",
         attachedMessage: "這個 daemon 不是由這個桌面版工作階段啟動的。",
         stopTitle: "要停止本機 daemon 嗎？",
@@ -1281,7 +1281,7 @@ export const zhTW: TranslationResources = {
         stop: "停止 daemon",
         stopping: "正在停止…",
         stopFailed: "無法停止 daemon",
-        pauseAttached: "要暫停自動管理 daemon 嗎？已連接的 daemon 會繼續執行。",
+        pauseAttached: "要暫停自動管理 daemon 嗎？已連線的 daemon 會繼續執行。",
         pause: "暫停管理",
         workerUpdated: "Worker 已更新到 {{version}}",
         supervisorRefresh:

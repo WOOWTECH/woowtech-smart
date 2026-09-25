@@ -50,7 +50,7 @@ export const UNTRANSLATED = {
     "Launched by this Desktop session",
     "由這個桌面版工作階段啟動",
   ],
-  "desktop.daemon.lifecycle.attached": ["Attached to an existing daemon", "連接到現有的 daemon"],
+  "desktop.daemon.lifecycle.attached": ["Attached to an existing daemon", "已連線到現有的 daemon"],
   "desktop.daemon.lifecycle.ownedMessage": [
     "This daemon was launched by this Desktop session.",
     "這個 daemon 是由這個桌面版工作階段啟動的。",
@@ -69,7 +69,7 @@ export const UNTRANSLATED = {
   "desktop.daemon.lifecycle.stopFailed": ["Unable to stop daemon", "無法停止 daemon"],
   "desktop.daemon.lifecycle.pauseAttached": [
     "Pause automatic daemon management? The attached daemon will keep running.",
-    "要暫停自動管理 daemon 嗎？已連接的 daemon 會繼續執行。",
+    "要暫停自動管理 daemon 嗎？已連線的 daemon 會繼續執行。",
   ],
   "desktop.daemon.lifecycle.pause": ["Pause management", "暫停管理"],
   "desktop.daemon.lifecycle.workerUpdated": [
