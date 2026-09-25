@@ -71,6 +71,7 @@ export const Moon = StubIcon;
 export const MoreHorizontal = StubIcon;
 export const MoreVertical = StubIcon;
 export const MousePointer2 = StubIcon;
+export const Network = StubIcon;
 export const PackagePlus = StubIcon;
 export const PanelLeft = StubIcon;
 export const PanelsTopLeft = StubIcon;

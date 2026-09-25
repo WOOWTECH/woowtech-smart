@@ -35,6 +35,13 @@ const ENGLISH = {
   sidebar: {
     workspaces: "Workspaces",
   },
+  pairing: {
+    relayOff: {
+      hint: "Devices paired through the relay can't connect while it's off.",
+      action: "Turn off relay",
+      pending: "Turning off…",
+    },
+  },
 };
 
 type WoowtechCopy = typeof ENGLISH;
@@ -74,6 +81,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     sidebar: {
       workspaces: "工作區",
     },
+    pairing: {
+      relayOff: {
+        hint: "停用後，透過中繼配對的裝置就無法連線。",
+        action: "停用中繼",
+        pending: "正在停用…",
+      },
+    },
   },
   "zh-CN": {
     changelog: {
@@ -107,6 +121,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     },
     sidebar: {
       workspaces: "工作区",
+    },
+    pairing: {
+      relayOff: {
+        hint: "停用后，通过中继配对的设备将无法连接。",
+        action: "停用中继",
+        pending: "正在停用…",
+      },
     },
   },
   ja: {
@@ -142,6 +163,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     sidebar: {
       workspaces: "ワークスペース",
     },
+    pairing: {
+      relayOff: {
+        hint: "無効にすると、リレー経由でペアリングしたデバイスは接続できなくなります。",
+        action: "リレーを無効にする",
+        pending: "無効にしています…",
+      },
+    },
   },
   ko: {
     changelog: {
@@ -176,6 +204,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     sidebar: {
       workspaces: "워크스페이스",
     },
+    pairing: {
+      relayOff: {
+        hint: "비활성화하면 릴레이로 페어링한 기기가 연결할 수 없습니다.",
+        action: "릴레이 비활성화",
+        pending: "비활성화하는 중…",
+      },
+    },
   },
   es: {
     changelog: {
@@ -209,6 +244,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     },
     sidebar: {
       workspaces: "Espacios de trabajo",
+    },
+    pairing: {
+      relayOff: {
+        hint: "Mientras el relé esté deshabilitado, los dispositivos emparejados a través de él no podrán conectarse.",
+        action: "Deshabilitar relé",
+        pending: "Deshabilitando…",
+      },
     },
   },
   fr: {
@@ -245,6 +287,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     sidebar: {
       workspaces: "Espaces de travail",
     },
+    pairing: {
+      relayOff: {
+        hint: "Tant que le relais est désactivé, les appareils appairés par son intermédiaire ne peuvent pas se connecter.",
+        action: "Désactiver le relais",
+        pending: "Désactivation…",
+      },
+    },
   },
   "pt-BR": {
     changelog: {
@@ -278,6 +327,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     },
     sidebar: {
       workspaces: "Espaços de trabalho",
+    },
+    pairing: {
+      relayOff: {
+        hint: "Enquanto o relay estiver desativado, os dispositivos pareados por ele não conseguem se conectar.",
+        action: "Desativar relay",
+        pending: "Desativando…",
+      },
     },
   },
   ru: {
@@ -313,6 +369,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     sidebar: {
       workspaces: "Рабочие пространства",
     },
+    pairing: {
+      relayOff: {
+        hint: "Пока ретранслятор отключён, устройства, сопряжённые через него, не смогут подключиться.",
+        action: "Отключить ретранслятор",
+        pending: "Отключение…",
+      },
+    },
   },
   ar: {
     changelog: {
@@ -346,6 +409,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
     },
     sidebar: {
       workspaces: "مساحات العمل",
+    },
+    pairing: {
+      relayOff: {
+        hint: "أثناء تعطيل التتابع، لا يمكن للأجهزة المقترنة عبره الاتصال.",
+        action: "تعطيل التتابع",
+        pending: "جارٍ التعطيل…",
+      },
     },
   },
 };

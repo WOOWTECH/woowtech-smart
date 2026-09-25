@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as QRCode from "qrcode";
@@ -16,6 +16,7 @@ import { useFetchQuery } from "@/data/query";
 import { daemonPairingOfferQueryKey } from "@/data/daemon-pairing";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useHostRuntimeClient, useHostRuntimeSnapshot } from "@/runtime/host-runtime";
+import { RelayOffAction } from "@/desktop/components/relay-off-action";
 import type { Theme } from "@/styles/theme";
 import {
   EditingTextInput as TextInput,
@@ -105,6 +106,10 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
   }, [enableRelay]);
 
   const qrSvg = useMemo(() => qrQuery.data ?? null, [qrQuery.data]);
+  const relayOffAction = useMemo(
+    () => (canConfigureRelay ? <RelayOffAction serverId={serverId} /> : null),
+    [canConfigureRelay, serverId],
+  );
 
   return (
     <View testID="pair-device-content">
@@ -123,6 +128,7 @@ export function PairDeviceSection({ serverId, onClose }: PairDeviceSectionProps)
         onEnableRelay={handleEnableRelay}
         onClose={onClose}
         onCopy={handleCopyPress}
+        offerFooter={relayOffAction}
       />
     </View>
   );
@@ -143,6 +149,8 @@ interface PairDeviceBodyProps {
   onEnableRelay: () => void;
   onClose: () => void;
   onCopy: () => void;
+  /** woowtech smart: shown under the pairing offer, where the relay can be turned off. */
+  offerFooter?: ReactNode;
 }
 
 function PairDeviceBody(props: PairDeviceBodyProps) {
@@ -264,6 +272,7 @@ function PairingOffer(props: PairDeviceBodyProps & { offer: { url: string } }) {
         </Button>
       </View>
       <Alert variant="warning" description={t("pairing.device.securityWarning")} />
+      {props.offerFooter}
     </View>
   );
 }
