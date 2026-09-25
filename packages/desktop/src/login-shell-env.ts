@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { userInfo as defaultUserInfo } from "node:os";
 import { basename } from "node:path";
 import defaultLog from "electron-log/main";
+import { withoutLoginShellDaemonTarget } from "./login-shell-daemon-target.js";
 
 const DEFAULT_RESOLVE_TIMEOUT_MS = 30_000;
 const TIMEOUT_ENV_KEY = "PASEO_SHELL_ENV_TIMEOUT_MS";
@@ -511,7 +512,7 @@ export function inheritLoginShellEnv(input: LoginShellEnvDependencies = {}): voi
 
   try {
     const { env, attemptKind } = resolveShellEnv({ deps, timeoutMs });
-    Object.assign(deps.env, env);
+    Object.assign(deps.env, withoutLoginShellDaemonTarget(env));
     deps.logger.info("[login-shell-env] applied", {
       attemptKind,
       durationMs: deps.now() - startedAt,
