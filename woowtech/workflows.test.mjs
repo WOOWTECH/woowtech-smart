@@ -108,6 +108,55 @@ test("CI's weekly run skips change detection, which has no default branch to com
   );
 });
 
+/**
+ * The terms a job's `if` joins with `&&` at its top level. Empty when an `||` outside
+ * parentheses could run the job without them.
+ */
+function requiredTerms(condition) {
+  let expression = String(condition ?? "").replace(/^\s*\$\{\{([\s\S]*)\}\}\s*$/, "$1");
+  // Collapse parenthesized groups, innermost first, until only the top level is left.
+  for (let previous = ""; previous !== expression; ) {
+    previous = expression;
+    expression = expression.replace(/\([^()]*\)/g, "()");
+  }
+  return expression.includes("||") ? [] : expression.split("&&").map((term) => term.trim());
+}
+
+test("CI runs the Playwright shards only on a manual run that asks for them", () => {
+  // The owner's decision (2026-09-26): the four shards took 26 to 44 minutes each in CI run 2.
+  // The weekly run, pull requests and the merge queue run every other job. Run workflow
+  // with run_playwright ticked runs the shards as well.
+  const ci = workflow("ci.yml");
+  const input = ci.on.workflow_dispatch?.inputs?.run_playwright;
+  assert.deepEqual(
+    { type: input?.type, default: input?.default },
+    { type: "boolean", default: false },
+    "Declare workflow_dispatch's run_playwright input: a boolean, unticked by default.",
+  );
+  const ids = (select) =>
+    Object.entries(ci.jobs)
+      .filter(([, job]) => select(job))
+      .map(([id]) => id);
+  const playwright = ids((job) =>
+    (job.steps ?? []).some(({ run }) =>
+      /\bnpm run test:e2e --workspace=@getpaseo\/app\b/.test(String(run ?? "")),
+    ),
+  );
+  assert.ok(playwright.length > 0, "the Playwright jobs were not found");
+  const onDemand = ["github.event_name == 'workflow_dispatch'", "inputs.run_playwright"];
+  assert.deepEqual(
+    ids((job) => onDemand.every((term) => requiredTerms(job.if).includes(term))),
+    playwright,
+    "Start each Playwright job's if with " +
+      "`github.event_name == 'workflow_dispatch' && inputs.run_playwright && `.",
+  );
+  assert.deepEqual(
+    ids((job) => /\b(?:github\.event_name|inputs)\b/.test(String(job.if ?? ""))),
+    playwright,
+    "Only the Playwright jobs depend on the event or the inputs; the weekly run runs the rest.",
+  );
+});
+
 test("CI jobs run on Ubuntu, and on Windows only when WOOWTECH_CI_WINDOWS is true", () => {
   // The repository variable is unset, so a gated job is skipped without a runner.
   const windowsGate = /^\$\{\{\s*vars\.WOOWTECH_CI_WINDOWS == 'true' && /;
