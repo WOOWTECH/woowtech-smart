@@ -267,6 +267,30 @@ test("CI gives a cold Metro bundle ten minutes, not 30, 90 or 120 seconds", () =
   );
 });
 
+test("CI gives Metro in the Playwright shards a 4 GB heap", () => {
+  // CI run 2's shard 4: Metro, holding the app and the second entry root-error-recovery.spec.ts
+  // asks for, reached Node's default heap limit, about 1.8 GB on the 7 GB runner (4 GB on
+  // upstream's 16 GB runner), and every later test found no server. Metro gets the setting
+  // because global-setup.ts starts it with the step's environment.
+  const startMetro = /function startMetro\([\s\S]*?\n\}\n/.exec(
+    readRepoCode("packages/app/e2e/support/global-setup.ts"),
+  )?.[0];
+  assert.match(
+    startMetro ?? "",
+    /\benv:\s*\{\s*\.\.\.process\.env\b/,
+    "global-setup.ts no longer starts Metro with the step's environment",
+  );
+  const heapLimits = ubuntuSteps(/\bnpm run test:e2e --workspace=@getpaseo\/app\b/).map(
+    ({ job, env }) => [job, /--max-old-space-size=(\d+)/.exec(env.NODE_OPTIONS ?? "")?.[1]],
+  );
+  assert.deepEqual(heapLimits, [
+    ["playwright-1", "4096"],
+    ["playwright-2", "4096"],
+    ["playwright-3", "4096"],
+    ["playwright-4", "4096"],
+  ]);
+});
+
 /**
  * The hook timeout of each packages/app vitest project, as vitest itself resolves the
  * config when PASEO_APP_TEST_HOOK_TIMEOUT_MS is `value`, or unset when `value` is null.

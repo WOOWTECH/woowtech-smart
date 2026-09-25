@@ -441,6 +441,10 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # woowtech smart: the cold web bundle takes over 120 s on the 2-core runner.
           E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
+          # woowtech smart: Node's default heap is about 1.8 GB on the 7 GB runner (4 GB on
+          # upstream's 16 GB runner). Metro ran out of it holding the app and the second entry
+          # root-error-recovery.spec.ts asks for. A limit, not a reservation.
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
