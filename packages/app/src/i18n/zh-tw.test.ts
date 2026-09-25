@@ -77,6 +77,14 @@ describe("Traditional Chinese (zh-TW)", () => {
     expect(inTraditional("sidebar.help.shortcuts")).toBe("鍵盤快速鍵");
   });
 
+  it("says in Taiwanese terms what testers read as English nouns", () => {
+    expect(inTraditional("sidebar.actions.addProject")).toBe("新增專案");
+    expect(inTraditional("openProject.tiles.setupProviders.title")).toBe("設定供應商");
+    expect(inTraditional("settings.hostSections.workspaces")).toBe("工作區");
+    expect(inTraditional("settings.hostSections.terminals")).toBe("終端機");
+    expect(inTraditional("pairing.direct.helper")).toBe("輸入渥屋智能伺服器的位址。");
+  });
+
   it("calls browser tabs 分頁 and workspace labels 標籤", () => {
     expect(inTraditional("workspace.tabs.menu.closeOthers")).toBe("關閉其他分頁");
     expect(inTraditional("workspaceLabels.manage.open")).toBe("管理標籤…");
