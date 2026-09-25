@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { rebrandResources } from "./brand";
 import { i18n } from "./i18next";
 
 function allStrings(value: unknown): string[] {
@@ -50,6 +51,74 @@ describe("product name in translations", () => {
         text.includes("Paseo"),
       );
       expect({ language, naming }).toEqual({ language, naming: [] });
+    }
+  });
+});
+
+// The official Paseo owns the `paseo` command, and ours is woowtech-smart.
+// Deliberately wider than the rewrite: it also catches a command upstream adds
+// later and a mention written without a space before it.
+const UPSTREAM_COMMAND = /(?<![\w.@/$~-])paseo(?= +(?:[a-z<[]|-))/;
+
+describe("CLI commands in translations", () => {
+  beforeAll(async () => {
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+  });
+
+  it("show the woowtech-smart command in every language", () => {
+    expect(i18n.t("desktop.daemon.fullStatus.hint", { lng: "en" })).toBe(
+      "Runs `woowtech-smart daemon status` and shows the output",
+    );
+    expect(i18n.t("desktop.daemon.fullStatus.hint", { lng: "zh-TW" })).toBe(
+      "執行 `woowtech-smart daemon status` 並顯示輸出",
+    );
+    expect(i18n.t("desktop.daemon.fullStatus.hint", { lng: "ja" })).toBe(
+      "`woowtech-smart daemon status`を実行して出力を表示します",
+    );
+    expect(i18n.t("desktop.daemon.fullStatus.hint", { lng: "ar" })).toBe(
+      "يقوم بتشغيل`woowtech-smart daemon status`ويظهر الإخراج",
+    );
+  });
+
+  it("leave no translation showing the paseo command, including strings upstream adds later", () => {
+    for (const language of Object.keys(i18n.store.data)) {
+      const commands = allStrings(i18n.getResourceBundle(language, "translation")).filter((text) =>
+        UPSTREAM_COMMAND.test(text),
+      );
+      expect({ language, commands }).toEqual({ language, commands: [] });
+    }
+  });
+
+  it("keep interpolated values, even ones that read like the command", () => {
+    expect(
+      i18n.t("workspace.git.forgeSetup.signIn", {
+        lng: "en",
+        command: "paseo daemon status",
+        brand: "GitHub",
+      }),
+    ).toBe("Run paseo daemon status to use GitHub features.");
+  });
+
+  it("keep file names, variables, packages, links and placeholders that only look like the command", () => {
+    const technical = [
+      "Couldn't load paseo.json",
+      "Leave blank to use paseo-plugin.json",
+      "assigns a port via $PASEO_PORT",
+      "PASEO_HOME points at ~/.paseo",
+      "npm install @getpaseo/cli",
+      "https://paseo.sh/docs/plugins",
+      "Open paseo://agent/1",
+      "Run {{paseo}} daemon status",
+    ];
+    const keys = technical.map((_, index) => `t${index}`);
+    const translation = Object.fromEntries(keys.map((key, index) => [key, technical[index]]));
+
+    for (const language of ["en", "zh-TW"]) {
+      const rebranded = rebrandResources({ [language]: { translation } })[language]?.translation;
+      const texts = keys.map((key) => (typeof rebranded === "object" ? rebranded[key] : undefined));
+      expect({ language, texts }).toEqual({ language, texts: technical });
     }
   });
 });

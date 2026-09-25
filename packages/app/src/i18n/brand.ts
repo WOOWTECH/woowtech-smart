@@ -1,3 +1,4 @@
+import { withCliCommand } from "@getpaseo/protocol/brand-cli";
 import type { Resource, ResourceKey, ResourceLanguage } from "i18next";
 import { supportCopyFor } from "./support-copy";
 
@@ -21,21 +22,23 @@ function spaceBeside(space: string, neighbour: string | undefined): string {
 }
 
 /**
- * Replaces upstream Paseo's name in one translation. Chinese reads 渥屋智能
+ * Replaces upstream Paseo's name and command in one translation. `paseo <command>`
+ * reads `woowtech-smart <command>` in every language. Chinese reads 渥屋智能
  * ("Paseo Desktop" becomes 渥屋智能桌面版) without the spaces that set the Latin
  * name apart from Chinese text; every other language reads "woowtech smart".
  * Identifiers such as $PASEO_PORT or paseo.json are left alone.
  */
 export function rebrandTranslation(text: string, language: string): string {
+  const withCommand = withCliCommand(text);
   if (!isChinese(language)) {
-    return text.replaceAll("Paseo", APP_NAME);
+    return withCommand.replaceAll("Paseo", APP_NAME);
   }
-  return text.replace(
+  return withCommand.replace(
     UPSTREAM_NAME,
     (match: string, before: string, desktop: string | undefined, after: string, offset: number) => {
       const name = desktop ? `${APP_NAME_ZH}桌面版` : APP_NAME_ZH;
-      const leading = spaceBeside(before, text[offset - 1]);
-      const trailing = spaceBeside(after, text[offset + match.length]);
+      const leading = spaceBeside(before, withCommand[offset - 1]);
+      const trailing = spaceBeside(after, withCommand[offset + match.length]);
       return `${leading}${name}${trailing}`;
     },
   );
@@ -103,8 +106,8 @@ function withSupportCopy(translation: ResourceKey, language: string): ResourceKe
 }
 
 /**
- * The translations with woowtech smart's name in place of upstream Paseo's, and
- * WoowTech's help channels in place of Paseo's Discord and GitHub.
+ * The translations with woowtech smart's name and command in place of upstream
+ * Paseo's, and WoowTech's help channels in place of Paseo's Discord and GitHub.
  * Applied to the resources as they load, so strings upstream adds later are
  * covered without editing its locale files, and interpolated values (a project
  * that happens to be called Paseo) are never touched.
