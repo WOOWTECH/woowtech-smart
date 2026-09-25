@@ -981,6 +981,11 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 跑過的測試，都用 `env -i` 的乾淨環境、一次一個檔、`npm run build:server` 之後：server 18 檔 193 個（含 `bootstrap.smoke` 22、`websocket-server.origin` 4）、CLI 10 檔 24 個、App 6 檔 91 個（`host-runtime.test.ts` 72）、protocol 3 檔 13 個；守門 `node --test woowtech/*.test.mjs` 69/69；完整 typecheck。
   - 在這台 Mac 上確認過：`expo config --type introspect` 的正式版和 Debug 版，iOS 的 `CFBundleURLSchemes` 和 Android `MainActivity` 的 VIEW + BROWSABLE intent filter 都有 `woowtech-smart`；expo-router 把 `woowtech-smart:///#offer=…` 對到空路徑（index）。
   - 沒做的：沒有模擬器或實機測試（相機掃描、`simctl openurl`、`adb shell am start`），沒有實際啟動 6770 的 daemon，CLI e2e 沒跑。已存在的 home 的 CORS 白名單沒有遷移。
+- 合併配對連結分支，推播分支的完整驗證（2026-09-25，分支 `woowtech/push`）：
+  - 合併 `woowtech/pairing-scheme`（`0724aa586`）：只有這份 README 的驗證紀錄衝突，兩邊加的條目都留。
+  - `npm run build:server` 重建 protocol、client、server、CLI 的 dist 之後：守門 `node --test woowtech/*.test.mjs` 16 檔 76/76；這個分支改過的 22 個 vitest 檔逐檔跑，357 個全過（App 12 檔 124、CLI 2 檔 3、protocol 3 檔 179、server 5 檔 51）；第 16 節「合併上游之後」的三條 vitest 指令照寫的跑也全過；完整 typecheck 通過。守門和測試都在乾淨環境（`env -i`、Node 22）和只准連 loopback 的 `sandbox-exec` 裡跑。
+  - `npm run lint` 有 3 個錯、`npm run format:check` 有 2 個檔不過，都在這個分支沒動的檔：`woowtech/png.mjs`、`woowtech/tools/generate-icons.mjs` 和上游的 `packages/server/src/server/agent/providers/test-utils/echo-client-info-acp-agent.mjs`。這些檔、`.oxlintrc.json`、`.oxfmtrc.json` 和兩個工具的版本都跟 main 相同，main 上一樣不過。這個分支改過的 58 個檔 lint 和排版都乾淨。
+  - 契約 fixture 跟中繼 repo 的仍相同（中繼 `smart-mode` 已到 `dff78a1`，fixture 從 `3363c60` 之後沒改）。
 
 ## 接下來
 
@@ -1021,4 +1026,5 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
 - 打開 GitHub Actions：照第 18 節的步驟設定權限、停用 10 個 workflow，手動跑一次 CI，用實際的分鐘數和結果（桌面版 job 的 30 分鐘上限、Playwright 的 120 秒打包）更新第 18 節。
+  打開之前先修好 main 上既有的 lint 和排版問題（`woowtech/png.mjs`、`woowtech/tools/generate-icons.mjs`、上游的 `echo-client-info-acp-agent.mjs`，見驗證紀錄），否則 CI 的 format 和 lint job 會紅。
 - 商標（TIPO）與 D-U-N-S。
