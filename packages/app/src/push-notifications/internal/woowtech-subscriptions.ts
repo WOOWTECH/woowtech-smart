@@ -186,7 +186,12 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
     await forgetCachedToken(input.client, storageKey(input.serverId));
   }
 
-  return { startSubscription, revokeSubscription };
+  return {
+    startSubscription,
+    revokeSubscription,
+    /** At app start, with or without hosts; every subscription waits for the same call. */
+    turnOffExpoPushRegistration: disableExpoRegistrationOnce,
+  };
 }
 
 // Loaded on first use: the unit tests cannot import expo-notifications, and F-Droid builds swap in
@@ -236,3 +241,5 @@ const nativeSubscriptions = createWoowtechPushSubscriptions(nativeDependencies);
 /** Named as in upstream's subscriptions.ts, so index.native.ts changes only its import. */
 export const startSubscription = nativeSubscriptions.startSubscription;
 export const revokeSubscription = nativeSubscriptions.revokeSubscription;
+/** index.native.ts calls this when it loads: the app starts, whether or not it has hosts. */
+export const turnOffExpoPushRegistration = nativeSubscriptions.turnOffExpoPushRegistration;

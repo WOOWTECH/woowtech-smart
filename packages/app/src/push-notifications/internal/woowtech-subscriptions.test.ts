@@ -534,6 +534,25 @@ describe("woowtech push subscription", () => {
 });
 
 describe("Expo's own push registration", () => {
+  it("is turned off at app start, with no host yet, and no subscription turns it off again", async () => {
+    const phone = createPhone();
+    const { startSubscription, turnOffExpoPushRegistration } = createWoowtechPushSubscriptions(
+      phone.dependencies,
+    );
+
+    await turnOffExpoPushRegistration();
+    expect(phone.events).toEqual(["disableExpoServerRegistration"]);
+
+    const client = new FakeDaemonClient(WOOWTECH_DAEMON);
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+    expect(phone.events.filter((event) => event === "disableExpoServerRegistration")).toEqual([
+      "disableExpoServerRegistration",
+    ]);
+    expect(client.registered).toEqual([`wsp1:zh-TW:${FCM_TOKEN}`]);
+  });
+
   it("is turned off exactly once per app run, before any daemon connects", async () => {
     const phone = createPhone();
     const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);

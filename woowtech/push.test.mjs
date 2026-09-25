@@ -260,15 +260,28 @@ function filesOf(matches) {
 }
 
 test("the phone apps subscribe through woowtech-subscriptions, never upstream's", () => {
-  const from = importedFrom(readFileSync(path.join(repoRoot, PUSH_ENTRY), "utf8"));
+  const entry = readFileSync(path.join(repoRoot, PUSH_ENTRY), "utf8");
+  const from = importedFrom(entry);
 
   assert.deepEqual(
-    { startSubscription: from.startSubscription, revokeSubscription: from.revokeSubscription },
+    {
+      startSubscription: from.startSubscription,
+      revokeSubscription: from.revokeSubscription,
+      turnOffExpoPushRegistration: from.turnOffExpoPushRegistration,
+    },
     {
       startSubscription: "./internal/woowtech-subscriptions",
       revokeSubscription: "./internal/woowtech-subscriptions",
+      turnOffExpoPushRegistration: "./internal/woowtech-subscriptions",
     },
     PUSH_ENTRY,
+  );
+  // At app start, whether or not the app has hosts: an older build left expo-notifications
+  // uploading the device token to Expo at every launch.
+  assert.match(
+    entry,
+    /^void turnOffExpoPushRegistration\(\);$/m,
+    `${PUSH_ENTRY} no longer turns Expo's push registration off when it loads`,
   );
   assert.deepEqual(
     findInShippedSources([NAMES_UPSTREAM_SUBSCRIPTIONS], APP_SOURCES),
