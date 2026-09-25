@@ -96,6 +96,13 @@ test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", ()
 // that at $(PRODUCT_NAME), the name without its spaces, which read "woowtechsmart…".
 test("the iOS home screen falls back to a readable short name", () => {
   for (const variant of ["production", "development"]) {
+    // The introspected Info.plist starts from packages/app/ios when a prebuild left
+    // one, so it can still hold the short name after app.config.js stops setting it.
+    assert.equal(
+      expoPrebuildConfig(variant).ios.infoPlist?.CFBundleName,
+      "woowtech smart",
+      `${variant}: app.config.js sets no ios.infoPlist.CFBundleName`,
+    );
     const { ios, locales } = expoIntrospectedConfig(variant);
     const shortNames = [
       ios.infoPlist.CFBundleName,
