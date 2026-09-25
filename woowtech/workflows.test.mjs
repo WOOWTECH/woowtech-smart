@@ -8,10 +8,12 @@
 //
 //   node --test woowtech/workflows.test.mjs
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import YAML from "yaml";
 
@@ -190,14 +192,52 @@ test("CI gives a cold Metro bundle ten minutes, not 90 or 120 seconds", () => {
   );
 });
 
-test("CI gives the app unit tests' hooks two minutes", () => {
+/**
+ * The hook timeout of each packages/app vitest project, as vitest itself resolves the
+ * config when PASEO_APP_TEST_HOOK_TIMEOUT_MS is `value`, or unset when `value` is null.
+ */
+async function appHookTimeouts(value) {
+  const env = { ...process.env };
+  delete env.PASEO_APP_TEST_HOOK_TIMEOUT_MS;
+  if (value !== null) env.PASEO_APP_TEST_HOOK_TIMEOUT_MS = value;
+  const script = `
+    import { createVitest } from "vitest/node";
+    const vitest = await createVitest("test", { watch: false, run: true });
+    const projects = vitest.projects.map(({ name, config }) => ({
+      name,
+      browser: config.browser.enabled,
+      hookTimeout: config.hookTimeout,
+    }));
+    await vitest.close();
+    process.stdout.write(JSON.stringify(projects) + "\\n", () => process.exit(0));
+  `;
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    ["--input-type=module", "--eval", script],
+    { cwd: fileURLToPath(new URL("../packages/app/", import.meta.url)), env },
+  );
+  return JSON.parse(stdout.trim().split("\n").at(-1));
+}
+
+test("CI gives the app unit tests' hooks two minutes; unset, vitest keeps its defaults", async () => {
   // input-draft.live.test.tsx imports a large module graph in beforeAll: 9.5 s on an idle
-  // Mac, over vitest's 10 s on the runner. vitest ignores --hookTimeout for projects.
-  assert.match(readRepo("packages/app/vitest.config.ts"), /PASEO_APP_TEST_HOOK_TIMEOUT_MS/);
+  // Mac, over vitest's 10 s on the runner. vitest ignores --hookTimeout for projects, so
+  // packages/app/vitest.config.ts reads the variable. Unset, as on a developer's machine,
+  // every project keeps vitest's own default: 10 s, or 30 s in browser mode.
   const appTests = ubuntuSteps(/npm run test --workspace=@getpaseo\/app\b/);
   assert.deepEqual(
     appTests.map(({ job, env }) => [job, Number(env.PASEO_APP_TEST_HOOK_TIMEOUT_MS)]),
     [["app-tests", 120_000]],
+  );
+  const [inCi, unset] = await Promise.all([appHookTimeouts("120000"), appHookTimeouts(null)]);
+  assert.ok(inCi.length >= 2, "the app's unit and browser projects were not found");
+  assert.deepEqual(
+    inCi.filter(({ hookTimeout }) => hookTimeout !== 120_000),
+    [],
+  );
+  assert.deepEqual(
+    unset.filter(({ browser, hookTimeout }) => hookTimeout !== (browser ? 30_000 : 10_000)),
+    [],
   );
 });
 
