@@ -7,6 +7,7 @@ const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const withLocalizedAppName = require("./plugins/with-localized-app-name");
 const withWoowtechPush = require("./plugins/with-woowtech-push");
+const { iosGoogleServiceInfoPlist } = require("./plugins/woowtech-ios-firebase");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
@@ -75,10 +76,6 @@ const variants = {
       envKey: "GOOGLE_SERVICES_FILE_PROD",
       fallbackRelativePath: "./.secrets/google-services.prod.json",
     }),
-    googleServiceInfoPlist: resolveSecretFile({
-      envKey: "GOOGLE_SERVICE_INFO_PLIST_PROD",
-      fallbackRelativePath: "./.secrets/GoogleService-Info.prod.plist",
-    }),
   },
   development: {
     name: "woowtech smart Debug",
@@ -88,14 +85,12 @@ const variants = {
       envKey: "GOOGLE_SERVICES_FILE_DEBUG",
       fallbackRelativePath: "./.secrets/google-services.debug.json",
     }),
-    googleServiceInfoPlist: resolveSecretFile({
-      envKey: "GOOGLE_SERVICE_INFO_PLIST_DEBUG",
-      fallbackRelativePath: "./.secrets/GoogleService-Info.debug.plist",
-    }),
   },
 };
 
 const variant = variants[appVariant] ?? variants.production;
+// woowtech push: react-native.config.js links React Native Firebase on the same plist.
+const googleServiceInfoPlist = iosGoogleServiceInfoPlist();
 const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 
 // iOS labels the home screen icon with this short name (CFBundleName) when the
@@ -127,9 +122,7 @@ export default {
         ITSAppUsesNonExemptEncryption: false,
       },
       bundleIdentifier: variant.packageId,
-      ...(variant.googleServiceInfoPlist
-        ? { googleServicesFile: variant.googleServiceInfoPlist }
-        : {}),
+      ...(googleServiceInfoPlist ? { googleServicesFile: googleServiceInfoPlist } : {}),
       buildNumber: nativeReleaseVersion.iosBuildNumber,
     },
     android: {
