@@ -235,7 +235,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 啟動失敗畫面的按鈕本來就是寫死的英文，「Open GitHub issue」改成「Email support」。
 - 還沒改的：
   - 外掛的相容性訊息和 `plugin init` 的範本仍連到 paseo.sh 的外掛文件。外掛 API 還是上游的，CLI 改名時決定保留。
-  - 配對網頁 `app.paseo.sh` 和 Hub 屬於自架 relay 那一步。
+  - 配對網頁 `app.paseo.sh` 待 owner 決定（第 11 節的「配對連結的主機」）；Hub（`hub.paseo.sh`）仍是上游的。
   - e2e 測試（`packages/app/e2e/` 的瀏覽器與手機腳本、`packages/desktop/e2e/`）的預期值已改成我們的名稱、連結、port 和 scheme，但還沒實際跑過。
     e2e 用的隔離 daemon 不准用 6767 和 6770；手機 composer 腳本的預設 port 從 6770 改成 6771，因為 6770 現在是 woowtech smart 本身的 daemon。
     Maestro 流程（`packages/app/maestro/`）仍是上游的值。
@@ -245,25 +245,93 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `utils/open-external-url.test.ts` 和桌面版的 `features/opener.test.ts` 檢查能開 mailto，也仍然擋掉 file: 和 javascript:。
   - `i18n/brand.test.ts` 檢查每種語言的說明選單都不再提 Discord 或 GitHub。
 
-### 11. Relay 預設關閉
+### 11. 自己的 relay：relay.woowtech.io，預設開啟
 
-- 原因：我們還沒有自己的 relay，上游的 relay.paseo.sh 不是我們營運的。使用者自己打開之前，daemon 不能連過去。
-- 上游只在建立新的 `config.json` 時寫入 `daemon.relay.enabled: false`。`config.json` 已經存在但沒寫這個欄位時，上游當作要開 relay（`relayOptInDefault` 相容規則，上游預計 2027-01-31 後拿掉）。
-  `scripts/dev-home.sh` 幫 dev daemon 寫的設定就沒有這個欄位，所以 dev daemon 一直連著上游的 relay，`.dev/paseo-home/daemon.log` 裡有 `relay_control_connected`。
-- 做法：`packages/server/src/server/config.ts` 的 `resolveConfigFromPersisted` 在沒寫 `daemon.relay.enabled` 時一律當作關閉，只改這一行。daemon 啟動、重新載入設定、CLI 的 `daemon pair` 和 `daemon status` 都從這裡取值。
-- 使用者打開 relay 的方法，打開後連的是上游的 relay：
-  - 桌面版「配對裝置」按「啟用中繼」，會寫進 `config.json`。
-  - `paseo daemon pair --relay` 或 `paseo onboard --relay`。
-  - 在 `config.json` 設 `daemon.relay.enabled: true`。前景執行的 `paseo daemon run` 也可以用 `PASEO_RELAY_ENABLED=true`；`paseo daemon start` 和桌面版啟動的 daemon 不看這個環境變數。
-- relay 關閉時看到的畫面都是上游原本的處理，沒有改：
-  - 桌面版「配對裝置」不產生 QR Code，顯示「啟用中繼？」和「暫不」「啟用中繼」兩個按鈕，下方提示改用直接連線。
-  - `paseo daemon pair` 印出「Relay pairing is disabled for this daemon.」，結束碼是 1。
-  - `paseo onboard` 在互動終端機裡問要不要啟用 relay（預設否）。選否，或不是互動終端機時，印出直接連線的說明。
-  - 手機 App 歡迎頁的主要按鈕仍是「掃描 QR Code」，但要先在桌面版或 CLI 打開 relay 才有 QR Code 可掃。「直接連線」隨時都能用。
-- 直接連線：daemon 預設只監聽 `127.0.0.1:6770`，模擬器連得到，實體手機連不到。要讓手機直接連，把 `daemon.listen` 改成這台電腦的區網 IP 或 Tailscale IP 加 `:6770`，並用 `paseo daemon set-password` 設密碼。
-- 測試：
-  - `packages/server/src/server/config-relay.test.ts`：什麼都沒設時 relay 是關的，包括 dev daemon 的設定、沒有 `enabled` 的 `relay: {}`，以及重新載入設定之後；`config.json` 或 `PASEO_RELAY_ENABLED` 仍然能打開。上游兩個「沒寫就開」的測試改成預期關閉。
-  - `woowtech/relay.test.mjs` 透過 tsx 直接呼叫原始碼裡的 `loadConfig`，不讀 `packages/server/dist`，因為 dist 要另外建置，合併上游後常常是舊的。
+relay 讓手機不在同一個網路時也連得到 daemon，流量端對端加密，relay 看不到內容。上游的 relay.paseo.sh 不是我們營運的，所以之前預設關閉。現在 WoowTech 自己跑 relay：WoowTech 的 Cloudflare 帳號（`9c27f623ee596e0b67be56263bcb1974`，zone woowtech.io）裡的 Worker `woowtech-smart-relay`，網址 `relay.woowtech.io`。daemon 預設打開 relay、連到這裡，使用者可以關掉。
+
+Worker：
+
+- 程式是上游的 `packages/relay/src/cloudflare-adapter.ts`，沒改：每個 daemon（serverId）一個 Durable Object `RelayDurableObject`，用 WebSocket hibernation 轉送 daemon 和 App 之間的 WebSocket，不存資料。`/health` 回 `{"status":"ok"}`，`/ws` 是 relay。
+- 上游的 `wrangler.toml` 設了 `PASEO_RELAY_UPSTREAM = "https://paseo-relay-next.fly.dev"`：上游把正式流量搬到了 Fly，Cloudflare 上的 Worker 只把請求原樣轉過去。沒設這個變數時，Worker 自己當 relay。
+- 我們用 fork 自己的 `packages/relay/wrangler.woowtech.toml` 部署，上游的 `wrangler.toml` 不動：
+  - 帳號 `9c27…`、Worker 名稱 `woowtech-smart-relay`、custom domain `relay.woowtech.io`（部署時自動建 DNS 記錄和憑證）、`workers_dev = false`（不開 workers.dev 網址）。
+  - Durable Object 綁定、SQLite migration（`new_sqlite_classes`）、observability 跟上游一樣，沒有任何變數。
+- 方案：不需要付費方案。SQLite 的 Durable Object 在 Workers 免費方案就能用，custom domain 也免費。
+  - 免費額度：Worker 和 Durable Object 各是每天 10 萬個請求，Durable Object 另有每天 13,000 GB-s。每條 WebSocket 連線算一個請求，收到的訊息 20 則算 1 個，送出的訊息和 ping 不算。超過就失敗，UTC 00:00（台灣 08:00）重置。用量大了再升 Workers Paid（每月 5 美元）。
+  - woowtech.io 的 Pro 是 zone 的方案，跟 Workers 的方案無關。
+- Workers Logs 記的是 relay 自己印的連線、斷線、serverId 和 connectionId，沒有內容（內容是加密的）。上游也開著；要關就把 `[observability]` 改成 `enabled = false` 再部署。
+
+部署（在 Cloudflare 帳號的操作由 coordinator 和 owner 做）：
+
+```bash
+cd packages/relay
+npx wrangler login                                              # 瀏覽器授權 WoowTech 的 Cloudflare 帳號
+npx wrangler deploy --config wrangler.woowtech.toml --dry-run   # 綁定只有 env.RELAY，沒有變數
+npx wrangler deploy --config wrangler.woowtech.toml
+npx wrangler logout                                             # 不再用 wrangler 時撤銷授權
+```
+
+- 一定要加 `--config wrangler.woowtech.toml`。不加會讀上游的 `wrangler.toml`，帳號是上游的，部署會因為沒有權限而失敗。
+- 第一次部署建立 Worker、Durable Object namespace（migration `v1`），以及 relay.woowtech.io 的 DNS 記錄和憑證。relay.woowtech.io 已經有 DNS 記錄的話，custom domain 會建不起來。
+- 不要在儀表板替這個 Worker 加 `PASEO_RELAY_UPSTREAM`。`keep_vars` 沒開，下次部署會清掉；但清掉之前，relay 會轉到上游。
+- `.github/workflows/deploy-relay.yml` 是上游的，部署的是上游的設定。Actions 目前關著，打開前要改成 `--config wrangler.woowtech.toml` 和我們的 token。
+- 部署後的檢查：`curl https://relay.woowtech.io/health` 回 `{"status":"ok"}`；`/ws?serverId=smoke&role=server&v=2` 不帶 WebSocket 升級時回 426；完整的加密往返用 `RUN_LIVE_RELAY_E2E=1 PASEO_LIVE_RELAY_URL=wss://relay.woowtech.io npx vitest run src/live-relay.e2e.test.ts`（在 `packages/relay` 執行）。
+
+還原：
+
+- 回到前一版 Worker：`npx wrangler rollback --config wrangler.woowtech.toml`，或指定 `npx wrangler versions list --config wrangler.woowtech.toml` 列出的版本 ID。版本還原不會撤銷 Durable Object 的 migration。
+- 整個停掉：儀表板的 Worker → Settings → Domains & Routes 拿掉 relay.woowtech.io，或 `npx wrangler delete --config wrangler.woowtech.toml`。relay 不存資料，停掉只會斷開現在的連線，daemon 會每 1～30 秒重試。
+- daemon 這邊：使用者照下面的方法關 relay；要讓新版預設不連，還原 commit `00fe79933`。
+
+daemon 的預設：
+
+- 端點寫在 `packages/protocol/src/brand-relay.ts`（`BRAND_RELAY`：`relay.woowtech.io:443`，port 443 表示 TLS）。protocol 的 `DEFAULT_RELAY_ENDPOINT` 讀它；`config.ts`、`pairing-offer.ts`、`bootstrap.ts` 原本各自寫死 relay.paseo.sh，現在都用這個常數。改了這個檔案，要重建 protocol 和 server 的 dist。
+- 什麼時候開：
+  - 新的 home：`persisted-config.ts` 在 `config.json` 寫入 `daemon.relay.enabled: true`。
+  - `config.json` 沒寫 `enabled`（例如 `scripts/dev-home.sh` 寫的 dev 設定）：一律開，重新載入設定後也一樣，寫在 `config.ts` 的 `resolveConfigFromPersisted`。上游只對「啟動時就沒寫」的設定開（`relayOptInDefault`），而且打算 2027-01-31 後改成關。
+  - 寫了 `enabled: false` 的照樣關。之前的內部測試版建立的 home 都寫著 `false`（舊預設），要自己打開。
+- 關掉的方法：
+  - 桌面版「配對裝置」：QR Code 下方的「停用中繼」（fork 的 `desktop/components/relay-off-action.tsx`）。寫進 `config.json` 並立刻停掉 relay，畫面回到上游的「啟用中繼？」。
+  - `woowtech-smart daemon config set daemon.relay.enabled false`，或 `woowtech-smart onboard --no-relay`。`daemon config unset daemon.relay.enabled` 則回到預設的開。
+  - 直接改 `config.json`，再 `woowtech-smart daemon reload`。
+  - 前景執行的 `woowtech-smart daemon run` 還可以用 `PASEO_RELAY_ENABLED=false`，只管那一次啟動；`daemon start` 和桌面版啟動的 daemon 不看這個環境變數。
+- 打開的方法：桌面版「配對裝置」的「啟用中繼」、`woowtech-smart daemon pair --relay`、`woowtech-smart onboard --relay`、`config.json`。
+- relay 開著時：桌面版「配對裝置」直接顯示 QR Code 和「停用中繼」；`woowtech-smart daemon pair` 印出 QR Code 和配對連結（daemon 沒在跑時是離線的配對連結）；`onboard` 不再先問。
+- relay 關著時，畫面是上游原本的：桌面版顯示「啟用中繼？」；`daemon pair` 印出「Relay pairing is disabled for this daemon.」，結束碼 1；`onboard` 在互動終端機裡問要不要打開（預設否），說明文字改成「WoowTech cannot read your code or messages」。
+- 先部署 relay，再發佈這一版：relay.woowtech.io 還沒有 DNS 時，daemon 連不上，每 1～30 秒重試一次，log 裡一直有連線錯誤。
+- 直接連線不受影響：daemon 預設只監聽 `127.0.0.1:6770`。要讓手機直接連，把 `daemon.listen` 改成區網或 Tailscale 的位址，並用 `woowtech-smart daemon set-password` 設密碼。
+
+配對連結的主機（待 owner 決定，還沒改）：
+
+- 配對連結是 `<app.baseUrl>/#offer=<base64url JSON>`（`connection-offer.ts` 的 `encodeOfferToFragmentUrl`），QR Code 的內容就是它。JSON 裡有 serverId、daemon 的公鑰和 relay 端點，拿到連結就能連上這個 daemon。
+- `app.baseUrl` 預設 `https://app.paseo.sh`：新 home 的 `config.json` 會寫入，`config.ts`、`pairing-offer.ts`、`bootstrap.ts` 也各有一份預設，`PASEO_APP_BASE_URL` 可以覆寫，執行中也能改。
+- App 內的掃描器（`app/pair-scan.tsx`）和「貼上配對連結」（`components/pair-link-modal.tsx`）只找 `#offer=`，不看主機；`_layout.tsx` 的 `OfferLinkListener` 也處理從外部打開的連結。所以換成什麼主機，App 內都能配對。
+- 用手機的相機 App 掃 QR Code 時，打開的是 app.paseo.sh：那是上游用 `deploy-app.yml` 在發版 tag 時部署到自己 Cloudflare Pages（專案 `paseo-app`）的網頁版 App（`expo export --platform web`）。我們沒有 universal link 或 App Links，不會叫起我們的 App。上游的網頁版會讀 `#offer=`、存下這台主機，並經由我們的 relay 連上使用者的 daemon：配對憑證交到上游的網頁程式手上，使用者在上游品牌的網頁裡操作我們的 daemon。relay 預設開啟後，桌面版一打開「配對裝置」就顯示這個 QR Code，這條路更容易被走到。
+- 新 home 的 `config.json` 也把 `https://app.paseo.sh` 寫進 `daemon.cors.allowedOrigins`：上游網站上的程式可以從使用者的瀏覽器直接連本機的 daemon（HTTP 和 WebSocket 都看這份白名單），而 daemon 預設沒有密碼。我們的產品用不到：桌面版的來源 `woowtech-smart://app` 和 daemon 自己的網頁版是固定放行的。
+- 使用者看得到 app.paseo.sh 的另外兩處：`onboard` 的下一步「Web app: https://app.paseo.sh」，和 App「貼上配對連結」的範例文字。
+- 選項：
+  - (a) 在 app.woowtech.io 自架網頁版（Cloudflare Pages）：相機掃描後在瀏覽器就有完整、我們品牌的網頁版；同網域之後可以放 `apple-app-site-association` 和 `assetlinks.json`，裝了 App 就直接開 App。代價是多維運一個能操作使用者 daemon 的網頁 App：每次發版都要更新、顧及 protocol 相容、供應鏈和 CSP；這台 Mac 建置網頁版要好幾分鐘；Pages 專案、DNS、憑證要在帳號上操作。
+  - (b) 配對連結改用 `woowtech-smart://`：不用部署，憑證不經過任何網頁，相機掃描會叫起我們的 App。但沒裝 App 時掃了沒反應，也沒有安裝引導；Android 各家相機對自訂 scheme 的處理不一致；自訂 scheme 別的 App 也能註冊；在電腦上點只會打開桌面版，而桌面版只處理 agent 連結；已存在的 home 仍寫著 app.paseo.sh，要另外遷移；一定要實機驗證，這次不做實機測試。
+  - (c) 指向 aiot.woowtech.io 的一頁（例如 `/pair`）：頁面讀 `#offer=`，提供「在渥屋智能中開啟」（轉成 `woowtech-smart://…#offer=…`）和商店連結。相機掃描落在我們的網域和品牌，沒裝 App 有引導，fragment 不會送到伺服器。但頁面的程式會碰到配對憑證，官網上的分析、追蹤或 session replay 可能記下完整網址，這一頁不能載入任何第三方程式；官網由誰維護、能不能放自訂程式要先確認；仍要多點一下。
+  - (d) 同 (c)，但這一頁由 relay 的 Worker 提供（`https://relay.woowtech.io/pair#offer=…`）：fork 自己的 Worker 入口處理 `/pair`（之後加 `/.well-known/`），其他請求交給上游的 relay。頁面完全由我們控制，不用新的基礎設施，之後可以在同網域做 universal links。代價是 relay 和網頁放在同一個 Worker（頁面的程式要極簡），要改 Worker 並多部署一次。
+  - (e) 維持 app.paseo.sh：不用做事，但上面的問題都在，而且上游隨時可能改或停掉那個網站。
+- 建議：
+  - 不管選哪個，先把 `https://app.paseo.sh` 從新 home 的 CORS 白名單拿掉（有自己的網頁版時換成它的網址），並決定要不要替已存在的 `config.json` 拿掉。
+  - 主機短期用 (d)，官網能保證那一頁沒有第三方程式時也可以用 (c)；需要網頁版時再做 (a)。universal links 和 App Links 要在 Apple Developer 開 Associated Domains、用 Play 的簽章指紋寫 `assetlinks.json`，並重新建置 App。
+  - (b) 不用部署，但要等實機驗證後再考慮。
+- 決定後要一起改的：`persisted-config.ts` 的 `app.baseUrl` 和 CORS 預設、`config.ts`、`pairing-offer.ts`、`bootstrap.ts` 的預設、`onboard` 的下一步、`pair-link-modal.tsx` 的範例文字，以及要不要遷移已存在的 `config.json`。
+
+測試：
+
+- `packages/server/src/server/config-relay.test.ts`：什麼都沒設、dev daemon 的設定、沒有 `enabled` 的 `relay: {}` 都是開的，重新載入設定後也一樣；預設端點是 relay.woowtech.io:443 和 TLS；`enabled: false` 和 `PASEO_RELAY_ENABLED=false` 會關。上游「拿掉 enabled 就保持關閉」的測試改成預期開。
+- `persisted-config.test.ts`：新 home 寫入 `enabled: true`（上游預期 `false`）。`pairing-offer.relay.test.ts`：沒指定端點的配對連結指向 relay.woowtech.io:443、TLS。`daemon-config-store.test.ts` 有兩個上游測試原本靠新 home 預設關，改成自己寫好狀態。
+- CLI：`commands/daemon/pair.relay.test.ts` 檢查新 home 的離線配對連結和 `daemon pair` 的輸出；`pair.test.ts` 和 `next-command.test.ts` 改在 relay 關著的 home 裡跑。e2e 的 `tests/03-daemon.test.ts`（Test 2、4）改成預期離線配對連結，`tests/17-onboard.test.ts` 先把 relay 關掉再測直接連線的說明；這兩支會連到 relay，還沒跑過。
+- App：`desktop/components/pair-device-section.relay-off.test.tsx` render 配對畫面，按「停用中繼」後確認送出 `relay.enabled: false` 並回到「啟用中繼？」，也檢查繁中文字。
+- relay：`packages/relay/src/e2e.test.ts` 用 `wrangler dev --local --config wrangler.woowtech.toml` 跑，只改了這個參數。上游的設定會把測試流量轉到 Fly。
+- 守門：
+  - `woowtech/relay-worker.test.mjs` 用 wrangler 自己的讀取函式讀 `wrangler.woowtech.toml`：帳號、網域、沒有 workers.dev、daemon 的預設端點就是這個網域；沒有 `PASEO_RELAY_UPSTREAM`、沒有 `[env.*]`、沒開 `keep_vars`，並用設定裡的變數實際跑 Worker，確認 `/health` 和 `/ws` 不會往外轉；程式、Durable Object、migration、observability 跟上游的設定一致（上游改了 migration 時會失敗，照著改）；relay 的 e2e 用的是我們的設定。
+  - `woowtech/relay.test.mjs` 透過 tsx 從原始碼呼叫 `loadConfig`、`editPersistedConfig` 和 `generateLocalPairingOffer`：新 home、沒寫 `enabled` 的設定都是開、連 relay.woowtech.io；`enabled: false`、環境變數和 `daemon config set` 都能關；配對連結指向我們的 relay；出貨的原始碼（連同 Worker 程式和設定）不准出現 relay.paseo.sh。跨套件的匯入讀 dist，合併上游後先 `npm run build:server`。
+- 其他還用上游設定的測試工具，都不出貨：`packages/cli/tests/e2e/relay-host.test.ts` 起的 `wrangler dev` 會轉到 Fly；server 的 `daemon-e2e/relay-transport.e2e.test.ts` 只有一個測試用 `--var PASEO_RELAY_UPSTREAM:` 在本機跑，其他的也轉到 Fly；`test-utils` 的測試 daemon 預設連 relay.paseo.sh。
 
 ### 12. CLI 改名（品牌識別最後一步）
 
@@ -302,7 +370,8 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `PASEO_*` 環境變數、`paseo.json`、`@getpaseo/*` 套件名、testID、翻譯 key：程式和設定檔用的名字，使用者不用打。
   - App 內的 `bin/paseo`（見上面的 shim），和 `packages/cli` 的 `paseo` bin：後者只給 workspace 開發和 CLI 的 e2e（`packages/cli/tests/` 用 zx 執行 `paseo`）。我們不發 npm 套件，它不會進使用者的 PATH。
   - 終端機活動 hooks 的文字和 OpenCode 外掛，原因見上面。
-  - Paseo Hub（`hub.paseo.sh`）和它的聊天機器人 `@Paseo`、relay 的加密說明「Paseo cannot read your code or messages」、`onboard` 裡的 `https://app.paseo.sh`：Hub 和 relay 目前仍是上游經營的，跟自架 relay 和 Hub 一起換。
+  - Paseo Hub（`hub.paseo.sh`）和它的聊天機器人 `@Paseo`：Hub 仍是上游經營的，跟自架 Hub 一起換。
+  - `onboard` 裡的 `https://app.paseo.sh`：跟配對連結的主機一起決定（第 11 節）。relay 的加密說明已改成「WoowTech cannot read your code or messages」，因為 relay 現在是我們的。
   - 外掛範本（`plugin/scaffold.ts`）和外掛文件連結 `paseo.sh/docs/plugins`：外掛 API 仍是上游的（第 10 節）。
   - agent 看到的 MCP server 名 `paseo`：protocol 的工具名稱轉換（`tool-name-normalization.ts`）靠它辨識。
 - 沒寫遷移：之前的內部測試版按過「安裝 CLI」的電腦，`~/.local/bin/paseo` 會指向 `woowtech smart.app` 裡的 `bin/paseo`，新版不會動它，要手動刪。刪之前先用 `readlink ~/.local/bin/paseo` 確認指向的不是 `Paseo.app`。
@@ -338,8 +407,8 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
   - 由 `woowtech/tools/generate-skills.mjs` 從上游的 `skills/` 產生，不要手改。上游改了 `skills/` 就重新產生：`npx tsx woowtech/tools/generate-skills.mjs`。
   - 改寫規則在 `woowtech/tools/skill-rewrites.mjs`，分兩種：
     - 到處套用的：技能名和互相引用（`**paseo**`、`/paseo-advisor`）、`paseo <指令>`（跟 CLI 用同一個 `withCliCommand`）、`~/.paseo`、6767、產品名 Paseo。`Paseo Hub` 和 `Paseo SDK` 不換：Hub 仍是上游的服務（跟 CLI 一樣），SDK 是外掛 API 的名字。
-    - 手寫的段落：指令找不到時改用 `"$PASEO_CLI"`、help 技能的說明文件（官網）、relay 預設關閉和 daemon 只聽 `127.0.0.1:6770`、App 內附 CLI 的位置和「Settings → Integrations → Command line → Install」、Docker、求助管道（客服信箱、LINE）。每段都要在上游原文裡剛好出現一次。上游改了那段，產生器會停下來，要你更新規則。
-  - 連結、指令名、daemon 資料夾和 port 從原始碼讀（`brand-links.ts`、`brand-cli.ts`、`paseo-home.ts`、`config.ts` 的 `DEFAULT_PORT`），改了這些要重新產生。
+    - 手寫的段落：指令找不到時改用 `"$PASEO_CLI"`、help 技能的說明文件（官網）、relay 是 WoowTech 的 relay.woowtech.io（預設開，關掉後怎麼打開）和 daemon 只聽 `127.0.0.1:6770`、App 內附 CLI 的位置和「Settings → Integrations → Command line → Install」、Docker、求助管道（客服信箱、LINE）。每段都要在上游原文裡剛好出現一次。上游改了那段，產生器會停下來，要你更新規則。
+  - 連結、指令名、relay 網址、daemon 資料夾和 port 從原始碼讀（`brand-links.ts`、`brand-cli.ts`、`brand-relay.ts`、`paseo-home.ts`、`config.ts` 的 `DEFAULT_PORT`），改了這些要重新產生。
   - 產生器用 oxfmt 排版，跟 pre-commit 的格式檢查一致。
   - 外掛 API 仍是上游的，所以 `woowtech-smart-plugin` 保留 paseo.sh 的外掛文件、`llms.txt`、SDK 文件和 GitHub 上的外掛範例；`usePaseo()`、`{ paseo }`、`requirements.paseo`、`@getpaseo/plugin` 也不動。
 - `"$PASEO_CLI"`：桌面版啟動 daemon 時把 App 內附的 `bin/woowtech-smart` 設成 `PASEO_CLI`，daemon 開的 agent 會繼承。使用者沒按「安裝 CLI」時，agent 用它也叫得到我們的 CLI。從原始碼跑的開發 daemon 沒有這個變數。
@@ -365,7 +434,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - `packages/app/src/i18n/woowtech-copy.ts` 放 fork 自己的文字，也用來翻譯上游寫死在程式裡的英文。
   - 跟第 10 節的 `support-copy.ts` 一樣由 `i18n/brand.ts` 在載入翻譯時套用：放在每個語言的 `woowtech` 底下，元件用 `t("woowtech.…")` 取用。
   - 10 種語言都要有每一個 key，型別會檢查。上游之後新增的語言先顯示英文。
-- 目前的內容：更新紀錄的空狀態（第 10 節）、設定頁的瀏覽器工具卡、「封存 PR 已合併的工作區」、終端機 Agent hooks 開關、「Unknown error」、側欄的「工作區」標題。側欄的「顯示偏好」提示改用上游自己的 `sidebar.display.trigger`。
+- 目前的內容：更新紀錄的空狀態（第 10 節）、設定頁的瀏覽器工具卡、「封存 PR 已合併的工作區」、終端機 Agent hooks 開關、「Unknown error」、側欄的「工作區」標題、配對畫面的「停用中繼」（第 11 節）。側欄的「顯示偏好」提示改用上游自己的 `sidebar.display.trigger`。
 - `screens/settings/**` 寫死的英文已經全部盤點過，使用者看得到的 14 處都改用 `t()`。刻意沒改的：
   - `daemon-lifecycle.ts` 的技術性錯誤細節，顯示在已經翻譯的失敗訊息裡。
   - `plugins-page.tsx` 裡執行不到的離線錯誤。
@@ -474,7 +543,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   2 種突變都被抓到：焦點框改回 `rgba(32, 116, 74, 0.8)`、深色連結色改回上游的 #7ccba0。`theme.test.ts` 12/12 通過。還沒在瀏覽器裡實際看過焦點框。
 - Relay 預設關閉（2026-09-25）：`config-relay.test.ts` 改寫和新增的 3 個測試先紅後綠，紅燈都是 `expected true to be false`，全檔 24/24；`relay.test.mjs` 先紅後綠，2/2。
   2 種突變都被抓到：改回上游「沒寫就開」的規則、忽略 `config.json` 的 `enabled: true`。config 11、persisted-config 44、daemon-config-store 34、relay-runtime 2、daemon-session 11 個測試全部通過。
-  還沒實際啟動 daemon 確認它不再連到 relay.paseo.sh。
+  還沒實際啟動 daemon 確認它不再連到 relay.paseo.sh。後來有了自己的 relay，改成預設開啟，見下面的「自己的 relay」。
 - 更新下載快取（2026-09-25）：`coexistence.test.mjs` 先紅後綠，紅燈是 electron-builder 算出 `'@getpaseodesktop-updater'`，跟官方 Paseo 的 `app-update.yml` 相同。
   突變被抓到：拿掉 `extraMetadata`、改在 `publish` 設 `updaterCacheDirName`，electron-builder 照樣算出上游的名稱。`auto-updater` 12、`updater` 5、`desktop-packaging` 11 個測試通過，`update-sources.test.mjs` 2/2。
   沒有實際打包，是用 electron-builder 自己的函式確認 mac、Windows、Linux 的 `app-update.yml` 都會寫 `io.woowtech.smart.desktop-updater`。
@@ -514,6 +583,16 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 在暫存副本 prebuild iOS 兩個版本：Info.plist 的 `CFBundleName` 是「woowtech smart」，zh-Hans／zh-Hant 是「渥屋智能」，`PRODUCT_NAME` 不變。
   - 跑過的測試：App 9 檔 70 個；server 相關 9 檔 214 個（1 個 win32 限定的略過）；`build-android.test.mjs` 7 個。合進 main 時完整 typecheck 通過，守門 11 檔 46 個全過。
   - 沒做的：還沒在模擬器或實機上看過這些畫面；還沒從 Claude Code 裡實際啟動 daemon、檢查 agent 拿到的環境。
+- 自己的 relay（2026-09-25，分支 `woowtech/services`，第 11 節）：新測試都先紅後綠，每一項都做了突變。
+  - Worker 設定：`relay-worker.test.mjs` 先紅（`wrangler.woowtech.toml` 不存在）。突變都被抓到：加上 `PASEO_RELAY_UPSTREAM`、改回上游的帳號和網域、relay 的 e2e 換回上游的設定。
+  - relay 的 e2e 在只准連 loopback 的 `sandbox-exec` 裡跑：用上游的 `wrangler.toml` 時，Worker 要轉到 Fly、被擋，60 秒內 WebSocket 起不來；改用 `wrangler.woowtech.toml` 後 3/3 通過，wrangler 列出的綁定只有 `env.RELAY`，log 有 `[Relay DO] v2:server(control) connected`。
+  - daemon 預設：config-relay 5 個、persisted-config 1 個、pairing-offer 1 個測試先紅，紅燈是 `expected false to be true` 和 `relay.paseo.sh:443` 不等於 `relay.woowtech.io:443`；3 檔 70/70。突變都被抓到：沒寫 `enabled` 時改回關、新 home 寫回 `false`、改回上游「啟動時沒寫才開」的規則。
+  - `daemon-config-store.test.ts` 有兩個上游測試靠新 home 預設關才成立，改成自己寫好狀態後 34/34。config 等 5 檔 59 個相關測試通過。
+  - CLI：`pair.relay.test.ts` 對舊的 server dist 紅，`build:server` 後和 `pair.test.ts`、`next-command.test.ts` 共 5/5。用建好的 CLI 在暫存 home、sandbox 裡重跑 e2e 03 的 `daemon pair` 和 `daemon pair --json`：結束碼 0，配對連結指向 `relay.woowtech.io:443`、TLS。
+  - 桌面版「停用中繼」：先紅（找不到按鈕）後綠 2/2；突變：拿掉接線、送出 `enabled: true`，都被抓到。i18n 3 檔 20/20。
+  - 守門：`relay.test.mjs` 4/4，出貨原始碼的掃描先紅在 `host-picker.tsx:41` 的註解；`skills.test.mjs` 先紅（技能過時、help 沒提 relay.woowtech.io），重新產生後 7/7；`cli-name.test.mjs` 拿掉 relay 的例外後先紅在 `pair.ts:145`。全部守門 53 個通過 52 個，沒過的 zh-TW 守門是 worktree 沒裝 OpenCC。
+  - 本機整合（腳本不進 repo）：sandbox 裡、暫存 HOME 和 PASEO_HOME，用 `wrangler dev --local --config wrangler.woowtech.toml` 跑 relay，用建好的 CLI `daemon run` 起 daemon，relay 開關用預設，只用 `PASEO_RELAY_ENDPOINT` 指到本機的 relay。新 home 的 `config.json` 是 `{"enabled":true}`，daemon.log 有 `relay_control_connected`，`daemon pair --json` 結束碼 0，`woowtech-smart --host <配對連結> ls -a --json` 經 relay 和 E2EE 連上 daemon；relay 看到 server(control)、client、server(data) 三條連線。跑了兩次，結果相同。
+  - 沒做的：沒有部署，relay.woowtech.io 還沒有 DNS；沒有對真的 relay.woowtech.io 測試；CLI e2e 03 和 17 只改了預期值，沒跑（會連到 relay）；沒有模擬器或實機測試。
 
 ## 接下來
 
@@ -534,5 +613,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 更新紀錄：HTTP 200、內容卻不是 changelog 時（例如會攔截 TLS 的公司 proxy 回的封鎖頁），現在顯示「還沒有釋出說明」，沒有重試按鈕。要不要跟 404 分開處理，還沒決定。
 - 第 15 節「還沒處理的」三項（終端機的環境、`GIT_EDITOR`、其他 agent 宿主的變數）要不要處理，還沒決定。
 - 在模擬器上確認：英文系統的主畫面標籤、「新功能」的空狀態、繁中的設定頁和側欄。
-- 自架 Cloudflare relay（拿掉 `wrangler.toml` 裡的 `PASEO_RELAY_UPSTREAM`），配對連結（`app.paseo.sh`）和 Hub（`hub.paseo.sh`）一起換。
+- 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
+- 配對連結的主機和 CORS 白名單裡的 app.paseo.sh 待 owner 決定（第 11 節）；Hub（`hub.paseo.sh`）仍是上游的。
+- 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 商標（TIPO）與 D-U-N-S。
