@@ -9,14 +9,34 @@
 //   node --test woowtech/workflows.test.mjs
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import YAML from "yaml";
 
 const workflowsDir = new URL("../.github/workflows/", import.meta.url);
+const desktopDir = new URL("../packages/desktop/", import.meta.url);
 
 function workflow(name) {
   return YAML.parse(readFileSync(new URL(name, workflowsDir), "utf8"));
+}
+
+/** The name of the deb package our desktop build makes, as electron-builder picks it. */
+async function debPackageName() {
+  const { AppInfo, Packager } = createRequire(new URL("package.json", desktopDir))(
+    "electron-builder",
+  );
+  const packager = new Packager({
+    projectDir: fileURLToPath(desktopDir),
+    config: "electron-builder.yml",
+  });
+  await packager.validateConfig();
+  const { deb, linux } = packager.config;
+  const name =
+    deb?.packageName ?? linux?.packageName ?? new AppInfo(packager, null).linuxPackageName;
+  // fpm lowercases deb package names.
+  return name.toLowerCase();
 }
 
 // The workflows GitHub runs for us.
@@ -119,4 +139,13 @@ test("CI can neither deploy nor publish: no credentials but the test keys, no wr
     }
   }
   assert.deepEqual(found, [], "The owner's rule for CI: tests only, nothing deploys or publishes.");
+});
+
+test("CI's RPM smoke first removes the deb package our desktop build installed", async () => {
+  // Upstream's deb is `paseo`. dpkg only warns about a package that is not installed,
+  // so a stale name leaves the deb's files in place to hide what the RPM misses.
+  const removed = workflow("ci.yml").jobs["desktop-tests-ubuntu"].steps.flatMap(({ run }) =>
+    [...String(run ?? "").matchAll(/\bdpkg --remove (\S+)/g)].map(([, name]) => name),
+  );
+  assert.deepEqual(removed, [await debPackageName()]);
 });

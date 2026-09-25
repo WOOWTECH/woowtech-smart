@@ -288,7 +288,8 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
-          sudo dpkg --remove paseo
+          # woowtech smart: the deb is named after extraMetadata.name in electron-builder.yml.
+          sudo dpkg --remove io.woowtech.smart.desktop
           # Ubuntu supplies the runtime libraries under Debian package names.
           # RPM still performs the real payload installation and postinstall.
           sudo rpm --install --nodeps packages/desktop/release/*.rpm
