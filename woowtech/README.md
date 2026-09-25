@@ -545,7 +545,10 @@ App：`packages/app/src/push-notifications/internal/woowtech-subscriptions.ts`
 - FCM token 更新的監聽在第一次拿到 token 之後才開始，而且只有 token 真的換了才重新同步：Android 的 `expo-notifications` 每次 `getDevicePushTokenAsync` 都會把同一個 token 當成新 token 再發一次事件（`PushTokenModule.kt`），不比對的話，同步取 token、事件又排下一次同步，會一直重新註冊。token 不符契約時不註冊，warn 只寫長度。
 - 啟動時呼叫一次 `setAutoServerRegistrationEnabledAsync(false)`：舊測試版呼叫過 `getExpoPushTokenAsync` 的話，`expo-notifications` 會記住「每次啟動把 device token 回報 exp.host」，這一步清掉它。
 - 各平台的 FCM token 來源，Metro 依副檔名只打包對應的檔：
-  - iOS `fcm-token.ios.ts`：RNFB 的 modular API，先 `registerDeviceForRemoteMessages` 再 `getToken`（`firebase.json` 關掉了自動註冊，見下面）。RNFB 在函式裡才 `require`：沒連結原生模組的建置，import RNFB 就會丟錯（「Native module RNFBAppModule is not registered」），靜態 import 會讓 App 一啟動就當掉。
+  - iOS `fcm-token.ios.ts`：RNFB 的 modular API，先 `registerDeviceForRemoteMessages` 再 `getToken`（`firebase.json` 關掉了自動註冊，見下面）。
+    - 第二次以後的啟動，iOS 回報 App 已經註冊過，RNFB 就直接回來、不呼叫 UIKit 的 `registerForRemoteNotifications`，而 Firebase 的 APNs token 只放在記憶體，沒有它 `getToken` 就失敗。所以 `getAPNSToken` 是 null 時，改用 `expo-notifications` 的 `getDevicePushTokenAsync()`（一定會呼叫 UIKit）等 iOS 交出 APNs token，最多等 10 秒，跟 RNFB 自己的註冊一樣。這一段在模擬器上測不到，實機驗收要看第二次啟動。
+    - 同時要 token 的呼叫共用同一次註冊：每台 daemon 的訂閱各要一次，換語言和第一次允許通知時幾乎同時，而 RNFB 會把被後來的呼叫蓋掉的註冊以 `registration-superseded` 拒絕。`registration-superseded` 和 `registration-timeout` 再試一次；拿不到 token 時 warn 寫出錯誤代碼。ARM64 模擬器上 RNFB 刻意不呼叫 UIKit，註冊 10 秒逾時、再試一次，約 20 秒後放棄。
+    - RNFB 在函式裡才 `require`：沒連結原生模組的建置，import RNFB 就會丟錯（「Native module RNFBAppModule is not registered」），靜態 import 會讓 App 一啟動就當掉。
   - Android `fcm-token.android.ts`：`expo-notifications` 的 `getDevicePushTokenAsync()`，在 Android 上回傳的就是 FCM token；更新用 `addPushTokenListener`。一樣延遲 `require`：F-Droid 版用的 stub 沒有這些函式，vitest 也載入不了 `expo-notifications`。
   - 其他平台（網頁、桌面版）`fcm-token.ts`：沒有 token。
   - 拿不到 token 時回 null，App 不會當掉；快取裡的舊字串先留著，是 Expo token 的話 daemon 第一次推播時會撤銷。
@@ -1017,12 +1020,12 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 兩個平台都用實機驗收（設計 6.6）：
     - 通知只顯示中繼的句子，點下去開到那個 agent 或 terminal，App 在背景和被滑掉各試一次；換語言後只收到一則新語言的通知；解除安裝後中繼回 410、daemon 刪掉那筆；桌面版的系統通知仍有回覆預覽。
     - iPhone 上 `registerDeviceForRemoteMessages` 會回來（RNFB 和 `expo-notifications` 都接了 AppDelegate）；TestFlight 版（production APNs）和 Xcode 裝的開發版（sandbox）都拿得到 token。
+    - 把 App 滑掉再重開：第二次啟動時 daemon 的 log 又出現「Registered push token」，裝置 log 沒有「No FCM token on this device」。48 小時後仍收得到推播。
     - 通知權限只在連上 woowtech smart 的 daemon 時才問。
     - 從呼叫過 `getExpoPushTokenAsync` 的舊測試版升級後，第一次啟動會不會把 device token 送到 exp.host 一次：`expo-notifications` 在 import 時跑的程式可能搶在我們關掉之前。
     - 打一次真正的 iOS bundle，確認裡面沒有 `@firebase/app`，並量 IPA 大小的差距。
   - 待決定：
     - 手動分兩步跑 prebuild 和 `pod install` 時，要不要讓 `react-native.config.js` 也看 prebuild 產生的 `ios/` 裡有沒有 plist，而不只看環境變數。
-    - iOS 取 token 要不要加逾時。APNs 一直不回應時，那個 daemon 的訂閱會一直等，App 重開前都不會註冊推播。
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。

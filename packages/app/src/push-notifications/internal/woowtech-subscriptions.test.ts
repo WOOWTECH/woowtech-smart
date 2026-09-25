@@ -1,6 +1,7 @@
 import type { ConnectionState, DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { describe, expect, it } from "vitest";
 import { createAndroidFcmTokenSource, type ExpoPushTokens } from "./fcm-token.android";
+import { createIosFcmTokenSource, type RnFirebaseMessaging } from "./fcm-token.ios";
 import {
   createWoowtechPushSubscriptions,
   type PushDaemonClient,
@@ -404,6 +405,58 @@ describe("woowtech push subscription", () => {
     expect(warnings).toEqual([
       "[PushNotifications] The FCM token (29 characters) is outside the push relay's contract",
     ]);
+  });
+
+  it("moves the registration on every daemon at once on iOS, where one APNs registration supersedes another", async () => {
+    // React Native Firebase (26.4) rejects a pending registerDeviceForRemoteMessages with
+    // registration-superseded when another starts before UIKit answers.
+    let pendingRegistration: ((error: Error) => void) | null = null;
+    const rnFirebase: RnFirebaseMessaging<"messaging"> = {
+      getMessaging: () => "messaging",
+      registerDeviceForRemoteMessages: () =>
+        new Promise<void>((resolve, reject) => {
+          pendingRegistration?.(
+            Object.assign(new Error("[messaging/registration-superseded]"), {
+              code: "messaging/registration-superseded",
+            }),
+          );
+          pendingRegistration = reject;
+          setImmediate(() => {
+            if (pendingRegistration !== reject) return;
+            pendingRegistration = null;
+            resolve();
+          });
+        }),
+      getAPNSToken: async () => "3f0e5a9c1b2d4e6f8a0b1c2d3e4f5a6b",
+      getToken: async () => FCM_TOKEN,
+      onTokenRefresh: () => () => undefined,
+    };
+    const phone = createPhone();
+    const { startSubscription } = createWoowtechPushSubscriptions({
+      ...phone.dependencies,
+      fcmTokens: createIosFcmTokenSource({
+        loadMessaging: () => rnFirebase,
+        loadApnsRegistration: () => async () => undefined,
+        warn: () => undefined,
+      }),
+    });
+    const daemons = [new FakeDaemonClient(WOOWTECH_DAEMON), new FakeDaemonClient(WOOWTECH_DAEMON)];
+    daemons.forEach((client, index) =>
+      startSubscription({ client, serverId: `${SERVER_ID.slice(0, -1)}${index}` }),
+    );
+    for (const client of daemons) client.connect();
+    await settleTurns(5);
+
+    phone.changeLanguage("en");
+    await settleTurns(5);
+
+    for (const client of daemons) {
+      expect(client.received).toEqual([
+        `register wsp1:zh-TW:${FCM_TOKEN}`,
+        `revoke wsp1:zh-TW:${FCM_TOKEN}`,
+        `register wsp1:en:${FCM_TOKEN}`,
+      ]);
+    }
   });
 
   it("stops following the daemon, token refreshes and the language once stopped", async () => {
