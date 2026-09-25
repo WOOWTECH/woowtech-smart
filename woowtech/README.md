@@ -571,9 +571,10 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - 觸發：拿掉 push main，改成每週一次（週日 18:17 UTC，台灣週一 02:17），PR、merge queue、手動照舊。個人帳號的私有 repo 沒有 merge queue，那個觸發不會發生，留著是因為上游的 `scripts/ci-workflow.test.mjs` 檢查它。
 - 排程的那一次不跑 `changes` job 裡的 `dorny/paths-filter`：它從事件內容讀預設分支，排程事件沒有帶 repository，會直接失敗，連帶跳過後面的 CI 規則檢查。PR 以外的事件本來就跑全部的 job，不需要它的結果。
 - Windows：兩個 Windows job 的 `if` 最前面加上 `vars.WOOWTECH_CI_WINDOWS == 'true' &&`。repo 沒設這個變數，兩個 job 顯示為略過，不佔 runner。沒有刪掉，因為上游的 `ci-workflow.test.mjs` 要求它們存在。要跑 Windows 時，在 Settings → Secrets and variables → Actions → Variables 新增 `WOOWTECH_CI_WINDOWS`，值是 `true`，並把下面 2 核心的時間設定也加到兩個 Windows job（私有 repo 的 Windows runner 也是 2 核心）。
+- Ubuntu 的 job 都固定用 `ubuntu-24.04`（上游只有桌面版 job 固定，其他 15 個用 `ubuntu-latest`）。GitHub 從 2026-10-19 起把 `ubuntu-latest` 改指 Ubuntu 26；固定之後，什麼時候換 Ubuntu 由我們決定，不會發生在沒人看的排程執行裡。要換時一起改 16 個 `runs-on`，先在分支上手動跑一次。job 名稱 `server-tests (ubuntu-latest)`、`desktop-tests (ubuntu-latest)` 照上游不改：那是 status check 的名稱，上游的 `ci-workflow.test.mjs` 檢查它們。
 - 桌面版的 RPM smoke 先用 `dpkg --remove` 移除前一步裝的 deb。我們的 deb 叫 `io.woowtech.smart.desktop`（electron-builder 取 `extraMetadata.name`，第 5 節），上游的叫 `paseo`。用上游的名字時 dpkg 只會警告、不會移除，deb 留下的檔案會補上 RPM 沒裝到的東西，smoke 就看不出 RPM 的問題。
 - 2 核心的時間設定，第一次執行後加的（見下面）。上游的 CI 在公開 repo 的 4 核心 runner 上跑，這些上限在那裡夠用；變數沒設時照上游：
-  - Playwright 的 4 個分片和桌面版 job 設 `E2E_METRO_WARMUP_TIMEOUT_MS=600000`，網頁版冷打包最多等 10 分鐘。讀它的是 Playwright 的 globalSetup（`packages/app/e2e/support/global-setup.ts`，上游 120 秒，桌面版的 renderer E2E 也用它）和桌面版 lifecycle E2E 第一次開視窗（`packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs`，上游 90 秒）。
+  - Playwright 的 4 個分片和桌面版 job 設 `E2E_METRO_WARMUP_TIMEOUT_MS=600000`，網頁版冷打包最多等 10 分鐘。讀它的是 Playwright 的 globalSetup（`packages/app/e2e/support/global-setup.ts`，上游 120 秒，桌面版的 renderer E2E 也用它）、桌面版 lifecycle E2E 第一次開視窗（`packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs`，上游 90 秒），以及桌面版 browser E2E 第一次點 Settings 之前等 Settings 按鈕出現（`packages/desktop/e2e/browser-tabs.e2e.mjs`，上游只有點擊本身的 Playwright 預設 30 秒；變數沒設時不多等）。
   - 桌面版 job 的上限從 30 分鐘改成 60 分鐘。
   - app-tests 設 `PASEO_APP_TEST_HOOK_TIMEOUT_MS=120000`，`packages/app/vitest.config.ts` 讀它，unit 和 browser 兩個 project 的 hook 上限（vitest 預設 10 秒和 30 秒）都改成 2 分鐘。沒設時設定檔不給值，照 vitest 的預設；給 10 秒當預設值會把 browser 的 30 秒一起降成 10 秒。在命令列加 `--hookTimeout` 沒用：vitest 4.1.7 只把固定幾個命令列選項傳給 projects，`hookTimeout` 不在裡面。
   - cli-tests 設 `PASEO_CLI_TEST_CONCURRENCY=2`，CLI 的 e2e 一次跑 2 個檔（上游預設 4 個）。分片維持 3 個，job 名稱和上游的 `ci-workflow.test.mjs` 都不用改。
@@ -603,7 +604,8 @@ secret 和外部服務：
 | cli-tests 2/3   | 11m46s   | 過   |                                                                                                           |                                       |
 | cli-tests 3/3   | 18m23s   | 失敗 | `25-daemon-restart-supervisor`：重啟後 20 秒內等不到新的 worker                                           | 一次跑 2 個檔                         |
 
-- format、lint：CI 對整個 repo 跑 `npm run format:check` 和 `npm run lint`。這三個檔都是 `.mjs`，lefthook 的 format 和 lint 用的 glob 沒有 `mjs`，commit 時從沒檢查過（`lefthook run pre-commit --job lint --file woowtech/png.mjs` 顯示「no files for inspection」）。改了 `.mjs` 要自己跑 `npm run format:files -- <檔案>` 和 `npm run lint -- <檔案>`。
+- format、lint：CI 對整個 repo 跑 `npm run format:check` 和 `npm run lint`。這三個檔都是 `.mjs`，lefthook 的 format 和 lint 用的 glob 沒有 `mjs`，commit 時從沒檢查過（`lefthook run pre-commit --job lint --file woowtech/png.mjs` 顯示「no files for inspection」）。`lefthook.yml` 的兩個 glob 已加上 `mjs`（上游的檔，改兩行）：同一個指令現在會檢查這個檔，拿 main 版的 `png.mjs` 來跑，lint 和 format 都失敗，錯誤跟 run 1 相同。`.cjs` 還是不在 glob 裡（repo 只有上游的 3 個），改了要自己跑 `npm run format:files -- <檔案>` 和 `npm run lint -- <檔案>`。
+  - 各 worktree 的 `lefthook.yml` 不同時（例如這個改動合進 main 之前），lefthook 每次發現設定跟上次不同，就重裝共用 `.git` 裡的 hook（輸出「sync hooks」），hook 會改成指向執行它的那份 lefthook。手動跑 lefthook 時加 `--no-auto-install`。
 - Linux 的桌面版測試：產品碼一致，錯的是夾具。electron-builder 替我們的設定算出的 Linux 執行檔是 `woowtech smart`，after-pack、linux-sandbox 的啟動器、`bin/paseo` 和打包 smoke 都用這個名字，launcher 測試卻還建上游的 `Paseo`，after-pack 改名時 ENOENT。CLI 安裝在 Linux 找 `<安裝資料夾>/resources/bin/woowtech-smart`，測試只建了 macOS 的 `.app`。
 - run 1 沒跑到的步驟裡另外修了兩處：
   - 桌面版的打包 smoke 檢查打包後 package.json 的 `desktopName` 是 `woowtech smart.desktop`，實際是上游的 `Paseo.desktop`。改在 `electron-builder.yml` 的 `extraMetadata` 設（第 5 節）。
@@ -635,10 +637,10 @@ secret 和外部服務：
 - 桌面版 job 在 run 1 停在單元測試。後面的 lifecycle、renderer、browser E2E，Linux 打包（AppImage、deb、rpm、tar.gz）和三次安裝 smoke 都還沒在我們的 repo 跑過；`desktopName` 的修正到 smoke 才看得到，60 分鐘夠不夠也是。
 - Playwright 的測試一個都還沒跑過，每個 test 60 秒的上限在 2 核心上夠不夠還不知道。
 - 冷打包 10 分鐘夠不夠。
-- 桌面版 browser E2E（`packages/desktop/e2e/browser-tabs.e2e.mjs`）不讀 `E2E_METRO_WARMUP_TIMEOUT_MS`：它自己起 Metro，視窗出來後第一次點 Settings 只等 Playwright 預設的 30 秒，靠的是前面 lifecycle、renderer 兩步留在 `/tmp/metro-cache` 的轉譯快取。守門只檢查這一步拿得到變數，不檢查它有沒有讀。
+- 桌面版 browser E2E（`packages/desktop/e2e/browser-tabs.e2e.mjs`）自己起 Metro，現在第一次點 Settings 之前最多等 10 分鐘。在我們的 repo 還沒跑過；這台 Mac 只確認了語法、lint 和守門，沒有實際跑整支（要起 daemon、Metro 和 Electron）。
 - CLI 一次跑 2 個檔後，`03-daemon` Test 8 能不能在 1.5 秒內拿到狀態、`25-daemon-restart-supervisor` 的新 worker 能不能在 20 秒內起來。還是失敗的話，改成一次 1 個，或加分片（加分片要一起改上游 `ci-workflow.test.mjs` 裡的 job 名稱）。
 - 全部跑完用掉的分鐘數。
-- GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑；`ubuntu-latest` 從 2026-10-19 起改指 Ubuntu 26，除了固定用 `ubuntu-24.04` 的桌面版 job，其他 job 都會換。
+- GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑。另一個提示（`ubuntu-latest` 改指 Ubuntu 26）已處理：Ubuntu 的 job 都固定 `ubuntu-24.04`。每個 job 的「Set up job」應該顯示 Ubuntu 24.04 的映像，run 1 的 `ubuntu-latest` 應該也是，都還沒到 GitHub 上核對。
 
 打開 Actions（在 GitHub 上的操作由 coordinator 和 owner 做）：
 
@@ -656,7 +658,7 @@ secret 和外部服務：
   - 這次 push 不會觸發它（只有手動、tag 或 PR）：照常 push，再到 Actions 停用它。
   - 這次 push 會觸發它：先在 Settings → Actions → General 選「Disable actions」，push 完選回原本的設定（確認允許清單還在），再停用它。
   - 然後把檔名和原因加進守門的 `DISABLED_IN_UI`；CI 需要它的話，改加進 `ENABLED`。
-- 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；開著的 workflow 只用那三把 key、不要求寫入權限；RPM smoke 移除的是 electron-builder 算出的 deb 名稱；上面 2 核心的時間設定都在，程式碼（不算註解）也還在讀那些變數；app 的 hook 上限請 vitest 自己解析設定：設了變數時每個 project 都是 2 分鐘，沒設時照 vitest 的預設。上游改到這些時會失敗，照訊息改回來。
+- 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；`runs-on` 和 matrix 都沒有 `ubuntu-latest`；開著的 workflow 只用那三把 key、不要求寫入權限；lefthook 的 format、lint glob 有 `mjs`；RPM smoke 移除的是 electron-builder 算出的 deb 名稱；上面 2 核心的時間設定都在，程式碼（不算註解）也還在讀那些變數；app 的 hook 上限請 vitest 自己解析設定：設了變數時每個 project 都是 2 分鐘，沒設時照 vitest 的預設。上游改到這些時會失敗，照訊息改回來。
 
 ## Mac 開發環境
 
@@ -823,6 +825,12 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 發現並修正：`vitest.config.ts` 沒設變數時給 10 秒，browser project 的 hook 上限從 vitest 預設的 30 秒變成 10 秒。守門改成請 vitest 解析設定，先紅（browser 10000）後綠；設了變數時兩個 project 都是 120000。
   - 守門突變：`ci.yml` 的設定刪掉或改弱 9 種、`vitest.config.ts` 改回 10 秒或刪掉那行、`electron-builder.yml` 拿掉 `desktopName`，都紅。程式不讀變數、只剩註解提到的 2 種原本抓不到；守門改成只看程式碼後抓得到，`run-all.ts` 讀別的名稱也紅。每次都用 sha256 確認改回原檔。
   - 沒做的：同第 18 節「下一次執行才能確認的」；run 1 各 job 的時間和原因沒有到 GitHub 上核對。
+- CI 第二次執行前的三項（2026-09-25，分支 `woowtech/ci-green`，第 18 節）：守門都先紅後綠，都做了突變，每次都用 sha256 確認改回原檔。
+  - browser E2E：守門要求 `browser-tabs.e2e.mjs` 的程式碼讀變數，先紅（`ignores the setting`）後綠。突變：改讀別的名稱但註解照寫、改成固定 30 秒、整段改回上游，都紅。
+  - lefthook：守門先紅（format、lint 都是 false）後綠。`lefthook run pre-commit --job lint|format --file woowtech/png.mjs` 改之前兩個都「no files for inspection」，改之後都有檢查、都過；換成 main 版的 `png.mjs`，兩個都失敗（complexity 24、巢狀三元；排版不符）。突變：兩個 glob 各拿掉 `mjs`，都紅。
+  - Ubuntu 版本：守門先紅，列出 15 個用 `ubuntu-latest` 的 job，改完變綠。展開 anchor 後跟改之前只差這 15 個 `runs-on`，觸發和 Windows 的條件沒變。突變：`changes` 和桌面版改回 `ubuntu-latest`、寫成陣列 `[ubuntu-latest]`、改成 matrix 的 `os` 清單和 `include`，都紅，每次都指到正確的 job。
+  - 跑過的：守門 70 個全過（`node --test woowtech/*.test.mjs`）；CI 第一個 job 的三個 node 測試 27/27，上游的 `ci-workflow.test.mjs` 不用改；全 repo 的 `npm run lint`、`npm run format:check` 通過；每個 commit 的 pre-commit 都跑了完整 typecheck。
+  - 沒跑的：browser E2E 本身（要起 daemon、Metro 和 Electron）和 GitHub 上的執行。
 
 ## 接下來
 
@@ -848,5 +856,4 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 推播的句子（第 16 節的表）請 owner 確認用字。實機測試時確認：通知只顯示產品名和通用句子、點下去開到那個 agent 或 terminal，桌面版的系統通知仍有回覆預覽。
 - CI：`woowtech/ci-green` 合進 main 後手動跑第二次，確認第 18 節「下一次執行才能確認的」各項，用實際的分鐘數更新估計。
-- lefthook 的 format 和 lint 不看 `.mjs`，fork 的守門和工具都是 `.mjs`。要不要在 `lefthook.yml` 的兩個 glob 加上 `mjs`（上游的檔，改兩行），待決定。
 - 商標（TIPO）與 D-U-N-S。
