@@ -80,8 +80,9 @@ test("every workflow file is either enabled or disabled in GitHub's UI", () => {
 test("CI runs weekly, on pull requests and on demand, not on every push to main", () => {
   const { on } = workflow("ci.yml");
   const message =
-    "A full CI run takes about 250 of GitHub Free's 2,000 private-repo minutes a month. " +
-    "Ten pushes a working day would need about 27 times that, a weekly run about half.";
+    "A CI run takes about 125 of GitHub Free's 2,000 private-repo minutes a month, or 275 " +
+    "with Playwright. Ten full runs a working day would need about 30 times the month's " +
+    "minutes; the weekly run without Playwright takes about a quarter.";
   assert.deepEqual(
     Object.keys(on).sort(),
     ["merge_group", "pull_request", "schedule", "workflow_dispatch"],
