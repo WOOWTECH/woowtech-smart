@@ -9,7 +9,8 @@ export function resolveBundledSkillsDir(moduleUrl: string | URL = import.meta.ur
   const moduleDir = path.dirname(fileURLToPath(moduleUrl));
   const candidates = [
     path.resolve(moduleDir, "..", "..", "..", "skills"),
-    path.resolve(moduleDir, "..", "..", "..", "..", "..", "..", "skills"),
+    // woowtech smart's skills, generated from upstream's skills/ under our names.
+    path.resolve(moduleDir, "..", "..", "..", "..", "..", "..", "woowtech", "skills"),
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
 }

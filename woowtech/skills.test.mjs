@@ -126,3 +126,17 @@ test("skills name our command, daemon, app and help channels", () => {
     }
   }
 });
+
+test("the server's build ships woowtech/skills, not upstream's skills", () => {
+  // build:lib copies the catalog into dist/server/skills, which the desktop app
+  // packs and the daemon installs from. A daemon run from source reads
+  // woowtech/skills itself (orchestration-skills/internal/paths.ts).
+  const { scripts } = JSON.parse(
+    readFileSync(path.join(repoRoot, "packages/server/package.json"), "utf8"),
+  );
+  assert.match(
+    scripts["build:lib"],
+    /fs\.cpSync\('\.\.\/\.\.\/woowtech\/skills','dist\/server\/skills',/,
+  );
+  assert.doesNotMatch(scripts["build:lib"], /'\.\.\/\.\.\/skills'/);
+});

@@ -115,7 +115,7 @@ describe("desktop packaging", () => {
 
     expect(config).not.toContain("from: ../../skills");
     expect(serverPackage).toContain("fs.rmSync('dist/server/skills',{recursive:true,force:true})");
-    expect(serverPackage).toContain("fs.cpSync('../../skills','dist/server/skills'");
+    expect(serverPackage).toContain("fs.cpSync('../../woowtech/skills','dist/server/skills'");
     expect(runtimeTrace).toContain('"packages/server/dist/server/skills/**"');
   });
 
