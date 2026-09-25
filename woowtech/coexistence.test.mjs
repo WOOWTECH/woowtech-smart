@@ -36,21 +36,26 @@ function linesMatching(file, patterns) {
     );
 }
 
+const electronBuilder = () =>
+  createRequire(new URL("package.json", desktopDir))("electron-builder");
+
+/** The desktop package as electron-builder reads it, with extraMetadata applied. */
+async function desktopPackager() {
+  const packager = new (electronBuilder().Packager)({
+    projectDir: fileURLToPath(desktopDir),
+    config: "electron-builder.yml",
+  });
+  await packager.validateConfig();
+  return packager;
+}
+
 /**
  * The folder electron-updater downloads into, as the desktop package's electron-builder
  * writes it into app-update.yml. electron-builder derives it from the packaged package
  * name and ignores any value under `publish`, so ask electron-builder itself.
  */
 async function builderUpdaterCacheDirName() {
-  const { AppInfo, Packager } = createRequire(new URL("package.json", desktopDir))(
-    "electron-builder",
-  );
-  const packager = new Packager({
-    projectDir: fileURLToPath(desktopDir),
-    config: "electron-builder.yml",
-  });
-  await packager.validateConfig();
-  return new AppInfo(packager, null).updaterCacheDirName;
+  return new (electronBuilder().AppInfo)(await desktopPackager(), null).updaterCacheDirName;
 }
 
 const DESKTOP_APP_ID = "io.woowtech.smart.desktop";
@@ -136,6 +141,10 @@ test("the desktop app has its own id, name and update cache, used consistently",
   // The official Paseo downloads updates into @getpaseodesktop-updater, named after
   // upstream's package name.
   assert.equal(await builderUpdaterCacheDirName(), `${appId}-updater`);
+  // On Linux, electron-builder names the desktop entry after executableName, and the
+  // packaged package.json's desktopName tells Electron which entry is the app's. The
+  // packaged-app smoke in CI checks that they match.
+  assert.equal((await desktopPackager()).metadata.desktopName, `${APP_NAME}.desktop`);
 });
 
 test("the desktop app, mobile app, deep links and daemon share one link scheme", () => {
