@@ -9,6 +9,7 @@ import {
 } from "@getpaseo/protocol/woowtech-push";
 
 import type { PushPayload } from "./push-service.js";
+import type { PushTokenStore } from "./token-store.js";
 
 // woowtech smart sends every push through WoowTech's push relay, which picks one fixed
 // sentence per reason in the phone's language and sends it with FCM (woowtech/README.md,
@@ -199,8 +200,9 @@ export function createWoowtechRelayDeliver(options: WoowtechRelayDeliverOptions)
         unusable.push(registered);
         continue;
       }
-      // One push per phone. Two strings for one FCM token means the app changed its language
-      // and the revocation of the old string was lost; the store lists the newer one last.
+      // One push per phone. Registering keeps one string per phone (revokeSupersededPushTokens),
+      // so two strings for one FCM token come from a store an older daemon wrote, or from a
+      // revocation the store failed to save; the relay gets the one the store lists last.
       const strings = phones.get(token.fcmToken)?.registered ?? [];
       phones.set(token.fcmToken, { token, registered: [...strings, registered] });
     }
@@ -210,6 +212,27 @@ export function createWoowtechRelayDeliver(options: WoowtechRelayDeliverOptions)
     }
     await Promise.all([...phones.values()].map((phone) => notify(phone, payload.data)));
   };
+}
+
+/**
+ * Revokes the phone's other strings when it registers `renewed`, so the language it registered
+ * last is the one its pushes use. The app revokes the old string itself when its language
+ * changes, but that request can be lost, and the store keeps its strings in the order they
+ * were first added.
+ */
+export function revokeSupersededPushTokens(input: {
+  renewed: string;
+  store: Pick<PushTokenStore, "getActiveTokens" | "revokeToken">;
+}): void {
+  const renewed = input.renewed.trim();
+  const phone = parsePushToken(renewed);
+  if (!phone) return;
+  for (const registered of input.store.getActiveTokens()) {
+    if (registered === renewed) continue;
+    if (parsePushToken(registered)?.fcmToken === phone.fcmToken) {
+      input.store.revokeToken(registered);
+    }
+  }
 }
 
 export const DEFAULT_WOOWTECH_PUSH_RELAY_URL = "https://push.woowtech.io/api/smart/v1/notify";

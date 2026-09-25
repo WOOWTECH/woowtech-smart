@@ -516,7 +516,7 @@ daemon：`packages/server/src/server/push/woowtech-relay.ts`
 - 接點：`push/index.ts` 的 `createPushNotifications` 沒注入 `deliver` 時用 `createDaemonRelayDeliver`，上游 90 天只改過這個檔案 1 次。上游的 Expo 送出器 `push-service.ts` 留著不動，沒有人呼叫，`index.ts` 只從它拿 `PushPayload` 型別。
 - 網址寫死 `https://push.woowtech.io/api/smart/v1/notify`。環境變數 `WOOWTECH_PUSH_RELAY_URL` 可以蓋掉，給測試和預備環境用，daemon 啟動時讀一次。
 - 不是 `wsp1:` 的字串（官方 App 或舊測試版註冊的 Expo token）和格式不合的 `wsp1:` 字串：從 store 撤銷，不送。
-- 同一個 FCM token 只送一次。換語言時 App 會先撤銷舊字串；撤銷沒送到、兩個字串並存時，用最後註冊的那個。
+- 每支手機只留一個字串，也就是最後註冊的那個：daemon 收到註冊或 heartbeat 續約時，撤銷同一個 FCM token 的其他字串（`push/index.ts` 的 `renew` 呼叫 `revokeSupersededPushTokens`）。App 換語言時自己也會先撤銷舊字串，但那個請求可能逾時沒送到，而 store 照字串第一次加入的順序排，不能拿順序當成註冊先後。送出時同一個 FCM token 仍只送一次：舊版 daemon 留下兩個字串時，用 store 排在後面的那個。
 - 完全不讀 `title`、`body` 和 `data.cwd`。送出前再用 `validateRelayNotifyBody` 檢查一次，送的是檢查後只剩四個欄位的那份。
 - 中繼的回應，逾時 10 秒：
 
@@ -596,7 +596,7 @@ Android：
 測試：
 
 - protocol `woowtech-push.test.ts`：字串來回和冒號、語言、token 契約（長度、字元、冒號）、`reason` 和 `target` 的對應、不帶文字，以及契約 fixture 的每一個案例。`messages.test.ts`：帶 `woowtechPush` 的 server_info 解析得到值，不帶的照樣解析。
-- server `push/woowtech-relay.test.ts`：用本機的 `node:http` 伺服器當假中繼，檢查收到的原始位元組。只有四個欄位；標題、內文、`cwd` 裡的標記字串不外流；Expo token 撤銷不送；同一支手機兩種語言只送一次；410 撤銷；503、連線被切、連不到、逾時各重試一次；400、403、413、429、502 不重試也不撤銷；307、308、302 轉址不跟著轉，另一個位址收不到任何請求；log 沒有 token，debug 只有雜湊前 8 碼；store 撤銷失敗不影響其他手機。另一個測試不注入 `deliver`，用 `diagnostics_channel`（`undici:request:create`、`http.client.request.start`）記下 `send()` 期間程序發出的每一個請求：只有假中繼那一個。
+- server `push/woowtech-relay.test.ts`：用本機的 `node:http` 伺服器當假中繼，檢查收到的原始位元組。只有四個欄位；標題、內文、`cwd` 裡的標記字串不外流；Expo token 撤銷不送；同一支手機兩種語言只送一次；App 換語言又換回來、兩次撤銷都沒送到時，中繼收到的是最後註冊的語言，store 只剩那個字串；410 撤銷；503、連線被切、連不到、逾時各重試一次；400、403、413、429、502 不重試也不撤銷；307、308、302 轉址不跟著轉，另一個位址收不到任何請求；log 沒有 token，debug 只有雜湊前 8 碼；store 撤銷失敗不影響其他手機。另一個測試不注入 `deliver`，用 `diagnostics_channel`（`undici:request:create`、`http.client.request.start`）記下 `send()` 期間程序發出的每一個請求：只有假中繼那一個。
 - server `push/woowtech-push-content.test.ts`、`websocket-server.notifications.test.ts`、`websocket-server.terminal-notifications.test.ts`：通用句子、ID 格式、語言判斷；`woowtechPush` 經 protocol 解析後是 `true`；App 的 attention 訊息保有回覆預覽，交給 `deliver` 的推播只有通用句子；terminal 完成和等輸入的 `reason`。
 - App：
   - `plugins/woowtech-ios-firebase.test.ts`：plist 從哪裡來，以及用 `expo-modules-autolinking` 自己的解析函式確認 RNFB 只在有 plist 的 iOS 連結、保留 build phase。

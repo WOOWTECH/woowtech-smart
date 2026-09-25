@@ -3,7 +3,7 @@ import type pino from "pino";
 import type { PushPayload } from "./push-service.js";
 import { PushTokenStore } from "./token-store.js";
 import { toRemotePushPayload, type PushLanguage } from "./woowtech-push-content.js";
-import { createDaemonRelayDeliver } from "./woowtech-relay.js";
+import { createDaemonRelayDeliver, revokeSupersededPushTokens } from "./woowtech-relay.js";
 
 export type { PushPayload };
 
@@ -37,6 +37,8 @@ export function createPushNotifications(options: {
   return {
     renew(token) {
       store.renewToken(token);
+      // woowtech smart: a phone keeps one string, the one registered last (woowtech/README.md, 16).
+      revokeSupersededPushTokens({ renewed: token, store });
     },
     revoke(token) {
       store.revokeToken(token);

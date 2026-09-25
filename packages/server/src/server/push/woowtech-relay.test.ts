@@ -276,11 +276,12 @@ describe("pushes through WoowTech's push relay", () => {
     ]);
   });
 
-  test("a phone registered in two languages gets one push, in the one registered last", async () => {
+  test("a phone listed in two languages gets one push, in the language listed last", async () => {
     const relay = await startFakeRelay();
     const { deliver, revoked } = deliverTo(relay);
 
-    // The app switched from English to Chinese and its revocation of the old string is lost.
+    // A store an older daemon wrote: the app switched from English to Chinese, and its
+    // revocation of the old string was lost.
     await deliver([`wsp1:en:${PHONE}`, `wsp1:zh-TW:${PHONE}`], finishedAgent());
 
     expect(bodiesOf(relay)).toEqual([
@@ -572,10 +573,52 @@ describe("the daemon's push notifications", () => {
       },
     ]);
     // The Expo token is gone from the store, so the next push does not look at it again.
-    expect(
-      JSON.parse(readFileSync(filePath, "utf8")).subscriptions.map(
-        (subscription: { token: string }) => subscription.token,
-      ),
-    ).toEqual([`wsp1:zh-TW:${PHONE}`]);
+    expect(storedTokens(filePath)).toEqual([`wsp1:zh-TW:${PHONE}`]);
+  });
+
+  test("keep one string per phone: the one it registered last, whatever the order in the store", async () => {
+    const relay = await startFakeRelay();
+    vi.stubEnv("WOOWTECH_PUSH_RELAY_URL", relay.url);
+    const home = mkdtempSync(path.join(tmpdir(), "woowtech-push-relay-"));
+    homes.push(home);
+    const filePath = path.join(home, "push-tokens.json");
+    let now = Date.parse("2026-09-25T00:00:00Z");
+    const push = createPushNotifications({
+      logger: recordingLogger().logger,
+      filePath,
+      now: () => now,
+      language: "en",
+    });
+    const otherPhone = `wsp1:en:${LOGGED_PHONES.delivered}`;
+    push.renew(otherPhone);
+    push.renew("ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]");
+
+    // The app switches to English and back within an hour each time, and both of its
+    // revocations of the old string are lost (push.unregister.request timed out).
+    push.renew(`wsp1:zh-TW:${PHONE}`);
+    now += 60 * 60 * 1000;
+    push.renew(`wsp1:en:${PHONE}`);
+    now += 60 * 60 * 1000;
+    push.renew(`wsp1:zh-TW:${PHONE}`);
+
+    await push.send(finishedAgent());
+
+    expect(bodiesOf(relay).filter((body) => (body as { token: string }).token === PHONE)).toEqual([
+      {
+        token: PHONE,
+        locale: "zh-TW",
+        reason: "finished",
+        target: { serverId: SERVER_ID, workspaceId: WORKSPACE_ID, agentId: AGENT_ID },
+      },
+    ]);
+    // Other phones and tokens stay; the Expo token went with the push.
+    expect(storedTokens(filePath)).toEqual([otherPhone, `wsp1:zh-TW:${PHONE}`]);
   });
 });
+
+/** The push token strings in the daemon's push-tokens.json, in the order it lists them. */
+function storedTokens(filePath: string): string[] {
+  return JSON.parse(readFileSync(filePath, "utf8")).subscriptions.map(
+    (subscription: { token: string }) => subscription.token,
+  );
+}
