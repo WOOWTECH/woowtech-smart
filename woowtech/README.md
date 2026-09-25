@@ -23,7 +23,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
   守門發現新的 workflow 檔時，push 之前先照第 18 節處理：GitHub 會啟用新的 workflow，觸發條件有 push 的話，加進它的那次 push 就會跑。
 
-  推播另外要跑的單元測試列在第 16 節的「合併上游之後」。
+  推播和配對連結另外要跑的單元測試，分別列在第 16 節的「合併上游之後」和第 19 節的「上游合併後要再確認」。
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
   `packages/server/src/server/agent/providers/claude/agent.ts`、`packages/server/package.json`、`packages/server/src/server/bootstrap.ts`。
@@ -481,7 +481,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 2. App 把 `wsp1:<zh-TW|en>:<FCM token>` 經既有的 `register_push_token` 交給 daemon，訊息格式不變。只對 `server_info.features.woowtechPush === true` 的 daemon 註冊：官方 Paseo 的 daemon 沒有這個旗標，token 交給它的話，它會連同 agent 的回覆送到 Expo。
 3. daemon 把整個字串當成不透明的 token，照舊存在 `push-tokens.json`，48 小時租約。
 4. 有推播時，daemon 對每支手機發一個 `POST https://push.woowtech.io/api/smart/v1/notify`，本文只有 `{ token, locale, reason, target }`。
-5. push.woowtech.io 是 Cloudflare Worker：只放行這條路徑、每個 IP 限流（WAF 規則），加上 edge key 標頭後轉給 Cloud Run。
+5. push.woowtech.io 是 Cloudflare Worker（`smart-push-proxy`）：只放行這條路徑、每個 IP 每分鐘 120 次（Worker 的 `IP_RATE_LIMITER` binding，每個 Cloudflare 據點各自計數，沒有建 WAF 規則），加上 edge key 標頭後轉給 Cloud Run。
 6. Cloud Run 的 `smart-push`（GCP 專案 `woowtech-smart`，asia-east1）跑中繼 repo `woowtech-push-relay` 的 smart 模式（`RELAY_PROFILE=smart`）：驗證格式、查每個 token 的上限（每分鐘 10 則、每天 500 則）、從 `functions/smart-messages.js` 挑句子，用 Cloud Run 的服務帳戶呼叫 FCM。
 7. FCM 送到 Android；iOS 由 FCM 用上傳到 Firebase 的 APNs 金鑰轉給 APNs。
 8. 點通知：`expo-notifications` 回報點擊，`notification-routing.ts`（沒改）開到那個 agent 或 terminal。iOS 的 ID 放在 APNs payload 的 `body`（`expo-notifications` 只讀 `userInfo["body"]`），Android 的在 FCM `data`，點下去時成為啟動 intent 的 extras。
@@ -580,7 +580,7 @@ Android：
 
 契約 fixture：
 
-- `packages/protocol/tests/fixtures/smart-notify-v1.fixtures.json` 是中繼 repo `functions/test/fixtures/smart-notify-v1.fixtures.json` 的逐位元組副本，列出合法和不合法的請求。現在對應中繼 `smart-mode` 分支的 `3363c60`，`shasum -a 256` 是 `f78591d8…c8f667`。這份檔案不會打包進 npm 套件（`files` 只有 `dist`）。
+- `packages/protocol/tests/fixtures/smart-notify-v1.fixtures.json` 是中繼 repo `functions/test/fixtures/smart-notify-v1.fixtures.json` 的逐位元組副本，列出合法和不合法的請求。中繼 `smart-mode` 分支從 `3363c60` 到部署的 `dff78a1` 這份檔案都相同，`shasum -a 256` 是 `f78591d8…c8f667`。這份檔案不會打包進 npm 套件（`files` 只有 `dist`）。
 - 契約由中繼那邊改。改了之後：
   1. 把整份檔案複製過來，不要在這裡改。
   2. 兩份的 `shasum -a 256` 要相同。
@@ -633,7 +633,7 @@ node --test woowtech/*.test.mjs
 
 - 各種組合：新 App 加新 daemon 正常；新 App 加官方 daemon，不註冊，舊版 App 在那台 daemon 註冊過的 Expo token 在第一次連上時撤銷，之後不推播（撤銷沒送到的話，那台 daemon 會繼續送到 Expo，最多到舊 token 的 48 小時租約到期）；官方 App 或舊測試版加新 daemon，它們註冊的 Expo token 在第一次推播時被撤銷，不送出，更新 App 後重新註冊。
 - 留在電腦上的通知照舊有內容：桌面版的系統通知和 App 裡的提醒，用的是 daemon 經自己的連線（直接連線，或端對端加密的 relay）送給 App 的 attention 訊息，裡面仍有回覆預覽和 terminal 名稱。手機 App 不顯示本機通知，只收推播。
-- 還沒做的：中繼和 push.woowtech.io 的部署，以及實機驗收，見「接下來」。
+- 中繼和 push.woowtech.io 在 2026-09-25 部署：中繼 `smart-mode` 的 `dff78a1`，Cloud Run `smart-push`（`woowtech-smart`、asia-east1，revision `smart-push-00001-8v9`），前面是 Worker `smart-push-proxy`（自訂網域 push.woowtech.io，workers.dev 和 Workers Logs 都關掉）。還沒做的是實機驗收，見「接下來」。
 
 ### 17. daemon 自己的訊息用 woowtech smart
 
@@ -804,6 +804,15 @@ CORS：
   - 突變都被抓到：新 home 的 `app.baseUrl` 或 CORS 改回、`config.ts` 不遷移、遷移少了結尾斜線那種寫法、`pairing-offer.ts` 或 `bootstrap.ts` 的預設改回、`onboard` 加回 Web app、範例文字改回、`app.config.js` 的 scheme 改掉、`BRAND_PAIRING` 改成有 host 的網址（要重建 protocol 的 dist）、`app-base-url.ts` 多一行提到 app.paseo.sh。
 
 上游合併後要再確認：
+
+```bash
+npm run build:server   # 守門從原始碼跑，但跨套件的匯入讀 dist
+node --test woowtech/*.test.mjs
+(cd packages/protocol && npx vitest run src/brand-pairing.test.ts --bail=1)
+(cd packages/server && npx vitest run src/server/pairing-link.test.ts src/server/cors-defaults.test.ts --bail=1)
+(cd packages/cli && npx vitest run src/commands/daemon/pair.app-link.test.ts src/utils/daemon-target.app-link.test.ts --bail=1)
+(cd packages/app && npx vitest run src/runtime/woowtech-pairing-link.test.ts src/runtime/host-runtime.test.ts src/components/pair-link-modal.app-link.test.tsx src/components/pair-scan.app-link.test.tsx --bail=1)
+```
 
 - 守門的出貨原始碼掃描失敗時，看新出現的地方是誰在用：預設值改用 `BRAND_PAIRING`，給人看的文字改成我們的。
 - 上游改了 `encodeOfferToFragmentUrl` 的組法或 `config.ts` 的 `app.baseUrl` 解析：守門第 1、3 項會失敗。照新的組法調整 `BRAND_PAIRING.appBaseUrl`，保持連結是 `woowtech-smart:///#offer=…`。
@@ -1015,10 +1024,10 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 在模擬器上確認：英文系統的主畫面標籤、「新功能」的空狀態、繁中的設定頁和側欄。
 - 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
 - 配對連結直接叫起 App（第 19 節）的實機驗收：iOS 和 Android 的相機掃 QR Code、`xcrun simctl openurl`、`adb shell am start`，冷啟動和 App 已開著各一次；已經有一台主機、App 關著時掃新的 QR Code，再重開 App，兩台都在；沒裝 App 時掃描的反應；桌面版點連結不會有反應。Android 相機叫不起 App 時，照第 19 節的「取捨」決定要不要改成在我們網域放一頁。
-- 已存在的 home 的 `config.json` 還在 CORS 白名單列著 `https://app.paseo.sh`，要不要自動拿掉，還沒決定（第 19 節）。Hub（`hub.paseo.sh`）仍是上游的。
+- 已存在的 home 的 `config.json` 還在 CORS 白名單列著 `https://app.paseo.sh`，要不要自動拿掉，還沒決定（第 19 節）。審查建議比照 `appBaseUrlFromConfig`，在 fork 的檔裡解析時去掉正好等於 `https://app.paseo.sh`（有沒有結尾斜線都算）的來源，`config.ts` 的 `resolveCorsAllowedOrigins` 改 1 行呼叫它；不做的話，第一個對外版本之前要確認內部測試版沒有給過外部使用者。Hub（`hub.paseo.sh`）仍是上游的。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 推播（第 16 節）：protocol、daemon、App 和守門都做完了（分支 `woowtech/push`），接下來：
-  - 部署中繼的 smart 模式和 push.woowtech.io（步驟在中繼 repo）。新版 App 註冊 `wsp1:` 字串之前，daemon 不會發出任何推播請求；之後、中繼部署之前，推播會在連不上或逾時、重試一次後被丟棄。
+  - 中繼的 smart 模式和 push.woowtech.io 已在 2026-09-25 部署（第 16 節）。部署後的檢查：`POST {}` 回 400 `invalid_request`（field `token`）、假的 FCM token 回 410、直接打 run.app 回 403、GET 回 405、其他路徑回 404。
   - 通知用字寫在中繼的 `smart-messages.js`，請 owner 確認。
   - 兩個平台都用實機驗收（設計 6.6）：
     - 通知只顯示中繼的句子，點下去開到那個 agent 或 terminal，App 在背景和被滑掉各試一次；換語言後只收到一則新語言的通知；解除安裝後中繼回 410、daemon 刪掉那筆；桌面版的系統通知仍有回覆預覽。
