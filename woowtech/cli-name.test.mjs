@@ -287,8 +287,6 @@ test("the CLI's own messages name woowtech smart", () => {
       /\.(?:description|option|requiredOption|argument|summary)\(/,
       // Paseo Hub's chat bot, renamed with our own Hub.
       /@Paseo have a look/,
-      // The relay's operator, which is upstream until we run our own relay.
-      /Paseo cannot read your code or messages/,
     ],
   });
   assert.deepEqual(naming, []);
