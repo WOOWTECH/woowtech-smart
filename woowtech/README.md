@@ -477,6 +477,40 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
   - `woowtech/agent-env.test.mjs` 透過 tsx 直接呼叫原始碼，檢查前兩個接點。合併上游後，如果清單沒展開，或 Pi、OMP 又繞過 `createProviderEnvSpec`，這個測試就會失敗。
   - 前兩個是上游的測試檔，這次共加了 96 行，合併上游時可能衝突。衝突時可以放掉這兩個檔案裡我們加的測試，`agent-env.test.mjs` 涵蓋同樣兩個接點。
 
+### 16. 推播不帶使用者的內容
+
+- 原因：手機推播經過 Expo、Apple、Google 才送到手機，會離開使用者的電腦。上游的推播帶著 agent 回覆的前 220 字、權限要求的標題和說明（沒有的話是指令內容），terminal 的推播帶著 terminal 名稱和資料夾路徑。owner 決定推播不帶任何使用者的內容：沒有 agent 名稱、回覆預覽、權限內容，也沒有專案、工作區和檔案名稱。
+- 做法：fork 的 `packages/server/src/server/push/woowtech-push-content.ts` 在送出前把推播換成對外的版本。接點是 `push/index.ts` 的 `send()`，上游 90 天只改過這個檔案 1 次；daemon 的每一則推播都經過這裡，之後新增的推播也一樣。
+  - 標題是產品名，內文是每種原因一句固定的句子：
+
+    | 原因                                                                    | 中文（渥屋智能）               | 英文（woowtech smart）                         |
+    | ----------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------- |
+    | agent 或 terminal 完成（`finished`）                                    | 工作完成了，點一下查看結果。   | Work finished — tap to see the result.         |
+    | agent 要權限（`permission`）                                            | 需要你的授權，點一下查看要求。 | Permission needed — tap to review the request. |
+    | 其他：terminal 等輸入（`needs_input`）、agent 出錯（`error`）、沒有原因 | 需要你的注意，點一下查看。     | Needs your attention — tap to take a look.     |
+
+  - 用字還沒請 owner 確認。要改就改這個檔案的 `SENTENCE`，`woowtech-push-content.test.ts` 的預期值一起改。agent 出錯目前不推播（`agent-attention-policy.ts`）。
+  - `data` 只留 App 點通知時導頁用的 `serverId`、`workspaceId`、`agentId`、`terminalId`（`app/src/utils/notification-routing.ts` 只讀這四個），加上固定代碼 `reason`，之後自己的推播中繼要靠它挑句子。資料夾路徑 `cwd` 和其他欄位都不送。
+  - ID 要符合 daemon 產生的格式才送：`srv_` 加 12 個字元、`wks_` 加 16 個十六進位數字、UUID。2026-06-14 以前，上游把工作區的資料夾路徑當成工作區 ID，舊的 ID 不會重新產生；`PASEO_SERVER_ID` 也能設成任何文字。不合格的 ID 不送，點通知時就開得淺一點：少了 `workspaceId` 開主機首頁，少了 `serverId` 開 App 首頁。
+  - 上游 terminal 的推播沒有帶原因，`websocket-server.ts` 加了一行 `reason`。沒有它，terminal 完成時也會顯示「需要你的注意」。
+
+- 語言看 daemon 所在的電腦：
+  - 依序看 `LC_ALL`、`LC_MESSAGES`、`LANG`。都沒設、或是 `C`、`POSIX` 時，macOS 讀系統語言（`defaults read -g AppleLanguages` 的第一個），其他平台用 Node 的預設語系。
+  - 中文（`zh` 開頭，簡體也算，跟 App 一樣，第 7 節）顯示「渥屋智能」和繁體中文，其他語言顯示「woowtech smart」和英文。
+  - 要讀 macOS 系統語言，是因為桌面版啟動的 daemon 沒有 `LANG`，Node 這時不管系統是什麼語言都回報 en-US。
+  - 每一則推播都重新判斷，改了系統語言不用重啟 daemon。在這台 Mac 上讀一次 `defaults` 約 10 毫秒。
+  - 跟 App 裡選的介面語言無關，daemon 不知道手機的設定。
+- 留在電腦上的通知照舊有內容：桌面版的系統通知和 App 裡的提醒，用的是 daemon 經自己的連線（直接連線，或端對端加密的 relay）送給 App 的 attention 訊息，裡面仍有回覆預覽和 terminal 名稱。手機 App 不顯示本機通知，只收推播。
+- 測試：
+  - `push/woowtech-push-content.test.ts`：用 protocol 組出帶回覆預覽、權限標題和說明的推播，以及照 `websocket-server.ts` 組的 terminal 推播，檢查交給 Expo 的內容正好是產品名、原因對應的句子和合格的 ID；中文四種原因；不認得的原因不送；不合格的 ID 不送；語言的判斷（環境變數的順序、`C`、macOS 系統語言、讀不到時用 Node 的語系），以及 daemon 不指定語言時照 `LC_ALL`。
+  - `websocket-server.notifications.test.ts`（上游的檔，加 1 個）：同一個 agent 完成事件，新版 App 收到的 attention 訊息有回覆預覽，離開電腦的推播只有通用句子。
+  - `websocket-server.terminal-notifications.test.ts`（上游的檔，加 1 組）：terminal 完成和等輸入時，推播帶著 `reason`。
+  - `woowtech/push-content.test.mjs`：
+    - 從原始碼跑沒有注入 `deliver` 的 `createPushNotifications`，也就是真的會打 Expo 的那一條，把 `fetch` 換成記錄器。中英文各跑一次：送出的位元組裡沒有 agent 名稱、回覆、權限內容、資料夾、terminal 名稱和工作區名稱；標題是產品名；同一個原因的內文不隨內容改變，三種原因是三句不同的話；`data` 只有 ID 和 `reason`。
+    - 掃描出貨的原始碼：Expo 的網址只出現在 `push-service.ts`，`new PushService` 只在 `push/index.ts`，`.sendPush(` 只呼叫一次（預設的 `deliver`）。上游新增一條繞過 `send()` 的推播路徑時會失敗。
+  - 上游的兩個測試檔合併時衝突的話，可以先放掉我們加的測試；守門涵蓋 `send()` 的接點，terminal 的 `reason` 除外。
+- 之後改用 WoowTech 自己的推播中繼時，這一步照樣在 `send()` 裡先做，中繼的送出器只需要 `reason` 和 ID。守門裡跟 Expo 有關的掃描要跟著改。
+
 ## Mac 開發環境
 
 `woowtech/scripts/mac/` 是在 M2、8GB RAM 的 Mac 上建置和測試用的腳本。路徑是寫死的：repo 在 `~/projects/woowtech-smart`，腳本透過 `~/.local/share/woowtech-smart/` 的 symlink 呼叫，log 和截圖也存在那裡。
@@ -593,6 +627,15 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 守門：`relay.test.mjs` 4/4，出貨原始碼的掃描先紅在 `host-picker.tsx:41` 的註解；`skills.test.mjs` 先紅（技能過時、help 沒提 relay.woowtech.io），重新產生後 7/7；`cli-name.test.mjs` 拿掉 relay 的例外後先紅在 `pair.ts:145`。全部守門 53 個通過 52 個，沒過的 zh-TW 守門是 worktree 沒裝 OpenCC。
   - 本機整合（腳本不進 repo）：sandbox 裡、暫存 HOME 和 PASEO_HOME，用 `wrangler dev --local --config wrangler.woowtech.toml` 跑 relay，用建好的 CLI `daemon run` 起 daemon，relay 開關用預設，只用 `PASEO_RELAY_ENDPOINT` 指到本機的 relay。新 home 的 `config.json` 是 `{"enabled":true}`，daemon.log 有 `relay_control_connected`，`daemon pair --json` 結束碼 0，`woowtech-smart --host <配對連結> ls -a --json` 經 relay 和 E2EE 連上 daemon；relay 看到 server(control)、client、server(data) 三條連線。跑了兩次，結果相同。
   - 沒做的：沒有部署，relay.woowtech.io 還沒有 DNS；沒有對真的 relay.woowtech.io 測試；CLI e2e 03 和 17 只改了預期值，沒跑（會連到 relay）；沒有模擬器或實機測試。
+- 推播不帶內容（2026-09-25，分支 `woowtech/services`，第 16 節）：新測試都先紅後綠，每一項都做了突變。
+  - 紅燈原因，依切片順序：交給 Expo 的推播是「Agent finished」加上回覆內容；權限要求也拿到完成的句子（前一片只做了完成）；terminal 的推播句子不對，還帶著 `cwd`；舊式工作區 ID（資料夾路徑）和自訂的 server ID 照送；語言判斷還不存在；terminal 的推播沒有 `reason`。
+  - 到場就綠的（實作先寫了）：中文四種原因、不認得的原因、daemon 照 `LC_ALL` 選語言、本機訊息保留預覽。都用突變確認會失敗。
+  - 突變都被抓到：`send()` 直接送原本的推播（12 個測試失敗）、權限當成「需要注意」、`cwd` 放行、工作區 ID 不驗格式、不讀 macOS 系統語言、把 `C` 當成語言、daemon 固定用英文、terminal 推播拿掉 `reason`、新版 App 的 attention 訊息改成通用句子、整個 daemon 不帶預覽。
+    本機訊息那一項第一次用舊版 App 的連線測，改 `agent_attention_required` 的突變沒被抓到（舊版 App 走 `agent_stream`），所以改用新版 App 的連線。
+  - 守門 `push-content.test.mjs` 3/3。三種突變都讓它失敗：`send()` 直接送原本的推播（中英文兩項，錯誤訊息裡看得到 agent 名稱、回覆、資料夾和工作區名稱）、`push/index.ts` 多一個直接呼叫 `sendPush` 的方法、`data` 原樣送出。
+  - 實測語言判斷（這台 Mac 的系統語言是繁中）：shell 的 `LANG=C.UTF-8` 和完全沒有語系變數時都是「渥屋智能」和繁中，讀 `defaults` 約 10 毫秒；`LANG=en_US.UTF-8` 是英文。
+  - 跑過的測試：server 4 檔 45 個（`woowtech-push-content` 24、`push/index` 2、`websocket-server.notifications` 7、`websocket-server.terminal-notifications` 12）；守門 `push-content.test.mjs` 3 個。
+  - 沒做的：沒有真的送到 Expo，也沒有在手機上看通知和點通知導頁（這次不做實體手機測試）。
 
 ## 接下來
 
@@ -616,4 +659,5 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
 - 配對連結的主機和 CORS 白名單裡的 app.paseo.sh 待 owner 決定（第 11 節）；Hub（`hub.paseo.sh`）仍是上游的。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
+- 推播的句子（第 16 節的表）請 owner 確認用字。實機測試時確認：通知只顯示產品名和通用句子、點下去開到那個 agent 或 terminal，桌面版的系統通知仍有回覆預覽。
 - 商標（TIPO）與 D-U-N-S。
