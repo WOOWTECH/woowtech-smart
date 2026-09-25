@@ -1,18 +1,19 @@
 import path from "node:path";
 import os from "node:os";
 import { app } from "electron";
+import { cliCommandFileName } from "@getpaseo/protocol/brand-cli";
 
 export function getLocalBinDir(): string {
   return path.join(os.homedir(), ".local", "bin");
 }
 
 export function getCliTargetPath(): string {
-  const filename = process.platform === "win32" ? "paseo.cmd" : "paseo";
+  const filename = cliCommandFileName(process.platform);
   return path.join(getLocalBinDir(), filename);
 }
 
 export function getBundledCliShimPath(): string {
-  const cliShimFilename = process.platform === "win32" ? "paseo.cmd" : "paseo";
+  const cliShimFilename = cliCommandFileName(process.platform);
 
   if (process.platform === "darwin") {
     const electronExePath = app.getPath("exe");

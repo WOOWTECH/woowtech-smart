@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import { app } from "electron";
 import log from "electron-log/main";
+import { commandRunsCli } from "./ownership.js";
 import { resolveCliInstallSourcePath } from "./path.js";
 import { getBundledCliShimPath, getCliTargetPath, getLocalBinDir } from "./paths.js";
 import { ensurePathInShellRc } from "./shell-rc.js";
@@ -18,16 +19,20 @@ async function pathOrSymlinkExists(p: string): Promise<boolean> {
   }
 }
 
-export async function installCli(): Promise<InstallStatus> {
-  const targetPath = getCliTargetPath();
-  const shimPath = getBundledCliShimPath();
-  const installSourcePath = resolveCliInstallSourcePath({
+function resolveInstallSourcePath(): string {
+  return resolveCliInstallSourcePath({
     platform: process.platform,
     isPackaged: app.isPackaged,
     executablePath: app.getPath("exe"),
-    shimPath,
+    shimPath: getBundledCliShimPath(),
     appImagePath: process.env.APPIMAGE,
   });
+}
+
+export async function installCli(): Promise<InstallStatus> {
+  const targetPath = getCliTargetPath();
+  const shimPath = getBundledCliShimPath();
+  const installSourcePath = resolveInstallSourcePath();
   const binDir = getLocalBinDir();
 
   await fs.mkdir(binDir, { recursive: true });
@@ -43,7 +48,7 @@ export async function installCli(): Promise<InstallStatus> {
       "@echo off",
       `set "BUNDLED_CLI=${shimPath}"`,
       `if not exist "%BUNDLED_CLI%" (`,
-      `  echo Paseo CLI not found at %BUNDLED_CLI% — is Paseo installed? 1>&2`,
+      `  echo woowtech smart CLI not found at %BUNDLED_CLI% — is woowtech smart installed? 1>&2`,
       `  exit /b 1`,
       `)`,
       `call "%BUNDLED_CLI%" %*`,
@@ -66,6 +71,10 @@ export async function installCli(): Promise<InstallStatus> {
 }
 
 export async function getCliInstallStatus(): Promise<InstallStatus> {
-  const targetPath = getCliTargetPath();
-  return { installed: await pathOrSymlinkExists(targetPath) };
+  const installed = await commandRunsCli({
+    commandPath: getCliTargetPath(),
+    cliPath: resolveInstallSourcePath(),
+    platform: process.platform,
+  });
+  return { installed };
 }
