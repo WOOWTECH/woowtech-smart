@@ -154,6 +154,74 @@ test("CI can neither deploy nor publish: no credentials but the test keys, no wr
   assert.deepEqual(found, [], "The owner's rule for CI: tests only, nothing deploys or publishes.");
 });
 
+// GitHub runs private repositories on 2-core Linux runners; upstream's public repo gets 4.
+// CI run 1 (2026-09-25) failed on four time limits that upstream's runners meet.
+
+/** The Ubuntu steps that run a command matching `pattern`, with the environment each gets. */
+function ubuntuSteps(pattern) {
+  const ci = workflow("ci.yml");
+  return Object.entries(ci.jobs)
+    .filter(([, job]) => String(job["runs-on"]).startsWith("ubuntu-"))
+    .flatMap(([id, job]) =>
+      (job.steps ?? [])
+        .filter((step) => pattern.test(String(step.run ?? "")))
+        .map((step) => ({ job: id, step: step.name, env: { ...ci.env, ...job.env, ...step.env } })),
+    );
+}
+
+function readRepo(path) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+test("CI gives a cold Metro bundle ten minutes, not 90 or 120 seconds", () => {
+  // Every Playwright shard stopped in globalSetup with the web bundle at 91% after 120 s.
+  // The desktop job's lifecycle E2E compiles the same bundle while its window waits 90 s.
+  for (const file of [
+    "packages/app/e2e/support/global-setup.ts",
+    "packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs",
+  ]) {
+    assert.match(readRepo(file), /E2E_METRO_WARMUP_TIMEOUT_MS/, `${file} ignores the setting`);
+  }
+  const metroSteps = ubuntuSteps(/\btest:e2e\b/);
+  assert.ok(metroSteps.length >= 5, "the Playwright and desktop E2E steps were not found");
+  assert.deepEqual(
+    metroSteps.filter(({ env }) => !(Number(env.E2E_METRO_WARMUP_TIMEOUT_MS) >= 600_000)),
+    [],
+  );
+});
+
+test("CI gives the app unit tests' hooks two minutes", () => {
+  // input-draft.live.test.tsx imports a large module graph in beforeAll: 9.5 s on an idle
+  // Mac, over vitest's 10 s on the runner. vitest ignores --hookTimeout for projects.
+  assert.match(readRepo("packages/app/vitest.config.ts"), /PASEO_APP_TEST_HOOK_TIMEOUT_MS/);
+  const appTests = ubuntuSteps(/npm run test --workspace=@getpaseo\/app\b/);
+  assert.deepEqual(
+    appTests.map(({ job, env }) => [job, Number(env.PASEO_APP_TEST_HOOK_TIMEOUT_MS)]),
+    [["app-tests", 120_000]],
+  );
+});
+
+test("CI runs two CLI e2e files at a time, not upstream's four", () => {
+  // At 4, daemon status requests missed their 1.5 s limit (03-daemon) and a restarted
+  // worker came up after its 20 s deadline (25-daemon-restart-supervisor).
+  assert.match(readRepo("packages/cli/tests/run-all.ts"), /PASEO_CLI_TEST_CONCURRENCY/);
+  const cliTests = ubuntuSteps(/npm run test --workspace=@getpaseo\/cli\b/);
+  assert.deepEqual(
+    cliTests.map(({ job, env }) => [job, String(env.PASEO_CLI_TEST_CONCURRENCY)]),
+    [
+      ["cli-tests-1", "2"],
+      ["cli-tests-2", "2"],
+      ["cli-tests-3", "2"],
+    ],
+  );
+});
+
+test("CI's Ubuntu desktop job may run for an hour", () => {
+  // Run 1 stopped at its unit tests. The E2E, packaging and smoke steps after them
+  // compile Metro's bundle, export the web app and build four Linux packages.
+  assert.equal(workflow("ci.yml").jobs["desktop-tests-ubuntu"]["timeout-minutes"], 60);
+});
+
 test("CI's RPM smoke first removes the deb package our desktop build installed", async () => {
   // Upstream's deb is `paseo`. dpkg only warns about a package that is not installed,
   // so a stale name leaves the deb's files in place to hide what the RPM misses.

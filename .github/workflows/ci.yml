@@ -184,7 +184,11 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.desktop != 'false') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # woowtech smart: the private repo's 2-core runner needs longer than upstream's 30 minutes,
+    # and more than 90 seconds for the first cold Metro bundle (woowtech/README.md section 18).
+    timeout-minutes: 60
+    env:
+      E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
     permissions:
       contents: read
     steps: &desktop_test_steps
@@ -344,6 +348,10 @@ jobs:
 
       - name: Run app unit tests
         run: npm run test --workspace=@getpaseo/app
+        env:
+          # woowtech smart: slow beforeAll imports on the 2-core runner. vitest does not pass
+          # --hookTimeout on to projects, so packages/app/vitest.config.ts reads this.
+          PASEO_APP_TEST_HOOK_TIMEOUT_MS: "120000"
 
   sdk-tests:
     name: sdk-tests
@@ -421,6 +429,8 @@ jobs:
         run: npm run test:e2e --workspace=@getpaseo/app -- --shard=${{ env.PLAYWRIGHT_SHARD }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # woowtech smart: the cold web bundle takes over 120 s on the 2-core runner.
+          E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
@@ -514,6 +524,10 @@ jobs:
 
       - name: Run CLI tests
         run: npm run test --workspace=@getpaseo/cli
+        env:
+          # woowtech smart: upstream's 4 files at a time overload the 2-core runner, and the
+          # daemon's timing checks miss their limits.
+          PASEO_CLI_TEST_CONCURRENCY: "2"
 
   cli-tests-2:
     name: cli-tests (shard 2/3)
