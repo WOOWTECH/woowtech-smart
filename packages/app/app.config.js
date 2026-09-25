@@ -97,6 +97,12 @@ const variants = {
 const variant = variants[appVariant] ?? variants.production;
 const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 
+// iOS labels the home screen icon with this short name (CFBundleName) when the
+// display name does not fit, as "woowtech smart Debug" does not. Expo would leave
+// it at $(PRODUCT_NAME), the name without its spaces. Apple allows 15 characters.
+const shortName = "woowtech smart";
+const chineseShortName = "渥屋智能";
+
 export default {
   expo: {
     name: variant.name,
@@ -107,14 +113,15 @@ export default {
     scheme: "woowtech-smart",
     // Chinese launchers show the Chinese name (iOS here; Android via withLocalizedAppName).
     locales: {
-      "zh-Hans": { CFBundleDisplayName: variant.chineseName },
-      "zh-Hant": { CFBundleDisplayName: variant.chineseName },
+      "zh-Hans": { CFBundleDisplayName: variant.chineseName, CFBundleName: chineseShortName },
+      "zh-Hant": { CFBundleDisplayName: variant.chineseName, CFBundleName: chineseShortName },
     },
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
       supportsTablet: true,
       infoPlist: {
+        CFBundleName: shortName,
         NSMicrophoneUsageDescription: "This app needs access to the microphone for voice commands.",
         ITSAppUsesNonExemptEncryption: false,
       },

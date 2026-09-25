@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { expoPrebuildConfig } from "./expo-config.mjs";
+import { expoIntrospectedConfig, expoPrebuildConfig } from "./expo-config.mjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
@@ -63,23 +63,50 @@ test("the daemon introduces itself to agents as woowtech smart", () => {
   );
 });
 
-
 test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", () => {
   for (const [variant, nameSuffix, idSuffix] of [
     ["production", "", ""],
     ["development", " Debug", ".debug"],
   ]) {
     const config = expoPrebuildConfig(variant);
-    const chineseName = { CFBundleDisplayName: `渥屋智能${nameSuffix}` };
+    const displayNames = Object.fromEntries(
+      Object.entries(config.locales).map(([language, strings]) => [
+        language,
+        strings.CFBundleDisplayName,
+      ]),
+    );
 
     assert.equal(config.name, `woowtech smart${nameSuffix}`);
     assert.equal(config.ios.bundleIdentifier, `io.woowtech.smart${idSuffix}`);
     assert.equal(config.android.package, `io.woowtech.smart${idSuffix}`);
-    assert.deepEqual(config.locales, { "zh-Hans": chineseName, "zh-Hant": chineseName });
+    assert.deepEqual(displayNames, {
+      "zh-Hans": `渥屋智能${nameSuffix}`,
+      "zh-Hant": `渥屋智能${nameSuffix}`,
+    });
     // Expo applies `locales` to iOS only; this plugin carries them to Android.
     assert.ok(
       config._internal?.pluginHistory?.["with-localized-app-name"],
       `${variant}: Android launchers would not get the localized name`,
     );
+  }
+});
+
+// When the display name does not fit under the icon, as "woowtech smart Debug"
+// does not, SpringBoard labels it with the short name (CFBundleName). Expo leaves
+// that at $(PRODUCT_NAME), the name without its spaces, which read "woowtechsmart…".
+test("the iOS home screen falls back to a readable short name", () => {
+  for (const variant of ["production", "development"]) {
+    const { ios, locales } = expoIntrospectedConfig(variant);
+    const shortNames = [
+      ios.infoPlist.CFBundleName,
+      locales["zh-Hans"].CFBundleName,
+      locales["zh-Hant"].CFBundleName,
+    ];
+
+    assert.deepEqual(shortNames, ["woowtech smart", "渥屋智能", "渥屋智能"], variant);
+    for (const name of shortNames) {
+      // Apple's limit for CFBundleName.
+      assert.ok([...name].length <= 15, `${variant}: "${name}" is longer than 15 characters`);
+    }
   }
 });
