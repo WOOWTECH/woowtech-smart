@@ -1,6 +1,10 @@
-import type { Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { describe, expect, test, vi } from "vitest";
+import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import type { Options, Query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
+import * as spawnUtils from "../../../../utils/spawn.js";
 import type { ClaudeAgentSdkModule } from "./claude-agent-sdk-runtime.js";
 import { type ClaudeAgentSdkSource, claudeQuery } from "./query.js";
 
@@ -81,5 +85,48 @@ describe("claudeQuery", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(sdk.query).not.toHaveBeenCalled();
+  });
+});
+
+describe("Claude launch environment", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  test("a Claude started through node does not get the daemon's parent Claude Code session", () => {
+    // The node path rebuilds the environment from the daemon's own, which still holds
+    // the session the daemon was started from.
+    vi.stubEnv("CLAUDECODE", "1");
+    vi.stubEnv("CLAUDE_CODE_MESSAGING_TOKEN", "parent-inbox-token");
+    vi.stubEnv("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "64000");
+    const child = Object.assign(new EventEmitter(), {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+    }) as unknown as ChildProcess;
+    const spawn = vi.spyOn(spawnUtils, "spawnProcess").mockReturnValue(child);
+    let options: Options | undefined;
+    claudeQuery(
+      { prompt: "hi", options: {} },
+      {
+        queryFactory: (request) => {
+          options = request.options;
+          return fakeQuery([]);
+        },
+      },
+    );
+
+    options?.spawnClaudeCodeProcess?.({
+      command: "node",
+      args: ["claude.js"],
+      cwd: process.cwd(),
+      env: {},
+      signal: new AbortController().signal,
+    });
+
+    const env = spawn.mock.calls[0]?.[2]?.env ?? {};
+    expect(["CLAUDECODE", "CLAUDE_CODE_MESSAGING_TOKEN"].filter((name) => name in env)).toEqual([]);
+    expect(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe("64000");
   });
 });
