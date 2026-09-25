@@ -8,7 +8,8 @@ import type { SkillSelection, SkillTargets } from "./operations";
 import { resolveSkillTargets } from "./paths";
 import { coerceSkillSelection, type SkillSelectionStore } from "./selection-store";
 
-// The official Paseo installs these into the same agent homes.
+// The official Paseo installs these into the same agent homes, and older
+// versions of it installed the retired ones.
 const OFFICIAL_SKILLS = [
   "paseo",
   "paseo-advisor",
@@ -16,6 +17,12 @@ const OFFICIAL_SKILLS = [
   "paseo-handoff",
   "paseo-help",
   "paseo-plugin",
+];
+const OFFICIAL_RETIRED_SKILLS = [
+  "paseo-chat",
+  "paseo-epic",
+  "paseo-orchestrate",
+  "paseo-orchestrator",
 ];
 const OUR_SKILLS = [
   "woowtech-smart",
@@ -42,14 +49,15 @@ function memorySelectionStore(): SkillSelectionStore {
   };
 }
 
-async function plantOfficialSkills(targets: SkillTargets, names: string[]): Promise<void> {
+/** Skills another install left in every agent home, each with its managed-files manifest. */
+async function plantSkills(targets: SkillTargets, names: string[]): Promise<void> {
   for (const root of skillRoots(targets)) {
     for (const name of names) {
       await mkdir(path.join(root, name), { recursive: true });
-      await writeFile(path.join(root, name, "SKILL.md"), `---\nname: ${name}\n---\nofficial\n`);
+      await writeFile(path.join(root, name, "SKILL.md"), `---\nname: ${name}\n---\nplanted\n`);
       await writeFile(
         path.join(root, name, ".paseo-managed-files.json"),
-        `${JSON.stringify({ version: 1, files: { "SKILL.md": "official" } })}\n`,
+        `${JSON.stringify({ version: 1, files: { "SKILL.md": "planted" } })}\n`,
       );
     }
   }
@@ -99,7 +107,7 @@ describe("orchestration skills beside the official Paseo's", () => {
       resolveTargets: () => targets,
       selectionStore: memorySelectionStore(),
     });
-    await plantOfficialSkills(targets, OFFICIAL_SKILLS);
+    await plantSkills(targets, OFFICIAL_SKILLS);
     officialBefore = await readSkills(targets, OFFICIAL_SKILLS);
   });
 
@@ -130,5 +138,52 @@ describe("orchestration skills beside the official Paseo's", () => {
 
     expect(await readFile(edited, "utf8")).not.toMatch(/^edited/);
     expect(await readSkills(targets, OFFICIAL_SKILLS)).toEqual(officialBefore);
+  });
+
+  it("does not count the official Paseo's retired skills as its own", async () => {
+    await plantSkills(targets, OFFICIAL_RETIRED_SKILLS);
+
+    const status = await controller.status();
+
+    expect(status.installed).toEqual([]);
+    expect(status.state).toBe("not-installed");
+    expect(status.ops.filter((op) => op.kind === "delete")).toEqual([]);
+  });
+
+  it("uninstalls its own skills, current and retired, and nothing of the official Paseo's", async () => {
+    const official = [...OFFICIAL_SKILLS, ...OFFICIAL_RETIRED_SKILLS];
+    await plantSkills(targets, OFFICIAL_RETIRED_SKILLS);
+    const before = await readSkills(targets, official);
+    await controller.install();
+    // A name an older woowtech smart shipped.
+    await plantSkills(targets, ["woowtech-smart-chat"]);
+
+    const status = await controller.uninstall();
+
+    expect(status.installed).toEqual([]);
+    for (const root of skillRoots(targets)) {
+      expect(await listSkillDirs(root)).toEqual(official.sort());
+    }
+    expect(await readSkills(targets, official)).toEqual(before);
+  });
+
+  it("asks to remove only its own skills when the selection shrinks", async () => {
+    const official = [...OFFICIAL_SKILLS, ...OFFICIAL_RETIRED_SKILLS];
+    await plantSkills(targets, OFFICIAL_RETIRED_SKILLS);
+    const before = await readSkills(targets, official);
+    await controller.install();
+    const deselected = OUR_SKILLS.filter((name) => name !== "woowtech-smart");
+
+    const asked = await controller.save({ mode: "custom", skills: ["woowtech-smart"] });
+    const saved = await controller.save({
+      mode: "custom",
+      skills: ["woowtech-smart"],
+      confirmedRemovals: deselected,
+    });
+
+    expect(asked.confirmationRequired).toEqual({ removals: deselected });
+    expect(saved.confirmationRequired).toBeNull();
+    expect(saved.installed).toEqual(["woowtech-smart"]);
+    expect(await readSkills(targets, official)).toEqual(before);
   });
 });

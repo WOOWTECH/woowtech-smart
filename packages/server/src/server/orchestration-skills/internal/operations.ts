@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { brandSkillName } from "@getpaseo/protocol/brand-skills";
 import type { AgentSkillSelection } from "@getpaseo/protocol/messages";
 import { listFilesRecursive, removeSkill, syncSkills } from "./sync.js";
 
@@ -36,12 +37,13 @@ export interface SkillTargets {
 
 // Names the bundle used to ship. They are never selectable, but every scan still
 // covers them so an older install's copies get cleaned up.
-export const LEGACY_SKILL_NAMES = [
+// Under our names: the official Paseo's paseo-* copies are not ours to delete.
+export const LEGACY_SKILL_NAMES: readonly string[] = [
   "paseo-chat",
   "paseo-epic",
   "paseo-orchestrate",
   "paseo-orchestrator",
-] as const;
+].map(brandSkillName);
 
 type SkillFiles = Map<string, string>;
 type TargetSkills = Map<string, SkillFiles>;

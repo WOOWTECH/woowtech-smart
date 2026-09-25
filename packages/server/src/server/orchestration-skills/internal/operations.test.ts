@@ -144,9 +144,13 @@ describe("getSkillsStatus", () => {
 
   it("reports legacy skill directories left on disk as installed", async () => {
     await writeCurrentBundle(sandbox.targets.sourceDir);
-    await writeOnDiskSkill(sandbox.targets.agentsDir, "paseo-chat", { "SKILL.md": "chat-old" });
+    await writeOnDiskSkill(sandbox.targets.agentsDir, "woowtech-smart-chat", {
+      "SKILL.md": "chat-old",
+    });
 
-    expect((await getSkillsStatus(sandbox.targets, ALL_SKILLS)).installed).toEqual(["paseo-chat"]);
+    expect((await getSkillsStatus(sandbox.targets, ALL_SKILLS)).installed).toEqual([
+      "woowtech-smart-chat",
+    ]);
   });
 
   it("returns not-installed when only user-personal skill dirs exist (the live bug)", async () => {
@@ -248,12 +252,14 @@ describe("getSkillsStatus", () => {
     await writeCurrentBundle(sandbox.targets.sourceDir);
     await writeOnDiskSkillToAllTargets(sandbox.targets, "paseo", { "SKILL.md": "paseo-v1" });
     await writeOnDiskSkillToAllTargets(sandbox.targets, "paseo-loop", { "SKILL.md": "loop-v1" });
-    await writeOnDiskSkill(sandbox.targets.agentsDir, "paseo-chat", { "SKILL.md": "chat-old" });
+    await writeOnDiskSkill(sandbox.targets.agentsDir, "woowtech-smart-chat", {
+      "SKILL.md": "chat-old",
+    });
 
     const status = await getSkillsStatus(sandbox.targets, ALL_SKILLS);
 
     expect(status.state).toBe("drift");
-    expect(status.ops).toEqual([{ kind: "delete", name: "paseo-chat" }]);
+    expect(status.ops).toEqual([{ kind: "delete", name: "woowtech-smart-chat" }]);
   });
 
   it("emits add + update + delete ops sorted by name when state is mixed", async () => {
@@ -261,15 +267,17 @@ describe("getSkillsStatus", () => {
     await writeOnDiskSkill(sandbox.targets.agentsDir, "paseo", { "SKILL.md": "stale" });
     await writeOnDiskSkill(sandbox.targets.claudeDir, "paseo", { "SKILL.md": "paseo-v1" });
     await writeOnDiskSkill(sandbox.targets.codexDir, "paseo", { "SKILL.md": "paseo-v1" });
-    await writeOnDiskSkill(sandbox.targets.agentsDir, "paseo-chat", { "SKILL.md": "chat-old" });
+    await writeOnDiskSkill(sandbox.targets.agentsDir, "woowtech-smart-chat", {
+      "SKILL.md": "chat-old",
+    });
 
     const status = await getSkillsStatus(sandbox.targets, ALL_SKILLS);
 
     expect(status.state).toBe("drift");
     expect(status.ops).toEqual([
       { kind: "update", name: "paseo" },
-      { kind: "delete", name: "paseo-chat" },
       { kind: "add", name: "paseo-loop" },
+      { kind: "delete", name: "woowtech-smart-chat" },
     ]);
   });
 });
@@ -374,13 +382,17 @@ describe("custom skill selection", () => {
   });
 
   it("still deletes legacy skill names that are not selectable", async () => {
-    await writeOnDiskSkillToAllTargets(sandbox.targets, "paseo-orchestrator", {
+    await writeOnDiskSkillToAllTargets(sandbox.targets, "woowtech-smart-orchestrator", {
       "SKILL.md": "orchestrator-old",
     });
 
     await installSkills(sandbox.targets, only("paseo"));
 
-    expect(await installedIn(sandbox.targets, "paseo-orchestrator")).toEqual([false, false, false]);
+    expect(await installedIn(sandbox.targets, "woowtech-smart-orchestrator")).toEqual([
+      false,
+      false,
+      false,
+    ]);
   });
 });
 
@@ -424,17 +436,23 @@ describe("installSkills / updateSkills", () => {
   it("repairs missing and edited skills without deleting a legacy directory", async () => {
     await writeCurrentBundle(sandbox.targets.sourceDir);
     await writeOnDiskSkill(sandbox.targets.agentsDir, "paseo", { "SKILL.md": "stale" });
-    await writeOnDiskSkill(sandbox.targets.agentsDir, "paseo-chat", { "SKILL.md": "chat-old" });
-    await writeOnDiskSkill(sandbox.targets.claudeDir, "paseo-chat", { "SKILL.md": "chat-old" });
-    await writeOnDiskSkill(sandbox.targets.codexDir, "paseo-chat", { "SKILL.md": "chat-old" });
+    await writeOnDiskSkill(sandbox.targets.agentsDir, "woowtech-smart-chat", {
+      "SKILL.md": "chat-old",
+    });
+    await writeOnDiskSkill(sandbox.targets.claudeDir, "woowtech-smart-chat", {
+      "SKILL.md": "chat-old",
+    });
+    await writeOnDiskSkill(sandbox.targets.codexDir, "woowtech-smart-chat", {
+      "SKILL.md": "chat-old",
+    });
 
     const status = await updateSkills(sandbox.targets, ALL_SKILLS);
 
     expect(status).toEqual({
       state: "drift",
-      ops: [{ kind: "delete", name: "paseo-chat" }],
+      ops: [{ kind: "delete", name: "woowtech-smart-chat" }],
       available: ["paseo", "paseo-loop"],
-      installed: ["paseo", "paseo-chat", "paseo-loop"],
+      installed: ["paseo", "paseo-loop", "woowtech-smart-chat"],
     });
     expect(
       await fs.readFile(path.join(sandbox.targets.agentsDir, "paseo", "SKILL.md"), "utf-8"),
@@ -447,7 +465,7 @@ describe("installSkills / updateSkills", () => {
       sandbox.targets.claudeDir,
       sandbox.targets.codexDir,
     ]) {
-      expect(await pathExists(path.join(dir, "paseo-chat"))).toBe(true);
+      expect(await pathExists(path.join(dir, "woowtech-smart-chat"))).toBe(true);
     }
   });
 
@@ -609,12 +627,16 @@ describe("uninstallSkills", () => {
       sandbox.targets.claudeDir,
       sandbox.targets.codexDir,
     ]) {
-      await writeOnDiskSkill(dir, "paseo-chat", { "SKILL.md": "chat-old" });
+      await writeOnDiskSkill(dir, "woowtech-smart-chat", { "SKILL.md": "chat-old" });
     }
 
     const status = await uninstallSkills(sandbox.targets, ALL_SKILLS);
 
     expect(status.state).toBe("not-installed");
-    expect(await installedIn(sandbox.targets, "paseo-chat")).toEqual([false, false, false]);
+    expect(await installedIn(sandbox.targets, "woowtech-smart-chat")).toEqual([
+      false,
+      false,
+      false,
+    ]);
   });
 });

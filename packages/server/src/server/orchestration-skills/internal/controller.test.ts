@@ -1136,7 +1136,7 @@ describe("skills controller", () => {
 
   it("asks again when another directory appears before the retry", async () => {
     await harness.controller.install();
-    await writeUserFile(harness.targets, "paseo-chat", "SKILL.md", "retired but present");
+    await writeUserFile(harness.targets, "woowtech-smart-chat", "SKILL.md", "retired but present");
 
     const result = await harness.controller.save({
       mode: "custom",
@@ -1145,12 +1145,12 @@ describe("skills controller", () => {
     });
 
     expect(result.confirmationRequired).toEqual({
-      removals: ["paseo-advisor", "paseo-chat", "paseo-loop"],
+      removals: ["paseo-advisor", "paseo-loop", "woowtech-smart-chat"],
     });
     expect(await installedEverywhere(harness.targets)).toEqual([
-      ["paseo", "paseo-advisor", "paseo-chat", "paseo-loop"],
-      ["paseo", "paseo-advisor", "paseo-chat", "paseo-loop"],
-      ["paseo", "paseo-advisor", "paseo-chat", "paseo-loop"],
+      ["paseo", "paseo-advisor", "paseo-loop", "woowtech-smart-chat"],
+      ["paseo", "paseo-advisor", "paseo-loop", "woowtech-smart-chat"],
+      ["paseo", "paseo-advisor", "paseo-loop", "woowtech-smart-chat"],
     ]);
   });
 
@@ -1162,13 +1162,13 @@ describe("skills controller", () => {
     const transactionStarted = waitForTransactionDirectory(path.dirname(harness.targets.agentsDir));
     const save = harness.controller.save(selection);
     await transactionStarted;
-    await writeUserFile(harness.targets, "paseo-chat", "notes/mine.md", "hand written");
+    await writeUserFile(harness.targets, "woowtech-smart-chat", "notes/mine.md", "hand written");
 
     const result = await save;
 
-    expect(result.confirmationRequired).toEqual({ removals: ["paseo-chat"] });
+    expect(result.confirmationRequired).toEqual({ removals: ["woowtech-smart-chat"] });
     expect(result.selection).toEqual(selection);
-    expect(await readUserFile(harness.targets, "paseo-chat", "notes/mine.md")).toEqual([
+    expect(await readUserFile(harness.targets, "woowtech-smart-chat", "notes/mine.md")).toEqual([
       "hand written",
       "hand written",
       "hand written",
