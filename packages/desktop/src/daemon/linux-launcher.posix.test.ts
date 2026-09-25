@@ -10,6 +10,8 @@ const it = test.runIf(process.platform === "linux");
 
 const require = createRequire(import.meta.url);
 const afterPack = require("../../scripts/after-pack.js").default;
+// electron-builder names the Linux executable after executableName in electron-builder.yml.
+const EXECUTABLE = "woowtech smart";
 
 async function launch(
   options: {
@@ -29,10 +31,10 @@ async function launch(
     mkdirSync(app);
     mkdirSync(commands);
     writeFileSync(
-      join(app, "Paseo"),
+      join(app, EXECUTABLE),
       `#!${process.execPath}\nconsole.log(JSON.stringify(process.argv.slice(2)));\n`,
     );
-    chmodSync(join(app, "Paseo"), 0o755);
+    chmodSync(join(app, EXECUTABLE), 0o755);
     // The command interface represents the host's userns policy, independent of CI's host.
     writeFileSync(join(commands, "unshare"), `#!/bin/sh\nexit ${options.namespaces ? 0 : 1}\n`);
     chmodSync(join(commands, "unshare"), 0o755);
@@ -47,8 +49,8 @@ async function launch(
     chmodSync(join(app, "chrome-sandbox"), 0o755);
     await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1 });
     if (options.rerun) await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1 });
-    const executablePath = options.symlink ? join(root, "paseo") : join(app, "Paseo");
-    if (options.symlink) symlinkSync(join(app, "Paseo"), executablePath);
+    const executablePath = options.symlink ? join(root, "paseo") : join(app, EXECUTABLE);
+    if (options.symlink) symlinkSync(join(app, EXECUTABLE), executablePath);
     const args = options.args ?? ["path with spaces", "$(touch never)", "semi;colon", "*.txt"];
     const result = spawnSync(executablePath, args, {
       encoding: "utf8",
