@@ -20,7 +20,10 @@ const WORKSPACE_ID = "wks_0123456789abcdef";
 const AGENT_ID = "1b4e28ba-2fa1-41d2-883f-0016d3cca427";
 
 /** What the fake relay answers each request with, the last one repeating. */
-type FakeRelayAnswer = { status: number; body?: unknown } | "hang" | "reset";
+type FakeRelayAnswer =
+  | { status: number; body?: unknown; headers?: Record<string, string> }
+  | "hang"
+  | "reset";
 
 interface RelayRequest {
   method: string | undefined;
@@ -78,7 +81,10 @@ async function startFakeRelay(
         request.socket.destroy();
         return;
       }
-      response.writeHead(answer.status, { "content-type": "application/json" });
+      response.writeHead(answer.status, {
+        "content-type": "application/json",
+        ...answer.headers,
+      });
       response.end(JSON.stringify(answer.body ?? {}));
     });
   });
@@ -403,6 +409,30 @@ describe("pushes through WoowTech's push relay", () => {
       expect(revoked).toEqual([]);
       expect(logs.filter((call) => call.level !== "debug")).toEqual([
         { level, args: [{ status, ...details }, RELAY_ANSWER_LOG[status]] },
+      ]);
+    },
+  );
+
+  test.each([307, 308, 302])(
+    "a %i redirect is not followed: the phone's token goes to the relay's address only",
+    async (status) => {
+      const elsewhere = await startFakeRelay();
+      const relay = await startFakeRelay([
+        { status, headers: { location: `${new URL(elsewhere.url).origin}/collect` } },
+      ]);
+      const { deliver, revoked, sleeps, logs } = deliverTo(relay);
+
+      await deliver([`wsp1:en:${PHONE}`], finishedAgent());
+
+      expect(elsewhere.requests).toEqual([]);
+      expect(relay.requests).toHaveLength(1);
+      expect(sleeps).toEqual([]);
+      expect(revoked).toEqual([]);
+      expect(logs.filter((call) => call.level !== "debug")).toEqual([
+        {
+          level: "warn",
+          args: [{ status }, "The push relay gave an unexpected answer; dropped the push"],
+        },
       ]);
     },
   );

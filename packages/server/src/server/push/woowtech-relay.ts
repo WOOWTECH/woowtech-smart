@@ -114,6 +114,9 @@ export function createWoowtechRelayDeliver(options: WoowtechRelayDeliverOptions)
         method: "POST",
         headers: { "content-type": "application/json" },
         body,
+        // A redirect would hand the phone's FCM token to another address: an answer like
+        // any other, logged and dropped.
+        redirect: "manual",
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (response.status === 400) {
