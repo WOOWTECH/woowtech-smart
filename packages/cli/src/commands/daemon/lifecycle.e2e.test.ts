@@ -5,7 +5,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { startDaemonInstance, readDaemonInstance } from "@getpaseo/server";
+import { startDaemonInstance, readDaemonInstance, resolvePaseoHome } from "@getpaseo/server";
 import { expect, test } from "vitest";
 import { connectToDaemon } from "../../utils/client.js";
 
@@ -135,7 +135,7 @@ test("managed two-home restart retains its supervisor and never routes ordinary 
     const beforeA = await f.liveStatus(a);
     const beforeB = await f.liveStatus(b, poisoned);
     if (process.platform !== "win32") {
-      for (const home of [a, b, path.join(f.root, ".paseo")])
+      for (const home of [a, b, path.join(f.root, path.basename(resolvePaseoHome({})))])
         expect((await stat(home)).mode & 0o777).toBe(0o700);
     }
 
