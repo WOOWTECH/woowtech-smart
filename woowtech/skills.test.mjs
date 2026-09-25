@@ -3,16 +3,20 @@
 // ~/.claude/skills, ~/.codex/skills), so ours are generated from upstream's
 // skills/ under woowtech-smart* names and send agents to our command, daemon,
 // app and help channels. These checks read the committed skills, because an
-// upstream merge changes skills/ without regenerating woowtech/skills/.
+// upstream merge changes skills/ without regenerating woowtech/skills/, and run
+// the daemon's skill operations from source in a temporary home.
 //
 //   npx tsx woowtech/tools/generate-skills.mjs   # after an upstream merge
 //   node --test woowtech/skills.test.mjs
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+
+import { importSource } from "./source-modules.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const skillsDir = path.join(repoRoot, "woowtech", "skills");
@@ -139,6 +143,77 @@ test("the server's build ships woowtech/skills, not upstream's skills", () => {
     /fs\.cpSync\('\.\.\/\.\.\/woowtech\/skills','dist\/server\/skills',/,
   );
   assert.doesNotMatch(scripts["build:lib"], /'\.\.\/\.\.\/skills'/);
+});
+
+test("the daemon creates, stages and deletes only woowtech-smart skill folders", async () => {
+  // The daemon run from source, as `npm run dev` and the desktop's dev mode run
+  // it, against a home of its own where the official Paseo's current and
+  // retired skills are already installed.
+  const skills = "packages/server/src/server/orchestration-skills/internal";
+  const { resolveSkillTargets } = await importSource(`${skills}/paths.ts`);
+  const { installSkills, listManagedSkillNames, uninstallSkills } = await importSource(
+    `${skills}/operations.ts`,
+  );
+  const { beginSkillsTransaction } = await importSource(`${skills}/transaction.ts`);
+  const official = [
+    "paseo",
+    "paseo-advisor",
+    "paseo-chat",
+    "paseo-committee",
+    "paseo-epic",
+    "paseo-handoff",
+    "paseo-help",
+    "paseo-orchestrate",
+    "paseo-orchestrator",
+    "paseo-plugin",
+  ];
+  const home = mkdtempSync(path.join(tmpdir(), "woowtech-skills-"));
+  try {
+    const targets = resolveSkillTargets(home);
+    const roots = [targets.agentsDir, targets.claudeDir, targets.codexDir];
+    for (const root of roots) {
+      for (const skill of official) {
+        mkdirSync(path.join(root, skill), { recursive: true });
+        writeFileSync(path.join(root, skill, "SKILL.md"), "official\n");
+      }
+    }
+
+    assert.deepEqual(
+      (await listManagedSkillNames(targets.sourceDir)).filter(
+        (skill) => !skill.startsWith("woowtech-smart"),
+      ),
+      [],
+      "names the daemon may create, replace or delete",
+    );
+    await installSkills(targets, { mode: "all" });
+    for (const root of roots) {
+      assert.deepEqual(readdirSync(root).sort(), [...official, ...OUR_SKILLS].sort(), root);
+    }
+    const transaction = await beginSkillsTransaction(
+      targets,
+      { mode: "all" },
+      { mode: "custom", skills: ["woowtech-smart"] },
+      [{ kind: "delete", name: "woowtech-smart-advisor" }],
+    );
+    const staged = readdirSync(path.dirname(targets.agentsDir)).filter((entry) =>
+      entry.includes("-skills-"),
+    );
+    await transaction.rollback();
+    // The official Paseo stages and recovers .paseo-skills-transaction-*.
+    assert.deepEqual(
+      staged.map((entry) => entry.replace(/[0-9a-f-]{36}$/, "<id>")),
+      [".woowtech-smart-skills-transaction-<id>"],
+    );
+    await uninstallSkills(targets, { mode: "all" });
+    for (const root of roots) {
+      assert.deepEqual(readdirSync(root).sort(), official, root);
+      for (const skill of official) {
+        assert.equal(readFileSync(path.join(root, skill, "SKILL.md"), "utf8"), "official\n");
+      }
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test("the rewriter keeps upstream's services and API but renames skill invocations", async () => {
