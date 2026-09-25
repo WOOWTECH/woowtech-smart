@@ -171,8 +171,10 @@ function ubuntuSteps(pattern) {
     );
 }
 
-function readRepo(path) {
-  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+/** A source file without its comments, so that a comment naming a setting does not count. */
+function readRepoCode(path) {
+  const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  return source.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/.*/g, "");
 }
 
 test("CI gives a cold Metro bundle ten minutes, not 90 or 120 seconds", () => {
@@ -182,7 +184,11 @@ test("CI gives a cold Metro bundle ten minutes, not 90 or 120 seconds", () => {
     "packages/app/e2e/support/global-setup.ts",
     "packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs",
   ]) {
-    assert.match(readRepo(file), /E2E_METRO_WARMUP_TIMEOUT_MS/, `${file} ignores the setting`);
+    assert.match(
+      readRepoCode(file),
+      /\benv\.E2E_METRO_WARMUP_TIMEOUT_MS\b/,
+      `${file} ignores the setting`,
+    );
   }
   const metroSteps = ubuntuSteps(/\btest:e2e\b/);
   assert.ok(metroSteps.length >= 5, "the Playwright and desktop E2E steps were not found");
@@ -244,7 +250,10 @@ test("CI gives the app unit tests' hooks two minutes; unset, vitest keeps its de
 test("CI runs two CLI e2e files at a time, not upstream's four", () => {
   // At 4, daemon status requests missed their 1.5 s limit (03-daemon) and a restarted
   // worker came up after its 20 s deadline (25-daemon-restart-supervisor).
-  assert.match(readRepo("packages/cli/tests/run-all.ts"), /PASEO_CLI_TEST_CONCURRENCY/);
+  assert.match(
+    readRepoCode("packages/cli/tests/run-all.ts"),
+    /\benv\.PASEO_CLI_TEST_CONCURRENCY\b/,
+  );
   const cliTests = ubuntuSteps(/npm run test --workspace=@getpaseo\/cli\b/);
   assert.deepEqual(
     cliTests.map(({ job, env }) => [job, String(env.PASEO_CLI_TEST_CONCURRENCY)]),
