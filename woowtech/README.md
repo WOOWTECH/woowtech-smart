@@ -25,7 +25,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
   `packages/server/src/server/agent/providers/claude/agent.ts`、`packages/server/package.json`、`packages/server/src/server/bootstrap.ts`。
-- GitHub Actions 目前是關閉的。只開 CI、只跑 Ubuntu 上的測試，其他 10 個上游 workflow 在 GitHub 停用，理由和打開的步驟見第 18 節。
+- GitHub Actions 只開 CI、只跑 Ubuntu 上的測試，其他 10 個上游 workflow 在 GitHub 停用。理由、打開的步驟、第一次執行的結果和修正見第 18 節。
 
 ## 跟上游的差異
 
@@ -88,6 +88,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 | 桌面版 appId         | `sh.paseo.desktop`                 | `io.woowtech.smart.desktop`                          |
 | 桌面版名稱／執行檔   | `Paseo`                            | `woowtech smart`（`woowtech smart.app`）             |
 | 桌面版更新下載快取   | `@getpaseodesktop-updater`         | `io.woowtech.smart.desktop-updater`                  |
+| Linux 的桌面項目     | `Paseo.desktop`                    | `woowtech smart.desktop`                             |
 | CLI 指令             | `paseo`（`~/.local/bin/paseo`）    | `woowtech-smart`（`~/.local/bin/woowtech-smart`）    |
 | daemon 行程名        | `Paseo Supervisor`、`Paseo Daemon` | `woowtech smart Supervisor`、`woowtech smart Daemon` |
 | agent 技能           | `paseo`、`paseo-advisor`…          | `woowtech-smart`、`woowtech-smart-advisor`…          |
@@ -110,7 +111,8 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 不受影響：`main.ts` 一啟動就用 `app.setName` 改名，userData 和 log 資料夾看的是那個名稱。
   - electron-builder 用套件名稱在 workspace 裡找桌面版的相依套件，改名後找不到，會改成逐一走訪 `node_modules`。兩種做法收集到的模組完全相同（277 筆，連版本和來源路徑都一樣），升級 electron-builder 後要再比對一次。
     會退回逐一走訪，是因為在 repo 根目錄也找不到：根目錄的 `package.json` 沒有 `dependencies` 和 `optionalDependencies`（上游 2026-04 才拿掉）。合併上游後如果又出現，electron-builder 會改打包根目錄的相依套件，桌面版自己的（electron-log、electron-updater、`@getpaseo/server` 等）都不會進 app.asar，打包本身不會報錯。
-- `woowtech/coexistence.test.mjs` 檢查以上所有值彼此一致，也掃描原始碼裡不能再出現 `~/.paseo` 和 6767。快取資料夾名稱直接交給桌面版的 electron-builder 計算。
+- Linux 的桌面項目：electron-builder 用 `executableName` 命名 `.desktop` 檔，打包進去的 package.json 用 `desktopName` 指出哪個是這個 App 的。上游在 `packages/desktop/package.json` 寫死 `Paseo.desktop`，那個檔上游常改，所以同樣用 `extraMetadata` 改成 `woowtech smart.desktop`。`main.ts` 啟動時也設同一個名稱；桌面版的打包 smoke 檢查兩者一致。
+- `woowtech/coexistence.test.mjs` 檢查以上所有值彼此一致，也掃描原始碼裡不能再出現 `~/.paseo` 和 6767。快取資料夾名稱和打包後的 `desktopName` 直接交給桌面版的 electron-builder 計算。
 - CLI 指令改叫 `woowtech-smart`，兩邊的 CLI 可以裝在同一個 PATH 上，見第 12 節。
 - agent 技能和它們的暫存資料夾改用我們的名字，兩邊的 daemon 不會改寫、刪除或復原對方的，見第 13 節。
 - 還沒處理的：
@@ -564,12 +566,18 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 | `nix.yml`                 | 在 Linux 用 Nix 建 daemon 並試跑，在 macOS 建桌面版                                  | PR（改到大部分套件）                                                                                                                      | 無                                                              | 每個 PR 都跑一個 macOS job（10 倍）；Nix 的桌面版找 `Paseo.app`（`nix/desktop-package.nix`），我們的是 `woowtech smart.app`，會失敗                                                           |
 | `release-notes-sync.yml`  | 用 `CHANGELOG.md` 更新 GitHub Release 的內文                                         | 推 `v*` tag；push main 且改到 `CHANGELOG.md`；手動                                                                                        | 可寫的 `GITHUB_TOKEN`                                           | 推 `v*` tag 會在我們的 repo 建草稿 release，內文是上游的更新紀錄                                                                                                                              |
 
-`ci.yml` 改了四處，其他照上游：
+`ci.yml` 跟上游不同的地方：
 
 - 觸發：拿掉 push main，改成每週一次（週日 18:17 UTC，台灣週一 02:17），PR、merge queue、手動照舊。個人帳號的私有 repo 沒有 merge queue，那個觸發不會發生，留著是因為上游的 `scripts/ci-workflow.test.mjs` 檢查它。
 - 排程的那一次不跑 `changes` job 裡的 `dorny/paths-filter`：它從事件內容讀預設分支，排程事件沒有帶 repository，會直接失敗，連帶跳過後面的 CI 規則檢查。PR 以外的事件本來就跑全部的 job，不需要它的結果。
-- Windows：兩個 Windows job 的 `if` 最前面加上 `vars.WOOWTECH_CI_WINDOWS == 'true' &&`。repo 沒設這個變數，兩個 job 顯示為略過，不佔 runner。沒有刪掉，因為上游的 `ci-workflow.test.mjs` 要求它們存在。要跑 Windows 時，在 Settings → Secrets and variables → Actions → Variables 新增 `WOOWTECH_CI_WINDOWS`，值是 `true`。
+- Windows：兩個 Windows job 的 `if` 最前面加上 `vars.WOOWTECH_CI_WINDOWS == 'true' &&`。repo 沒設這個變數，兩個 job 顯示為略過，不佔 runner。沒有刪掉，因為上游的 `ci-workflow.test.mjs` 要求它們存在。要跑 Windows 時，在 Settings → Secrets and variables → Actions → Variables 新增 `WOOWTECH_CI_WINDOWS`，值是 `true`，並把下面 2 核心的時間設定也加到兩個 Windows job（私有 repo 的 Windows runner 也是 2 核心）。
 - 桌面版的 RPM smoke 先用 `dpkg --remove` 移除前一步裝的 deb。我們的 deb 叫 `io.woowtech.smart.desktop`（electron-builder 取 `extraMetadata.name`，第 5 節），上游的叫 `paseo`。用上游的名字時 dpkg 只會警告、不會移除，deb 留下的檔案會補上 RPM 沒裝到的東西，smoke 就看不出 RPM 的問題。
+- 2 核心的時間設定，第一次執行後加的（見下面）。上游的 CI 在公開 repo 的 4 核心 runner 上跑，這些上限在那裡夠用；變數沒設時照上游：
+  - Playwright 的 4 個分片和桌面版 job 設 `E2E_METRO_WARMUP_TIMEOUT_MS=600000`，網頁版冷打包最多等 10 分鐘。讀它的是 Playwright 的 globalSetup（`packages/app/e2e/support/global-setup.ts`，上游 120 秒，桌面版的 renderer E2E 也用它）和桌面版 lifecycle E2E 第一次開視窗（`packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs`，上游 90 秒）。
+  - 桌面版 job 的上限從 30 分鐘改成 60 分鐘。
+  - app-tests 設 `PASEO_APP_TEST_HOOK_TIMEOUT_MS=120000`，`packages/app/vitest.config.ts` 讀它，hook 的上限從 10 秒改成 2 分鐘。在命令列加 `--hookTimeout` 沒用：vitest 4.1.7 只把固定幾個命令列選項傳給 projects，`hookTimeout` 不在裡面。
+  - cli-tests 設 `PASEO_CLI_TEST_CONCURRENCY=2`，CLI 的 e2e 一次跑 2 個檔（上游預設 4 個）。分片維持 3 個，job 名稱和上游的 `ci-workflow.test.mjs` 都不用改。
+  - Metro 的快取不跨次保存：GitHub 會刪掉 7 天沒用到的快取，每週一次的排程幾乎都拿不到。
 
 secret 和外部服務：
 
@@ -577,23 +585,33 @@ secret 和外部服務：
 - repo 不要設這三個 secret，也不要設 Cloudflare、Expo、Apple 的 secret：停用的 workflow 被重新打開時會拿去用。
 - CI 會連公開的服務：npm registry（安裝、`npm audit signatures`、全域安裝 claude-code、codex、opencode）、Playwright 和 Electron 的下載、Ubuntu 的套件庫，以及測試裡 Expo CLI、opencode 自己連的。不連上游的 relay、Hub 和網站：測試用的 daemon 預設關 relay 或指到本機，Hub 的測試用本機的假伺服器，relay 的 e2e 用 `wrangler dev --local`。CLI 的 e2e 有兩支會打開 relay（`03-daemon`、`17-onboard`），連的是我們的 relay.woowtech.io。
 
-分鐘估計：上游的執行時間拿不到（不查 GitHub），用本機的測試時間推算 2 核心私有 runner 上的時間。
+第一次執行（run 36115544173，2026-09-25 在 main `03824427e` 手動觸發）失敗。實際 18 分 50 秒，工作時間合計 1 小時 42 分 39 秒，每個 job 各自進位後約 110 計費分鐘。兩個 Windows job 照設計略過。修正在分支 `woowtech/ci-green`：
 
-| job                           | 估計分鐘           |
-| ----------------------------- | ------------------ |
-| changes                       | 1                  |
-| format、lint                  | 5、6               |
-| typecheck                     | 10                 |
-| server-tests (ubuntu-latest)  | 28                 |
-| desktop-tests (ubuntu-latest) | 30                 |
-| app-tests                     | 10                 |
-| sdk-tests                     | 8                  |
-| playwright，4 個分片          | 4 × 25             |
-| relay-tests                   | 5                  |
-| cli-tests，3 個分片           | 3 × 18             |
-| 合計，16 個 job               | 約 250（180～320） |
+| job             | 時間     | 結果 | 原因                                                                                                      | 修正                                  |
+| --------------- | -------- | ---- | --------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| changes         | 18s      | 過   |                                                                                                           |                                       |
+| format          | 1m52s    | 失敗 | 兩個 fork 的 `.mjs` 沒照 oxfmt 排版                                                                       | 重新排版                              |
+| lint            | 2m33s    | 失敗 | `woowtech/png.mjs` 的 `readPng` 複雜度 24、巢狀三元；fork 加的 `echo-client-info-acp-agent.mjs` 的 no-new | `readPng` 拆成小函式；連線存進變數    |
+| typecheck       | 4m2s     | 過   |                                                                                                           |                                       |
+| server-tests    | 11m0s    | 過   |                                                                                                           |                                       |
+| desktop-tests   | 3m7s     | 失敗 | 12 個只在 Linux 跑的測試：launcher 9 個、CLI 安裝 3 個                                                    | 夾具改用我們的名字和 Linux 的安裝位置 |
+| app-tests       | 6m11s    | 失敗 | `input-draft.live.test.tsx` 的 beforeAll 超過 10 秒                                                       | hook 上限 2 分鐘                      |
+| sdk-tests       | 3m42s    | 過   |                                                                                                           |                                       |
+| playwright 1～4 | 各 5～6m | 失敗 | globalSetup 等冷打包 120 秒，停在 91%，測試一個都沒跑                                                     | 等 10 分鐘                            |
+| relay-tests     | 1m53s    | 過   |                                                                                                           |                                       |
+| cli-tests 1/3   | 15m25s   | 失敗 | `03-daemon` Test 8：IPC 的狀態查詢每次都超過 1.5 秒                                                       | 一次跑 2 個檔                         |
+| cli-tests 2/3   | 11m46s   | 過   |                                                                                                           |                                       |
+| cli-tests 3/3   | 18m23s   | 失敗 | `25-daemon-restart-supervisor`：重啟後 20 秒內等不到新的 worker                                           | 一次跑 2 個檔                         |
 
-- 依據：每個 job 都要 `npm ci`（約 3 分鐘）。vitest 預設用「CPU 數減一」個 worker，2 核心只有 1 個，server 的單元測試一個檔一個檔跑：本機 384 個檔的測試時間加起來 1,008 秒，其中 `hub/relationship-controller.test.ts` 一個就要 4～6 分鐘。App 的 603 個檔，載入時間加起來 168 秒。CLI 的 e2e 35 個檔在本機同時跑 2 個要 596 秒。網頁版冷打包在本機要 215 秒（5,136 個模組），每個 Playwright 分片都要打包一次。
+- format、lint：CI 對整個 repo 跑 `npm run format:check` 和 `npm run lint`。這三個檔都是 `.mjs`，lefthook 的 format 和 lint 用的 glob 沒有 `mjs`，commit 時從沒檢查過（`lefthook run pre-commit --job lint --file woowtech/png.mjs` 顯示「no files for inspection」）。改了 `.mjs` 要自己跑 `npm run format:files -- <檔案>` 和 `npm run lint -- <檔案>`。
+- Linux 的桌面版測試：產品碼一致，錯的是夾具。electron-builder 替我們的設定算出的 Linux 執行檔是 `woowtech smart`，after-pack、linux-sandbox 的啟動器、`bin/paseo` 和打包 smoke 都用這個名字，launcher 測試卻還建上游的 `Paseo`，after-pack 改名時 ENOENT。CLI 安裝在 Linux 找 `<安裝資料夾>/resources/bin/woowtech-smart`，測試只建了 macOS 的 `.app`。
+- run 1 沒跑到的步驟裡另外修了兩處：
+  - 桌面版的打包 smoke 檢查打包後 package.json 的 `desktopName` 是 `woowtech smart.desktop`，實際是上游的 `Paseo.desktop`。改在 `electron-builder.yml` 的 `extraMetadata` 設（第 5 節）。
+  - 桌面版的 lifecycle E2E 是 job 裡第一個打包網頁版的步驟，視窗只等 90 秒；Playwright 的同一份冷打包在 120 秒時才到 91%。改成跟 Playwright 一樣讀 `E2E_METRO_WARMUP_TIMEOUT_MS`。
+- CLI 的兩個測試：daemon 每次回狀態都會對裝好的 provider 各跑一次 `--version`（CI 裝了 claude、codex、opencode），一次跑 4 個檔時 2 核心忙不過來。
+
+分鐘：run 1 很多 job 提早失敗，只用了約 110 計費分鐘。全部跑完的一次估計 170～250 分鐘：changes、format、lint、typecheck、server、sdk、relay 照 run 1 合計約 28，Playwright 4 個分片各 15～25，桌面版 30～45，CLI 3 個分片各 15～20，app-tests 約 7。這是推算，下一次執行後照實際的改。
+
 - 兩個 Windows job 打開的話，每次再加約 140 分鐘（已算 2 倍）。
 - 每月（約 22 個工作天，每個工作天 push main 約 10 次）：
 
@@ -608,9 +626,18 @@ secret 和外部服務：
   - main 上的問題最慢一週後才發現。合併上游和發佈之前，手動跑一次（Actions → CI → Run workflow）。
   - PR 依改到的路徑只跑相關的 job（`.github/ci-paths.yml`），但改到很多套件的 PR 接近一次完整的。
 - 排程的 CI 失敗時，GitHub 通知最後修改 cron 那一行的使用者。
-- 第一次跑要注意的，都是上游的設定，實際跑過再決定要不要放寬：
-  - `desktop-tests (ubuntu-latest)` 設了 30 分鐘上限，估計剛好在邊緣。
-  - Playwright 的 globalSetup 要在 120 秒內打包好網頁版（`packages/app/e2e/support/global-setup.ts` 的 `warmMetro`），本機冷打包要 215 秒，4 個分片可能都停在這裡。
+
+手動跑一次（在 GitHub 上操作）：Actions → 左邊的 CI → 右邊的 Run workflow → 選分支 → Run workflow。手動和排程的執行都跑全部的 job。跑的是所選分支上的 `ci.yml`，所以合併前可以先 push 分支、選它跑。登入過的 gh 也可以用 `gh workflow run ci.yml --ref <分支>`（這台 Mac 的 gh 沒登入）。
+
+下一次執行才能確認的（這台 Mac 跑不了 Linux，這些修正都還沒在 GitHub 上跑過）：
+
+- Linux 的桌面版測試在 Mac 上是把 `process.platform` 設成 linux 跑的：12 個失敗照樣重現，修完 14 個有 13 個過。剩下的 launcher「root-owned SUID helper」要讀 Linux 的 `/proc/self/status`，只把那個路徑換成假檔手動跑過。
+- 桌面版 job 在 run 1 停在單元測試。後面的 lifecycle、renderer、browser E2E，Linux 打包（AppImage、deb、rpm、tar.gz）和三次安裝 smoke 都還沒在我們的 repo 跑過；`desktopName` 的修正到 smoke 才看得到，60 分鐘夠不夠也是。
+- Playwright 的測試一個都還沒跑過，每個 test 60 秒的上限在 2 核心上夠不夠還不知道。
+- 冷打包 10 分鐘夠不夠。
+- CLI 一次跑 2 個檔後，`03-daemon` Test 8 能不能在 1.5 秒內拿到狀態、`25-daemon-restart-supervisor` 的新 worker 能不能在 20 秒內起來。還是失敗的話，改成一次 1 個，或加分片（加分片要一起改上游 `ci-workflow.test.mjs` 裡的 job 名稱）。
+- 全部跑完用掉的分鐘數。
+- GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑；`ubuntu-latest` 從 2026-10-19 起改指 Ubuntu 26，除了固定用 `ubuntu-24.04` 的桌面版 job，其他 job 都會換。
 
 打開 Actions（在 GitHub 上的操作由 coordinator 和 owner 做）：
 
@@ -618,7 +645,7 @@ secret 和外部服務：
 2. Settings → Actions → General → Actions permissions：選「Allow WOOWTECH, and select non-WOOWTECH, actions and reusable workflows」，只勾「Allow actions created by GitHub」，允許清單填 `dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590`。CI 只用 GitHub 自己的 actions 和這一個。不要勾「Require actions to be pinned to a full-length commit SHA」，CI 用的是 `@v4` 這種標籤。
 3. 同一頁的 Workflow permissions：選「Read repository contents and packages permissions」，不勾「Allow GitHub Actions to create and approve pull requests」。
 4. 馬上到 Actions 分頁，把上表 CI 以外的 10 個 workflow 逐一停用：點 workflow → 右上角 ··· → Disable workflow。停用完之前不要 push、推 tag 或開 PR。
-5. 手動跑一次 CI，看每個 job 的結果和用掉的分鐘數，更新上面的估計。
+5. 手動跑一次 CI，看每個 job 的結果和用掉的分鐘數，更新上面的估計。2026-09-25 跑了第一次，結果在上面。
 6. 確認 Actions 用完免費額度時會停下，而不是收費：帳號沒有付款方式時本來就會停；有的話，在 Billing and licensing → Budgets and alerts 替 Actions 設 0 元預算並選到達上限就停止。
 
 合併上游時：
@@ -628,7 +655,7 @@ secret 和外部服務：
   - 這次 push 不會觸發它（只有手動、tag 或 PR）：照常 push，再到 Actions 停用它。
   - 這次 push 會觸發它：先在 Settings → Actions → General 選「Disable actions」，push 完選回原本的設定（確認允許清單還在），再停用它。
   - 然後把檔名和原因加進守門的 `DISABLED_IN_UI`；CI 需要它的話，改加進 `ENABLED`。
-- 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；開著的 workflow 只用那三把 key、不要求寫入權限；RPM smoke 移除的是 electron-builder 算出的 deb 名稱。上游改到這些時會失敗，照訊息改回來。
+- 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；開著的 workflow 只用那三把 key、不要求寫入權限；RPM smoke 移除的是 electron-builder 算出的 deb 名稱；上面 2 核心的時間設定都在，程式也還在讀那些變數。上游改到這些時會失敗，照訊息改回來。
 
 ## Mac 開發環境
 
@@ -778,6 +805,16 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 沒跑的：`lifecycle.e2e.test.ts`，收尾任務在最後一次改它、重建 dist 之後跑過（15 通過、1 略過），`resolvePaseoHome({})` 的資料夾名稱確認是 `.woowtech-smart`；CLI e2e 03 和 17，會啟動真的 daemon 並連 relay。
   - 順手改的：`03-daemon.test.ts` 開頭的說明還寫著沒同意就不產生配對連結；第 11 節補上關掉 Workers Logs 時守門要一起改。
 
+- CI 第一次執行後的修正（2026-09-25，分支 `woowtech/ci-green`，第 18 節）：新測試和守門都先紅後綠，行為改動都做了突變。
+  - format、lint：整個 repo 的 `npm run format:check` 和 `npm run lint` 都乾淨。`readPng` 改寫前後比對 1,029 個輸入，結果完全相同：repo 的 64 張 PNG 用路徑和 buffer 各讀一次、.icns 和 .ico 裡的 15 張，以及合成圖（每種 filter 值、兩種色彩型態、分段的 IDAT、截斷的資料、列數不夠、不支援的格式）。repo 的圖用到 filter 0～4 全部。兩個突變（Paeth 的比較、RGB 的 alpha）分別差 182 和 462 個，比對抓得到。
+  - Linux 的桌面版測試：這台 Mac 上把 `process.platform` 設成 linux，12 個失敗照樣重現，ENOENT 的訊息跟 CI 一樣；修完 14 個有 13 個過。剩下的要讀 `/proc/self/status`，把 launcher 裡那個路徑換成假檔手動跑，結果跟測試預期相同。突變：launcher 找 `Paseo`（9 個紅）、Linux 的 CLI 放到 `Resources/`（2 個紅）。Mac 原生：CLI 安裝 5/5，launcher 9 個略過。
+  - `desktopName`：`coexistence.test.mjs` 先紅（`'Paseo.desktop'`）後綠 6/6。用 electron-builder 自己的 file transformer 產生打包後的 package.json：改前是 `Paseo.desktop`，改後是 `woowtech smart.desktop`。`desktop-packaging` 11/11。
+  - Metro 暖機：`e2e-metro-readiness.test.ts` 先紅（`metroWarmupTimeoutMs is not a function`）後綠 3/3。突變：打包的請求不理設定，紅。
+  - app 的 hook 上限：命令列的 `--hookTimeout=1` 沒有作用，hook 仍在 10000ms 逾時；改成變數後設 1 就在 1ms 逾時。這台 Mac 很忙的時候（load average 40～80、swap 用了 5.2/6.1 GB），`input-draft.live.test.tsx` 的 beforeAll 要 35～40 秒，上限放寬後 7/7 通過。
+  - `workflows.test.mjs` 新的 4 項先紅後綠，10/10；CI 第一個 job 跑的三個 node 測試 27/27。
+  - 跑過的：守門 68 個全過（`node --test woowtech/*.test.mjs`，含 zh-TW）；改過或受影響的 vitest 檔逐一跑；`npm run lint`、`npm run format:check`、`npm run typecheck` 全 repo 通過。
+  - 沒跑的：Linux 上的一切和 GitHub 上的執行，見第 18 節「下一次執行才能確認的」。
+
 ## 接下來
 
 - 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
@@ -801,5 +838,6 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 配對連結的主機和 CORS 白名單裡的 app.paseo.sh 待 owner 決定（第 11 節）；Hub（`hub.paseo.sh`）仍是上游的。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 推播的句子（第 16 節的表）請 owner 確認用字。實機測試時確認：通知只顯示產品名和通用句子、點下去開到那個 agent 或 terminal，桌面版的系統通知仍有回覆預覽。
-- 打開 GitHub Actions：照第 18 節的步驟設定權限、停用 10 個 workflow，手動跑一次 CI，用實際的分鐘數和結果（桌面版 job 的 30 分鐘上限、Playwright 的 120 秒打包）更新第 18 節。
+- CI：`woowtech/ci-green` 合進 main 後手動跑第二次，確認第 18 節「下一次執行才能確認的」各項，用實際的分鐘數更新估計。
+- lefthook 的 format 和 lint 不看 `.mjs`，fork 的守門和工具都是 `.mjs`。要不要在 `lefthook.yml` 的兩個 glob 加上 `mjs`（上游的檔，改兩行），待決定。
 - 商標（TIPO）與 D-U-N-S。
