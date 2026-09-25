@@ -1,16 +1,16 @@
-// woowtech smart's push notifications leave the machine through Expo, Apple and Google,
-// so they carry no text from the user's work: no agent title, message preview or
-// permission details, no project, workspace or file names (README, 16). The daemon
-// rewrites every push in packages/server/src/server/push/woowtech-push-content.ts,
-// called from createPushNotifications in push/index.ts. Upstream sends the assistant's
-// message and the terminal's name and folder, so a merge can bring them back by dropping
-// that call or by adding another way to Expo. These checks run the push module from
-// source through tsx, with Expo's endpoint answered by a recorder, and scan the shipped
-// sources for other ways to Expo.
+// woowtech smart's push notifications go through WoowTech's push relay (push.woowtech.io),
+// which writes one fixed sentence per reason in the phone's language and sends it with FCM
+// (README, 16). Nothing from the user's work leaves the machine: the daemon sends the relay
+// only {token, locale, reason, target}, and it never contacts Expo (exp.host). The daemon's
+// deliver is wired in createPushNotifications (packages/server/src/server/push/index.ts),
+// from push/woowtech-relay.ts. Upstream sends the assistant's message and the terminal's name
+// and folder to Expo, so a merge can bring them back by restoring upstream's default deliver
+// or by adding another way out. These checks run the push module from source through tsx,
+// with every fetch answered by a recorder, and scan the shipped sources for other ways out.
 //
 //   node --test woowtech/push-content.test.mjs
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -27,14 +27,17 @@ const { buildAgentAttentionNotificationPayload } = await tsImport(
   import.meta.url,
 );
 
+const RELAY_URL = "https://push.woowtech.io/api/smart/v1/notify";
+// Shaped like tokens the phones register. Fake.
+const FCM_TOKEN = "fake-install-0001:APA91bFAKE_TOKEN_FOR_GUARD_TESTS_ONLY-0001";
+const EXPO_TOKEN = "ExponentPushToken[guard]";
+
 const IDS = {
   serverId: "srv_Ab3dEf9hIjK_",
   workspaceId: "wks_0123456789abcdef",
   agentId: "1b4e28ba-2fa1-41d2-883f-0016d3cca427",
 };
 const TERMINAL_ID = "0f9e8d7c-6b5a-4938-8271-605f4e3d2c1b";
-const ROUTING_KEYS = new Set(["serverId", "workspaceId", "agentId", "terminalId", "reason"]);
-const PRODUCT_NAME = { "zh-TW": "渥屋智能", en: "woowtech smart" };
 
 // The user's text, each piece in the field upstream puts it.
 const SECRET = {
@@ -61,49 +64,55 @@ after(() => {
   for (const home of homes) rmSync(home, { recursive: true, force: true });
 });
 
-/** The requests the daemon's push notifications make for `payload`, with Expo recorded. */
-async function requestsToExpo(payload, language) {
+/**
+ * Every request the daemon's push notifications make for `payload` with `registered` push
+ * tokens, and the tokens left afterwards. The recorder stands in for fetch before the push
+ * module exists and answers as the relay does, so nothing reaches the network.
+ */
+async function pushWithRecordedFetch(payload, registered, relayUrl) {
   const home = mkdtempSync(path.join(tmpdir(), "woowtech-push-content-"));
   homes.push(home);
-  const push = createPushNotifications({
-    logger: silentLogger,
-    filePath: path.join(home, "push-tokens.json"),
-    language,
-  });
-  push.renew("ExponentPushToken[guard]");
+  const filePath = path.join(home, "push-tokens.json");
   const requests = [];
   const realFetch = globalThis.fetch;
+  const configuredUrl = process.env.WOOWTECH_PUSH_RELAY_URL;
   globalThis.fetch = async (url, init) => {
-    requests.push({ url: String(url), body: String(init?.body) });
-    return Response.json({ data: [{ status: "ok", id: "ticket" }] });
+    requests.push({ url: String(url), method: init?.method, body: String(init?.body) });
+    return Response.json({ ok: true }, { status: 201 });
   };
+  if (relayUrl) process.env.WOOWTECH_PUSH_RELAY_URL = relayUrl;
+  else delete process.env.WOOWTECH_PUSH_RELAY_URL;
   try {
+    const push = createPushNotifications({ logger: silentLogger, filePath });
+    for (const token of registered) push.renew(token);
     await push.send(payload);
   } finally {
     globalThis.fetch = realFetch;
+    if (configuredUrl === undefined) delete process.env.WOOWTECH_PUSH_RELAY_URL;
+    else process.env.WOOWTECH_PUSH_RELAY_URL = configuredUrl;
   }
-  return requests;
+  const left = JSON.parse(readFileSync(filePath, "utf8")).subscriptions.map(({ token }) => token);
+  return { requests, left };
 }
 
-/** The one message the daemon sent to Expo, after checking that no secret is in the bytes. */
-async function messageToExpo(payload, language) {
-  const requests = await requestsToExpo(payload, language);
-  assert.equal(requests.length, 1, "one request to Expo");
-  const [{ url, body }] = requests;
-  assert.match(url, /^https:\/\/exp\.host\//);
+/**
+ * What the daemon sent the relay for `payload` and a phone registered in `locale` (next to
+ * an Expo token from the official app), after checking that no secret is in the bytes.
+ */
+async function requestToRelay(payload, locale) {
+  const phone = `wsp1:${locale}:${FCM_TOKEN}`;
+  const { requests, left } = await pushWithRecordedFetch(payload, [EXPO_TOKEN, phone]);
+  assert.deepEqual(
+    requests.map(({ url, method }) => ({ url, method })),
+    [{ url: RELAY_URL, method: "POST" }],
+    "one request, to the relay, and none to Expo",
+  );
+  const [{ body }] = requests;
   for (const [field, text] of Object.entries(SECRET)) {
     assert.ok(!body.includes(text), `the ${field} left the machine: ${body}`);
   }
-  const messages = JSON.parse(body);
-  assert.equal(messages.length, 1);
-  const [message] = messages;
-  assert.equal(message.title, PRODUCT_NAME[language]);
-  assert.deepEqual(
-    Object.keys(message.data).filter((key) => !ROUTING_KEYS.has(key)),
-    [],
-    "data keeps only the ids the app routes a tap with, and the reason",
-  );
-  return message;
+  assert.deepEqual(left, [phone], "the Expo token is revoked, not sent");
+  return JSON.parse(body);
 }
 
 function finishedAgent(assistantMessage) {
@@ -151,41 +160,54 @@ function terminalNeedsInput() {
   };
 }
 
-for (const language of ["zh-TW", "en"]) {
-  test(`a push in ${language} reaches Expo with one generic sentence per reason and the ids`, async () => {
-    const finished = await messageToExpo(finishedAgent(SECRET.assistantMessage), language);
-    const finishedAgain = await messageToExpo(finishedAgent("Something else entirely"), language);
-    const permission = await messageToExpo(permissionRequest(), language);
-    const attention = await messageToExpo(terminalNeedsInput(), language);
+for (const locale of ["zh-TW", "en"]) {
+  test(`a push for a phone in ${locale} reaches the relay as a reason and ids only`, async () => {
+    const finished = await requestToRelay(finishedAgent(SECRET.assistantMessage), locale);
+    const finishedAgain = await requestToRelay(finishedAgent("Something else entirely"), locale);
+    const permission = await requestToRelay(permissionRequest(), locale);
+    const attention = await requestToRelay(terminalNeedsInput(), locale);
 
-    assert.equal(finishedAgain.body, finished.body, "the sentence does not depend on the work");
-    assert.equal(new Set([finished.body, permission.body, attention.body]).size, 3);
-    assert.deepEqual(finished.data, { ...IDS, reason: "finished" });
-    assert.deepEqual(permission.data, { ...IDS, reason: "permission" });
-    assert.deepEqual(attention.data, {
-      serverId: IDS.serverId,
-      workspaceId: IDS.workspaceId,
-      terminalId: TERMINAL_ID,
-      reason: "needs_input",
+    const phone = { token: FCM_TOKEN, locale };
+    assert.deepEqual(finished, { ...phone, reason: "finished", target: IDS });
+    assert.deepEqual(finishedAgain, finished, "the request does not depend on the work");
+    assert.deepEqual(permission, { ...phone, reason: "permission", target: IDS });
+    assert.deepEqual(attention, {
+      ...phone,
+      reason: "attention",
+      target: {
+        serverId: IDS.serverId,
+        workspaceId: IDS.workspaceId,
+        terminalId: TERMINAL_ID,
+      },
     });
   });
 }
+
+test("WOOWTECH_PUSH_RELAY_URL points the daemon at another relay, still not at Expo", async () => {
+  const staging = "https://staging.example.invalid/api/smart/v1/notify";
+  const { requests } = await pushWithRecordedFetch(
+    permissionRequest(),
+    [EXPO_TOKEN, `wsp1:en:${FCM_TOKEN}`],
+    staging,
+  );
+
+  assert.deepEqual(
+    requests.map(({ url }) => url),
+    [staging],
+  );
+});
 
 /** `path:line` results as the files they are in. */
 function filesOf(matches) {
   return [...new Set(matches.map((match) => match.replace(/:\d+$/, "")))];
 }
 
-test("the only way to Expo is createPushNotifications", () => {
+test("upstream's Expo sender is the only code that names Expo, and nothing calls it", () => {
   assert.deepEqual(filesOf(findInShippedSources([/exp\.host|api\/v2\/push/])), [
     "packages/server/src/server/push/push-service.ts",
   ]);
-  assert.deepEqual(filesOf(findInShippedSources([/new PushService\b/])), [
-    "packages/server/src/server/push/index.ts",
+  assert.deepEqual(findInShippedSources([/new PushService\b/, /\.sendPush\(/]), []);
+  assert.deepEqual(filesOf(findInShippedSources([/push\.woowtech\.io/])), [
+    "packages/server/src/server/push/woowtech-relay.ts",
   ]);
-  assert.deepEqual(
-    findInShippedSources([/\.sendPush\(/]).map((match) => match.replace(/:\d+$/, "")),
-    ["packages/server/src/server/push/index.ts"],
-    "one call into the Expo sender, the default deliver",
-  );
 });
