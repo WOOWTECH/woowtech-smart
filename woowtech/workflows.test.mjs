@@ -223,8 +223,8 @@ test("CI can neither deploy nor publish: no credentials but the test keys, no wr
   assert.deepEqual(found, [], "The owner's rule for CI: tests only, nothing deploys or publishes.");
 });
 
-// GitHub runs private repositories on 2-core Linux runners; upstream's public repo gets 4.
-// CI run 1 (2026-09-25) failed on four time limits that upstream's runners meet.
+// GitHub runs private repositories on 2-core, 7 GB Linux runners; upstream's public repo gets
+// 4 cores and 16 GB. CI runs 1 and 2 failed on time and memory limits that upstream's runners meet.
 
 /** The Ubuntu steps that run a command matching `pattern`, with the environment each gets. */
 function ubuntuSteps(pattern) {
@@ -234,7 +234,12 @@ function ubuntuSteps(pattern) {
     .flatMap(([id, job]) =>
       (job.steps ?? [])
         .filter((step) => pattern.test(String(step.run ?? "")))
-        .map((step) => ({ job: id, step: step.name, env: { ...ci.env, ...job.env, ...step.env } })),
+        .map((step) => ({
+          job: id,
+          step: step.name,
+          run: String(step.run),
+          env: { ...ci.env, ...job.env, ...step.env },
+        })),
     );
 }
 
@@ -292,20 +297,25 @@ test("CI gives Metro in the Playwright shards a 4 GB heap", () => {
 });
 
 /**
- * The hook timeout of each packages/app vitest project, as vitest itself resolves the
- * config when PASEO_APP_TEST_HOOK_TIMEOUT_MS is `value`, or unset when `value` is null.
+ * The hook and test timeouts of each packages/app vitest project, as vitest itself resolves
+ * them for the app's test script followed by `args`, with PASEO_APP_TEST_HOOK_TIMEOUT_MS set
+ * to `hookTimeout`, or unset when it is null.
  */
-async function appHookTimeouts(value) {
+async function appTestTimeouts({ hookTimeout = null, args = "" } = {}) {
   const env = { ...process.env };
   delete env.PASEO_APP_TEST_HOOK_TIMEOUT_MS;
-  if (value !== null) env.PASEO_APP_TEST_HOOK_TIMEOUT_MS = value;
+  if (hookTimeout !== null) env.PASEO_APP_TEST_HOOK_TIMEOUT_MS = hookTimeout;
+  const appDir = new URL("../packages/app/", import.meta.url);
+  const { scripts } = JSON.parse(readFileSync(new URL("package.json", appDir), "utf8"));
   const script = `
-    import { createVitest } from "vitest/node";
-    const vitest = await createVitest("test", { watch: false, run: true });
+    import { createVitest, parseCLI } from "vitest/node";
+    const { options } = parseCLI(${JSON.stringify(`${scripts.test} ${args}`.trim())});
+    const vitest = await createVitest("test", { ...options, watch: false, run: true });
     const projects = vitest.projects.map(({ name, config }) => ({
       name,
       browser: config.browser.enabled,
       hookTimeout: config.hookTimeout,
+      testTimeout: config.testTimeout,
     }));
     await vitest.close();
     process.stdout.write(JSON.stringify(projects) + "\\n", () => process.exit(0));
@@ -313,7 +323,7 @@ async function appHookTimeouts(value) {
   const { stdout } = await promisify(execFile)(
     process.execPath,
     ["--input-type=module", "--eval", script],
-    { cwd: fileURLToPath(new URL("../packages/app/", import.meta.url)), env },
+    { cwd: fileURLToPath(appDir), env },
   );
   return JSON.parse(stdout.trim().split("\n").at(-1));
 }
@@ -328,7 +338,10 @@ test("CI gives the app unit tests' hooks two minutes; unset, vitest keeps its de
     appTests.map(({ job, env }) => [job, Number(env.PASEO_APP_TEST_HOOK_TIMEOUT_MS)]),
     [["app-tests", 120_000]],
   );
-  const [inCi, unset] = await Promise.all([appHookTimeouts("120000"), appHookTimeouts(null)]);
+  const [inCi, unset] = await Promise.all([
+    appTestTimeouts({ hookTimeout: "120000" }),
+    appTestTimeouts(),
+  ]);
   assert.ok(inCi.length >= 2, "the app's unit and browser projects were not found");
   assert.deepEqual(
     inCi.filter(({ hookTimeout }) => hookTimeout !== 120_000),
@@ -336,6 +349,26 @@ test("CI gives the app unit tests' hooks two minutes; unset, vitest keeps its de
   );
   assert.deepEqual(
     unset.filter(({ browser, hookTimeout }) => hookTimeout !== (browser ? 30_000 : 10_000)),
+    [],
+  );
+});
+
+test("CI gives each app test a minute, and vitest hands --testTimeout to every project", async () => {
+  // unistyles-module-scope.test.ts parses every app source file with TypeScript: 1.4 s on a
+  // Mac, over vitest's 5 s on the runner in CI run 2. vitest passes --testTimeout on to its
+  // projects, unlike --hookTimeout, so the flag on CI's command is enough. npm hands the
+  // script what follows `--`, and keeps a flag before it for itself.
+  const args = ubuntuSteps(/npm run test --workspace=@getpaseo\/app\b/).map(({ run }) =>
+    run
+      .split(/\s--\s/)
+      .slice(1)
+      .join(" -- "),
+  );
+  assert.equal(args.length, 1, "the app-tests step was not found");
+  const projects = await appTestTimeouts({ args: args[0] });
+  assert.ok(projects.length >= 2, "the app's unit and browser projects were not found");
+  assert.deepEqual(
+    projects.filter(({ testTimeout }) => testTimeout !== 60_000),
     [],
   );
 });

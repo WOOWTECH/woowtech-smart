@@ -356,7 +356,9 @@ jobs:
         run: npm run build:app-deps
 
       - name: Run app unit tests
-        run: npm run test --workspace=@getpaseo/app
+        # woowtech smart: some tests take longer than vitest's 5 s on the 2-core runner.
+        # vitest passes --testTimeout on to projects; npm passes what follows -- to vitest.
+        run: npm run test --workspace=@getpaseo/app -- --testTimeout=60000
         env:
           # woowtech smart: slow beforeAll imports on the 2-core runner. vitest does not pass
           # --hookTimeout on to projects, so packages/app/vitest.config.ts reads this.
