@@ -7,6 +7,7 @@ import { basename, delimiter, dirname, extname, join, resolve as resolvePath } f
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createExternalProcessEnv } from "../server/paseo-env.js";
+import { withoutClaudeCodeSession } from "../server/agent/parent-claude-session-env.js";
 import { writePrivateFileAtomicSync } from "../server/private-files.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
 import type { TerminalCell, TerminalState } from "@getpaseo/protocol/messages";
@@ -492,10 +493,12 @@ function prepareZshShellIntegrationRuntimeDir(sourceDir = resolveZshShellIntegra
 export function buildTerminalEnvironment(
   input: BuildTerminalEnvironmentInput,
 ): Record<string, string> {
-  const baseEnv: Record<string, string> = createExternalProcessEnv(process.env, input.env, {
-    TERM: "xterm-256color",
-    TERM_PROGRAM: "kitty",
-  });
+  const baseEnv: Record<string, string> = withoutClaudeCodeSession(
+    createExternalProcessEnv(process.env, input.env, {
+      TERM: "xterm-256color",
+      TERM_PROGRAM: "kitty",
+    }),
+  );
   const envWithAgentHooks = prependPaseoCliToPath(
     baseEnv,
     input.paseoCliBinDir === undefined ? resolvePaseoCliBinDir() : input.paseoCliBinDir,

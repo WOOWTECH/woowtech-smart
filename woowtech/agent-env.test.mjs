@@ -2,9 +2,9 @@
 // that session's variables: its id, its inbox socket and token, the parent's process
 // id. The agents the daemon launches are other sessions and must not get them, or an
 // agent's command can post into the parent session's inbox as one of its children.
-// Upstream drops only four of these, and Pi and OMP start through a transport that
-// drops none, so a merge can bring either gap back. These checks run the daemon's
-// source through tsx.
+// Upstream drops only four of these, Pi and OMP start through a transport that drops
+// none, and terminals drop none at all, so a merge can bring any of these gaps back.
+// These checks run the daemon's source through tsx.
 //
 //   node --test woowtech/agent-env.test.mjs
 import assert from "node:assert/strict";
@@ -22,6 +22,10 @@ const { PARENT_CLAUDE_SESSION_ENV_VARS } = await tsImport(
 );
 const { JsonlRpcProcess } = await tsImport(
   `${agentDir}providers/jsonl-rpc-process.ts`,
+  import.meta.url,
+);
+const { buildTerminalEnvironment } = await tsImport(
+  "../packages/server/src/terminal/terminal.ts",
   import.meta.url,
 );
 
@@ -81,4 +85,45 @@ test("Pi and OMP launches drop it too", async () => {
   } finally {
     await transport.close();
   }
+});
+
+test("terminals the daemon opens drop it too", () => {
+  // Upstream's four as well: with CLAUDECODE left in, `claude` run in the terminal
+  // takes itself for a nested session.
+  const names = [
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_SSE_PORT",
+    "CLAUDE_AGENT_SDK_VERSION",
+    ...PARENT_CLAUDE_SESSION_ENV_VARS,
+  ];
+  const saved = Object.fromEntries(
+    [...names, ...Object.keys(USER_SETTINGS)].map((name) => [name, process.env[name]]),
+  );
+  Object.assign(
+    process.env,
+    Object.fromEntries(names.map((name) => [name, `parent-${name}`])),
+    USER_SETTINGS,
+  );
+  let env;
+  try {
+    env = buildTerminalEnvironment({
+      shell: "/bin/sh",
+      env: { PATH: "/usr/bin" },
+      paseoCliBinDir: null,
+      paseoHookCliPath: null,
+    });
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+
+  assert.deepEqual(
+    names.filter((name) => name in env),
+    [],
+  );
+  assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, USER_SETTINGS.CLAUDE_CODE_OAUTH_TOKEN);
+  assert.equal(env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, USER_SETTINGS.CLAUDE_CODE_MAX_OUTPUT_TOKENS);
 });

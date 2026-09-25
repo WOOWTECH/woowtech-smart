@@ -2,9 +2,10 @@
  * Variables a running Claude Code session sets for the processes it starts.
  *
  * They name or reach that one session, so a daemon started from inside Claude Code
- * (a Bash tool command or a hook) must not hand them to the agents it launches. With
- * the messaging token, for example, a launched agent's shell command can post to the
- * parent session's inbox as if it were one of that session's own child processes.
+ * (a Bash tool command or a hook) must not hand them to the agents it launches or
+ * the terminals it opens. With the messaging token, for example, a launched agent's
+ * shell command can post to the parent session's inbox as if it were one of that
+ * session's own child processes.
  *
  * Upstream already drops CLAUDECODE, CLAUDE_CODE_ENTRYPOINT, CLAUDE_CODE_SSE_PORT and
  * CLAUDE_AGENT_SDK_VERSION in provider-launch-config.ts; these are the rest, taken
@@ -38,3 +39,27 @@ export const PARENT_CLAUDE_SESSION_ENV_VARS: readonly string[] = [
   "CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR",
   "CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR",
 ];
+
+/**
+ * All of that session's variables: upstream's four and the list above. Terminals
+ * use this, because upstream drops nothing from a terminal's environment. With
+ * CLAUDECODE left in, `claude` run in the terminal takes itself for a nested session.
+ */
+export const CLAUDE_CODE_SESSION_ENV_VARS: readonly string[] = [
+  "CLAUDECODE",
+  "CLAUDE_CODE_ENTRYPOINT",
+  "CLAUDE_CODE_SSE_PORT",
+  "CLAUDE_AGENT_SDK_VERSION",
+  ...PARENT_CLAUDE_SESSION_ENV_VARS,
+];
+
+/** A copy of `env` without the Claude Code session the daemon was started in. */
+export function withoutClaudeCodeSession<Env extends Record<string, string | undefined>>(
+  env: Env,
+): Env {
+  const copy = { ...env };
+  for (const name of CLAUDE_CODE_SESSION_ENV_VARS) {
+    delete copy[name];
+  }
+  return copy;
+}
