@@ -76,6 +76,10 @@ const variants = {
       envKey: "GOOGLE_SERVICES_FILE_PROD",
       fallbackRelativePath: "./.secrets/google-services.prod.json",
     }),
+    googleServiceInfoPlist: resolveSecretFile({
+      envKey: "GOOGLE_SERVICE_INFO_PLIST_PROD",
+      fallbackRelativePath: "./.secrets/GoogleService-Info.prod.plist",
+    }),
   },
   development: {
     name: "woowtech smart Debug",
@@ -85,11 +89,16 @@ const variants = {
       envKey: "GOOGLE_SERVICES_FILE_DEBUG",
       fallbackRelativePath: "./.secrets/google-services.debug.json",
     }),
+    googleServiceInfoPlist: resolveSecretFile({
+      envKey: "GOOGLE_SERVICE_INFO_PLIST_DEBUG",
+      fallbackRelativePath: "./.secrets/GoogleService-Info.debug.plist",
+    }),
   },
 };
 
 const variant = variants[appVariant] ?? variants.production;
-// woowtech push: react-native.config.js links React Native Firebase on the same plist.
+// woowtech push: react-native.config.js links React Native Firebase on the same plist, so both
+// read it through iosGoogleServiceInfoPlist() instead of variant.googleServiceInfoPlist.
 const googleServiceInfoPlist = iosGoogleServiceInfoPlist();
 const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 
