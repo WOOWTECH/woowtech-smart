@@ -46,7 +46,9 @@ function page(body) {
 /** A square tile, inset from the canvas edge, holding a centered symbol. */
 function tile({ inset, radius, fill, border, shadow = "none", glyph, glyphWidth, dot }) {
   const size = MASTER - inset * 2;
-  const borderCss = border ? `box-shadow:inset 0 0 0 ${Math.round(MASTER * 0.012)}px ${border}${shadow === "none" ? "" : `,${shadow}`};` : `box-shadow:${shadow};`;
+  const borderCss = border
+    ? `box-shadow:inset 0 0 0 ${Math.round(MASTER * 0.012)}px ${border}${shadow === "none" ? "" : `,${shadow}`};`
+    : `box-shadow:${shadow};`;
   const dotHtml = dot
     ? `<div style="position:absolute;right:0;bottom:0;width:${MASTER * 0.36}px;height:${MASTER * 0.36}px;border-radius:50%;background:${dot}"></div>`
     : "";
@@ -57,35 +59,86 @@ function tile({ inset, radius, fill, border, shadow = "none", glyph, glyphWidth,
 
 const compositions = {
   // Full-bleed square: the launcher (iOS, Android legacy) applies its own mask.
-  fullBleed: page(`<div style="position:absolute;inset:0;background:#ffffff">${symbol(BLUE_SYMBOL, 62)}</div>`),
+  fullBleed: page(
+    `<div style="position:absolute;inset:0;background:#ffffff">${symbol(BLUE_SYMBOL, 62)}</div>`,
+  ),
   // Android adaptive icon foreground: the symbol inside the 66% safe zone.
   androidForeground: page(symbol(BLUE_SYMBOL, 40)),
   // Android notification icons are drawn as a white silhouette.
   notification: page(symbol(WHITE_SYMBOL, 84)),
-  tile: tile({ inset: 20, radius: 230, fill: "#ffffff", border: TILE_BORDER, glyph: BLUE_SYMBOL, glyphWidth: 62 }),
+  tile: tile({
+    inset: 20,
+    radius: 230,
+    fill: "#ffffff",
+    border: TILE_BORDER,
+    glyph: BLUE_SYMBOL,
+    glyphWidth: 62,
+  }),
   // Favicons show at 16-32px, so the symbol fills more of the tile.
-  favicon: tile({ inset: 20, radius: 200, fill: "#ffffff", border: TILE_BORDER, glyph: BLUE_SYMBOL, glyphWidth: 76 }),
-  faviconRunning: tile({ inset: 20, radius: 200, fill: "#ffffff", border: TILE_BORDER, glyph: BLUE_SYMBOL, glyphWidth: 76, dot: RUNNING_DOT }),
-  faviconAttention: tile({ inset: 20, radius: 200, fill: "#ffffff", border: TILE_BORDER, glyph: BLUE_SYMBOL, glyphWidth: 76, dot: ATTENTION_DOT }),
+  favicon: tile({
+    inset: 20,
+    radius: 200,
+    fill: "#ffffff",
+    border: TILE_BORDER,
+    glyph: BLUE_SYMBOL,
+    glyphWidth: 76,
+  }),
+  faviconRunning: tile({
+    inset: 20,
+    radius: 200,
+    fill: "#ffffff",
+    border: TILE_BORDER,
+    glyph: BLUE_SYMBOL,
+    glyphWidth: 76,
+    dot: RUNNING_DOT,
+  }),
+  faviconAttention: tile({
+    inset: 20,
+    radius: 200,
+    fill: "#ffffff",
+    border: TILE_BORDER,
+    glyph: BLUE_SYMBOL,
+    glyphWidth: 76,
+    dot: ATTENTION_DOT,
+  }),
   // macOS icon grid: an 824px tile inside the 1024px canvas, with a soft shadow.
-  desktop: tile({ inset: 100, radius: 185, fill: "#ffffff", border: TILE_BORDER, shadow: "0 10px 22px rgba(26,29,41,0.18)", glyph: BLUE_SYMBOL, glyphWidth: 58 }),
-  desktopDev: tile({ inset: 100, radius: 185, fill: BRAND_BLUE, shadow: "0 10px 22px rgba(26,29,41,0.18)", glyph: WHITE_SYMBOL, glyphWidth: 58 }),
+  desktop: tile({
+    inset: 100,
+    radius: 185,
+    fill: "#ffffff",
+    border: TILE_BORDER,
+    shadow: "0 10px 22px rgba(26,29,41,0.18)",
+    glyph: BLUE_SYMBOL,
+    glyphWidth: 58,
+  }),
+  desktopDev: tile({
+    inset: 100,
+    radius: 185,
+    fill: BRAND_BLUE,
+    shadow: "0 10px 22px rgba(26,29,41,0.18)",
+    glyph: WHITE_SYMBOL,
+    glyphWidth: 58,
+  }),
 };
 
 function renderMaster(name) {
   const html = path.join(work, `${name}.html`);
   const png = path.join(work, `${name}.png`);
   writeFileSync(html, compositions[name]);
-  execFileSync(CHROME, [
-    "--headless=new",
-    "--disable-gpu",
-    "--hide-scrollbars",
-    "--allow-file-access-from-files",
-    "--default-background-color=00000000",
-    `--window-size=${MASTER},${MASTER}`,
-    `--screenshot=${png}`,
-    `file://${html}`,
-  ], { stdio: "ignore" });
+  execFileSync(
+    CHROME,
+    [
+      "--headless=new",
+      "--disable-gpu",
+      "--hide-scrollbars",
+      "--allow-file-access-from-files",
+      "--default-background-color=00000000",
+      `--window-size=${MASTER},${MASTER}`,
+      `--screenshot=${png}`,
+      `file://${html}`,
+    ],
+    { stdio: "ignore" },
+  );
   return png;
 }
 
@@ -93,7 +146,9 @@ function renderMaster(name) {
 
 function resized(master, size) {
   const out = path.join(work, `${path.basename(master, ".png")}-${size}.png`);
-  execFileSync("sips", ["-z", String(size), String(size), master, "--out", out], { stdio: "ignore" });
+  execFileSync("sips", ["-z", String(size), String(size), master, "--out", out], {
+    stdio: "ignore",
+  });
   return out;
 }
 
@@ -127,8 +182,14 @@ function icns(master) {
   const iconset = path.join(work, "icon.iconset");
   mkdirSync(iconset, { recursive: true });
   for (const size of [16, 32, 128, 256, 512]) {
-    writeFileSync(path.join(iconset, `icon_${size}x${size}.png`), readFileSync(resized(master, size)));
-    writeFileSync(path.join(iconset, `icon_${size}x${size}@2x.png`), readFileSync(resized(master, size * 2)));
+    writeFileSync(
+      path.join(iconset, `icon_${size}x${size}.png`),
+      readFileSync(resized(master, size)),
+    );
+    writeFileSync(
+      path.join(iconset, `icon_${size}x${size}@2x.png`),
+      readFileSync(resized(master, size * 2)),
+    );
   }
   const out = path.join(work, "icon.icns");
   execFileSync("iconutil", ["-c", "icns", iconset, "-o", out], { stdio: "ignore" });
@@ -145,8 +206,11 @@ function write(relative, contents) {
 }
 
 try {
-  const masters = Object.fromEntries(Object.keys(compositions).map((name) => [name, renderMaster(name)]));
-  const png = (master, size) => readFileSync(size === MASTER ? masters[master] : resized(masters[master], size));
+  const masters = Object.fromEntries(
+    Object.keys(compositions).map((name) => [name, renderMaster(name)]),
+  );
+  const png = (master, size) =>
+    readFileSync(size === MASTER ? masters[master] : resized(masters[master], size));
 
   write("packages/app/assets/images/icon.png", withoutAlpha(masters.fullBleed));
   write("packages/app/assets/images/android-icon-foreground.png", png("androidForeground", MASTER));
@@ -157,7 +221,10 @@ try {
   }
   for (const scheme of ["light", "dark"]) {
     write(`packages/app/assets/images/favicon-${scheme}-running.png`, png("faviconRunning", 48));
-    write(`packages/app/assets/images/favicon-${scheme}-attention.png`, png("faviconAttention", 48));
+    write(
+      `packages/app/assets/images/favicon-${scheme}-attention.png`,
+      png("faviconAttention", 48),
+    );
   }
   write("packages/app/public/apple-touch-icon.png", withoutAlpha(resized(masters.fullBleed, 180)));
   write("packages/app/public/pwa-icon-192.png", png("tile", 192));

@@ -8,10 +8,12 @@
 //
 //   node --test woowtech/workflows.test.mjs
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import YAML from "yaml";
 
@@ -78,8 +80,9 @@ test("every workflow file is either enabled or disabled in GitHub's UI", () => {
 test("CI runs weekly, on pull requests and on demand, not on every push to main", () => {
   const { on } = workflow("ci.yml");
   const message =
-    "A full CI run takes about 250 of GitHub Free's 2,000 private-repo minutes a month. " +
-    "Ten pushes a working day would need about 27 times that, a weekly run about half.";
+    "A CI run takes about 125 of GitHub Free's 2,000 private-repo minutes a month, or 275 " +
+    "with Playwright. Ten full runs a working day would need about 30 times the month's " +
+    "minutes; the weekly run without Playwright takes about a quarter.";
   assert.deepEqual(
     Object.keys(on).sort(),
     ["merge_group", "pull_request", "schedule", "workflow_dispatch"],
@@ -106,6 +109,55 @@ test("CI's weekly run skips change detection, which has no default branch to com
   );
 });
 
+/**
+ * The terms a job's `if` joins with `&&` at its top level. Empty when an `||` outside
+ * parentheses could run the job without them.
+ */
+function requiredTerms(condition) {
+  let expression = String(condition ?? "").replace(/^\s*\$\{\{([\s\S]*)\}\}\s*$/, "$1");
+  // Collapse parenthesized groups, innermost first, until only the top level is left.
+  for (let previous = ""; previous !== expression; ) {
+    previous = expression;
+    expression = expression.replace(/\([^()]*\)/g, "()");
+  }
+  return expression.includes("||") ? [] : expression.split("&&").map((term) => term.trim());
+}
+
+test("CI runs the Playwright shards only on a manual run that asks for them", () => {
+  // The owner's decision (2026-09-26): the four shards took 26 to 44 minutes each in CI run 2.
+  // The weekly run, pull requests and the merge queue run every other job. Run workflow
+  // with run_playwright ticked runs the shards as well.
+  const ci = workflow("ci.yml");
+  const input = ci.on.workflow_dispatch?.inputs?.run_playwright;
+  assert.deepEqual(
+    { type: input?.type, default: input?.default },
+    { type: "boolean", default: false },
+    "Declare workflow_dispatch's run_playwright input: a boolean, unticked by default.",
+  );
+  const ids = (select) =>
+    Object.entries(ci.jobs)
+      .filter(([, job]) => select(job))
+      .map(([id]) => id);
+  const playwright = ids((job) =>
+    (job.steps ?? []).some(({ run }) =>
+      /\bnpm run test:e2e --workspace=@getpaseo\/app\b/.test(String(run ?? "")),
+    ),
+  );
+  assert.ok(playwright.length > 0, "the Playwright jobs were not found");
+  const onDemand = ["github.event_name == 'workflow_dispatch'", "inputs.run_playwright"];
+  assert.deepEqual(
+    ids((job) => onDemand.every((term) => requiredTerms(job.if).includes(term))),
+    playwright,
+    "Start each Playwright job's if with " +
+      "`github.event_name == 'workflow_dispatch' && inputs.run_playwright && `.",
+  );
+  assert.deepEqual(
+    ids((job) => /\b(?:github\.event_name|inputs)\b/.test(String(job.if ?? ""))),
+    playwright,
+    "Only the Playwright jobs depend on the event or the inputs; the weekly run runs the rest.",
+  );
+});
+
 test("CI jobs run on Ubuntu, and on Windows only when WOOWTECH_CI_WINDOWS is true", () => {
   // The repository variable is unset, so a gated job is skipped without a runner.
   const windowsGate = /^\$\{\{\s*vars\.WOOWTECH_CI_WINDOWS == 'true' && /;
@@ -125,6 +177,24 @@ test("CI jobs run on Ubuntu, and on Windows only when WOOWTECH_CI_WINDOWS is tru
       "(macOS ten times). Start a Windows job's if with " +
       "`vars.WOOWTECH_CI_WINDOWS == 'true' && `.",
   );
+});
+
+test("CI's Ubuntu jobs name an Ubuntu version, not ubuntu-latest", () => {
+  // GitHub moves ubuntu-latest to Ubuntu 26 from 2026-10-19. With a version, the image
+  // changes when we change the label, not under a weekly run. Two job names still say
+  // (ubuntu-latest): they are upstream's check names, which scripts/ci-workflow.test.mjs pins.
+  const labels = (value) =>
+    typeof value === "string" ? [value] : Object.values(value ?? {}).flatMap(labels);
+  const latest = [];
+  for (const name of ENABLED) {
+    for (const [id, job] of Object.entries(workflow(name).jobs)) {
+      // A matrix job lists its runners in the matrix.
+      for (const label of labels([job["runs-on"], job.strategy?.matrix])) {
+        if (/\bubuntu-latest\b/.test(label)) latest.push(`${name} ${id}: ${label}`);
+      }
+    }
+  }
+  assert.deepEqual(latest, [], "Pin each Ubuntu runner to a version, such as ubuntu-24.04.");
 });
 
 test("CI can neither deploy nor publish: no credentials but the test keys, no write access", () => {
@@ -154,6 +224,196 @@ test("CI can neither deploy nor publish: no credentials but the test keys, no wr
   assert.deepEqual(found, [], "The owner's rule for CI: tests only, nothing deploys or publishes.");
 });
 
+// GitHub runs private repositories on 2-core, 7 GB Linux runners; upstream's public repo gets
+// 4 cores and 16 GB. CI runs 1 and 2 failed on time and memory limits that upstream's runners meet.
+
+/** The Ubuntu steps that run a command matching `pattern`, with the environment each gets. */
+function ubuntuSteps(pattern) {
+  const ci = workflow("ci.yml");
+  return Object.entries(ci.jobs)
+    .filter(([, job]) => String(job["runs-on"]).startsWith("ubuntu-"))
+    .flatMap(([id, job]) =>
+      (job.steps ?? [])
+        .filter((step) => pattern.test(String(step.run ?? "")))
+        .map((step) => ({
+          job: id,
+          step: step.name,
+          run: String(step.run),
+          env: { ...ci.env, ...job.env, ...step.env },
+        })),
+    );
+}
+
+/** A source file without its comments, so that a comment naming a setting does not count. */
+function readRepoCode(path) {
+  const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  return source.replace(/\/\*[\s\S]*?\*\/|(?<!:)\/\/.*/g, "");
+}
+
+test("CI gives a cold Metro bundle ten minutes, not 30, 90 or 120 seconds", () => {
+  // Every Playwright shard stopped in globalSetup with the web bundle at 91% after 120 s.
+  // The desktop job's lifecycle E2E compiles the same bundle while its window waits 90 s,
+  // and its browser E2E starts another Metro and waits Playwright's default 30 s for Settings.
+  for (const file of [
+    "packages/app/e2e/support/global-setup.ts",
+    "packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs",
+    "packages/desktop/e2e/browser-tabs.e2e.mjs",
+  ]) {
+    assert.match(
+      readRepoCode(file),
+      /\benv\.E2E_METRO_WARMUP_TIMEOUT_MS\b/,
+      `${file} ignores the setting`,
+    );
+  }
+  const metroSteps = ubuntuSteps(/\btest:e2e\b/);
+  assert.ok(metroSteps.length >= 5, "the Playwright and desktop E2E steps were not found");
+  assert.deepEqual(
+    metroSteps.filter(({ env }) => !(Number(env.E2E_METRO_WARMUP_TIMEOUT_MS) >= 600_000)),
+    [],
+  );
+});
+
+test("the desktop browser E2E retries a screenshot the tab has not painted yet", () => {
+  // CI run 2: the hidden window had not painted within the desktop's 5 s capture, and
+  // browser_screenshot answered screenshot_no_frame, retryable. verifyHiddenBrowserScreenshots
+  // called it once. Every call goes through an ...UntilReady helper, which retries retryable
+  // errors until the script's timeout and returns any other answer.
+  const code = readRepoCode("packages/desktop/e2e/browser-tabs.e2e.mjs");
+  const callers = [
+    ...code.matchAll(/(\w+)\((?:\s*client,)?(?:\s*\{\s*name:)?\s*"browser_screenshot"/g),
+  ].map(([, caller]) => caller);
+  assert.ok(callers.length >= 2, "the browser_screenshot calls were not found");
+  assert.deepEqual(
+    callers.filter((caller) => !caller.endsWith("UntilReady")),
+    [],
+  );
+});
+
+test("CI gives Metro in the Playwright shards a 4 GB heap", () => {
+  // CI run 2's shard 4: Metro, holding the app and the second entry root-error-recovery.spec.ts
+  // asks for, reached Node's default heap limit, about 1.8 GB on the 7 GB runner (4 GB on
+  // upstream's 16 GB runner), and every later test found no server. Metro gets the setting
+  // because global-setup.ts starts it with the step's environment.
+  const startMetro = /function startMetro\([\s\S]*?\n\}\n/.exec(
+    readRepoCode("packages/app/e2e/support/global-setup.ts"),
+  )?.[0];
+  assert.match(
+    startMetro ?? "",
+    /\benv:\s*\{\s*\.\.\.process\.env\b/,
+    "global-setup.ts no longer starts Metro with the step's environment",
+  );
+  const heapLimits = ubuntuSteps(/\bnpm run test:e2e --workspace=@getpaseo\/app\b/).map(
+    ({ job, env }) => [job, /--max-old-space-size=(\d+)/.exec(env.NODE_OPTIONS ?? "")?.[1]],
+  );
+  assert.deepEqual(heapLimits, [
+    ["playwright-1", "4096"],
+    ["playwright-2", "4096"],
+    ["playwright-3", "4096"],
+    ["playwright-4", "4096"],
+  ]);
+});
+
+/**
+ * The hook and test timeouts of each packages/app vitest project, as vitest itself resolves
+ * them for the app's test script followed by `args`, with PASEO_APP_TEST_HOOK_TIMEOUT_MS set
+ * to `hookTimeout`, or unset when it is null.
+ */
+async function appTestTimeouts({ hookTimeout = null, args = "" } = {}) {
+  const env = { ...process.env };
+  delete env.PASEO_APP_TEST_HOOK_TIMEOUT_MS;
+  if (hookTimeout !== null) env.PASEO_APP_TEST_HOOK_TIMEOUT_MS = hookTimeout;
+  const appDir = new URL("../packages/app/", import.meta.url);
+  const { scripts } = JSON.parse(readFileSync(new URL("package.json", appDir), "utf8"));
+  const script = `
+    import { createVitest, parseCLI } from "vitest/node";
+    const { options } = parseCLI(${JSON.stringify(`${scripts.test} ${args}`.trim())});
+    const vitest = await createVitest("test", { ...options, watch: false, run: true });
+    const projects = vitest.projects.map(({ name, config }) => ({
+      name,
+      browser: config.browser.enabled,
+      hookTimeout: config.hookTimeout,
+      testTimeout: config.testTimeout,
+    }));
+    await vitest.close();
+    process.stdout.write(JSON.stringify(projects) + "\\n", () => process.exit(0));
+  `;
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    ["--input-type=module", "--eval", script],
+    { cwd: fileURLToPath(appDir), env },
+  );
+  return JSON.parse(stdout.trim().split("\n").at(-1));
+}
+
+test("CI gives the app unit tests' hooks two minutes; unset, vitest keeps its defaults", async () => {
+  // input-draft.live.test.tsx imports a large module graph in beforeAll: 9.5 s on an idle
+  // Mac, over vitest's 10 s on the runner. vitest ignores --hookTimeout for projects, so
+  // packages/app/vitest.config.ts reads the variable. Unset, as on a developer's machine,
+  // every project keeps vitest's own default: 10 s, or 30 s in browser mode.
+  const appTests = ubuntuSteps(/npm run test --workspace=@getpaseo\/app\b/);
+  assert.deepEqual(
+    appTests.map(({ job, env }) => [job, Number(env.PASEO_APP_TEST_HOOK_TIMEOUT_MS)]),
+    [["app-tests", 120_000]],
+  );
+  const [inCi, unset] = await Promise.all([
+    appTestTimeouts({ hookTimeout: "120000" }),
+    appTestTimeouts(),
+  ]);
+  assert.ok(inCi.length >= 2, "the app's unit and browser projects were not found");
+  assert.deepEqual(
+    inCi.filter(({ hookTimeout }) => hookTimeout !== 120_000),
+    [],
+  );
+  assert.deepEqual(
+    unset.filter(({ browser, hookTimeout }) => hookTimeout !== (browser ? 30_000 : 10_000)),
+    [],
+  );
+});
+
+test("CI gives each app test a minute, and vitest hands --testTimeout to every project", async () => {
+  // unistyles-module-scope.test.ts parses every app source file with TypeScript: 1.4 s on a
+  // Mac, over vitest's 5 s on the runner in CI run 2. vitest passes --testTimeout on to its
+  // projects, unlike --hookTimeout, so the flag on CI's command is enough. npm hands the
+  // script what follows `--`, and keeps a flag before it for itself.
+  const args = ubuntuSteps(/npm run test --workspace=@getpaseo\/app\b/).map(({ run }) =>
+    run
+      .split(/\s--\s/)
+      .slice(1)
+      .join(" -- "),
+  );
+  assert.equal(args.length, 1, "the app-tests step was not found");
+  const projects = await appTestTimeouts({ args: args[0] });
+  assert.ok(projects.length >= 2, "the app's unit and browser projects were not found");
+  assert.deepEqual(
+    projects.filter(({ testTimeout }) => testTimeout !== 60_000),
+    [],
+  );
+});
+
+test("CI runs two CLI e2e files at a time, not upstream's four", () => {
+  // At 4, daemon status requests missed their 1.5 s limit (03-daemon) and a restarted
+  // worker came up after its 20 s deadline (25-daemon-restart-supervisor).
+  assert.match(
+    readRepoCode("packages/cli/tests/run-all.ts"),
+    /\benv\.PASEO_CLI_TEST_CONCURRENCY\b/,
+  );
+  const cliTests = ubuntuSteps(/npm run test --workspace=@getpaseo\/cli\b/);
+  assert.deepEqual(
+    cliTests.map(({ job, env }) => [job, String(env.PASEO_CLI_TEST_CONCURRENCY)]),
+    [
+      ["cli-tests-1", "2"],
+      ["cli-tests-2", "2"],
+      ["cli-tests-3", "2"],
+    ],
+  );
+});
+
+test("CI's Ubuntu desktop job may run for an hour", () => {
+  // Run 1 stopped at its unit tests. The E2E, packaging and smoke steps after them
+  // compile Metro's bundle, export the web app and build four Linux packages.
+  assert.equal(workflow("ci.yml").jobs["desktop-tests-ubuntu"]["timeout-minutes"], 60);
+});
+
 test("CI's RPM smoke first removes the deb package our desktop build installed", async () => {
   // Upstream's deb is `paseo`. dpkg only warns about a package that is not installed,
   // so a stale name leaves the deb's files in place to hide what the RPM misses.
@@ -161,4 +421,19 @@ test("CI's RPM smoke first removes the deb package our desktop build installed",
     [...String(run ?? "").matchAll(/\bdpkg --remove (\S+)/g)].map(([, name]) => name),
   );
   assert.deepEqual(removed, [await debPackageName()]);
+});
+
+test("the pre-commit hook formats and lints .mjs files, as CI does", () => {
+  // CI checks the whole repo. Without mjs in these globs the hook skipped every .mjs file,
+  // and CI run 1's format and lint jobs failed on three of them.
+  const hook = YAML.parse(readFileSync(new URL("../lefthook.yml", import.meta.url), "utf8"));
+  assert.deepEqual(
+    hook["pre-commit"].jobs
+      .filter(({ name }) => name === "format" || name === "lint")
+      .map(({ name, glob }) => [name, /\bmjs\b/.test(glob)]),
+    [
+      ["format", true],
+      ["lint", true],
+    ],
+  );
 });

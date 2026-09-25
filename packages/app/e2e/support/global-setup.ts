@@ -124,9 +124,17 @@ export async function waitForMetro(port: number, options: WaitForServerOptions):
   await waitForServer(port, options, probeMetro);
 }
 
-export async function warmMetro(port: number): Promise<void> {
+/** How long each warmup request may take. Slow CI runners raise it with E2E_METRO_WARMUP_TIMEOUT_MS. */
+export function metroWarmupTimeoutMs(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const configured = Number(env.E2E_METRO_WARMUP_TIMEOUT_MS);
+  return Number.isSafeInteger(configured) && configured > 0 ? configured : 120_000;
+}
+
+export async function warmMetro(port: number, timeoutMs = metroWarmupTimeoutMs()): Promise<void> {
   const origin = `http://127.0.0.1:${port}`;
-  const documentResponse = await fetch(origin, { signal: AbortSignal.timeout(120_000) });
+  const documentResponse = await fetch(origin, { signal: AbortSignal.timeout(timeoutMs) });
   if (!documentResponse.ok) {
     throw new Error(`Metro document warmup failed with HTTP ${documentResponse.status}`);
   }
@@ -140,7 +148,7 @@ export async function warmMetro(port: number): Promise<void> {
   for (const source of scriptSources) {
     const scriptUrl = new URL(source, origin);
     if (scriptUrl.origin !== origin) continue;
-    const response = await fetch(scriptUrl, { signal: AbortSignal.timeout(120_000) });
+    const response = await fetch(scriptUrl, { signal: AbortSignal.timeout(timeoutMs) });
     if (!response.ok) {
       throw new Error(
         `Metro bundle warmup failed for ${scriptUrl.pathname}: HTTP ${response.status}`,

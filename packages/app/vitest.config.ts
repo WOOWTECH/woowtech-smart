@@ -15,6 +15,10 @@ const resolvePackageEntry = (packageName: string) => {
 export default defineConfig({
   test: {
     environment: "node",
+    // woowtech smart: CI sets this on GitHub's 2-core runner, where a beforeAll that imports
+    // a large module graph takes longer than 10 s. Projects ignore --hookTimeout. Unset,
+    // vitest keeps its defaults: 10 s, 30 s for the browser project.
+    hookTimeout: Number(process.env.PASEO_APP_TEST_HOOK_TIMEOUT_MS) || undefined,
     exclude: [...configDefaults.exclude, "e2e/**"],
     projects: [
       {

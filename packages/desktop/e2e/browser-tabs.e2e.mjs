@@ -241,14 +241,16 @@ async function callBrowserTool(client, name, args = {}) {
 }
 
 async function callBrowserToolUntilReady(client, name, args = {}) {
+  return mcpPayload(await callToolUntilReady(client, name, args), name);
+}
+
+// woowtech smart: returns the whole response, which carries a screenshot's image content.
+async function callToolUntilReady(client, name, args = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const result = await client.callTool({ name, args });
     const payload = result.structuredContent;
-    if (payload?.ok === true) return payload.result;
-    if (payload?.ok !== false || payload.error?.retryable !== true) {
-      return mcpPayload(result, name);
-    }
+    if (payload?.ok !== false || payload.error?.retryable !== true) return result;
     await delay(100);
   }
   throw new Error(`${name} remained unavailable for ${timeoutMs}ms`);
@@ -540,7 +542,8 @@ async function verifyHiddenBrowserScreenshots({
       browserId,
       function: "() => { document.body.style.background = 'rgb(0,255,0)'; }",
     });
-    const response = await client.callTool({ name: "browser_screenshot", args: { browserId } });
+    // woowtech smart: a slow runner may not paint the hidden tab within one capture's 5 s.
+    const response = await callToolUntilReady(client, "browser_screenshot", { browserId });
     mcpPayload(response, "browser_screenshot");
     const screenshot = response.content.find((item) => item.type === "image");
     assert(screenshot, "browser_screenshot returned no image");
@@ -1097,6 +1100,13 @@ async function main() {
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
     const page = await waitForAppPage(browser, expoPort);
     const status = await waitForDesktopStatus(page);
+    // The first load waits for Metro's cold bundle; slow runners set E2E_METRO_WARMUP_TIMEOUT_MS.
+    const firstLoadTimeout = Number(process.env.E2E_METRO_WARMUP_TIMEOUT_MS);
+    if (firstLoadTimeout > 0) {
+      await page
+        .getByRole("button", { name: "Settings", exact: true })
+        .waitFor({ timeout: firstLoadTimeout });
+    }
 
     const settingsMemory = await runSettingsMemoryRegression(page);
     if (process.env.PASEO_DESKTOP_SETTINGS_MEMORY_ONLY === "1") {
