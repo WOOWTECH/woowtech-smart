@@ -7,7 +7,7 @@ function unsupported() {
   throw new Error("not supported by the echo-client-info test agent");
 }
 
-new AgentSideConnection(
+const agentConnection = new AgentSideConnection(
   () => ({
     async initialize(params) {
       return {
@@ -23,3 +23,4 @@ new AgentSideConnection(
   }),
   ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin)),
 );
+void agentConnection;
