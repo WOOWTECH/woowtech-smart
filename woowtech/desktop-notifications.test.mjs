@@ -77,9 +77,19 @@ test("agent notification caller localizes after existing suppression and dedupli
   const callback = session.slice(start, session.indexOf("\n  useEffect(", start));
   assert.match(
     callback,
-    /sendOsNotification\(\s*localizeAgentNotification\(\{ notification, reason: params.reason, t \}\)/,
+    /sendOsNotification\(\s*localizeAgentNotification\(\{\s*notification,\s*reason: params.reason,\s*t: notificationTranslationRef.current,?\s*\}\)/,
   );
-  assert.match(callback, /\[serverId, t\]/);
+  assert.match(callback, /\[serverId\]/);
+  assert.doesNotMatch(callback, /\[serverId, t\]/);
+  assert.match(
+    session,
+    /const \{ t \} = useTranslation\(\);\s*const notificationTranslationRef = useRef\(t\);\s*notificationTranslationRef.current = t;/,
+  );
+  const observeEffect = session.slice(session.indexOf("const feeds = client.observeEvents("));
+  const dependencies = observeEffect.match(/\}, \[([\s\S]*?)\]\);/);
+  assert.ok(dependencies, "observeEvents effect dependencies");
+  assert.match(dependencies[1], /\bnotifyAgentAttention\b/);
+  assert.doesNotMatch(dependencies[1], /\bt\b|notificationTranslationRef/);
   assert.match(callback, /if \(params.reason === "error"\) \{\s*return;/);
   assert.match(callback, /if \(!isAwayFromAgent\) \{\s*return;/);
   assert.match(callback, /if \(lastNotified && lastNotified >= timestampMs\) \{\s*return;/);
@@ -93,4 +103,25 @@ test("agent notification caller localizes after existing suppression and dedupli
   );
   assert.match(session, /return input.notification.data.workspaceId \? input.notification : null/);
   assert.match(session, /return buildAgentAttentionNotificationPayload\(/);
+});
+
+test("renderer owns its delivery result union and agrees with Electron without sibling src imports", () => {
+  const renderer = source("packages/app/src/desktop/host.ts");
+  const desktop = source("packages/desktop/src/features/woowtech-notification-delivery.ts");
+  const union = /export type NotificationDeliveryResult = ([^;]+);/;
+  assert.doesNotMatch(renderer, /(?:import|export)[^;]*desktop\/src\//);
+  const values = (text) => {
+    const declaration = text.match(union);
+    assert.ok(declaration, "explicit local delivery result union");
+    return declaration[1]
+      .split("|")
+      .map((member) => {
+        const literal = member.trim();
+        assert.match(literal, /^"[^"]+"$/);
+        return literal.slice(1, -1);
+      })
+      .sort();
+  };
+  assert.deepEqual(values(renderer), ["failed", "shown", "unconfirmed"]);
+  assert.deepEqual(values(renderer), values(desktop));
 });

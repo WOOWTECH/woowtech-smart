@@ -1,3 +1,4 @@
+import { i18n } from "@/i18n/i18next";
 import type { Agent } from "@/stores/session-store";
 import type { ConfirmDialogInput } from "@/utils/confirm-dialog";
 
@@ -28,7 +29,7 @@ export function resolveDetachSubagentDialog(
     title: "Detach subagent?",
     message: `${subagentLabel} will leave this track and continue as a standalone agent.`,
     confirmLabel: "Detach",
-    cancelLabel: "Cancel",
+    cancelLabel: i18n.t("common.actions.cancel"),
     destructive: false,
   };
 }

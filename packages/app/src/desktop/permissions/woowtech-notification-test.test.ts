@@ -21,8 +21,7 @@ describe("woowtech notification test feedback", () => {
       { status: "sending" },
       {
         status: "unconfirmed",
-        message:
-          "無法確認通知是否顯示。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+        message: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
       },
     ]);
   });
@@ -111,7 +110,7 @@ describe("woowtech notification test feedback", () => {
       { status: "sending" },
       {
         status: "error",
-        message: "通知顯示失敗。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+        message: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
       },
     ]);
   });

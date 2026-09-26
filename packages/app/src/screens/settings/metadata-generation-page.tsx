@@ -111,7 +111,7 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
   return (
     <SettingsSection
       title={t("settings.metadataGeneration.title")}
-      info={t("settings.metadataGeneration.description")}
+      info={t("woowtech.metadataGeneration.description")}
       trailing={docsLink}
       testID="metadata-generation-settings"
     >
@@ -123,8 +123,8 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
             </Text>
             <Text style={settingsStyles.rowHint}>
               {mode === "automatic"
-                ? t("settings.metadataGeneration.automaticHint")
-                : t("settings.metadataGeneration.preferredHint")}
+                ? t("woowtech.metadataGeneration.automaticHint")
+                : t("woowtech.metadataGeneration.preferredHint")}
             </Text>
           </View>
           <SegmentedControl
@@ -140,7 +140,7 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
             <View style={settingsStyles.rowContent}>
               <Text style={settingsStyles.rowTitle}>{t("settings.metadataGeneration.model")}</Text>
               <Text style={settingsStyles.rowHint}>
-                {t("settings.metadataGeneration.fallbackHint")}
+                {t("woowtech.metadataGeneration.fallbackHint")}
               </Text>
             </View>
             <CombinedModelSelector
