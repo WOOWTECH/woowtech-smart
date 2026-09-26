@@ -155,6 +155,8 @@ export class DirectorySync {
   private readonly fullDemandSources = new Set<object>();
   private demandRefresh: Promise<void> | null = null;
   private satisfiedDemandSource: DirectorySourceToken | null = null;
+  // Bumped each time the demand-owned subscriptions are dropped.
+  private subscriptionGeneration = 0;
   private cursors: DirectoryCheckpoint = {};
 
   constructor(
@@ -241,6 +243,7 @@ export class DirectorySync {
     this.workspaceSubscription = null;
     this.eventSubscription = null;
     this.satisfiedDemandSource = null;
+    this.subscriptionGeneration += 1;
   }
 
   private receiveAgentDelta(source: DirectorySourceToken, delta: AgentDirectoryDelta): void {
@@ -301,6 +304,9 @@ export class DirectorySync {
     ) {
       return Promise.resolve();
     }
+    // A refresh replaces the demand subscriptions, so only its success satisfies this epoch.
+    this.satisfiedDemandSource = null;
+    const generation = this.subscriptionGeneration;
     const refresh =
       this.fullDemandSources.size > 0
         ? this.refreshAll()
@@ -310,7 +316,8 @@ export class DirectorySync {
           ]).then(() => undefined);
     this.demandRefresh = refresh
       .then(() => {
-        this.satisfiedDemandSource = source;
+        // If its subscriptions were dropped mid-refresh, the epoch stays unsatisfied.
+        if (generation === this.subscriptionGeneration) this.satisfiedDemandSource = source;
         return undefined;
       })
       .finally(() => {
@@ -319,7 +326,9 @@ export class DirectorySync {
         if (
           this.hasDemand() &&
           (current.clientGeneration !== source.clientGeneration ||
-            current.connectionEpoch !== source.connectionEpoch)
+            current.connectionEpoch !== source.connectionEpoch ||
+            // Demand that joined after the subscriptions were dropped needs live ones.
+            generation !== this.subscriptionGeneration)
         ) {
           void this.requestDemandRefresh().catch(() => undefined);
         }

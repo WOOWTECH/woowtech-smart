@@ -26,6 +26,12 @@ export const workspace: WorkspaceDescriptor = {
   diffStat: null,
   scripts: [],
 };
+// Created on the computer later in the same connection.
+export const secondWorkspace: WorkspaceDescriptor = {
+  ...workspace,
+  id: "t1-second-workspace",
+  name: "feature",
+};
 
 class MemoryRows implements ReplicaRowStore {
   rows: ReplicaRow[] = [];
@@ -63,6 +69,8 @@ class MemoryRows implements ReplicaRowStore {
   }
 }
 
+const REFRESH_LOOP_LIMIT = 10;
+
 // A typed, in-memory transport port. Real DaemonClient serializes requests and parses replies;
 // no socket, server fixture, module replacement, or React renderer is involved.
 class DirectoryTransport implements DaemonTransport {
@@ -73,15 +81,18 @@ class DirectoryTransport implements DaemonTransport {
   readonly activeSubscriptions = new Set<string>();
   entries: WorkspaceDescriptor[] = [];
   holdWorkspaces = false;
+  // A host with workspace labels: refreshAll() then waits for the label catalog after both
+  // directory lists have landed. That tail took 1.4-2.25 s on the device.
+  workspaceLabels = false;
+  holdLabels = false;
+  // The host answers workspace requests with an error while the connection stays up.
+  failWorkspaces = false;
   private pending: Array<Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>> = [];
+  private pendingLabels: Array<
+    Extract<SessionInboundMessage, { type: "workspace.label.list.request" }>
+  > = [];
   private nextSubscription = 0;
-  private workspaceRequested: (() => void) | undefined;
-  waitForWorkspaceRequest(): Promise<void> {
-    if (this.pending.length > 0) return Promise.resolve();
-    return new Promise((resolve) => {
-      this.workspaceRequested = resolve;
-    });
-  }
+  private nextLabelSubscription = 0;
   onMessage(handler: (data: unknown, isBinary: boolean) => void) {
     this.receive = handler;
     return () => {
@@ -109,7 +120,10 @@ class DirectoryTransport implements DaemonTransport {
         serverId,
         hostname: "Test host",
         version: "0.8.0",
-        features: { ownedSubscriptions: true },
+        features: {
+          ownedSubscriptions: true,
+          ...(this.workspaceLabels ? { workspaceLabels: true } : {}),
+        },
       },
     });
   }
@@ -149,9 +163,16 @@ class DirectoryTransport implements DaemonTransport {
         });
         break;
       case "fetch_workspaces_request":
-        if (this.holdWorkspaces) this.pending.push(message);
+        // Replies are microtasks, so a refresh loop would starve the event loop and hang the
+        // test. Past the limit the host goes quiet and the loop fails a request-count assertion.
+        if (this.count("fetch_workspaces_request") > REFRESH_LOOP_LIMIT) this.pending.push(message);
+        else if (this.failWorkspaces) this.fail(message);
+        else if (this.holdWorkspaces) this.pending.push(message);
         else this.workspaceReply(message);
-        this.workspaceRequested?.();
+        break;
+      case "workspace.label.list.request":
+        if (this.holdLabels) this.pendingLabels.push(message);
+        else this.labelReply(message);
         break;
       case "subscription.release.request":
         this.activeSubscriptions.delete(message.subscriptionId);
@@ -191,13 +212,42 @@ class DirectoryTransport implements DaemonTransport {
     this.holdWorkspaces = false;
     for (const request of this.pending.splice(0)) this.workspaceReply(request);
   }
+  private fail(message: Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>) {
+    this.reply({
+      type: "rpc_error",
+      payload: {
+        requestId: message.requestId,
+        requestType: message.type,
+        error: "Workspace directory unavailable",
+      },
+    });
+  }
+  private labelReply(
+    message: Extract<SessionInboundMessage, { type: "workspace.label.list.request" }>,
+  ) {
+    this.reply({
+      type: "workspace.label.list.response",
+      payload: {
+        requestId: message.requestId,
+        // Not in activeSubscriptions: the label catalog is not a directory subscription.
+        subscriptionId: `t1-labels-${++this.nextLabelSubscription}`,
+        labels: [],
+        sync: { mode: "snapshot", generation: "t1-labels", headSeq: 0, removals: [] },
+      },
+    });
+  }
+  deliverLabels() {
+    this.holdLabels = false;
+    for (const request of this.pendingLabels.splice(0)) this.labelReply(request);
+  }
   count(type: SessionInboundMessage["type"]) {
     return this.requests.filter((request) => request.type === type).length;
   }
 }
 
-export async function createDemandFixture() {
+export async function createDemandFixture(options: { workspaceLabels?: boolean } = {}) {
   const transport = new DirectoryTransport();
+  transport.workspaceLabels = options.workspaceLabels ?? false;
   const rows = new MemoryRows();
   const values = new Map<string, string>();
   const storage: HostRuntimeStorage = {

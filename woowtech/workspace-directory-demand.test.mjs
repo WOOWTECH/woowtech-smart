@@ -29,6 +29,12 @@ function calls(tree, name) {
     (node) => ts.isCallExpression(node) && node.expression.getText(tree) === name,
   );
 }
+// A return that leaves the component itself; nested functions return only from themselves.
+function returnsFromComponent(node) {
+  if (ts.isReturnStatement(node)) return true;
+  if (ts.isFunctionLike(node)) return false;
+  return ts.forEachChild(node, returnsFromComponent) ?? false;
+}
 function properties(node, tree) {
   assert.ok(node && ts.isObjectLiteralExpression(node));
   return Object.fromEntries(
@@ -64,10 +70,24 @@ test("workspace-screen wires the focused missing descriptor owner beside cache p
     isRouteFocused: "isRouteFocused",
     hasWorkspaceDescriptor: "workspaceDescriptor !== null",
   });
-  assert.ok(ts.isExpressionStatement(call.parent));
-  const statements = call.parent.parent.statements;
-  assert.ok(statements, "hook must be an unconditional screen-level call");
-  const next = statements[statements.indexOf(call.parent) + 1].getText(tree);
+  // Rules of hooks: one plain statement of the component body, reached on every render.
+  const components = findAll(
+    tree,
+    (node) => ts.isFunctionDeclaration(node) && node.name?.text === "WorkspaceScreenContent",
+  );
+  assert.equal(components.length, 1, "WorkspaceScreenContent component not found");
+  const body = components[0].body;
+  assert.ok(
+    ts.isExpressionStatement(call.parent) && call.parent.parent === body,
+    "hook must be a direct statement of WorkspaceScreenContent, not inside if, ?:, &&, a block or a callback",
+  );
+  const statements = body.statements;
+  const index = statements.indexOf(call.parent);
+  assert.ok(
+    !statements.slice(0, index).some(returnsFromComponent),
+    "hook must run before any early return of WorkspaceScreenContent",
+  );
+  const next = statements[index + 1].getText(tree);
   assert.match(next, /useEffect\(/);
   assert.match(next, /\.prepareWorkspaceRoute\(normalizedServerId, normalizedWorkspaceId\)/);
 });

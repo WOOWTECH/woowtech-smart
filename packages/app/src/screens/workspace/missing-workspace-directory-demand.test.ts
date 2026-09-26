@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useSessionStore } from "@/stores/session-store";
 import {
   navigateToWorkspace,
@@ -8,23 +8,28 @@ import { resolveWorkspaceRouteState } from "./workspace-route-state";
 import { selectVisibleAgentIds } from "./visible-agent-ids";
 import {
   createDemandFixture,
+  secondWorkspace,
   serverId,
   workspaceId,
   workspace,
 } from "./missing-workspace-directory-demand.test-support";
 
 import { parseWorkspaceOpenIntent } from "@/utils/host-routes";
-import { acquireMissingWorkspaceDirectoryDemand } from "./missing-workspace-directory-demand";
+import {
+  acquireMissingWorkspaceDirectoryDemand,
+  type MissingWorkspaceDirectoryDemandInput,
+} from "./missing-workspace-directory-demand";
 
 const fixtures: Awaited<ReturnType<typeof createDemandFixture>>[] = [];
 afterEach(async () => {
   for (const current of fixtures.splice(0)) await current.dispose();
 });
-async function fixture() {
-  const result = await createDemandFixture();
+async function fixture(options?: Parameters<typeof createDemandFixture>[0]) {
+  const result = await createDemandFixture(options);
   fixtures.push(result);
   return result;
 }
+type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 const recovery = {
   kind: "unavailable",
@@ -35,12 +40,12 @@ const recovery = {
     message: "Not available through archive recovery.",
   },
 } as const;
-function routeState(f: Awaited<ReturnType<typeof fixture>>) {
+function routeState(f: Awaited<ReturnType<typeof fixture>>, id = workspaceId) {
   return resolveWorkspaceRouteState({
     hostName: "Test host",
     connectionStatus: "online",
     lastError: null,
-    workspace: f.session()?.workspaces.get(workspaceId) ?? null,
+    workspace: f.session()?.workspaces.get(id) ?? null,
     hasHydratedWorkspaces: f.session()?.hasHydratedWorkspaces ?? false,
     recovery,
   });
@@ -71,6 +76,61 @@ function navigation(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 const missingInput = { serverId, workspaceId, isRouteFocused: true, hasWorkspaceDescriptor: false };
+const secondInput = { ...missingInput, workspaceId: secondWorkspace.id };
+
+// The hook's effect: when an input changes, React runs the previous cleanup and then the next
+// setup. Descriptor arrival, blur and unmount all release through that cleanup.
+function missingWorkspaceRoute(f: Fixture, input: MissingWorkspaceDirectoryDemandInput) {
+  let current = input;
+  let release = acquireMissingWorkspaceDirectoryDemand(f.runtime, current);
+  return {
+    rerender(patch: Partial<MissingWorkspaceDirectoryDemandInput>) {
+      release?.();
+      current = { ...current, ...patch };
+      release = acquireMissingWorkspaceDirectoryDemand(f.runtime, current);
+    },
+    holdsDemand: () => release !== undefined,
+    unmount() {
+      release?.();
+      release = undefined;
+    },
+  };
+}
+
+// The fixture replies in microtasks, so one macrotask turn lets any follow-up refresh send
+// its request. Used only to prove that no further request goes out.
+function settle() {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+function directory(f: Fixture, id: string) {
+  return {
+    workspaceRequests: f.transport.count("fetch_workspaces_request"),
+    hasWorkspace: f.session()?.workspaces.has(id) ?? false,
+  };
+}
+
+// Real timeline owner. Its timeline ports throw: only its directory demand is under test.
+function directoryOnlyTimeline(f: Fixture) {
+  return f.runtime.createViewedTimelineOwner(serverId, {
+    observe: () => {
+      throw new Error("Timeline is not connected in this directory handoff test");
+    },
+    readCursor: () => undefined,
+    fetchPage: async () => {
+      throw new Error("Unexpected timeline page");
+    },
+    fetchLatestTail: async () => {
+      throw new Error("Unexpected timeline tail");
+    },
+    reportError: (error) => {
+      throw error;
+    },
+    schedule: () => {
+      throw new Error("Unexpected timeline retry");
+    },
+  });
+}
 
 describe("missing workspace directory demand", () => {
   it.each([
@@ -163,9 +223,9 @@ describe("missing workspace directory demand", () => {
     f.transport.holdWorkspaces = true;
     await f.connect();
     expect(f.runtime.getSnapshot(serverId)?.connectionEpoch).toBe((epoch ?? 0) + 1);
-    // Wait for the epoch-triggered request BEFORE joining the refresh: the test
-    // must not be the owner that starts network work.
-    await f.transport.waitForWorkspaceRequest();
+    // The reconnect itself must send the directory request. A refresh started by the test
+    // would hide a missing demand, so assert the request before joining it.
+    await expect.poll(() => f.transport.count("fetch_workspaces_request")).toBe(1);
     const refreshed = f.runtime.refreshDirectories(serverId);
     expect(f.transport.count("fetch_workspaces_request")).toBe(1);
     expect(f.session()?.workspaces.has(workspaceId)).toBe(false);
@@ -183,24 +243,7 @@ describe("missing workspace directory demand", () => {
         placement: undefined,
       },
     ]);
-    const timeline = f.runtime.createViewedTimelineOwner(serverId, {
-      observe: () => {
-        throw new Error("Timeline is not connected in this directory handoff test");
-      },
-      readCursor: () => undefined,
-      fetchPage: async () => {
-        throw new Error("Unexpected timeline page");
-      },
-      fetchLatestTail: async () => {
-        throw new Error("Unexpected timeline tail");
-      },
-      reportError: (error) => {
-        throw error;
-      },
-      schedule: () => {
-        throw new Error("Unexpected timeline retry");
-      },
-    });
+    const timeline = directoryOnlyTimeline(f);
     try {
       timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
       release?.();
@@ -264,5 +307,219 @@ describe("missing workspace directory demand", () => {
     });
     f.runtime.acceptWorkspaceSnapshots(serverId, [workspace]);
     expect(routeState(f)).toEqual({ kind: "ready" });
+  });
+});
+
+describe("directory demand that leaves while its own refresh is still running", () => {
+  async function fixtureWithSlowLabels() {
+    const f = await fixture({ workspaceLabels: true });
+    useSessionStore.getState().setHasHydratedWorkspaces(serverId, true);
+    f.transport.entries = [workspace];
+    f.transport.holdLabels = true;
+    return f;
+  }
+
+  // Both directory lists land, then refreshAll() still waits for the label catalog. The only
+  // demand leaves in that window, and the refresh finishes afterwards.
+  async function leaveMidRefresh(f: Fixture, leave: () => void) {
+    await expect.poll(() => f.transport.count("workspace.label.list.request")).toBe(1);
+    expect(f.session()?.workspaces.has(workspaceId)).toBe(true);
+    leave();
+    await expect.poll(() => f.transport.activeSubscriptions.size).toBe(0);
+    f.transport.deliverLabels();
+    // Nothing demands the directory now, so this joins the running refresh without starting one.
+    await f.runtime.refreshDirectories(serverId);
+    expect(directory(f, workspaceId)).toEqual({ workspaceRequests: 1, hasWorkspace: true });
+    // Later in the same connection, the computer creates another workspace.
+    f.transport.entries = [workspace, secondWorkspace];
+  }
+
+  async function expectSecondWorkspaceRefreshed(f: Fixture) {
+    await expect
+      .poll(() => directory(f, secondWorkspace.id))
+      .toEqual({ workspaceRequests: 2, hasWorkspace: true });
+  }
+
+  it("the sidebar refreshes a new workspace after the missing-workspace owner left mid-refresh", async () => {
+    const f = await fixtureWithSlowLabels();
+    const route = missingWorkspaceRoute(f, missingInput);
+    await leaveMidRefresh(f, () => route.rerender({ hasWorkspaceDescriptor: true }));
+    const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
+    try {
+      await expectSecondWorkspaceRefreshed(f);
+    } finally {
+      closeSidebar();
+    }
+  });
+
+  it("a second notification route opens its new workspace after the first owner left mid-refresh", async () => {
+    const f = await fixtureWithSlowLabels();
+    const first = missingWorkspaceRoute(f, missingInput);
+    await leaveMidRefresh(f, () => first.rerender({ hasWorkspaceDescriptor: true }));
+    const second = missingWorkspaceRoute(f, secondInput);
+    try {
+      await expectSecondWorkspaceRefreshed(f);
+      second.rerender({ hasWorkspaceDescriptor: true });
+      expect(second.holdsDemand()).toBe(false);
+      expect(routeState(f, secondWorkspace.id)).toEqual({ kind: "ready" });
+    } finally {
+      second.unmount();
+    }
+  });
+
+  it("an agent tab that joins the refresh after the owner left still gets live subscriptions", async () => {
+    const f = await fixtureWithSlowLabels();
+    const route = missingWorkspaceRoute(f, missingInput);
+    const timeline = directoryOnlyTimeline(f);
+    try {
+      await expect.poll(() => f.transport.count("workspace.label.list.request")).toBe(1);
+      // One render pass: the descriptor releases the owner and the notification's agent tab
+      // opens, so the tab's route demand joins the refresh whose subscriptions were dropped.
+      route.rerender({ hasWorkspaceDescriptor: true });
+      timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
+      f.transport.deliverLabels();
+      await expect
+        .poll(() => ({
+          workspaceRequests: f.transport.count("fetch_workspaces_request"),
+          subscriptions: f.transport.activeSubscriptions.size,
+        }))
+        .toEqual({ workspaceRequests: 2, subscriptions: 3 });
+    } finally {
+      timeline.dispose();
+    }
+  });
+
+  it("upstream: a sidebar reopened after closing mid-refresh refreshes a new workspace", async () => {
+    const f = await fixtureWithSlowLabels();
+    await leaveMidRefresh(f, f.runtime.acquireDirectoryDemand(serverId));
+    const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
+    try {
+      await expectSecondWorkspaceRefreshed(f);
+    } finally {
+      closeSidebar();
+    }
+  });
+});
+
+describe("failed directory refresh", () => {
+  // An open sidebar holds the directory demand throughout. Opening an agent adds route demand.
+  async function sidebarFixture() {
+    const f = await fixture();
+    useSessionStore.getState().setHasHydratedWorkspaces(serverId, true);
+    f.transport.entries = [workspace];
+    return f;
+  }
+
+  it("a failed refresh does not satisfy the connection and does not retry by itself", async () => {
+    const f = await sidebarFixture();
+    f.transport.failWorkspaces = true;
+    const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
+    const timeline = directoryOnlyTimeline(f);
+    try {
+      // Joins the sidebar's refresh, which the host rejects.
+      await expect(f.runtime.refreshDirectories(serverId)).rejects.toThrow(
+        "Workspace directory unavailable",
+      );
+      await settle();
+      expect(directory(f, workspaceId)).toEqual({ workspaceRequests: 1, hasWorkspace: false });
+      f.transport.failWorkspaces = false;
+      timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
+      await expect
+        .poll(() => directory(f, workspaceId))
+        .toEqual({ workspaceRequests: 2, hasWorkspace: true });
+    } finally {
+      timeline.dispose();
+      closeSidebar();
+    }
+  });
+
+  it("a failed pull-to-refresh does not leave the connection satisfied", async () => {
+    const f = await sidebarFixture();
+    const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
+    const timeline = directoryOnlyTimeline(f);
+    try {
+      await f.runtime.refreshDirectories(serverId);
+      f.transport.failWorkspaces = true;
+      await expect(f.runtime.refreshDirectories(serverId)).rejects.toThrow(
+        "Workspace directory unavailable",
+      );
+      await settle();
+      // The rejected request replaced the live workspace subscription: agents and events remain.
+      expect(f.transport.activeSubscriptions.size).toBe(2);
+      expect(f.transport.count("fetch_workspaces_request")).toBe(2);
+      f.transport.failWorkspaces = false;
+      f.transport.entries = [workspace, secondWorkspace];
+      timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
+      await expect
+        .poll(() => directory(f, secondWorkspace.id))
+        .toEqual({ workspaceRequests: 3, hasWorkspace: true });
+    } finally {
+      timeline.dispose();
+      closeSidebar();
+    }
+  });
+});
+
+describe("missing workspace that never arrives", () => {
+  async function reconnect(f: Fixture) {
+    f.transport.disconnect();
+    await f.connect();
+  }
+
+  it("a deleted or archived workspace refreshes once per connection, not in a loop", async () => {
+    const f = await fixture();
+    useSessionStore.getState().setHasHydratedWorkspaces(serverId, true);
+    // Archived or deleted on the computer: no refresh returns it.
+    f.transport.entries = [];
+    const route = missingWorkspaceRoute(f, missingInput);
+    try {
+      await f.runtime.refreshDirectories(serverId);
+      // The sidebar opens and closes while the owner keeps waiting.
+      f.runtime.acquireDirectoryDemand(serverId)();
+      await settle();
+      expect(directory(f, workspaceId)).toEqual({ workspaceRequests: 1, hasWorkspace: false });
+      expect(route.holdsDemand()).toBe(true);
+      await reconnect(f);
+      await expect.poll(() => f.transport.count("fetch_workspaces_request")).toBe(2);
+      await settle();
+      await reconnect(f);
+      await expect.poll(() => f.transport.count("fetch_workspaces_request")).toBe(3);
+      await settle();
+      expect(directory(f, workspaceId)).toEqual({ workspaceRequests: 3, hasWorkspace: false });
+    } finally {
+      route.unmount();
+    }
+  });
+
+  it("a refresh that times out ends the connection, and the reconnect refreshes once", async () => {
+    const f = await fixture();
+    useSessionStore.getState().setHasHydratedWorkspaces(serverId, true);
+    f.transport.entries = [workspace];
+    f.transport.holdWorkspaces = true;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const route = missingWorkspaceRoute(f, missingInput);
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(f.transport.count("fetch_workspaces_request")).toBe(1);
+      // The host never answers; the client gives up on the subscription and drops the socket.
+      await vi.advanceTimersByTimeAsync(60_000);
+      vi.useRealTimers();
+      expect(f.runtime.getSnapshot(serverId)).toMatchObject({
+        connectionStatus: "error",
+        lastError: "Subscription request failed",
+      });
+      expect(directory(f, workspaceId)).toEqual({ workspaceRequests: 1, hasWorkspace: false });
+      f.transport.holdWorkspaces = false;
+      await f.connect();
+      await expect
+        .poll(() => directory(f, workspaceId))
+        .toEqual({ workspaceRequests: 2, hasWorkspace: true });
+      route.rerender({ hasWorkspaceDescriptor: true });
+      await settle();
+      expect(directory(f, workspaceId)).toEqual({ workspaceRequests: 2, hasWorkspace: true });
+    } finally {
+      vi.useRealTimers();
+      route.unmount();
+    }
   });
 });
