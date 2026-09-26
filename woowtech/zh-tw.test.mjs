@@ -162,3 +162,14 @@ test("Host UI terminology is 主機 while Agent and technical strings are preser
     assert.equal(fixTerms(text, context), text);
   }
 });
+
+test("confirm dialog keeps the shared localized Cancel default and caller override", () => {
+  const source = readFileSync(
+    new URL("../packages/app/src/utils/confirm-dialog.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /cancelLabel: input.cancelLabel \?\? i18n.t\("common.actions.cancel"\)/);
+  assert.equal((source.match(/resolveButtonLabels\(input\)/g) ?? []).length, 2);
+  assert.match(source, /ports: ConfirmDialogPorts = \{ getDesktopHost \}/);
+  assert.equal(committedTraditional().get("common.actions.cancel"), "取消");
+});

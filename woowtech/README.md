@@ -436,6 +436,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - `browser-tools-config.ts` 回傳的卡片狀態仍帶上游英文，上游的單元測試會檢查它；畫面上的文字由 `browser-tools-card.tsx` 翻譯。
 - 新增專案整個流程與主機選擇器的本地文案已接到 `woowtech.addProject`、`woowtech.hostPicker`。繁中「Clone from GitHub」用「從 GitHub 複製專案」，進行中用「正在複製專案…」。原始 daemon 錯誤、儲存庫說明、網址、路徑與使用者名稱不翻譯。
 - 主機選擇器顯示與搜尋共用同一份選項文字；包含 `host-filter.tsx` 的觸發器在內，文字快取依賴翻譯函式，切語言時更新。其他設定頁外的硬編碼仍需逐頁盤點。
+- Renderer 共用 `utils/confirm-dialog.ts` 的 Cancel 預設使用既有 `common.actions.cancel`，依呼叫當下 App 語言取值，caller 的 `cancelLabel`（含空字串）優先。Confirm 預設與 caller 文字不改；Electron main 選單／原生對話框 fallback、瀏覽器系統按鈕及 html lang 不在這次範圍。`utils/woowtech-confirm-dialog.test.ts` 用 typed desktop bridge port 執行真正的 renderer helper，`woowtech/zh-tw.test.mjs` 的 confirm dialog 項守住接點。
 - 合併上游後要注意：T5 在 `components/add-project-flow.tsx` 約 171 行差異，另接到 `add-project-flow/options.ts`、`components/hosts/host-picker.tsx`、`host-picker-constants.ts`、`host-filter.tsx`；上游重整這些流程時，保留 fork 翻譯接點與 `t` 的快取依賴，並重跑下列定向測試。
 - 測試：
   - `i18n/woowtech-copy.test.ts`：既有文案與新文案各按上述語言政策驗證，檢查 key、插值一致及英文 fallback；已遷移的硬編碼不能回到原始碼裡。新增專案選項與主機選擇器的純 helper 測試也驗證切語言及使用者資料原樣保留，不以元件 mock 代替 UI 驗收。
@@ -981,6 +982,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- F7a 共用取消鈕（2026-09-26）：先紅確認繁中呼叫真正 renderer helper 仍送 Cancel，再改用既有 `common.actions.cancel`；沒有新增翻譯 key。定向 Vitest 4/4、繁中守門新增項 1/1。英文硬編碼、忽略 caller override、空字串 override 被當缺值、固定繁中不隨語言切換四個突變皆 exit 1；英文硬編碼也讓接點守門失敗，還原後 4/4、1/1。format/lint 通過；未跑 build/typecheck、Electron UI 或原生裝置驗收。
 
 - F6 主機補名（2026-09-26）：先紅確認正常 server_info 到達後 label 仍是 serverId；補名後 fork 整合測試 11/11、配對守門新增項 1/1。移除 store 接點、rename 保護、身分檢查、連線世代檢查、hydration gate／補查、持久化、持續監聽、主機世代及卸載接點共 10 個突變均 exit 1；還原後 11/11、1/1。App 測試使用既有 unit 設定，未跑完整配對／host-runtime suite、build 或實機；提交時另由既有 hook 執行完整 typecheck。沒有新 probe 或外部網路。
 
