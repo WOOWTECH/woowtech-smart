@@ -36,3 +36,28 @@ test("renderer uses unknown permission, test policy and visible translated resul
   assert.match(hook, /if \(!isDesktopApp \|\| testNotificationPendingRef.current\)/);
   assert.match(hook, /if \(isMountedRef.current\) setTestNotificationState\(state\)/);
 });
+
+test("agent notification caller localizes after existing suppression and deduplication", () => {
+  const session = source("packages/app/src/contexts/session-context.tsx");
+  const start = session.indexOf("const notifyAgentAttention = useCallback(");
+  assert.notEqual(start, -1);
+  const callback = session.slice(start, session.indexOf("\n  useEffect(", start));
+  assert.match(
+    callback,
+    /sendOsNotification\(\s*localizeAgentNotification\(\{ notification, reason: params.reason, t \}\)/,
+  );
+  assert.match(callback, /\[serverId, t\]/);
+  assert.match(callback, /if \(params.reason === "error"\) \{\s*return;/);
+  assert.match(callback, /if \(!isAwayFromAgent\) \{\s*return;/);
+  assert.match(callback, /if \(lastNotified && lastNotified >= timestampMs\) \{\s*return;/);
+  assert.match(callback, /attentionNotifiedRef.current.set\(params.agentId, timestampMs\)/);
+  assert.match(
+    callback,
+    /resolveAgentAttentionNotification\(\{\s*notification: params.notification,/,
+  );
+  assert.ok(
+    callback.indexOf("localizeAgentNotification(") > callback.indexOf("if (!notification)"),
+  );
+  assert.match(session, /return input.notification.data.workspaceId \? input.notification : null/);
+  assert.match(session, /return buildAgentAttentionNotificationPayload\(/);
+});

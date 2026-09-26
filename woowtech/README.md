@@ -651,6 +651,7 @@ node --test woowtech/*.test.mjs
 - 桌面主程序要等原生 `show` 才回報成功，`failed`、同步錯誤或 5 秒內沒有結果都回報未確認。`show` 也不代表使用者一定看到橫幅。失敗提示引導到「系統設定 → 通知」，並說明未簽章測試版可能無法顯示；這不表示已證明所有 ad-hoc 版本都會失敗。
 - 生命週期放在 `packages/desktop/src/features/woowtech-notification-delivery.ts`；上游接點是 `features/notifications.ts`。成功後保留點擊導頁，關閉、點擊、失敗時才清引用。啟動時的靜音 probe 仍是 best effort，不當成授權證據。
 - Renderer 接點是 `desktop-permissions.ts`、`use-desktop-permissions.ts`、`desktop-notifications-section.tsx`；測試狀態放 fork helper，文案放 `i18n/woowtech-copy.ts`，繁中以外先沿用英文。合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，再跑同名 fork helper 與 permission 的定向 Vitest。沒有變更手機推播。
+- Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；合併時不能漏掉 `t` 的 callback 依賴。
 - 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。
 
 ### 17. daemon 自己的訊息用 woowtech smart
@@ -970,6 +971,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- F4 桌面 Agent 通知標題（2026-09-26）：先驗缺少文案 key 與原 sender 仍傳英文的紅燈，再接 renderer reason 翻譯。helper／共用 fork copy 定向 Vitest 11/11、桌面通知守門 3/3；移除接點、移除語言依賴、移除 error 抑制、改 body、讓簡中套繁中五個突變皆 exit 1；還原後 11/11、3/3。format、lint 通過；未驗實際系統橫幅，未改手機推播、protocol 或 daemon。
 
 - F3 桌面通知回饋（2026-09-26）：permission 的 supported→granted、request 的 browser→granted、sender 的 show()→true、unknown 禁止測試四個行為先紅後綠。定向 Vitest 三檔 24/24；fork 接點守門 2/2。送出接點、permission、unknown 按鈕、失敗文案與 show 後清掉 click listener 共五個突變均 exit 1，逐項還原；還原後守門 2/2、生命週期 7/7。審查再補 optional native bridge 的 unknown 邊界、文案確切值／英文 fallback／placeholder 與既有翻譯政策，兩檔 20/20；再做五個突變均 exit 1，還原後 20/20。沒有啟動 Electron、沒有檢驗簽章產物或實際通知橫幅；typecheck 由提交者執行。
 

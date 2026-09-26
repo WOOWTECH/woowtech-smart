@@ -36,6 +36,7 @@ import {
 } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { sendOsNotification } from "@/utils/os-notifications";
+import { localizeAgentNotification } from "@/utils/woowtech-agent-notification";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
   getInitKey,
@@ -322,13 +323,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         return;
       }
 
-      void sendOsNotification({
-        title: notification.title,
-        body: notification.body,
-        data: notification.data,
-      });
+      void sendOsNotification(
+        localizeAgentNotification({ notification, reason: params.reason, t }),
+      );
     },
-    [serverId],
+    [serverId, t],
   );
 
   useEffect(() => {

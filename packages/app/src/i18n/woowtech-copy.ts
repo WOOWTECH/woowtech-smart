@@ -639,6 +639,18 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
   failed: "無法確認通知是否顯示。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
 };
 
+const AGENT_NOTIFICATION_TITLES_ENGLISH = {
+  finished: "Agent finished",
+  permission: "Agent needs permission",
+  attention: "Agent needs attention",
+};
+
+const AGENT_NOTIFICATION_TITLES_ZH_TW: typeof AGENT_NOTIFICATION_TITLES_ENGLISH = {
+  finished: "工作完成了",
+  permission: "需要你的授權",
+  attention: "需要你的注意",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
@@ -647,5 +659,7 @@ export function woowtechCopyFor(language: string) {
     hostPicker: HOST_PICKER_COPY[language] ?? HOST_PICKER_ENGLISH,
     desktopNotifications:
       language === "zh-TW" ? DESKTOP_NOTIFICATIONS_ZH_TW : DESKTOP_NOTIFICATIONS_ENGLISH,
+    agentNotificationTitles:
+      language === "zh-TW" ? AGENT_NOTIFICATION_TITLES_ZH_TW : AGENT_NOTIFICATION_TITLES_ENGLISH,
   };
 }

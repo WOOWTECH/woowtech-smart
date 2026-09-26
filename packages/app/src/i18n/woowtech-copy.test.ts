@@ -90,7 +90,9 @@ describe("woowtech smart's own text", () => {
         const newSurface = key.startsWith("addProject.") || key.startsWith("hostPicker.");
         if (newSurface && !["zh-TW", "zh-CN"].includes(language)) return [];
         // Desktop delivery feedback is translated only in Traditional Chinese.
-        if (key.startsWith("desktopNotifications.") && language !== "zh-TW") return [];
+        const traditionalChineseOnly =
+          key.startsWith("desktopNotifications.") || key.startsWith("agentNotificationTitles.");
+        if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });
       expect({ language, untranslated }).toEqual({ language, untranslated: [] });
@@ -130,6 +132,18 @@ it("keeps fork project-copy keys and placeholders in every locale with English f
         expect(copy.get(key)).toBe(text);
       }
     }
+  }
+});
+
+it("localizes only agent notification titles in Traditional Chinese with English fallback", () => {
+  const titles = ["finished", "permission", "attention"];
+  for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
+    const copy = new Map(strings(woowtechCopyFor(language)));
+    const expected =
+      language === "zh-TW"
+        ? ["工作完成了", "需要你的授權", "需要你的注意"]
+        : ["Agent finished", "Agent needs permission", "Agent needs attention"];
+    expect(titles.map((reason) => copy.get(`agentNotificationTitles.${reason}`))).toEqual(expected);
   }
 });
 
