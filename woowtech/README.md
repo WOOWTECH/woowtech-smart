@@ -135,9 +135,9 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 手機 App 的名稱和 bundle id 直接寫在 `app.config.js`：正式版 `io.woowtech.smart`，Debug 版 `io.woowtech.smart.debug`。
   - 中文手機桌面顯示「渥屋智能」（Debug 版是「渥屋智能 Debug」）。iOS 用 Expo 的 `locales`；Expo 只把 `locales` 套到 iOS，Android 由 `plugins/with-localized-app-name.js` 讀同一份設定寫進 Android 資源。
   - `apply-identity.mjs` 現在只處理 Expo 帳號相關的 owner、slug、project id。
-- iOS 主畫面的短名稱：顯示名稱放不下時（例如「woowtech smart Debug」），iOS 改用短名稱 `CFBundleName`。Expo 預設是 `$(PRODUCT_NAME)`，也就是去掉空白的 `woowtechsmartDebug`（正式版 `woowtechsmart`），iOS 26.5 模擬器上顯示成「woowtechsmart…」。
-  - 現在 `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 另外設「渥屋智能」。兩個版本相同，都在 Apple 建議的 15 字以內。Xcode 的 `PRODUCT_NAME`、執行檔和 `.app` 名稱不變。
-  - 英文系統上，Debug 版的主畫面標籤也是「woowtech smart」，跟正式版一樣。中文系統仍是「渥屋智能 Debug」，「設定 → App」裡也有完整名稱。
+- iOS 的主畫面顯示名稱欄位是 `CFBundleDisplayName`，`CFBundleName` 是 bundle 的短名稱（[Apple 欄位說明](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html)）。沒有證據能保證名稱太長時會切換到短名稱，也不能僅憑截圖判斷改讀了 `PRODUCT_NAME`。
+  - `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 設「渥屋智能」。這次只更正說明，不改顯示名稱、Xcode 的 `PRODUCT_NAME`、執行檔或 `.app` 名稱。
+  - iOS 26.5 英文模擬器驗收：Debug 產物的 `CFBundleDisplayName` 已是「woowtech smart Debug」、`CFBundleName` 已是「woowtech smart」，主畫面仍顯示「woowtechsmart…」，「設定 → App」則顯示完整名稱。短名設定沒有修好主畫面標籤；需再確認 SpringBoard 的空白與截斷行為。正式版顯示名稱較短，但主畫面結果尚未驗證，不宣稱兩版相同。中文 Debug 主畫面已觀察到「渥屋智能 Debug」。
   - 已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
   - 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`，而且只有英文，見「接下來」。
 - App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
