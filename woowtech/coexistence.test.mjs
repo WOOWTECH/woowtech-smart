@@ -58,6 +58,16 @@ async function builderUpdaterCacheDirName() {
   return new (electronBuilder().AppInfo)(await desktopPackager(), null).updaterCacheDirName;
 }
 
+test("desktop packaging excludes relay deployment configs without excluding its runtime", async () => {
+  const { config } = await desktopPackager();
+  const filters = new Set(config.files.flatMap((entry) => entry.filter));
+  assert.ok(
+    filters.has("!node_modules/@getpaseo/relay/wrangler*.toml"),
+    "relay deployment configs must not ship inside the desktop app",
+  );
+  assert.equal(filters.has("!node_modules/@getpaseo/relay/**"), false);
+});
+
 const DESKTOP_APP_ID = "io.woowtech.smart.desktop";
 const APP_NAME = "woowtech smart";
 const LINK_SCHEME = "woowtech-smart";

@@ -22,6 +22,8 @@ files:
   - "!node_modules/@getpaseo/*/src/**"
   - "!node_modules/@getpaseo/**/*.test.*"
   - "!node_modules/@getpaseo/**/*.spec.*"
+  # Relay deployment settings are not desktop runtime resources.
+  - "!node_modules/@getpaseo/relay/wrangler*.toml"
   - "!node_modules/@getpaseo/server/dist/server/web-ui/**"
   # Workspace packages are symlinked, so anything a dev generates inside them
   # lands in the asar. CI never has these; a local .debug run adds gigabytes.
