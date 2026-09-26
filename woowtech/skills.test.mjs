@@ -116,7 +116,7 @@ test("skills name our command, daemon, app and help channels", () => {
       "woowtech-smart daemon pair --relay",
       "https://aiot.woowtech.io",
       "mailto:woowtech@designsmart.com.tw",
-      "https://line.me/R/ti/p/@lwo6431z",
+      "- Questions and quick help: [woowtech smart website](https://aiot.woowtech.io)",
     ],
     "woowtech-smart-plugin": [
       "woowtech-smart plugin ls",
@@ -224,7 +224,7 @@ test("the rewriter keeps upstream's services and API but renames skill invocatio
     cliCommand: "woowtech-smart",
     withCliCommand: (text) => text,
     brandSkillName: (name) => name.replace(/^paseo/, "woowtech-smart"),
-    links: { docs: { home: "" }, supportEmail: "", lineOfficialAccount: "" },
+    links: { docs: { home: "" }, supportEmail: "", website: "" },
     daemonHome: "~/.woowtech-smart",
     port: "6770",
     productName: "woowtech smart",

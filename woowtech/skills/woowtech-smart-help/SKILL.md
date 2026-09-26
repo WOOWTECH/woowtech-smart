@@ -86,4 +86,4 @@ Offer to install it with **Settings → Integrations → Command line → Instal
 If the current docs and diagnostics do not resolve the problem, collect the app and daemon versions, OS, install method, connection method, exact error, minimal reproduction, and a small redacted log excerpt.
 
 - Bugs and problems: email support at [woowtech@designsmart.com.tw](mailto:woowtech@designsmart.com.tw)
-- Questions and quick help: [LINE official account](https://line.me/R/ti/p/@lwo6431z)
+- Questions and quick help: [woowtech smart website](https://aiot.woowtech.io)

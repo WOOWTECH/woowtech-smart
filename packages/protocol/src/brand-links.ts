@@ -1,6 +1,7 @@
 // Where woowtech smart sends people outside the app: WoowTech's website, support
-// email, LINE official account and public releases repository. The app and the
-// CLI both read these, so a link changes here and nowhere else.
+// email and public releases repository. The app and the CLI both read these, so a
+// link changes here and nowhere else. Community help goes to the website's home
+// page; nothing leads to the LINE official account any more.
 
 const WEBSITE_HOST = "aiot.woowtech.io";
 const WEBSITE = `https://${WEBSITE_HOST}`;
@@ -11,7 +12,6 @@ export const BRAND_LINKS = {
   /** The website as the app shows it, without the scheme. */
   websiteHost: WEBSITE_HOST,
   supportEmail: "mailto:woowtech@designsmart.com.tw",
-  lineOfficialAccount: "https://line.me/R/ti/p/@lwo6431z",
   releases: `https://github.com/${RELEASES_REPO}/releases`,
   changelogSource: `https://raw.githubusercontent.com/${RELEASES_REPO}/main/CHANGELOG.md`,
   // The website has no documentation pages yet, so every topic opens its home
