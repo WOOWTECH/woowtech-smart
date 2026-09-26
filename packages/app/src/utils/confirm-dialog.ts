@@ -26,7 +26,7 @@ interface ConfirmButtonConfig {
 
 function resolveButtonLabels(input: ConfirmDialogInput): ConfirmButtonConfig {
   return {
-    confirmLabel: input.confirmLabel ?? "Confirm",
+    confirmLabel: input.confirmLabel ?? i18n.t("woowtech.confirmDialog.confirm"),
     cancelLabel: input.cancelLabel ?? i18n.t("common.actions.cancel"),
   };
 }

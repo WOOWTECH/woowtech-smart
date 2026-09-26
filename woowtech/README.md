@@ -436,7 +436,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - `browser-tools-config.ts` 回傳的卡片狀態仍帶上游英文，上游的單元測試會檢查它；畫面上的文字由 `browser-tools-card.tsx` 翻譯。
 - 新增專案整個流程與主機選擇器的本地文案已接到 `woowtech.addProject`、`woowtech.hostPicker`。繁中「Clone from GitHub」用「從 GitHub 複製專案」，進行中用「正在複製專案…」。原始 daemon 錯誤、儲存庫說明、網址、路徑與使用者名稱不翻譯。
 - 主機選擇器顯示與搜尋共用同一份選項文字；包含 `host-filter.tsx` 的觸發器在內，文字快取依賴翻譯函式，切語言時更新。其他設定頁外的硬編碼仍需逐頁盤點。
-- Renderer 共用 `utils/confirm-dialog.ts` 的 Cancel 預設使用既有 `common.actions.cancel`，依呼叫當下 App 語言取值，caller 的 `cancelLabel`（含空字串）優先。Confirm 預設與 caller 文字不改；Electron main 選單／原生對話框 fallback、瀏覽器系統按鈕及 html lang 不在這次範圍。`utils/woowtech-confirm-dialog.test.ts` 用 typed desktop bridge port 執行真正的 renderer helper，`woowtech/zh-tw.test.mjs` 的 confirm dialog 項守住接點。
+- Renderer 共用 `utils/confirm-dialog.ts` 的 Cancel 預設使用既有 `common.actions.cancel`；Confirm 沒有通用既有 key，使用 fork 的 `woowtech.confirmDialog.confirm`（繁中「確認」，其他語系沿用英文）。兩者依呼叫當下 App 語言取值，caller 的 label（含空字串）優先。子 Agent 的 archive／detach 確認也使用同一個 Cancel key，其餘文字不在這次範圍。Electron main 選單／原生對話框 fallback、瀏覽器系統按鈕及 html lang 不改。`utils/woowtech-confirm-dialog.test.ts` 與 `subagents/woowtech-subagent-dialogs.test.ts` 透過 public ports 檢查 label、布林及錯誤行為，不新增 module mock；`woowtech/zh-tw.test.mjs` 守住接點。
 - 合併上游後要注意：T5 在 `components/add-project-flow.tsx` 約 171 行差異，另接到 `add-project-flow/options.ts`、`components/hosts/host-picker.tsx`、`host-picker-constants.ts`、`host-filter.tsx`；上游重整這些流程時，保留 fork 翻譯接點與 `t` 的快取依賴，並重跑下列定向測試。
 - 測試：
   - `i18n/woowtech-copy.test.ts`：既有文案與新文案各按上述語言政策驗證，檢查 key、插值一致及英文 fallback；已遷移的硬編碼不能回到原始碼裡。新增專案選項與主機選擇器的純 helper 測試也驗證切語言及使用者資料原樣保留，不以元件 mock 代替 UI 驗收。
@@ -649,11 +649,11 @@ node --test woowtech/*.test.mjs
 #### 桌面通知的回饋
 
 - Electron 的通知支援不代表系統已授權；設定頁顯示尚未確認，仍可按「傳送測試通知」。不拿瀏覽器的授權值冒充原生通知授權。
-- 桌面測試通知分三種結果：原生 `show` 顯示「通知已顯示」；`failed` 或同步錯誤顯示「通知顯示失敗」；5 秒內沒有結果顯示「無法確認通知是否顯示」。`show` 不代表使用者一定看到橫幅。後兩者都引導到「系統設定 → 通知」，並說明未簽章測試版可能無法顯示；這不表示已證明所有 ad-hoc 版本都會失敗。
+- 桌面測試通知分三種結果：原生 `show` 顯示「通知已顯示」；`failed` 或同步錯誤顯示「通知顯示失敗」；5 秒內沒有結果顯示「無法確認通知是否顯示」。`show` 不代表使用者一定看到橫幅。後兩者的說明不重複標題，直接引導到「系統設定 → 通知」，並說明未簽章測試版可能無法顯示；這不表示已證明所有 ad-hoc 版本都會失敗。
 - 生命週期放在 `packages/desktop/src/features/woowtech-notification-delivery.ts`；上游接點是 `features/notifications.ts`。一般通知逾時只結束等待，不關通知、不清引用；之後點擊仍導頁，關閉、點擊、失敗時才清引用。晚到的 show 不改已回報的未確認結果。只允許靜音註冊 probe 逾時關閉，它仍是 best effort，不當成授權證據。
-- 三態只新增桌面內部 `sendNotificationWithResult` bridge／IPC，接點另有 `preload.ts` 與 App `desktop/host.ts`；沒有修改網路 protocol。一般 `sendOsNotification` 與既有 `sendNotification` IPC 仍回布林，僅 show 為 true。舊 bridge 仍能傳送測試，但舊布林不能證明是否收到 show，畫面一律回報未確認；不以重送來猜測結果。相容接點帶 `COMPAT(notificationDeliveryResult)` 標記。
+- 三態只新增桌面內部 `sendNotificationWithResult` bridge／IPC，接點另有 `preload.ts` 與 App `desktop/host.ts`；沒有修改網路 protocol。App 與 Electron 各自宣告三態 union，由守門核對一致，不跨套件引用 sibling `src`。一般 `sendOsNotification` 與既有 `sendNotification` IPC 仍回布林，僅 show 為 true。舊 bridge 仍能傳送測試，但舊布林不能證明是否收到 show，畫面一律回報未確認；不以重送來猜測結果。相容接點帶 `COMPAT(notificationDeliveryResult)` 標記。
 - Renderer 接點是 `desktop-permissions.ts`、`use-desktop-permissions.ts`、`desktop-notifications-section.tsx`；測試狀態放 fork helper，文案放 `i18n/woowtech-copy.ts`，繁中以外先沿用英文。合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，再跑同名 fork helper 與 permission 的定向 Vitest。沒有變更手機推播。
-- Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；合併時不能漏掉 `t` 的 callback 依賴。
+- Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；翻譯函式存入 ref 並在 render 同步更新，通知 callback 只依賴 `serverId`，避免切換語言使 `observeEvents` 拆掉再訂閱；送出時仍讀最新翻譯。
 - 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。
 
 ### 17. daemon 自己的訊息用 woowtech smart
@@ -866,7 +866,7 @@ owner 的決定是「直接叫起 App」：配對連結和 QR Code 打開渥屋�
 - 深連結可先離線匯入，不為取名字另開 probe。後續正常連線的 `server_info` 有非空 hostname、serverId 相符時，才把仍是 serverId 或空白的 label 補成主機名稱並存檔；重連與已連線後的新 server_info 都走同一條路。
 - 已有名字不覆蓋，等待連線期間的手動 rename 優先；已移除主機不重建，舊連線或舊主機世代的 callback 不處理。registry 尚未載入不寫入，載入完成後再讀目前連線快取的 server_info，避免遺漏先到的名稱。
 - 沿用上游 label 判別慣例，沒有新增名稱來源欄位：使用者若刻意把名稱設成完全相同的 serverId，無法與自動 fallback 區分，仍會被 hostname 取代。可先取其他名字以保留手動名稱。
-- 政策與監聽在 `runtime/woowtech-host-label.ts`，上游只接 `runtime/host-runtime.ts` 的 controller 生命週期、registry 載入完成與 label 持久化。只改 label 時不呼叫會啟動 probe cycle 的 updateHost；沒有改連線探測、路由或網路 protocol。
+- 政策與監聽在 `runtime/woowtech-host-label.ts`，上游只接 `runtime/host-runtime.ts` 的 controller 生命週期、registry 載入完成與 label 持久化。只改 label 時不呼叫會啟動 probe cycle 的 updateHost；沒有改連線探測、路由或網路 protocol。`woowtech-host-label.test.ts` 只有第一個整合案例使用 15 秒上限，吸收冷啟動成本；其他案例與全域上限不變。
 
 預設值和遷移：
 
@@ -939,7 +939,7 @@ node --test woowtech/*.test.mjs
 - 政策在 `packages/server/src/server/woowtech-metadata-policy.ts`。`WorkspaceAutoName` 的 directory/worktree 入口都在排程前拒絕：沒有 timer、沒有 generator、provider snapshot 列舉、instructions 載入或 structured generation。新舊 home 一樣關閉，不讀任何命名設定，也不從既有 metadata provider 清單推定使用者同意。
 - 保留建立時的名稱、初始 prompt title 與分支；不回改以前的命名，不阻擋手動改名。正常 Agent 工作與 OpenCode 設定頁探測維持現狀；這不是全域禁止 provider 網路使用。
 - 上游接點只有 `workspace-auto-name.ts` 的排程 gate 與 typed policy/scheduler ports，以及 `worktree-branch-name-generator.ts` 的 instructions-builder 測試 port。production bootstrap 不傳 policy override；既有上游行為測試明確注入 enabled policy 以保留原斷言，另以真正預設 OFF 的 service 驗零呼叫，不能用測試開啟值當 production 預設。
-- 合併上游後跑 `workspace-auto-name.test.ts` 與 `node --test woowtech/workspace-auto-name.test.mjs`。守門鎖住 production OFF、兩個 daemon 入口、排程前 gate 與 bootstrap 接點。
+- OFF 基線與 positive control 放 `woowtech-workspace-auto-name.test.ts`；上游 `workspace-auto-name.test.ts` 僅保留 ON policy 注入，原斷言不變。合併上游後跑這兩檔與 `node --test woowtech/workspace-auto-name.test.mjs`。守門鎖住 production OFF、兩個 daemon 入口、排程前 gate 與 bootstrap 接點，並以 AST 掃 server production sources：命名 generator 只能由 `workspace-auto-name.ts` 存取。守存取而非只找函式呼叫，才能攔住 import alias、間接引用、namespace、dynamic import 與 re-export；函式宣告本身和測試不當作新 caller。
 - D5 修正（F8-min）：commit 訊息與 PR 草稿的 AI 產生也先完全關閉，共用 `woowtech-metadata-policy.ts`，但使用獨立的 Git metadata policy。`git-metadata-generator.ts` 兩個入口在讀 diff、載入 metadata instructions、讀 provider 偏好、列舉 provider 或呼叫生成前直接返回既有固定文字：commit `Update files`；PR title `Update changes`、body `Automated PR generated by woowtech smart.`。這段 body 沿用既有 fallback，並不代表有呼叫 AI。
 - 手填 commit 訊息與 PR 文字照舊使用（維持原有 trim）；PR 只有一欄空白時只補空欄。真正的 Git commit、push、建立 PR 流程不變。沒有 env/home 開關，不清除既有磁碟設定；未來明確 provider 選擇與手寫介面依 F8 計畫另做，這次不新增。
 - metadata 設定頁保留，用 fork copy 覆寫總說明與三段模型提示，明說目前停用、已存偏好不會啟用生成。比隱藏頁面更少改動，也讓使用者知道舊設定仍保留。繁中使用台灣用語，英文與其他語系使用英文；不改上游語系檔或 OpenCode 探測流程。
@@ -994,6 +994,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- C-017 review a–g（2026-09-26）：移除 sibling src 型別引用、去除通知描述重複首句、只提高 host-label 首例上限、搬移 F5 OFF/positive-control 到 fork 測試、補 production caller AST 守門、用最新翻譯 ref 維持通知 callback 身分、補子 Agent Cancel 與通用 Confirm 預設。a/b/c/d/f/g 先有預期紅燈；e 注入異地 alias caller 驗紅後刪除，另驗 namespace／間接引用等案例。20 個定向突變均 exit 1 且已還原；還原後 App 定向 51/51、server 3/3、相關 node 守門 14/14，format/lint 通過。上游命名測試相對 `836f1a9` 只多一行 ON 注入。c 的紅燈是 timeout 契約守門，不以 sleep 模擬負載；f 的訂閱穩定性由 source guard 檢查，語言內容另有行為測試。未跑 build/typecheck、完整套件、GUI、裝置或外部服務；h 的 probe wrapper 搬移未做，不影響 a–g。完整命令與原始證據在 `/Users/elmolin/.local/share/woowtech-smart/coord/reports/C17-review-implementation.md`。
 
 - F8-min 停用 commit／PR AI 產生（2026-09-26）：server 先紅，確認預設路徑仍讀 diff、列舉 provider；接 gate 後 fork 行為 11/11、上游 ON 行為 6/6。App copy 先紅後綠 8/8；相關 node 守門 6/6。分別移除 commit gate、移除 PR gate、policy 改 ON、factory 繞過預設 policy，行為測試與守門均 exit 1；production 注入 ON 的突變由接點守門抓到。還原後同組測試全綠。`npm run format:files`、定向 `npm run lint` 與 `git diff --check` 通過；依 C-017 資源限制未跑 build/typecheck、全套測試、裝置／模擬器、真實 provider 或外部 forge。原始紀錄與限制見 `reports/F8-min-implementation.md`；本切片不含 C-017 第 2 項或 T1。
 

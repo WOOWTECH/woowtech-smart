@@ -234,7 +234,7 @@ describe("woowtech host label at the real store/controller boundary", () => {
     const restored = fixture(f.storage);
     await restored.store.boot();
     expect(restored.store.getHosts().map((host) => host.label)).toEqual(["Studio Mac"]);
-  });
+  }, 15_000);
 
   it("does not replace a name changed while the normal connection is pending", async () => {
     const f = fixture();

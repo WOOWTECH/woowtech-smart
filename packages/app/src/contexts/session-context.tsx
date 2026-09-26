@@ -208,6 +208,8 @@ export function SessionProvider(props: SessionProviderProps) {
 
 function SessionProviderInternal({ children, serverId, client }: SessionProviderClientProps) {
   const { t } = useTranslation();
+  const notificationTranslationRef = useRef(t);
+  notificationTranslationRef.current = t;
   const voiceRuntime = useVoiceRuntimeOptional();
   const voiceAudioEngine = useVoiceAudioEngineOptional();
   const queryClient = useQueryClient();
@@ -324,10 +326,14 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       }
 
       void sendOsNotification(
-        localizeAgentNotification({ notification, reason: params.reason, t }),
+        localizeAgentNotification({
+          notification,
+          reason: params.reason,
+          t: notificationTranslationRef.current,
+        }),
       );
     },
-    [serverId, t],
+    [serverId],
   );
 
   useEffect(() => {

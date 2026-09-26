@@ -93,7 +93,8 @@ describe("woowtech smart's own text", () => {
         const traditionalChineseOnly =
           key.startsWith("desktopNotifications.") ||
           key.startsWith("agentNotificationTitles.") ||
-          key.startsWith("metadataGeneration.");
+          key.startsWith("metadataGeneration.") ||
+          key.startsWith("confirmDialog.");
         if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });
@@ -161,9 +162,9 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
     failedTitle: "Notification failed",
     unconfirmedTitle: "Unable to confirm notification display",
     unconfirmed:
-      "Notification display could not be confirmed. Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+      "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
     failed:
-      "Notification display failed. Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+      "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
   };
   expect(woowtechCopyFor("zh-TW").desktopNotifications).toEqual({
     supported: "系統支援通知，但尚未確認系統授權狀態。",
@@ -174,9 +175,8 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
     successDescription: "系統已回報顯示通知，但不代表你一定看到了通知橫幅。",
     failedTitle: "通知顯示失敗",
     unconfirmedTitle: "無法確認通知是否顯示",
-    unconfirmed:
-      "無法確認通知是否顯示。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
-    failed: "通知顯示失敗。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+    unconfirmed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+    failed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
   });
   for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
     const copy = woowtechCopyFor(language).desktopNotifications;
@@ -265,4 +265,12 @@ it("provides Taiwanese page titles, placeholders, progress and local error wrapp
     "無法瀏覽資料夾",
     "無法複製儲存庫",
   ]);
+});
+
+it("provides a generic Confirm default in zh-TW with English fallback and no placeholders", () => {
+  for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
+    const copy = new Map(strings(woowtechCopyFor(language)));
+    expect(copy.get("confirmDialog.confirm")).toBe(language === "zh-TW" ? "確認" : "Confirm");
+    expect(copy.get("confirmDialog.confirm")?.match(/\{\{[^}]*\}\}/g)).toBeNull();
+  }
 });
