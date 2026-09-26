@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import {
   backAddProjectPage,
   chooseAddProjectHost,
@@ -205,4 +206,112 @@ describe("Add Project options", () => {
       },
     ]);
   });
+});
+
+it("translates add-project choices at call time without translating host names or paths", async () => {
+  const host = { ...HOST, label: "Host Alice 的 Mac" };
+  await i18n.changeLanguage("zh-TW");
+  try {
+    expect(buildAddProjectMethods(host)).toEqual([
+      {
+        id: "directory-search",
+        label: "搜尋資料夾",
+        description: "在 Host Alice 的 Mac 上尋找資料夾",
+      },
+      { id: "browse", label: "瀏覽", description: "在 Finder 中選擇或建立資料夾" },
+      {
+        id: "github",
+        label: "從 GitHub 複製專案",
+        description: "搜尋你的 GitHub 帳號可存取的專案",
+        disabled: false,
+      },
+      {
+        id: "new-directory",
+        label: "新增資料夾",
+        description: "在 Host Alice 的 Mac 上建立空白資料夾",
+        disabled: false,
+      },
+    ]);
+    expect(addProjectMethodEmptyText({ ...host, canAddProject: false })).toBe(
+      "請更新主機以使用新增專案功能",
+    );
+    expect(addProjectMethodEmptyText(host)).toBe("找不到符合的項目");
+    expect(
+      buildAddProjectMethods({
+        ...host,
+        canCloneGithubRepositories: false,
+        canCreateDirectory: false,
+      }).slice(2),
+    ).toEqual([
+      {
+        id: "github",
+        label: "從 GitHub 複製專案",
+        description: "請更新此主機以複製 GitHub 儲存庫",
+        disabled: true,
+      },
+      {
+        id: "new-directory",
+        label: "新增資料夾",
+        description: "請更新此主機以建立資料夾",
+        disabled: true,
+      },
+    ]);
+    expect(
+      buildAddProjectMethods({ ...host, canSearchGithubRepositories: false })[2].description,
+    ).toBe("輸入 GitHub 網址或 owner/repo");
+    expect(
+      buildCloneLocationOptions({
+        parents: ["/Users/Host/dev", "/Users/Host/src"],
+        repositoryName: "Agent",
+        existingPaths: ["/Users/Host/src/Agent"],
+      }),
+    ).toEqual([
+      {
+        id: "/Users/Host/dev",
+        path: "/Users/Host/dev",
+        displayPath: "/Users/Host/dev/Agent",
+        secondaryText: "上層資料夾：/Users/Host/dev",
+        disabled: false,
+      },
+      {
+        id: "/Users/Host/src",
+        path: "/Users/Host/src",
+        displayPath: "/Users/Host/src/Agent",
+        secondaryText: "已存在",
+        disabled: true,
+      },
+    ]);
+    expect(buildManualGithubRepositoryChoices("Host/Agent")).toEqual([
+      {
+        id: "manual:https:Host/Agent",
+        nameWithOwner: "Host/Agent",
+        cloneUrl: "Host/Agent",
+        cloneProtocol: "https",
+        description: "透過 HTTPS 複製 owner/repo 的專案",
+        updatedAt: null,
+      },
+      {
+        id: "manual:ssh:Host/Agent",
+        nameWithOwner: "Host/Agent",
+        cloneUrl: "Host/Agent",
+        cloneProtocol: "ssh",
+        description: "透過 SSH 複製 owner/repo 的專案",
+        updatedAt: null,
+      },
+    ]);
+    const url = "https://github.com/Host/Agent.git";
+    expect(buildManualGithubRepositoryChoices(url)[0]).toMatchObject({
+      cloneUrl: url,
+      description: "複製此儲存庫網址的專案",
+    });
+    await i18n.changeLanguage("en");
+    expect(buildAddProjectMethods(host).map(({ label }) => label)).toEqual([
+      "Search for directory",
+      "Browse",
+      "Clone from GitHub",
+      "New directory",
+    ]);
+  } finally {
+    await i18n.changeLanguage("en");
+  }
 });

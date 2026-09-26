@@ -165,7 +165,8 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
     - 「通過」後面接東西才改成「透過」，「檢查通過」不變。
     - 插入英文詞時自動在中文前後補空格。
   - 上游簡中句子裡留下的英文名詞改成台灣用語：project 專案、workspace 工作區、provider 供應商、server 伺服器、terminal 終端機、model 模型、script 腳本、client 用戶端、relay 中繼、repository 儲存庫、branch 分支、remote 遠端、mode 模式、feature 功能、thinking 思考、runtime 執行環境、prompt 提示詞（system prompt 系統提示詞）、subagent 子 Agent、review 審查、draft 草稿、skill 技能、tools 工具、commands 指令、setup 初始化、teardown 清理、realtime voice 即時語音、turn 回合、desktop app 桌面版 App；「System Settings > Notifications」改成「系統設定」>「通知」。
-  - 維持英文：Agent、Host、Daemon、worktree（Agent、Host、App 一律大寫單數）、Git 指令（commit、push、pull、merge、stash、rebase、squash、auto-merge）、PR、MR、issue、pull request、diff、hooks、token、縮寫、產品和品牌名稱。
+  - 維持英文：Agent、Daemon、worktree（Agent、App 一律大寫單數）、Git 指令（commit、push、pull、merge、stash、rebase、squash、auto-merge）、PR、MR、issue、pull request、diff、hooks、token、縮寫、產品和品牌名稱。
+- Host 統一譯為「主機」；Agent 保留英文。localhost、hostname、`--host`、網址、路徑、插值與使用者主機名稱不翻譯。
 - 連線一律用「連線」，「連接」只用在「連接埠」。桌面版連上既有的 daemon 時，顯示「已連線到現有的 daemon」。
 - 上游簡中留下的英文，產生器分兩種處理：
   - 句子裡的英文名詞（「新建 project」「设置 providers」）和只有一個英文名詞的標籤（「Workspaces」）：`zh-tw-terms.mjs` 的 `inChinese()` 和 `label()`，詞表見上面。
@@ -423,16 +424,17 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 
 - `packages/app/src/i18n/woowtech-copy.ts` 放 fork 自己的文字，也用來翻譯上游寫死在程式裡的英文。
   - 跟第 10 節的 `support-copy.ts` 一樣由 `i18n/brand.ts` 在載入翻譯時套用：放在每個語言的 `woowtech` 底下，元件用 `t("woowtech.…")` 取用。
-  - 10 種語言都要有每一個 key，型別會檢查。上游之後新增的語言先顯示英文。
+  - 每種語言都提供相同的 key；既有文案保留各語系翻譯。新增專案與主機選擇器提供 zh-TW、zh-CN，其他語言使用英文。上游之後新增的語言先顯示英文。
 - 目前的內容：更新紀錄的空狀態（第 10 節）、設定頁的瀏覽器工具卡、「封存 PR 已合併的工作區」、終端機 Agent hooks 開關、「Unknown error」、側欄的「工作區」標題、配對畫面的「停用中繼」（第 11 節）。側欄的「顯示偏好」提示改用上游自己的 `sidebar.display.trigger`。
 - `screens/settings/**` 寫死的英文已經全部盤點過，使用者看得到的 14 處都改用 `t()`。刻意沒改的：
   - `daemon-lifecycle.ts` 的技術性錯誤細節，顯示在已經翻譯的失敗訊息裡。
   - `plugins-page.tsx` 裡執行不到的離線錯誤。
   - 外觀預覽的範例程式碼和「px」。
 - `browser-tools-config.ts` 回傳的卡片狀態仍帶上游英文，上游的單元測試會檢查它；畫面上的文字由 `browser-tools-card.tsx` 翻譯。
-- 設定頁以外，上游寫死的英文還沒盤點，這次只改了測試員看到的側欄標題。
+- 新增專案整個流程與主機選擇器的本地文案已接到 `woowtech.addProject`、`woowtech.hostPicker`。繁中「Clone from GitHub」用「從 GitHub 複製專案」，進行中用「正在複製專案…」。原始 daemon 錯誤、儲存庫說明、網址、路徑與使用者名稱不翻譯。
+- 主機選擇器顯示與搜尋共用同一份選項文字；包含 `host-filter.tsx` 的觸發器在內，文字快取依賴翻譯函式，切語言時更新。其他設定頁外的硬編碼仍需逐頁盤點。
 - 測試：
-  - `i18n/woowtech-copy.test.ts`：每種語言都有自己的翻譯，不能只是英文；上游寫死的那些英文不能回到原始碼裡。
+  - `i18n/woowtech-copy.test.ts`：既有文案與新文案各按上述語言政策驗證，檢查 key、插值一致及英文 fallback；已遷移的硬編碼不能回到原始碼裡。新增專案選項與主機選擇器的純 helper 測試也驗證切語言及使用者資料原樣保留，不以元件 mock 代替 UI 驗收。
   - `screens/settings/host-page-translations.test.tsx`：用 zh-TW 實際 render「終端機」「工作區」設定頁和瀏覽器工具卡，也檢查「終端機設定檔」和空狀態的文字。
 
 ### 15. agent 和終端機不繼承啟動 daemon 的 Claude Code 工作階段
@@ -940,6 +942,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- T5（C-007，2026-09-26）：新增專案／主機選擇器文案、繁中 Host 術語完成定向紅→綠驗證；術語、placeholder、主要新增專案文字與主機搜尋選項的突變都被測試擋下並已還原。`node --test woowtech/zh-tw.test.mjs` 檢查產生器同步與技術字保留；定向 Vitest 覆蓋 `add-project-flow/model.test.ts`、`components/hosts/host-picker.test.tsx`、`i18n/woowtech-copy.test.ts`、`i18n/zh-tw.test.ts`。實作階段只跑限定格式／lint，提交另由既有 pre-commit 執行完整 typecheck；未建置、執行完整測試套件或 UI／裝置驗收。iOS、Android 與桌面 Browse 的實際畫面和語言切換仍待獨立驗收。
+
 - 里程碑 0，兩個平台的模擬器實測都通過：iOS 在 2026-09-23，Android 在 2026-09-24。
   App 連上 dev daemon 後，Claude 和 Pi 都在沙盒專案裡成功執行了 Shell 和 Read，熱重載也正常，兩個平台看得到同一批專案。
 - 拿掉本地語音：語音相關 37 個測試、設定相關 82 個測試全部通過。用乾淨設定啟動 daemon，沒有下載模型，也沒有啟動語音 worker。
@@ -1121,7 +1125,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - iOS 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`（Debug 版顯示成 woowtechsmartDebug），而且只有英文。要不要改成品牌名並加上中文，還沒決定。
 - 盤點設定頁以外上游寫死的英文，照第 14 節的做法一頁一頁處理。
 - 用詞待決定：
-  - 28 處仍用「主機」指 daemon（例如新增主機、切換主機、此主機離線），其他 87 處用「Host」。
+  - 已處理：原本「28 處主機／87 處 Host」的混用已統一為「主機」（C-007）；由產生器來源修正並重生繁中，Agent 保留英文。
   - PR 狀態 open 的「開啟」讀起來像動作，建議改「開啟中」（目前沒用到這個 key）。
   - 腳本網址的「好記網址」和「直接位址」建議統一用「網址」。
 - 更新紀錄：HTTP 200、內容卻不是 changelog 時（例如會攔截 TLS 的公司 proxy 回的封鎖頁），現在顯示「還沒有釋出說明」，沒有重試按鈕。要不要跟 404 分開處理，還沒決定。

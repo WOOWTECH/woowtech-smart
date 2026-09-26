@@ -21,10 +21,14 @@ test("Traditional Chinese is regenerated from upstream's current Simplified Chin
     existsSync(new URL("tools/node_modules/opencc-js", import.meta.url)),
     "OpenCC is not installed: run npm ci --prefix woowtech/tools",
   );
-  const check = spawnSync("npx", ["tsx", "woowtech/tools/generate-zh-tw.mjs", "--check"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
+  const check = spawnSync(
+    "npx",
+    ["--no-install", "tsx", "woowtech/tools/generate-zh-tw.mjs", "--check"],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+    },
+  );
   assert.equal(check.status, 0, check.stderr || check.stdout);
 });
 
@@ -61,6 +65,7 @@ const ENGLISH_NOUN = new RegExp(
       "workspaces?",
       "providers?",
       "servers?",
+      "hosts?",
       "terminals?",
       "models?",
       "scripts?",
@@ -91,7 +96,7 @@ const ENGLISH_NOUN = new RegExp(
   "i",
 );
 // The named terms stay English, capitalized and singular as Chinese has no plural.
-const MISSPELLED_NAMED_TERM = new RegExp(WORD("agents?|hosts?|Agents|Hosts|apps?"));
+const MISSPELLED_NAMED_TERM = new RegExp(WORD("agents?|Agents|apps?"));
 
 // A label upstream left as just one of those words.
 const ENGLISH_LABEL = new RegExp(`^(?:${ENGLISH_NOUN.source})$`, "i");
@@ -133,4 +138,27 @@ test("Traditional Chinese has no English string left over from upstream", () => 
     return !HAN.test(words) && /[A-Za-z]{2}/.test(words) && !KEEP_ENGLISH.has(key);
   });
   assert.deepEqual(english, []);
+});
+
+// No UI Host exceptions: technical identifiers and interpolation values are not prose.
+test("Host UI terminology is 主機 while Agent and technical strings are preserved", () => {
+  const remaining = [...committedTraditional()].filter(([, text]) =>
+    new RegExp(asWord("hosts?"), "i").test(text.replace(/\{\{[^}]*\}\}/g, " ")),
+  );
+  assert.deepEqual(remaining, []);
+  const context = { key: "", english: "" };
+  assert.equal(fixTerms("Host", context), "主機");
+  assert.equal(fixTerms("選擇 Host 和 hosts", context), "選擇主機和主機");
+  assert.equal(fixTerms("Agent", context), "Agent");
+  for (const text of [
+    "localhost",
+    "hostname",
+    "--host",
+    "https://host.example/host",
+    "{{host}}",
+    "連線至 localhost、hostname，執行 --host {{host}}",
+    "開啟 https://host.example/host 和 /host/file、host.json、`host`",
+  ]) {
+    assert.equal(fixTerms(text, context), text);
+  }
 });

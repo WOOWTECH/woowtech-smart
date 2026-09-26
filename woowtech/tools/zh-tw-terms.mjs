@@ -133,11 +133,11 @@ export const TERM_FIXES = [
   { find: /主機名(?!稱)/g, replace: "主機名稱" },
   // English nouns upstream's Simplified Chinese keeps inside Chinese sentences, and
   // labels it leaves as just the English noun. These stay English: the named terms
-  // Agent, Host, Daemon and worktree; Git commands (commit, push, pull, merge, stash)
+  // Agent, Daemon and worktree; Git commands (commit, push, pull, merge, stash)
   // and forge terms (PR, MR, issue, pull request); diff, hooks, tokens, acronyms, and
   // product and brand names. Phrases come before the words they contain.
   inChinese("System Settings > Notifications", "「系統設定」>「通知」"),
-  inChinese("host/port", "Host、連接埠"),
+  inChinese("host/port", "主機、連接埠"),
   inChinese("system prompts?", "系統提示詞"),
   inChinese("realtime voice", "即時語音"),
   inChinese("web runtime", "網頁執行環境"),
@@ -146,6 +146,7 @@ export const TERM_FIXES = [
   inChinese("workspaces?", "工作區"),
   inChinese("providers?", "供應商"),
   inChinese("servers?", "伺服器"),
+  inChinese("hosts?", "主機"),
   inChinese("terminals?", "終端機"),
   inChinese("models?", "模型"),
   inChinese("scripts?", "腳本"),
@@ -171,10 +172,9 @@ export const TERM_FIXES = [
   inChinese("turn", "回合", "g"),
   // The named terms, capitalized and singular: Chinese has no plural.
   inChinese("[Aa]gents|agent", "Agent", "g"),
-  inChinese("[Hh]osts|host", "Host", "g"),
   inChinese("app", "App", "g"),
   label("Agents", "Agent"),
-  label("Hosts", "Host"),
+  label("[Hh]osts?", "主機"),
   label("Providers?", "供應商"),
   label("Workspaces?", "工作區"),
   label("Terminals?", "終端機"),

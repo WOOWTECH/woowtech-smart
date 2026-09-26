@@ -65,7 +65,7 @@ describe("Traditional Chinese (zh-TW)", () => {
   it("reads as Taiwanese Traditional Chinese with the product name", () => {
     expect(inTraditional("onboarding.title")).toBe("歡迎使用渥屋智能");
     expect(inTraditional("settings.host.daemon.update.desktopManagedHint")).toBe(
-      "此 Daemon 由渥屋智能桌面版管理。請在 Host 上更新渥屋智能桌面版。",
+      "此 Daemon 由渥屋智能桌面版管理。請在主機上更新渥屋智能桌面版。",
     );
     expect(inTraditional("shell.commandCenter.placeholder")).toBe(
       "搜尋指令、檔案、工作區和 Agent...",
