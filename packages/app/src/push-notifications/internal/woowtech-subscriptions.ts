@@ -8,6 +8,7 @@ import { i18n } from "@/i18n/i18next";
 import { readValidatedString } from "@/storage/validated-storage";
 import { fcmTokenSource } from "./fcm-token";
 import type { FcmTokenSource } from "./fcm-token-source";
+import { disableIosExpoRegistration } from "./woowtech-expo-registration";
 
 // woowtech smart push (fork-owned; woowtech/README.md, 16). Replaces upstream's subscriptions.ts,
 // which registered an Expo push token with any daemon: the app registers
@@ -43,7 +44,7 @@ export interface WoowtechPushDependencies {
   prepareNotificationChannel(): Promise<void>;
   fcmTokens: FcmTokenSource;
   appLanguage: AppLanguage;
-  /** expo-notifications' setAutoServerRegistrationEnabledAsync(false). */
+  /** Persist disabled Expo registration; iOS requires a non-null native String. */
   disableExpoServerRegistration(): Promise<void>;
   warn(message: string, error?: unknown): void;
 }
@@ -228,6 +229,10 @@ const nativeDependencies: WoowtechPushDependencies = {
     },
   },
   async disableExpoServerRegistration() {
+    if (Platform.OS === "ios") {
+      await disableIosExpoRegistration();
+      return;
+    }
     await expoNotifications().setAutoServerRegistrationEnabledAsync(false);
   },
   warn(message, error) {

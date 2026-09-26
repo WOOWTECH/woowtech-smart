@@ -545,7 +545,9 @@ App：`packages/app/src/push-notifications/internal/woowtech-subscriptions.ts`
 - 快取沿用上游的 key `@paseo:expo-push-token:<serverId>`，存註冊出去的字串。升級後第一次同步會在那裡找到舊的 Expo token，先撤銷它。連的是沒有 `woowtechPush` 的 daemon（官方 Paseo，或這個改版以前的我們）也撤銷：那種 daemon 會把 agent 的回覆送到 Expo，直到舊 token 的 48 小時租約到期。daemon 宣告了 `pushTokenRevocation` 才撤銷並刪掉快取，不問權限、不碰 Firebase；沒宣告的，快取留著。
 - 換 token、換語言時先撤銷舊字串（我們的 daemon 宣告了 `pushTokenRevocation`）再註冊新的，同一支手機才不會收到兩則；通知權限被拒時撤銷並刪快取（上游只刪快取）；每次重新連線都再註冊一次，續 48 小時的租約。
 - FCM token 更新的監聽在第一次拿到 token 之後才開始，而且只有 token 真的換了才重新同步：Android 的 `expo-notifications` 每次 `getDevicePushTokenAsync` 都會把同一個 token 當成新 token 再發一次事件（`PushTokenModule.kt`），不比對的話，同步取 token、事件又排下一次同步，會一直重新註冊。token 不符契約時不註冊，warn 只寫長度。
-- App 啟動時呼叫一次 `setAutoServerRegistrationEnabledAsync(false)`：舊測試版呼叫過 `getExpoPushTokenAsync` 的話，`expo-notifications` 會記住「每次啟動把 device token 回報 exp.host」，這一步清掉它。呼叫放在 `index.native.ts` 載入時（`turnOffExpoPushRegistration`），不管有沒有主機；每個訂閱同步前都等同一次呼叫完成，不會再呼叫。清不掉升級後第一次啟動的那一次：`expo-notifications` 在 import 時就讀這份設定（`DevicePushTokenAutoRegistration.fx.js`），比我們的呼叫早，有可能已經開始上傳。
+- App 啟動時透過 `turnOffExpoPushRegistration` 停用 Expo 自動登記，不管有沒有主機；每個訂閱同步前都等同一次呼叫完成。iOS 的 fork adapter `push-notifications/internal/woowtech-expo-registration.ts` 直接向 `NotificationsServerRegistrationModule` 寫入 `{"isEnabled":false}` 字串；Expo 0.32.16 的公開 `setAutoServerRegistrationEnabledAsync(false)` 會傳 `null`，但 iOS 原生參數是非 optional `String`，因此舊版停用必定失敗，留下的 enabled 登記可能在後續每次啟動與 APNs token 事件回報 exp.host，不只升級第一次。Android 仍使用原公開 API（原生接受 null）。
+- 舊登記未清除的風險只影響曾經以相同 bundle ID 登記 Expo 的裝置。使用者已確認目前沒有任何 iPhone 裝過這種舊版，所以本輪只做原生字串的最小修正，不封鎖 Expo import 副作用。
+- 這項修正只保證成功寫入後的登記狀態停用，不是零 Expo 請求保證：`expo-notifications` 在 import 時已讀取設定，較早讀到 enabled 的工作可能仍在取 token 或已上傳；直接寫原生設定也不會取消既有上傳。封鎖 import 副作用另行決定。寫入失敗仍會 warn，這次啟動不重試。這條 Expo 更新路徑包含 device token、安裝識別碼、App ID 與環境，不含 agent 內容；不要把 warning 消失當成網路驗證通過。
 - 各平台的 FCM token 來源，Metro 依副檔名只打包對應的檔：
   - iOS `fcm-token.ios.ts`：RNFB 的 modular API，先 `registerDeviceForRemoteMessages` 再 `getToken`（`firebase.json` 關掉了自動註冊，見下面）。
     - 第二次以後的啟動，iOS 回報 App 已經註冊過，RNFB 就直接回來、不呼叫 UIKit 的 `registerForRemoteNotifications`，而 Firebase 的 APNs token 只放在記憶體，沒有它 `getToken` 就失敗。所以 `getAPNSToken` 是 null 時，改用 `expo-notifications` 的 `getDevicePushTokenAsync()`（一定會呼叫 UIKit）等 iOS 交出 APNs token，最多等 10 秒，跟 RNFB 自己的註冊一樣。這一段在模擬器上測不到，實機驗收要看第二次啟動。
@@ -1137,7 +1139,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - iPhone 上 `registerDeviceForRemoteMessages` 會回來（RNFB 和 `expo-notifications` 都接了 AppDelegate）；TestFlight 版（production APNs）和 Xcode 裝的開發版（sandbox）都拿得到 token。
     - 把 App 滑掉再重開：第二次啟動時 daemon 的 log 又出現「Registered push token」，裝置 log 沒有「No FCM token on this device」。48 小時後仍收得到推播。
     - 通知權限只在連上 woowtech smart 的 daemon 時才問。
-    - 從呼叫過 `getExpoPushTokenAsync` 的舊測試版升級後，第一次啟動會不會把 device token 送到 exp.host 一次：`expo-notifications` 在 import 時跑的程式可能搶在我們關掉之前。
+    - 從相同 bundle ID、呼叫過 `getExpoPushTokenAsync` 的舊測試版升級：驗證 iOS 原生寫入 disabled 成功、下次啟動與 APNs token 事件維持停用；另驗證首次 import 已讀到 enabled、仍等待 token 或已開始上傳的競速。原生字串 adapter 不取消這些工作，尚不能宣稱升級首次啟動零 Expo 請求。移除 App 也不能當成清除 Keychain 登記的可靠方式。
     - 打一次真正的 iOS bundle，確認裡面沒有 `@firebase/app`，並量 IPA 大小的差距。
   - 待決定：
     - 手動分兩步跑 prebuild 和 `pod install` 時，要不要讓 `react-native.config.js` 也看 prebuild 產生的 `ios/` 裡有沒有 plist，而不只看環境變數。
