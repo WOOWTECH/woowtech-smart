@@ -2,10 +2,40 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "./i18next";
+import { woowtechCopyFor } from "./woowtech-copy";
 
 // Text upstream hardcodes in English, which these files now read from the
 // woowtech.* translations. An upstream merge can bring a literal back.
 const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
+  "components/hosts/host-picker.tsx": [
+    '"Add host"',
+    '"All hosts"',
+    '"Enable built-in daemon"',
+    'searchPlaceholder="Search hosts"',
+    'title ?? "Host"',
+  ],
+  "components/hosts/host-filter.tsx": ['title="Filter by host"', "`Filter: ${selectedHostLabel}`"],
+  "components/add-project-flow.tsx": [
+    '"Add project"',
+    '"Search for directory"',
+    '"Clone from GitHub"',
+    '"Choose host"',
+    '"No connected hosts"',
+    '"Unable to add project"',
+    '"Unable to clone repository"',
+    '"Search directories or enter a path..."',
+    '"Cloning project..."',
+    '"Creating directory..."',
+    'accessibilityLabel="Back"',
+    'action="Navigate"',
+    'action="Select"',
+    "Loading...",
+  ],
+  "add-project-flow/options.ts": [
+    '"Search for directory"',
+    '"Clone from GitHub"',
+    '"New directory"',
+  ],
   "components/left-sidebar.tsx": [">Workspaces<", '"Display preferences"'],
   "screens/settings/browser-tools-card.tsx": ['"Enable browser tools"'],
   "screens/settings/host-page.tsx": [
@@ -50,15 +80,17 @@ describe("woowtech smart's own text", () => {
     expect(i18n.t("woowtech.changelog.empty.title", { lng: "zh-TW" })).toBe("還沒有釋出說明");
   });
 
-  it("is translated in every language", () => {
+  it("translates existing copy in every language and new surfaces in Chinese", () => {
     const english = woowtechCopy("en");
     expect(english.size).toBeGreaterThan(0);
     for (const language of Object.keys(i18n.store.data)) {
       if (language === "en") continue;
       const copy = woowtechCopy(language);
-      const untranslated = [...english].flatMap(([key, text]) =>
-        copy.get(key) && copy.get(key) !== text ? [] : [key],
-      );
+      const untranslated = [...english].flatMap(([key, text]) => {
+        const newSurface = key.startsWith("addProject.") || key.startsWith("hostPicker.");
+        if (newSurface && !["zh-TW", "zh-CN"].includes(language)) return [];
+        return copy.get(key) && copy.get(key) !== text ? [] : [key];
+      });
       expect({ language, untranslated }).toEqual({ language, untranslated: [] });
     }
   });
@@ -73,4 +105,77 @@ describe("woowtech smart's own text", () => {
     }
     expect(hardcoded).toEqual([]);
   });
+});
+
+it("keeps fork project-copy keys and placeholders in every locale with English fallback", () => {
+  const english = woowtechCopy("en");
+  expect(woowtechCopyFor("unknown-locale")).toEqual(woowtechCopyFor("en"));
+  expect(english.get("addProject.searchDirectoryDescription")).toBe("Find a directory on {{host}}");
+  const placeholders = (text: string) => (text.match(/\{\{[^}]*\}\}/g) ?? []).sort();
+  for (const language of Object.keys(i18n.store.data)) {
+    const copy = woowtechCopy(language);
+    expect([...copy.keys()].sort()).toEqual([...english.keys()].sort());
+    for (const [key, text] of english) {
+      expect({ language, key, placeholders: placeholders(copy.get(key) ?? "") }).toEqual({
+        language,
+        key,
+        placeholders: placeholders(text),
+      });
+      if (
+        (key.startsWith("addProject.") || key.startsWith("hostPicker.")) &&
+        !["zh-TW", "zh-CN"].includes(language)
+      ) {
+        expect(copy.get(key)).toBe(text);
+      }
+    }
+  }
+});
+
+it("provides Taiwanese page titles, placeholders, progress and local error wrappers", () => {
+  const keys = [
+    "title",
+    "searchDirectory",
+    "cloneGithub",
+    "chooseHost",
+    "chooseDestination",
+    "chooseParent",
+    "nameDirectory",
+    "directoryName",
+    "directoryPlaceholder",
+    "parentPlaceholder",
+    "githubPlaceholder",
+    "noConnectedHosts",
+    "adding",
+    "cloning",
+    "creatingDirectory",
+    "directorySearchFailed",
+    "githubSearchFailed",
+    "addFailed",
+    "createFailed",
+    "browseFailed",
+    "cloneFailed",
+  ];
+  expect(keys.map((key) => i18n.t(`woowtech.addProject.${key}`, { lng: "zh-TW" }))).toEqual([
+    "新增專案",
+    "搜尋資料夾",
+    "從 GitHub 複製專案",
+    "選擇主機",
+    "選擇存放位置",
+    "選擇上層資料夾",
+    "命名資料夾",
+    "資料夾名稱",
+    "搜尋資料夾或輸入路徑…",
+    "搜尋上層資料夾或輸入路徑…",
+    "搜尋或輸入 GitHub 儲存庫…",
+    "沒有已連線的主機",
+    "正在新增專案…",
+    "正在複製專案…",
+    "正在建立資料夾…",
+    "無法搜尋資料夾",
+    "無法搜尋 GitHub 儲存庫",
+    "無法新增專案",
+    "無法建立資料夾",
+    "無法瀏覽資料夾",
+    "無法複製儲存庫",
+  ]);
 });

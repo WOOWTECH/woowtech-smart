@@ -102,9 +102,9 @@ const variant = variants[appVariant] ?? variants.production;
 const googleServiceInfoPlist = iosGoogleServiceInfoPlist();
 const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 
-// iOS labels the home screen icon with this short name (CFBundleName) when the
-// display name does not fit, as "woowtech smart Debug" does not. Expo would leave
-// it at $(PRODUCT_NAME), the name without its spaces. Apple allows 15 characters.
+// Keep CFBundleName independent of Expo's sanitized PRODUCT_NAME. The home-screen
+// display name is CFBundleDisplayName; setting this short name does not guarantee
+// the icon label's spacing or truncation. Debug and Release labels still need validation.
 const shortName = "woowtech smart";
 const chineseShortName = "渥屋智能";
 

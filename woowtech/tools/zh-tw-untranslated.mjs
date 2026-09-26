@@ -16,7 +16,7 @@ export const UNTRANSLATED = {
   "agentControls.thinking.extraHigh": ["Extra high", "極高"],
   "agentControls.hints.thinking": ["Thinking mode", "思考模式"],
   "agentStream.permission.plan": ["Plan", "計畫"],
-  "importSession.chooseHostTitle": ["Import from host", "從 Host 匯入"],
+  "importSession.chooseHostTitle": ["Import from host", "從主機匯入"],
   "workspace.hoverCard.scriptsAccessibility": ["Workspace scripts", "工作區腳本"],
   "workspace.setup.descriptor.workspace": ["Workspace setup", "工作區初始化"],
   "workspace.tabs.fallback.workspaceSetup": ["Workspace setup", "工作區初始化"],
@@ -35,7 +35,7 @@ export const UNTRANSLATED = {
   "sidebar.project.actions.openFolder": ["Open in file manager", "在檔案管理員中開啟"],
   "sidebar.project.actions.openFolderFailed": ["Couldn't open folder", "無法開啟資料夾"],
   "newWorkspace.tooltips.project": ["Choose the project", "選擇專案"],
-  "newWorkspace.tooltips.host": ["Choose the host", "選擇 Host"],
+  "newWorkspace.tooltips.host": ["Choose the host", "選擇主機"],
   "newWorkspace.tooltips.isolation": ["Choose the isolation level", "選擇隔離方式"],
   "newWorkspace.tooltips.launch": ["Choose what to launch", "選擇要啟動的項目"],
   "newWorkspace.launch.title": ["What to launch", "要啟動的項目"],
@@ -157,16 +157,16 @@ export const UNTRANSLATED = {
   "settings.host.skills.openDocs": ["Open skills documentation", "開啟技能說明文件"],
   "settings.host.skills.unavailable": [
     "Connect to this host to manage orchestration skills",
-    "連線到這個 Host 以管理編排技能",
+    "連線到這個主機以管理編排技能",
   ],
   "settings.host.skills.unsupported": [
     "Update this host to manage orchestration skills",
-    "更新這個 Host 以管理編排技能",
+    "更新這個主機以管理編排技能",
   ],
   "settings.host.orchestration.systemPrompt.title": ["System prompt", "系統提示詞"],
   "settings.host.terminalProfiles.unavailable": [
     "Connect to this host to manage terminal profiles",
-    "連線到這個 Host 以管理終端機設定檔",
+    "連線到這個主機以管理終端機設定檔",
   ],
   "settings.host.terminalProfiles.sectionTitle": ["Terminal profiles", "終端機設定檔"],
   "settings.host.terminalProfiles.editProfile": ["Edit profile", "編輯設定檔"],
@@ -219,15 +219,15 @@ export const UNTRANSLATED = {
     "{{name}} did not come back online after updating. Please verify the daemon restarted.",
     "{{name}} 更新後沒有重新上線。請確認 Daemon 已重新啟動。",
   ],
-  "settings.host.daemon.update.unavailableTitle": ["Host unavailable", "Host 不可用"],
+  "settings.host.daemon.update.unavailableTitle": ["Host unavailable", "主機不可用"],
   "settings.host.daemon.update.unavailableMessage": [
     "This host is not connected. Wait for it to come online before updating.",
-    "這個 Host 尚未連線。請等待它上線後再更新。",
+    "這個主機尚未連線。請等待它上線後再更新。",
   ],
-  "settings.host.daemon.update.offlineTitle": ["Host offline", "Host 離線"],
+  "settings.host.daemon.update.offlineTitle": ["Host offline", "主機離線"],
   "settings.host.daemon.update.offlineMessage": [
     "This host is offline. Wait until it is back online before updating.",
-    "這個 Host 已離線。請等它恢復線上後再更新。",
+    "這個主機已離線。請等它恢復線上後再更新。",
   ],
   "settings.host.daemon.update.requestFailedTitle": ["Update failed", "更新失敗"],
   "settings.host.daemon.update.requestFailedMessage": [
@@ -252,15 +252,13 @@ export const UNTRANSLATED = {
   "settings.project.metadata.pullRequest": ["Pull requests", "Pull request 內容"],
 };
 
-// zh-TW strings that stay English on purpose: the named terms (Agent, Host,
+// zh-TW strings that stay English on purpose: the named terms (Agent,
 // Daemon), Git commands, diff, tokens, examples and names.
 export const KEEP_ENGLISH = new Set([
   "shell.commandCenter.agents",
   "workspace.tabs.fallback.agent",
   "workspace.tabs.toasts.agentIdCopiedLabel",
-  "sidebar.actions.hosts",
   "settings.hostSections.agents",
-  "pairing.direct.fields.host",
   "desktop.daemon.title",
   "desktop.daemon.status.pid",
   "workspace.git.actions.commit.label",

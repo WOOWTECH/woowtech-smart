@@ -16,6 +16,14 @@ function read(relativePath) {
   return readFileSync(new URL(relativePath, repoRoot), "utf8");
 }
 
+test("iOS naming documentation does not claim an unverified home-screen fallback", () => {
+  const config = read("packages/app/app.config.js");
+  const readme = read("woowtech/README.md");
+  assert.doesNotMatch(config, /when the\s*\/\/ display name does not fit/);
+  assert.doesNotMatch(readme, /iOS 改用短名稱 `CFBundleName`/);
+  assert.doesNotMatch(readme, /Debug 版的主畫面標籤也是「woowtech smart」/);
+});
+
 test("installers are named woowtech-smart and the app links to the dmg the mac build makes", () => {
   const builder = read("packages/desktop/electron-builder.yml");
   const artifactNames = [...builder.matchAll(/^\s*artifactName:\s*"(.+?)"\s*$/gm)].map(

@@ -135,9 +135,9 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 手機 App 的名稱和 bundle id 直接寫在 `app.config.js`：正式版 `io.woowtech.smart`，Debug 版 `io.woowtech.smart.debug`。
   - 中文手機桌面顯示「渥屋智能」（Debug 版是「渥屋智能 Debug」）。iOS 用 Expo 的 `locales`；Expo 只把 `locales` 套到 iOS，Android 由 `plugins/with-localized-app-name.js` 讀同一份設定寫進 Android 資源。
   - `apply-identity.mjs` 現在只處理 Expo 帳號相關的 owner、slug、project id。
-- iOS 主畫面的短名稱：顯示名稱放不下時（例如「woowtech smart Debug」），iOS 改用短名稱 `CFBundleName`。Expo 預設是 `$(PRODUCT_NAME)`，也就是去掉空白的 `woowtechsmartDebug`（正式版 `woowtechsmart`），iOS 26.5 模擬器上顯示成「woowtechsmart…」。
-  - 現在 `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 另外設「渥屋智能」。兩個版本相同，都在 Apple 建議的 15 字以內。Xcode 的 `PRODUCT_NAME`、執行檔和 `.app` 名稱不變。
-  - 英文系統上，Debug 版的主畫面標籤也是「woowtech smart」，跟正式版一樣。中文系統仍是「渥屋智能 Debug」，「設定 → App」裡也有完整名稱。
+- iOS 的主畫面顯示名稱欄位是 `CFBundleDisplayName`，`CFBundleName` 是 bundle 的短名稱（[Apple 欄位說明](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html)）。沒有證據能保證名稱太長時會切換到短名稱，也不能僅憑截圖判斷改讀了 `PRODUCT_NAME`。
+  - `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 設「渥屋智能」。這次只更正說明，不改顯示名稱、Xcode 的 `PRODUCT_NAME`、執行檔或 `.app` 名稱。
+  - iOS 26.5 英文模擬器驗收：Debug 產物的 `CFBundleDisplayName` 已是「woowtech smart Debug」、`CFBundleName` 已是「woowtech smart」，主畫面仍顯示「woowtechsmart…」，「設定 → App」則顯示完整名稱。短名設定沒有修好主畫面標籤；需再確認 SpringBoard 的空白與截斷行為。正式版顯示名稱較短，但主畫面結果尚未驗證，不宣稱兩版相同。中文 Debug 主畫面已觀察到「渥屋智能 Debug」。
   - 已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
   - 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`，而且只有英文，見「接下來」。
 - App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
@@ -165,7 +165,8 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
     - 「通過」後面接東西才改成「透過」，「檢查通過」不變。
     - 插入英文詞時自動在中文前後補空格。
   - 上游簡中句子裡留下的英文名詞改成台灣用語：project 專案、workspace 工作區、provider 供應商、server 伺服器、terminal 終端機、model 模型、script 腳本、client 用戶端、relay 中繼、repository 儲存庫、branch 分支、remote 遠端、mode 模式、feature 功能、thinking 思考、runtime 執行環境、prompt 提示詞（system prompt 系統提示詞）、subagent 子 Agent、review 審查、draft 草稿、skill 技能、tools 工具、commands 指令、setup 初始化、teardown 清理、realtime voice 即時語音、turn 回合、desktop app 桌面版 App；「System Settings > Notifications」改成「系統設定」>「通知」。
-  - 維持英文：Agent、Host、Daemon、worktree（Agent、Host、App 一律大寫單數）、Git 指令（commit、push、pull、merge、stash、rebase、squash、auto-merge）、PR、MR、issue、pull request、diff、hooks、token、縮寫、產品和品牌名稱。
+  - 維持英文：Agent、Daemon、worktree（Agent、App 一律大寫單數）、Git 指令（commit、push、pull、merge、stash、rebase、squash、auto-merge）、PR、MR、issue、pull request、diff、hooks、token、縮寫、產品和品牌名稱。
+- Host 統一譯為「主機」；Agent 保留英文。localhost、hostname、`--host`、網址、路徑、插值與使用者主機名稱不翻譯。
 - 連線一律用「連線」，「連接」只用在「連接埠」。桌面版連上既有的 daemon 時，顯示「已連線到現有的 daemon」。
 - 上游簡中留下的英文，產生器分兩種處理：
   - 句子裡的英文名詞（「新建 project」「设置 providers」）和只有一個英文名詞的標籤（「Workspaces」）：`zh-tw-terms.mjs` 的 `inChinese()` 和 `label()`，詞表見上面。
@@ -423,16 +424,18 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 
 - `packages/app/src/i18n/woowtech-copy.ts` 放 fork 自己的文字，也用來翻譯上游寫死在程式裡的英文。
   - 跟第 10 節的 `support-copy.ts` 一樣由 `i18n/brand.ts` 在載入翻譯時套用：放在每個語言的 `woowtech` 底下，元件用 `t("woowtech.…")` 取用。
-  - 10 種語言都要有每一個 key，型別會檢查。上游之後新增的語言先顯示英文。
+  - 每種語言都提供相同的 key；既有文案保留各語系翻譯。新增專案與主機選擇器提供 zh-TW、zh-CN，其他語言使用英文。上游之後新增的語言先顯示英文。
 - 目前的內容：更新紀錄的空狀態（第 10 節）、設定頁的瀏覽器工具卡、「封存 PR 已合併的工作區」、終端機 Agent hooks 開關、「Unknown error」、側欄的「工作區」標題、配對畫面的「停用中繼」（第 11 節）。側欄的「顯示偏好」提示改用上游自己的 `sidebar.display.trigger`。
 - `screens/settings/**` 寫死的英文已經全部盤點過，使用者看得到的 14 處都改用 `t()`。刻意沒改的：
   - `daemon-lifecycle.ts` 的技術性錯誤細節，顯示在已經翻譯的失敗訊息裡。
   - `plugins-page.tsx` 裡執行不到的離線錯誤。
   - 外觀預覽的範例程式碼和「px」。
 - `browser-tools-config.ts` 回傳的卡片狀態仍帶上游英文，上游的單元測試會檢查它；畫面上的文字由 `browser-tools-card.tsx` 翻譯。
-- 設定頁以外，上游寫死的英文還沒盤點，這次只改了測試員看到的側欄標題。
+- 新增專案整個流程與主機選擇器的本地文案已接到 `woowtech.addProject`、`woowtech.hostPicker`。繁中「Clone from GitHub」用「從 GitHub 複製專案」，進行中用「正在複製專案…」。原始 daemon 錯誤、儲存庫說明、網址、路徑與使用者名稱不翻譯。
+- 主機選擇器顯示與搜尋共用同一份選項文字；包含 `host-filter.tsx` 的觸發器在內，文字快取依賴翻譯函式，切語言時更新。其他設定頁外的硬編碼仍需逐頁盤點。
+- 合併上游後要注意：T5 在 `components/add-project-flow.tsx` 約 171 行差異，另接到 `add-project-flow/options.ts`、`components/hosts/host-picker.tsx`、`host-picker-constants.ts`、`host-filter.tsx`；上游重整這些流程時，保留 fork 翻譯接點與 `t` 的快取依賴，並重跑下列定向測試。
 - 測試：
-  - `i18n/woowtech-copy.test.ts`：每種語言都有自己的翻譯，不能只是英文；上游寫死的那些英文不能回到原始碼裡。
+  - `i18n/woowtech-copy.test.ts`：既有文案與新文案各按上述語言政策驗證，檢查 key、插值一致及英文 fallback；已遷移的硬編碼不能回到原始碼裡。新增專案選項與主機選擇器的純 helper 測試也驗證切語言及使用者資料原樣保留，不以元件 mock 代替 UI 驗收。
   - `screens/settings/host-page-translations.test.tsx`：用 zh-TW 實際 render「終端機」「工作區」設定頁和瀏覽器工具卡，也檢查「終端機設定檔」和空狀態的文字。
 
 ### 15. agent 和終端機不繼承啟動 daemon 的 Claude Code 工作階段
@@ -545,7 +548,9 @@ App：`packages/app/src/push-notifications/internal/woowtech-subscriptions.ts`
 - 快取沿用上游的 key `@paseo:expo-push-token:<serverId>`，存註冊出去的字串。升級後第一次同步會在那裡找到舊的 Expo token，先撤銷它。連的是沒有 `woowtechPush` 的 daemon（官方 Paseo，或這個改版以前的我們）也撤銷：那種 daemon 會把 agent 的回覆送到 Expo，直到舊 token 的 48 小時租約到期。daemon 宣告了 `pushTokenRevocation` 才撤銷並刪掉快取，不問權限、不碰 Firebase；沒宣告的，快取留著。
 - 換 token、換語言時先撤銷舊字串（我們的 daemon 宣告了 `pushTokenRevocation`）再註冊新的，同一支手機才不會收到兩則；通知權限被拒時撤銷並刪快取（上游只刪快取）；每次重新連線都再註冊一次，續 48 小時的租約。
 - FCM token 更新的監聽在第一次拿到 token 之後才開始，而且只有 token 真的換了才重新同步：Android 的 `expo-notifications` 每次 `getDevicePushTokenAsync` 都會把同一個 token 當成新 token 再發一次事件（`PushTokenModule.kt`），不比對的話，同步取 token、事件又排下一次同步，會一直重新註冊。token 不符契約時不註冊，warn 只寫長度。
-- App 啟動時呼叫一次 `setAutoServerRegistrationEnabledAsync(false)`：舊測試版呼叫過 `getExpoPushTokenAsync` 的話，`expo-notifications` 會記住「每次啟動把 device token 回報 exp.host」，這一步清掉它。呼叫放在 `index.native.ts` 載入時（`turnOffExpoPushRegistration`），不管有沒有主機；每個訂閱同步前都等同一次呼叫完成，不會再呼叫。清不掉升級後第一次啟動的那一次：`expo-notifications` 在 import 時就讀這份設定（`DevicePushTokenAutoRegistration.fx.js`），比我們的呼叫早，有可能已經開始上傳。
+- App 啟動時透過 `turnOffExpoPushRegistration` 停用 Expo 自動登記，不管有沒有主機；每個訂閱同步前都等同一次呼叫完成。iOS 的 fork adapter `push-notifications/internal/woowtech-expo-registration.ts` 直接向 `NotificationsServerRegistrationModule` 寫入 `{"isEnabled":false}` 字串；Expo 0.32.16 的公開 `setAutoServerRegistrationEnabledAsync(false)` 會傳 `null`，但 iOS 原生參數是非 optional `String`，因此舊版停用必定失敗，留下的 enabled 登記可能在後續每次啟動與 APNs token 事件回報 exp.host，不只升級第一次。Android 仍使用原公開 API（原生接受 null）。
+- 舊登記未清除的風險只影響曾經以相同 bundle ID 登記 Expo 的裝置。使用者已確認目前沒有任何 iPhone 裝過這種舊版，所以本輪只做原生字串的最小修正，不封鎖 Expo import 副作用。
+- 這項修正只保證成功寫入後的登記狀態停用，不是零 Expo 請求保證：`expo-notifications` 在 import 時已讀取設定，較早讀到 enabled 的工作可能仍在取 token 或已上傳；直接寫原生設定也不會取消既有上傳。封鎖 import 副作用另行決定。寫入失敗仍會 warn，這次啟動不重試。這條 Expo 更新路徑包含 device token、安裝識別碼、App ID 與環境，不含 agent 內容；不要把 warning 消失當成網路驗證通過。
 - 各平台的 FCM token 來源，Metro 依副檔名只打包對應的檔：
   - iOS `fcm-token.ios.ts`：RNFB 的 modular API，先 `registerDeviceForRemoteMessages` 再 `getToken`（`firebase.json` 關掉了自動註冊，見下面）。
     - 第二次以後的啟動，iOS 回報 App 已經註冊過，RNFB 就直接回來、不呼叫 UIKit 的 `registerForRemoteNotifications`，而 Firebase 的 APNs token 只放在記憶體，沒有它 `getToken` 就失敗。所以 `getAPNSToken` 是 null 時，改用 `expo-notifications` 的 `getDevicePushTokenAsync()`（一定會呼叫 UIKit）等 iOS 交出 APNs token，最多等 10 秒，跟 RNFB 自己的註冊一樣。這一段在模擬器上測不到，實機驗收要看第二次啟動。
@@ -757,24 +762,40 @@ secret 和外部服務：
   - 另有 flaky 的 `command-center-host.spec.ts:12`。
   - 分類完之前，勾了 Playwright 的手動執行會是紅的；每週的排程不受影響。
 
-分鐘（每個 job 各自進位到整分鐘）。run 2 沒記下 changes、format、lint、typecheck、server、sdk、relay 的時間，照 run 1 合計約 28：
+第三次執行（[run 36163380457](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36163380457)，main `1f4b2b00f`，手動、不勾 Playwright）**成功**。實際 41 分 15 秒，各 job 工作時間合計約 131 分鐘。來源是本機 `plans/ci-run-1-findings.md` 的「CI 第三次執行」紀錄，本次文件更新沒有重新查詢 GitHub。
 
-- 每週的排程（不含 Playwright）約 125 分鐘：上面 7 個約 28，CLI 3 個分片 53，app-tests 8，桌面版約 35（run 2 停在 browser E2E 時已 20 分鐘，後面還有 Linux 打包和三個 smoke）。
-- 手動勾 Playwright 約 275 分鐘：再加 4 個分片約 150（run 2 是 45＋39＋26＋44＝154）。
-- run 2 有記時間的 job 進位後合計 235 分鐘，加上沒記的 7 個約 263。
-- 這是推算，下一次執行後照實際的改。
-- 兩個 Windows job 打開的話，每次再加約 140 分鐘（已算 2 倍）。
-- 每月（約 22 個工作天，每個工作天 push main 約 10 次）：
+| job                           | 時間                  | 結果                            |
+| ----------------------------- | --------------------- | ------------------------------- |
+| changes                       | 20s                   | 過                              |
+| format                        | 2m7s                  | 過                              |
+| lint                          | 2m56s                 | 過                              |
+| typecheck                     | 4m12s                 | 過                              |
+| server-tests                  | 16m41s                | 過                              |
+| app-tests                     | 6m19s                 | 過，每個 test 60 秒的上限下全綠 |
+| sdk-tests                     | 3m15s                 | 過                              |
+| relay-tests                   | 2m2s                  | 過                              |
+| cli-tests 1～3                | 19m2s／15m38s／17m58s | 全過                            |
+| desktop-tests                 | 40m45s                | 過，包含 Linux 打包與三個 smoke |
+| Playwright 1～4、Windows 兩組 | —                     | 照設計略過，不是測試通過        |
+
+桌面版步驟：desktop tests 21s、lifecycle E2E 4m42s、renderer E2E 10m20s、browser E2E 2m31s、Linux 打包 13m52s、三個 smoke 2m20s／2m0s／50s，全部通過。
+
+分鐘估算（每個 job 各自進位到整分鐘，不是上述原始工作時間）：
+
+- 不含 Playwright 的組合，依 run 3 各 job 進位合計約 138 分鐘；原始工作時間約 131 分鐘。這是每週排程的成本參考，不是已核對的帳單。
+- 手動勾 Playwright 暫估約 292 分鐘：138 加 run 2 的四個分片 154（45＋39＋26＋44）。修改後的完整手動執行仍未驗證。
+- 兩個 Windows job 打開的話，每次另加約 140 分鐘（既有估計，已算 2 倍）；run 3 沒有執行它們。
+- 每月推算（約 22 個工作天，每個工作天 push main 約 10 次）：
 
 | 觸發                               | 每月次數 | 每月分鐘                                    |
 | ---------------------------------- | -------- | ------------------------------------------- |
-| 上游的：每次 push main，全部的 job | 約 220   | 約 60,500（30 倍；含 Windows 約 91,000）    |
-| 工作日每晚一次，不含 Playwright    | 約 22    | 約 2,750（1.4 倍）                          |
-| 每週一次，不含 Playwright（採用）  | 約 4.3   | 約 540                                      |
-| 手動                               | 看用量   | 勾 Playwright 每次約 275，不勾約 125        |
-| PR                                 | 看用量   | 只跑相關的 job，不跑 Playwright，最多約 125 |
+| 上游的：每次 push main，全部的 job | 約 220   | 約 64,240（32 倍；含 Windows 約 95,040）    |
+| 工作日每晚一次，不含 Playwright    | 約 22    | 約 3,036（1.5 倍）                          |
+| 每週一次，不含 Playwright（採用）  | 約 4.3   | 約 594                                      |
+| 手動                               | 看用量   | 勾 Playwright 每次暫估 292，不勾約 138      |
+| PR                                 | 看用量   | 只跑相關的 job，不跑 Playwright，最多約 138 |
 
-- 採用每週一次加手動，剩約 1,460 分鐘，大約還能手動跑 5 次勾 Playwright 的，或 11 次不勾的。取捨：
+- 以每月 2,000 分鐘額度、每週排程約 594 分鐘估算，剩約 1,406 分鐘可安排手動執行：約 4 次勾 Playwright，或 10 次不勾。這是月度配置估算，不是本月即時餘額。取捨：
   - main 上的問題最慢一週後才發現。合併上游和發佈之前，手動跑一次並勾 Playwright。
   - 瀏覽器測試的問題只有手動勾 Playwright 時才看得到。
   - PR 依改到的路徑只跑相關的 job（`.github/ci-paths.yml`），但改到很多套件的 PR 接近一次不含 Playwright 的完整執行。
@@ -782,18 +803,19 @@ secret 和外部服務：
 
 手動跑一次（在 GitHub 上操作）：Actions → 左邊的 CI → 右邊的 Run workflow → 選分支 → 要跑 Playwright 就勾「Also run the Playwright browser tests (4 long shards)」→ Run workflow。不勾時跟每週的排程一樣，跑 Playwright 以外的全部 job。跑的是所選分支上的 `ci.yml`，所以合併前可以先 push 分支、選它跑；這個選項要所選分支的 `ci.yml` 已經有這個輸入才有。登入過的 gh 也可以用 `gh workflow run ci.yml --ref <分支> -f run_playwright=true`（這台 Mac 的 gh 沒登入）。
 
-下一次執行才能確認的（這台 Mac 跑不了 Linux）。run 2 已經確認了 Linux 的桌面版單元測試（391 個全過）、lifecycle 和 renderer E2E、Playwright 的冷打包在 10 分鐘內完成、browser E2E 第一次點 Settings、CLI 一次跑 2 個檔後的兩個計時測試。還要確認的：
+第三次執行已確認（Linux 結果來自 CI，不是這台 Mac）：
 
-- 桌面版 job：
-  - browser E2E 的截圖重試能不能讓整支通過。這台 Mac 只確認了語法、lint、守門，和把重試函式切出來用假的 client 跑；沒有實際跑整支（要起 daemon、Metro 和 Electron）。
-  - Linux 打包（AppImage、deb、rpm、tar.gz）和三次安裝 smoke 都還沒在我們的 repo 跑過；`desktopName` 的修正到 smoke 才看得到。
-  - 打包那步的 `expo export`（正式版的網頁打包）用 Node 預設的 heap，在 7 GB 的 runner 上夠不夠。不夠的話，那一步也設 `NODE_OPTIONS`。
-  - 60 分鐘夠不夠。
-- app-tests 在每個 test 1 分鐘、hook 2 分鐘的上限下會不會全綠。
-- Playwright（手動勾選）：分片 4 在 4 GB 的 heap 下能不能跑完；上面待分類的 5 個失敗和 1 個 flaky；每個 test 60 秒的上限夠不夠。
-- 每週的排程：4 個 Playwright 分片顯示為略過，整次執行是綠的。
-- 實際的分鐘數：一次每週的排程、一次勾 Playwright 的手動執行。
-- GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑。每個 job 的「Set up job」應該顯示 Ubuntu 24.04 的映像，還沒到 GitHub 上核對。
+- `desktopName` 的修正經三個打包 smoke 驗到；Linux 打包與安裝 smoke 全過。
+- desktop browser E2E 2m31s 通過，截圖重試在這次執行有效。
+- app-tests 6m19s 全綠，每個 test 60 秒的設定通過本次驗證。
+- Linux 打包 13m52s，含該步的整個 desktop-tests 40m45s，60 分鐘 job 上限足夠完成這次執行；打包的網頁輸出也未再因 heap 中斷。
+- 每週排程採用的 job 組合已透過「手動、不勾 Playwright」驗證：Playwright 四組與 Windows 兩組略過，整次綠；並非已驗證 cron 觸發。
+
+仍待確認：
+
+- Playwright（手動勾選）的完整執行：分片 4 的 4 GB heap、每個 test 60 秒上限，以及上面待分類的 5 個失敗和 1 個 flaky；run 3 略過 Playwright，不能算它們已修好。
+- 真正 cron 觸發的一次排程與勾 Playwright 的手動執行時間；目前只有同組合的手動 run 3 實測值。
+- GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑。每個 job 的「Set up job」映像版本未在本次重新核對。
 
 打開 Actions（在 GitHub 上的操作由 coordinator 和 owner 做）：
 
@@ -801,7 +823,7 @@ secret 和外部服務：
 2. Settings → Actions → General → Actions permissions：選「Allow WOOWTECH, and select non-WOOWTECH, actions and reusable workflows」，只勾「Allow actions created by GitHub」，允許清單填 `dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590`。CI 只用 GitHub 自己的 actions 和這一個。不要勾「Require actions to be pinned to a full-length commit SHA」，CI 用的是 `@v4` 這種標籤。
 3. 同一頁的 Workflow permissions：選「Read repository contents and packages permissions」，不勾「Allow GitHub Actions to create and approve pull requests」。
 4. 馬上到 Actions 分頁，把上表 CI 以外的 10 個 workflow 逐一停用：點 workflow → 右上角 ··· → Disable workflow。停用完之前不要 push、推 tag 或開 PR。
-5. 手動跑一次 CI，看每個 job 的結果和用掉的分鐘數，更新上面的估計。2026-09-25 跑了兩次，結果在上面。
+5. 手動跑一次 CI，看每個 job 的結果和用掉的分鐘數，更新上面的估計。前兩次失敗、第三次 main 不勾 Playwright 成功，結果在上面。
 6. 確認 Actions 用完免費額度時會停下，而不是收費：帳號沒有付款方式時本來就會停；有的話，在 Billing and licensing → Budgets and alerts 替 Actions 設 0 元預算並選到達上限就停止。
 
 合併上游時：
@@ -937,6 +959,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- T5（C-007，2026-09-26）：新增專案／主機選擇器文案、繁中 Host 術語完成定向紅→綠驗證；術語、placeholder、主要新增專案文字與主機搜尋選項的突變都被測試擋下並已還原。`node --test woowtech/zh-tw.test.mjs` 檢查產生器同步與技術字保留；定向 Vitest 覆蓋 `add-project-flow/model.test.ts`、`components/hosts/host-picker.test.tsx`、`i18n/woowtech-copy.test.ts`、`i18n/zh-tw.test.ts`。實作階段只跑限定格式／lint，提交另由既有 pre-commit 執行完整 typecheck；未建置、執行完整測試套件或 UI／裝置驗收。iOS、Android 與桌面 Browse 的實際畫面和語言切換仍待獨立驗收。
 
 - 里程碑 0，兩個平台的模擬器實測都通過：iOS 在 2026-09-23，Android 在 2026-09-24。
   App 連上 dev daemon 後，Claude 和 Pi 都在沙盒專案裡成功執行了 Shell 和 Read，熱重載也正常，兩個平台看得到同一批專案。
@@ -1083,7 +1107,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - app 的 hook 上限：命令列的 `--hookTimeout=1` 沒有作用，hook 仍在 10000ms 逾時；改成變數後設 1 就在 1ms 逾時。這台 Mac 很忙的時候（load average 40～80、swap 用了 5.2/6.1 GB），`input-draft.live.test.tsx` 的 beforeAll 要 35～40 秒，上限放寬後 7/7 通過。
   - `workflows.test.mjs` 新的 4 項先紅後綠，10/10；CI 第一個 job 跑的三個 node 測試 27/27。
   - 跑過的：守門 68 個全過（`node --test woowtech/*.test.mjs`，含 zh-TW）；改過或受影響的 vitest 檔逐一跑；`npm run lint`、`npm run format:check`、`npm run typecheck` 全 repo 通過。
-  - 沒跑的：Linux 上的一切和 GitHub 上的執行，見第 18 節「下一次執行才能確認的」。
+  - 沒跑的：Linux 上的一切和 GitHub 上的執行，當時未驗項目後續狀態見第 18 節「第三次執行已確認」與「仍待確認」。
 - `woowtech/ci-green` 獨立驗證（2026-09-25）：
   - 重跑：整個 repo 的 `npm run lint`、`npm run format:check`、`npm run typecheck` 通過，守門 68 個全過。main 的副本 lint 3 個錯、format 2 個檔，跟 run 1 相同。
   - `readPng`：main 版和分支版比對 664 個輸入（repo 的 64 張 PNG、400 張合成圖、200 個壞檔），結果和錯誤訊息都相同；`encodeOpaquePng` 200/200 相同。排版那個 commit 前後的語法樹相同。
@@ -1091,7 +1115,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - `ci.yml`：展開 anchor 後跟 main 只差這 10 處時間設定，觸發和 Windows 的條件沒變。每個變數都有程式在讀，Playwright 和桌面版 renderer E2E 經過 `globalSetup`，lifecycle E2E 在第一次點 Settings；browser E2E 不讀，記在第 18 節。
   - 發現並修正：`vitest.config.ts` 沒設變數時給 10 秒，browser project 的 hook 上限從 vitest 預設的 30 秒變成 10 秒。守門改成請 vitest 解析設定，先紅（browser 10000）後綠；設了變數時兩個 project 都是 120000。
   - 守門突變：`ci.yml` 的設定刪掉或改弱 9 種、`vitest.config.ts` 改回 10 秒或刪掉那行、`electron-builder.yml` 拿掉 `desktopName`，都紅。程式不讀變數、只剩註解提到的 2 種原本抓不到；守門改成只看程式碼後抓得到，`run-all.ts` 讀別的名稱也紅。每次都用 sha256 確認改回原檔。
-  - 沒做的：同第 18 節「下一次執行才能確認的」；run 1 各 job 的時間和原因沒有到 GitHub 上核對。
+  - 沒做的：當時未驗項目的後續狀態見第 18 節「第三次執行已確認」與「仍待確認」；run 1 各 job 的時間和原因當時沒有到 GitHub 上核對。
 - CI 第二次執行前的三項（2026-09-25，分支 `woowtech/ci-green`，第 18 節）：守門都先紅後綠，都做了突變，每次都用 sha256 確認改回原檔。
   - browser E2E：守門要求 `browser-tabs.e2e.mjs` 的程式碼讀變數，先紅（`ignores the setting`）後綠。突變：改讀別的名稱但註解照寫、改成固定 30 秒、整段改回上游，都紅。
   - lefthook：守門先紅（format、lint 都是 false）後綠。`lefthook run pre-commit --job lint|format --file woowtech/png.mjs` 改之前兩個都「no files for inspection」，改之後都有檢查、都過；換成 main 版的 `png.mjs`，兩個都失敗（complexity 24、巢狀三元；排版不符）。突變：兩個 glob 各拿掉 `mjs`，都紅。
@@ -1119,7 +1143,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - iOS 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`（Debug 版顯示成 woowtechsmartDebug），而且只有英文。要不要改成品牌名並加上中文，還沒決定。
 - 盤點設定頁以外上游寫死的英文，照第 14 節的做法一頁一頁處理。
 - 用詞待決定：
-  - 28 處仍用「主機」指 daemon（例如新增主機、切換主機、此主機離線），其他 87 處用「Host」。
+  - 已處理：原本「28 處主機／87 處 Host」的混用已統一為「主機」（C-007）；由產生器來源修正並重生繁中，Agent 保留英文。
   - PR 狀態 open 的「開啟」讀起來像動作，建議改「開啟中」（目前沒用到這個 key）。
   - 腳本網址的「好記網址」和「直接位址」建議統一用「網址」。
 - 更新紀錄：HTTP 200、內容卻不是 changelog 時（例如會攔截 TLS 的公司 proxy 回的封鎖頁），現在顯示「還沒有釋出說明」，沒有重試按鈕。要不要跟 404 分開處理，還沒決定。
@@ -1137,13 +1161,13 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - iPhone 上 `registerDeviceForRemoteMessages` 會回來（RNFB 和 `expo-notifications` 都接了 AppDelegate）；TestFlight 版（production APNs）和 Xcode 裝的開發版（sandbox）都拿得到 token。
     - 把 App 滑掉再重開：第二次啟動時 daemon 的 log 又出現「Registered push token」，裝置 log 沒有「No FCM token on this device」。48 小時後仍收得到推播。
     - 通知權限只在連上 woowtech smart 的 daemon 時才問。
-    - 從呼叫過 `getExpoPushTokenAsync` 的舊測試版升級後，第一次啟動會不會把 device token 送到 exp.host 一次：`expo-notifications` 在 import 時跑的程式可能搶在我們關掉之前。
+    - 從相同 bundle ID、呼叫過 `getExpoPushTokenAsync` 的舊測試版升級：驗證 iOS 原生寫入 disabled 成功、下次啟動與 APNs token 事件維持停用；另驗證首次 import 已讀到 enabled、仍等待 token 或已開始上傳的競速。原生字串 adapter 不取消這些工作，尚不能宣稱升級首次啟動零 Expo 請求。移除 App 也不能當成清除 Keychain 登記的可靠方式。
     - 打一次真正的 iOS bundle，確認裡面沒有 `@firebase/app`，並量 IPA 大小的差距。
   - 待決定：
     - 手動分兩步跑 prebuild 和 `pod install` 時，要不要讓 `react-native.config.js` 也看 prebuild 產生的 `ios/` 裡有沒有 plist，而不只看環境變數。
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
-- CI：`woowtech/ci-green` 在 2026-09-26 合進 main。在 main 手動跑一次不勾 Playwright 的 CI，確認第 18 節「下一次執行才能確認的」各項，用實際的分鐘數更新估計；要跑 Playwright 時再手動勾選。
+- CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
 - 商標（TIPO）與 D-U-N-S。

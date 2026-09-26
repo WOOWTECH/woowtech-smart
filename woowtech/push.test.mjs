@@ -291,6 +291,30 @@ test("the phone apps subscribe through woowtech-subscriptions, never upstream's"
   );
 });
 
+test("iOS disables Expo registration through its native String adapter", () => {
+  const source = readFileSync(
+    path.join(repoRoot, "packages/app/src/push-notifications/internal/woowtech-subscriptions.ts"),
+    "utf8",
+  );
+  assert.equal(importedFrom(source).disableIosExpoRegistration, "./woowtech-expo-registration");
+  assert.match(
+    source,
+    /if \(Platform\.OS === "ios"\) \{\s*await disableIosExpoRegistration\(\);\s*return;/,
+    "iOS must not fall through to Expo's null-valued public API",
+  );
+  const adapter = readFileSync(
+    path.join(
+      repoRoot,
+      "packages/app/src/push-notifications/internal/woowtech-expo-registration.ts",
+    ),
+    "utf8",
+  );
+  assert.match(
+    adapter,
+    /requireNativeModule<ExpoServerRegistration>\("NotificationsServerRegistrationModule"\)/,
+  );
+});
+
 test("only upstream's unused subscriptions.ts asks Expo for a push token", () => {
   // The F-Droid build's stand-in for expo-notifications (src/fdroid/expo-notifications.ts)
   // defines the function, which is not a call.
