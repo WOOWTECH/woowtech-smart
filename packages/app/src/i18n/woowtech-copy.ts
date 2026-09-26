@@ -659,10 +659,28 @@ const AGENT_NOTIFICATION_TITLES_ZH_TW: typeof AGENT_NOTIFICATION_TITLES_ENGLISH 
   attention: "需要你的注意",
 };
 
+const METADATA_GENERATION_ENGLISH = {
+  description:
+    "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
+  automaticHint: "Automatic model selection is inactive while generation is disabled.",
+  preferredHint: "Saved model preferences are inactive while generation is disabled.",
+  fallbackHint: "This preference is retained; no model is called for metadata generation.",
+};
+
+const METADATA_GENERATION_ZH_TW: typeof METADATA_GENERATION_ENGLISH = {
+  description:
+    "woowtech smart 目前不會自動產生工作區標題、分支名稱、commit 訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
+  automaticHint: "自動產生已停用，目前不會自動選擇模型。",
+  preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
+  fallbackHint: "此偏好會保留；不會呼叫任何模型來產生中繼資料。",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
     ...(WOOWTECH_COPY[language] ?? ENGLISH),
+    metadataGeneration:
+      language === "zh-TW" ? METADATA_GENERATION_ZH_TW : METADATA_GENERATION_ENGLISH,
     addProject: ADD_PROJECT_COPY[language] ?? ADD_PROJECT_ENGLISH,
     hostPicker: HOST_PICKER_COPY[language] ?? HOST_PICKER_ENGLISH,
     desktopNotifications:

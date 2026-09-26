@@ -89,9 +89,11 @@ describe("woowtech smart's own text", () => {
       const untranslated = [...english].flatMap(([key, text]) => {
         const newSurface = key.startsWith("addProject.") || key.startsWith("hostPicker.");
         if (newSurface && !["zh-TW", "zh-CN"].includes(language)) return [];
-        // Desktop delivery feedback is translated only in Traditional Chinese.
+        // These newer fork surfaces are translated only in Traditional Chinese.
         const traditionalChineseOnly =
-          key.startsWith("desktopNotifications.") || key.startsWith("agentNotificationTitles.");
+          key.startsWith("desktopNotifications.") ||
+          key.startsWith("agentNotificationTitles.") ||
+          key.startsWith("metadataGeneration.");
         if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });
@@ -180,6 +182,39 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
     const copy = woowtechCopyFor(language).desktopNotifications;
     if (language !== "zh-TW") expect(copy).toEqual(english);
     for (const text of Object.values(copy)) expect(text.match(/\{\{[^}]*\}\}/g)).toBeNull();
+  }
+});
+
+it("explains inactive metadata preferences in zh-TW and English without changing old translations", () => {
+  const english = {
+    description:
+      "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
+    automaticHint: "Automatic model selection is inactive while generation is disabled.",
+    preferredHint: "Saved model preferences are inactive while generation is disabled.",
+    fallbackHint: "This preference is retained; no model is called for metadata generation.",
+  };
+  const traditionalChinese = {
+    description:
+      "woowtech smart 目前不會自動產生工作區標題、分支名稱、commit 訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
+    automaticHint: "自動產生已停用，目前不會自動選擇模型。",
+    preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
+    fallbackHint: "此偏好會保留；不會呼叫任何模型來產生中繼資料。",
+  };
+  for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
+    const copy = new Map(strings(woowtechCopyFor(language)));
+    const expected = language === "zh-TW" ? traditionalChinese : english;
+    for (const [key, text] of Object.entries(expected)) {
+      expect(copy.get(`metadataGeneration.${key}`)).toBe(text);
+      expect(text.match(/\{\{[^}]*\}\}/g)).toBeNull();
+    }
+  }
+  const page = readFileSync(
+    join(__dirname, "../screens/settings/metadata-generation-page.tsx"),
+    "utf8",
+  );
+  for (const key of Object.keys(english)) {
+    expect(page).toContain(`t("woowtech.metadataGeneration.${key}")`);
+    expect(page).not.toContain(`t("settings.metadataGeneration.${key}")`);
   }
 });
 

@@ -42,9 +42,12 @@ test("both daemon naming entrances reach the policy before any task is scheduled
   assert.doesNotMatch(wiring, /isAutoNameEnabled|scheduleTask/);
 });
 
-test("the naming policy does not disable shared commit or PR generation", () => {
+test("the naming policy is separate from commit/PR policy and shared generation", () => {
+  assert.doesNotMatch(
+    source("server/session/checkout/git-metadata-generator.ts"),
+    /isWorkspaceAutoNameEnabled/,
+  );
   for (const file of [
-    "server/session/checkout/git-metadata-generator.ts",
     "server/agent/structured-generation-providers.ts",
     "utils/build-metadata-prompt.ts",
   ]) {
