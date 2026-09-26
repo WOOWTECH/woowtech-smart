@@ -15,8 +15,10 @@ compatibility_date = "2024-12-01"
 workers_dev = false
 routes = [{ pattern = "relay.woowtech.io", custom_domain = true }]
 
+# No Workers Logs: the relay logs which role connected to which server ID. Turn them
+# on for a debugging session only (woowtech/README.md, section 11).
 [observability]
-enabled = true
+enabled = false
 
 [[durable_objects.bindings]]
 name = "RELAY"

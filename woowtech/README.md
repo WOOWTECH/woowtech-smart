@@ -265,11 +265,11 @@ Worker：
 - 上游的 `wrangler.toml` 設了 `PASEO_RELAY_UPSTREAM = "https://paseo-relay-next.fly.dev"`：上游把正式流量搬到了 Fly，Cloudflare 上的 Worker 只把請求原樣轉過去。沒設這個變數時，Worker 自己當 relay。
 - 我們用 fork 自己的 `packages/relay/wrangler.woowtech.toml` 部署，上游的 `wrangler.toml` 不動：
   - 帳號 `9c27…`、Worker 名稱 `woowtech-smart-relay`、custom domain `relay.woowtech.io`（部署時自動建 DNS 記錄和憑證）、`workers_dev = false`（不開 workers.dev 網址）。
-  - Durable Object 綁定、SQLite migration（`new_sqlite_classes`）、observability 跟上游一樣，沒有任何變數。
+  - Durable Object 綁定、SQLite migration（`new_sqlite_classes`）跟上游一樣，沒有任何變數。observability 跟上游不同：關閉（見下一項）。
 - 方案：不需要付費方案。SQLite 的 Durable Object 在 Workers 免費方案就能用，custom domain 也免費。
   - 免費額度：Worker 和 Durable Object 各是每天 10 萬個請求，Durable Object 另有每天 13,000 GB-s。每條 WebSocket 連線算一個請求，收到的訊息 20 則算 1 個，送出的訊息和 ping 不算。超過就失敗，UTC 00:00（台灣 08:00）重置。用量大了再升 Workers Paid（每月 5 美元）。
   - woowtech.io 的 Pro 是 zone 的方案，跟 Workers 的方案無關。
-- Workers Logs 記的是 relay 自己印的連線、斷線、serverId 和 connectionId，沒有內容（內容是加密的）。上游也開著；要關就把 `[observability]` 改成 `enabled = false` 再部署，`relay-worker.test.mjs` 比對 observability 跟上游一致的那一行也要一起改。
+- Workers Logs 關閉（擁有者 2026-09-26 決定，最終驗收後關）：relay 自己印的是連線、斷線、serverId 和 connectionId，沒有內容（內容是加密的），但沒有必要留在 Cloudflare。`wrangler.woowtech.toml` 的 `[observability]` 是 `enabled = false`，`relay-worker.test.mjs` 擋住它被打開。要除錯時暫時改成 `true` 再部署，查完改回來並重新部署；也可以不開 Logs，改用 `wrangler tail --config wrangler.woowtech.toml` 即時看。上游開著。
 
 部署（在 Cloudflare 帳號的操作由 coordinator 和 owner 做）：
 
@@ -1136,6 +1136,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 2026-09-26 說明與求助連結改成官網（分支 `woowtech/website-links`）：原本導向 LINE 官方帳號的三處（說明選單、關於頁與專案首頁的按鈕、help 技能）都改開 https://aiot.woowtech.io 首頁，十種語言的標籤改成「官方網站」一類的譯文，`BRAND_LINKS` 拿掉 LINE 的連結。
   - 守門 `help-links.test.mjs` 先紅（技能檔還有 LINE、兩處按鈕沒開 `BRAND_LINKS.website`、標籤還寫 LINE）後綠；`brand.test.ts` 先紅（仍是 LINE official account）後綠 10/10；`skills.test.mjs` 更新期望後綠；`generate-skills.mjs --check` 一致。
   - 瀏覽器 e2e `sidebar-help.spec.ts` 的預期已改成官網，還沒實跑（Playwright 改成手動觸發）。
+- 2026-09-26 關掉 relay.woowtech.io 的 Workers Logs（分支 `woowtech/relay-logs-off`）：守門 `relay-worker.test.mjs` 新增「沒有 Workers Logs」先紅後綠，比對 observability 跟上游一致的那一項拿掉；relay 程式碼從 9/25 部署後沒有變動，只重新部署設定。
 
 ## 接下來
 

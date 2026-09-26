@@ -112,7 +112,7 @@ test("the relay's e2e test runs our Worker config", () => {
   assert.match(harness, /"--config",\s*"wrangler\.woowtech\.toml",/);
 });
 
-test("our Worker runs upstream's relay: same code, Durable Object, migrations and logs", () => {
+test("our Worker runs upstream's relay: same code, Durable Object and migrations", () => {
   // When upstream renames the Durable Object or adds a migration, ours has to follow,
   // or the next deploy fails or strands the existing sessions.
   const ours = readConfig(OUR_CONFIG);
@@ -122,5 +122,11 @@ test("our Worker runs upstream's relay: same code, Durable Object, migrations an
   assert.deepEqual(ours.compatibility_flags, upstream.compatibility_flags);
   assert.deepEqual(ours.durable_objects, upstream.durable_objects);
   assert.deepEqual(ours.migrations, upstream.migrations);
-  assert.deepEqual(ours.observability, upstream.observability);
+});
+
+test("our Worker keeps no Workers Logs", () => {
+  // The owner turned Workers Logs off after the 2026-09-26 acceptance: the relay logs
+  // which role connected to which server ID, and nobody needs that kept in Cloudflare.
+  // Turn them on for a debugging session only, then off again (woowtech/README.md, 11).
+  assert.deepEqual(readConfig(OUR_CONFIG).observability, { enabled: false });
 });
