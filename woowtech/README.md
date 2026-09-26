@@ -433,6 +433,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - `browser-tools-config.ts` 回傳的卡片狀態仍帶上游英文，上游的單元測試會檢查它；畫面上的文字由 `browser-tools-card.tsx` 翻譯。
 - 新增專案整個流程與主機選擇器的本地文案已接到 `woowtech.addProject`、`woowtech.hostPicker`。繁中「Clone from GitHub」用「從 GitHub 複製專案」，進行中用「正在複製專案…」。原始 daemon 錯誤、儲存庫說明、網址、路徑與使用者名稱不翻譯。
 - 主機選擇器顯示與搜尋共用同一份選項文字；包含 `host-filter.tsx` 的觸發器在內，文字快取依賴翻譯函式，切語言時更新。其他設定頁外的硬編碼仍需逐頁盤點。
+- 合併上游後要注意：T5 在 `components/add-project-flow.tsx` 約 171 行差異，另接到 `add-project-flow/options.ts`、`components/hosts/host-picker.tsx`、`host-picker-constants.ts`、`host-filter.tsx`；上游重整這些流程時，保留 fork 翻譯接點與 `t` 的快取依賴，並重跑下列定向測試。
 - 測試：
   - `i18n/woowtech-copy.test.ts`：既有文案與新文案各按上述語言政策驗證，檢查 key、插值一致及英文 fallback；已遷移的硬編碼不能回到原始碼裡。新增專案選項與主機選擇器的純 helper 測試也驗證切語言及使用者資料原樣保留，不以元件 mock 代替 UI 驗收。
   - `screens/settings/host-page-translations.test.tsx`：用 zh-TW 實際 render「終端機」「工作區」設定頁和瀏覽器工具卡，也檢查「終端機設定檔」和空狀態的文字。
@@ -761,24 +762,40 @@ secret 和外部服務：
   - 另有 flaky 的 `command-center-host.spec.ts:12`。
   - 分類完之前，勾了 Playwright 的手動執行會是紅的；每週的排程不受影響。
 
-分鐘（每個 job 各自進位到整分鐘）。run 2 沒記下 changes、format、lint、typecheck、server、sdk、relay 的時間，照 run 1 合計約 28：
+第三次執行（[run 36163380457](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36163380457)，main `1f4b2b00f`，手動、不勾 Playwright）**成功**。實際 41 分 15 秒，各 job 工作時間合計約 131 分鐘。來源是本機 `plans/ci-run-1-findings.md` 的「CI 第三次執行」紀錄，本次文件更新沒有重新查詢 GitHub。
 
-- 每週的排程（不含 Playwright）約 125 分鐘：上面 7 個約 28，CLI 3 個分片 53，app-tests 8，桌面版約 35（run 2 停在 browser E2E 時已 20 分鐘，後面還有 Linux 打包和三個 smoke）。
-- 手動勾 Playwright 約 275 分鐘：再加 4 個分片約 150（run 2 是 45＋39＋26＋44＝154）。
-- run 2 有記時間的 job 進位後合計 235 分鐘，加上沒記的 7 個約 263。
-- 這是推算，下一次執行後照實際的改。
-- 兩個 Windows job 打開的話，每次再加約 140 分鐘（已算 2 倍）。
-- 每月（約 22 個工作天，每個工作天 push main 約 10 次）：
+| job                           | 時間                  | 結果                            |
+| ----------------------------- | --------------------- | ------------------------------- |
+| changes                       | 20s                   | 過                              |
+| format                        | 2m7s                  | 過                              |
+| lint                          | 2m56s                 | 過                              |
+| typecheck                     | 4m12s                 | 過                              |
+| server-tests                  | 16m41s                | 過                              |
+| app-tests                     | 6m19s                 | 過，每個 test 60 秒的上限下全綠 |
+| sdk-tests                     | 3m15s                 | 過                              |
+| relay-tests                   | 2m2s                  | 過                              |
+| cli-tests 1～3                | 19m2s／15m38s／17m58s | 全過                            |
+| desktop-tests                 | 40m45s                | 過，包含 Linux 打包與三個 smoke |
+| Playwright 1～4、Windows 兩組 | —                     | 照設計略過，不是測試通過        |
+
+桌面版步驟：desktop tests 21s、lifecycle E2E 4m42s、renderer E2E 10m20s、browser E2E 2m31s、Linux 打包 13m52s、三個 smoke 2m20s／2m0s／50s，全部通過。
+
+分鐘估算（每個 job 各自進位到整分鐘，不是上述原始工作時間）：
+
+- 不含 Playwright 的組合，依 run 3 各 job 進位合計約 138 分鐘；原始工作時間約 131 分鐘。這是每週排程的成本參考，不是已核對的帳單。
+- 手動勾 Playwright 暫估約 292 分鐘：138 加 run 2 的四個分片 154（45＋39＋26＋44）。修改後的完整手動執行仍未驗證。
+- 兩個 Windows job 打開的話，每次另加約 140 分鐘（既有估計，已算 2 倍）；run 3 沒有執行它們。
+- 每月推算（約 22 個工作天，每個工作天 push main 約 10 次）：
 
 | 觸發                               | 每月次數 | 每月分鐘                                    |
 | ---------------------------------- | -------- | ------------------------------------------- |
-| 上游的：每次 push main，全部的 job | 約 220   | 約 60,500（30 倍；含 Windows 約 91,000）    |
-| 工作日每晚一次，不含 Playwright    | 約 22    | 約 2,750（1.4 倍）                          |
-| 每週一次，不含 Playwright（採用）  | 約 4.3   | 約 540                                      |
-| 手動                               | 看用量   | 勾 Playwright 每次約 275，不勾約 125        |
-| PR                                 | 看用量   | 只跑相關的 job，不跑 Playwright，最多約 125 |
+| 上游的：每次 push main，全部的 job | 約 220   | 約 64,240（32 倍；含 Windows 約 95,040）    |
+| 工作日每晚一次，不含 Playwright    | 約 22    | 約 3,036（1.5 倍）                          |
+| 每週一次，不含 Playwright（採用）  | 約 4.3   | 約 594                                      |
+| 手動                               | 看用量   | 勾 Playwright 每次暫估 292，不勾約 138      |
+| PR                                 | 看用量   | 只跑相關的 job，不跑 Playwright，最多約 138 |
 
-- 採用每週一次加手動，剩約 1,460 分鐘，大約還能手動跑 5 次勾 Playwright 的，或 11 次不勾的。取捨：
+- 以每月 2,000 分鐘額度、每週排程約 594 分鐘估算，剩約 1,406 分鐘可安排手動執行：約 4 次勾 Playwright，或 10 次不勾。這是月度配置估算，不是本月即時餘額。取捨：
   - main 上的問題最慢一週後才發現。合併上游和發佈之前，手動跑一次並勾 Playwright。
   - 瀏覽器測試的問題只有手動勾 Playwright 時才看得到。
   - PR 依改到的路徑只跑相關的 job（`.github/ci-paths.yml`），但改到很多套件的 PR 接近一次不含 Playwright 的完整執行。
@@ -786,18 +803,19 @@ secret 和外部服務：
 
 手動跑一次（在 GitHub 上操作）：Actions → 左邊的 CI → 右邊的 Run workflow → 選分支 → 要跑 Playwright 就勾「Also run the Playwright browser tests (4 long shards)」→ Run workflow。不勾時跟每週的排程一樣，跑 Playwright 以外的全部 job。跑的是所選分支上的 `ci.yml`，所以合併前可以先 push 分支、選它跑；這個選項要所選分支的 `ci.yml` 已經有這個輸入才有。登入過的 gh 也可以用 `gh workflow run ci.yml --ref <分支> -f run_playwright=true`（這台 Mac 的 gh 沒登入）。
 
-下一次執行才能確認的（這台 Mac 跑不了 Linux）。run 2 已經確認了 Linux 的桌面版單元測試（391 個全過）、lifecycle 和 renderer E2E、Playwright 的冷打包在 10 分鐘內完成、browser E2E 第一次點 Settings、CLI 一次跑 2 個檔後的兩個計時測試。還要確認的：
+第三次執行已確認（Linux 結果來自 CI，不是這台 Mac）：
 
-- 桌面版 job：
-  - browser E2E 的截圖重試能不能讓整支通過。這台 Mac 只確認了語法、lint、守門，和把重試函式切出來用假的 client 跑；沒有實際跑整支（要起 daemon、Metro 和 Electron）。
-  - Linux 打包（AppImage、deb、rpm、tar.gz）和三次安裝 smoke 都還沒在我們的 repo 跑過；`desktopName` 的修正到 smoke 才看得到。
-  - 打包那步的 `expo export`（正式版的網頁打包）用 Node 預設的 heap，在 7 GB 的 runner 上夠不夠。不夠的話，那一步也設 `NODE_OPTIONS`。
-  - 60 分鐘夠不夠。
-- app-tests 在每個 test 1 分鐘、hook 2 分鐘的上限下會不會全綠。
-- Playwright（手動勾選）：分片 4 在 4 GB 的 heap 下能不能跑完；上面待分類的 5 個失敗和 1 個 flaky；每個 test 60 秒的上限夠不夠。
-- 每週的排程：4 個 Playwright 分片顯示為略過，整次執行是綠的。
-- 實際的分鐘數：一次每週的排程、一次勾 Playwright 的手動執行。
-- GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑。每個 job 的「Set up job」應該顯示 Ubuntu 24.04 的映像，還沒到 GitHub 上核對。
+- `desktopName` 的修正經三個打包 smoke 驗到；Linux 打包與安裝 smoke 全過。
+- desktop browser E2E 2m31s 通過，截圖重試在這次執行有效。
+- app-tests 6m19s 全綠，每個 test 60 秒的設定通過本次驗證。
+- Linux 打包 13m52s，含該步的整個 desktop-tests 40m45s，60 分鐘 job 上限足夠完成這次執行；打包的網頁輸出也未再因 heap 中斷。
+- 每週排程採用的 job 組合已透過「手動、不勾 Playwright」驗證：Playwright 四組與 Windows 兩組略過，整次綠；並非已驗證 cron 觸發。
+
+仍待確認：
+
+- Playwright（手動勾選）的完整執行：分片 4 的 4 GB heap、每個 test 60 秒上限，以及上面待分類的 5 個失敗和 1 個 flaky；run 3 略過 Playwright，不能算它們已修好。
+- 真正 cron 觸發的一次排程與勾 Playwright 的手動執行時間；目前只有同組合的手動 run 3 實測值。
+- GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑。每個 job 的「Set up job」映像版本未在本次重新核對。
 
 打開 Actions（在 GitHub 上的操作由 coordinator 和 owner 做）：
 
@@ -805,7 +823,7 @@ secret 和外部服務：
 2. Settings → Actions → General → Actions permissions：選「Allow WOOWTECH, and select non-WOOWTECH, actions and reusable workflows」，只勾「Allow actions created by GitHub」，允許清單填 `dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590`。CI 只用 GitHub 自己的 actions 和這一個。不要勾「Require actions to be pinned to a full-length commit SHA」，CI 用的是 `@v4` 這種標籤。
 3. 同一頁的 Workflow permissions：選「Read repository contents and packages permissions」，不勾「Allow GitHub Actions to create and approve pull requests」。
 4. 馬上到 Actions 分頁，把上表 CI 以外的 10 個 workflow 逐一停用：點 workflow → 右上角 ··· → Disable workflow。停用完之前不要 push、推 tag 或開 PR。
-5. 手動跑一次 CI，看每個 job 的結果和用掉的分鐘數，更新上面的估計。2026-09-25 跑了兩次，結果在上面。
+5. 手動跑一次 CI，看每個 job 的結果和用掉的分鐘數，更新上面的估計。前兩次失敗、第三次 main 不勾 Playwright 成功，結果在上面。
 6. 確認 Actions 用完免費額度時會停下，而不是收費：帳號沒有付款方式時本來就會停；有的話，在 Billing and licensing → Budgets and alerts 替 Actions 設 0 元預算並選到達上限就停止。
 
 合併上游時：
@@ -1089,7 +1107,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - app 的 hook 上限：命令列的 `--hookTimeout=1` 沒有作用，hook 仍在 10000ms 逾時；改成變數後設 1 就在 1ms 逾時。這台 Mac 很忙的時候（load average 40～80、swap 用了 5.2/6.1 GB），`input-draft.live.test.tsx` 的 beforeAll 要 35～40 秒，上限放寬後 7/7 通過。
   - `workflows.test.mjs` 新的 4 項先紅後綠，10/10；CI 第一個 job 跑的三個 node 測試 27/27。
   - 跑過的：守門 68 個全過（`node --test woowtech/*.test.mjs`，含 zh-TW）；改過或受影響的 vitest 檔逐一跑；`npm run lint`、`npm run format:check`、`npm run typecheck` 全 repo 通過。
-  - 沒跑的：Linux 上的一切和 GitHub 上的執行，見第 18 節「下一次執行才能確認的」。
+  - 沒跑的：Linux 上的一切和 GitHub 上的執行，當時未驗項目後續狀態見第 18 節「第三次執行已確認」與「仍待確認」。
 - `woowtech/ci-green` 獨立驗證（2026-09-25）：
   - 重跑：整個 repo 的 `npm run lint`、`npm run format:check`、`npm run typecheck` 通過，守門 68 個全過。main 的副本 lint 3 個錯、format 2 個檔，跟 run 1 相同。
   - `readPng`：main 版和分支版比對 664 個輸入（repo 的 64 張 PNG、400 張合成圖、200 個壞檔），結果和錯誤訊息都相同；`encodeOpaquePng` 200/200 相同。排版那個 commit 前後的語法樹相同。
@@ -1097,7 +1115,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - `ci.yml`：展開 anchor 後跟 main 只差這 10 處時間設定，觸發和 Windows 的條件沒變。每個變數都有程式在讀，Playwright 和桌面版 renderer E2E 經過 `globalSetup`，lifecycle E2E 在第一次點 Settings；browser E2E 不讀，記在第 18 節。
   - 發現並修正：`vitest.config.ts` 沒設變數時給 10 秒，browser project 的 hook 上限從 vitest 預設的 30 秒變成 10 秒。守門改成請 vitest 解析設定，先紅（browser 10000）後綠；設了變數時兩個 project 都是 120000。
   - 守門突變：`ci.yml` 的設定刪掉或改弱 9 種、`vitest.config.ts` 改回 10 秒或刪掉那行、`electron-builder.yml` 拿掉 `desktopName`，都紅。程式不讀變數、只剩註解提到的 2 種原本抓不到；守門改成只看程式碼後抓得到，`run-all.ts` 讀別的名稱也紅。每次都用 sha256 確認改回原檔。
-  - 沒做的：同第 18 節「下一次執行才能確認的」；run 1 各 job 的時間和原因沒有到 GitHub 上核對。
+  - 沒做的：當時未驗項目的後續狀態見第 18 節「第三次執行已確認」與「仍待確認」；run 1 各 job 的時間和原因當時沒有到 GitHub 上核對。
 - CI 第二次執行前的三項（2026-09-25，分支 `woowtech/ci-green`，第 18 節）：守門都先紅後綠，都做了突變，每次都用 sha256 確認改回原檔。
   - browser E2E：守門要求 `browser-tabs.e2e.mjs` 的程式碼讀變數，先紅（`ignores the setting`）後綠。突變：改讀別的名稱但註解照寫、改成固定 30 秒、整段改回上游，都紅。
   - lefthook：守門先紅（format、lint 都是 false）後綠。`lefthook run pre-commit --job lint|format --file woowtech/png.mjs` 改之前兩個都「no files for inspection」，改之後都有檢查、都過；換成 main 版的 `png.mjs`，兩個都失敗（complexity 24、巢狀三元；排版不符）。突變：兩個 glob 各拿掉 `mjs`，都紅。
@@ -1150,6 +1168,6 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
-- CI：`woowtech/ci-green` 在 2026-09-26 合進 main。在 main 手動跑一次不勾 Playwright 的 CI，確認第 18 節「下一次執行才能確認的」各項，用實際的分鐘數更新估計；要跑 Playwright 時再手動勾選。
+- CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
 - 商標（TIPO）與 D-U-N-S。
