@@ -36,6 +36,7 @@ export interface GenerateBranchNameFromFirstAgentContextOptions {
   logger: BranchNameGeneratorLogger;
   deps?: {
     generateStructuredAgentResponseWithFallback?: typeof generateStructuredAgentResponseWithFallback;
+    buildMetadataPrompt?: typeof buildMetadataPrompt;
   };
 }
 
@@ -49,9 +50,11 @@ async function buildPrompt(
   options: {
     cwd: string;
     workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
+    buildMetadataPrompt?: typeof buildMetadataPrompt;
   },
 ): Promise<string> {
-  return buildMetadataPrompt({
+  const build = options.buildMetadataPrompt ?? buildMetadataPrompt;
+  return build({
     cwd: options.cwd,
     workspaceGitService: options.workspaceGitService,
     contract: [
@@ -116,6 +119,7 @@ export async function generateBranchNameFromFirstAgentContext(
       prompt: await buildPrompt(seed, {
         cwd: options.cwd,
         workspaceGitService: options.workspaceGitService,
+        buildMetadataPrompt: options.deps?.buildMetadataPrompt,
       }),
       schema: BranchNameSchema,
       schemaName: "BranchName",

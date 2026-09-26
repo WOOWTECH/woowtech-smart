@@ -725,6 +725,7 @@ function createSessionForWorkspaceTests(
       github: options.github,
       workspaceGitService,
       workspaceAutoName: new WorkspaceAutoName({
+        isAutoNameEnabled: () => true,
         agentManager,
         workspaceRegistry,
         workspaceGitService,
@@ -1194,6 +1195,7 @@ test("create_agent_request launches from an exact subdirectory in a created work
       }),
       workspaceGitService,
       workspaceAutoName: new WorkspaceAutoName({
+        isAutoNameEnabled: () => true,
         agentManager,
         workspaceRegistry,
         workspaceGitService,
@@ -9103,6 +9105,7 @@ test("workspace auto-name keeps a manual title written before the scheduled titl
   const stored = new Map([[workspace.workspaceId, workspace]]);
   const emittedWorkspaceIds: string[] = [];
   const workspaceAutoName = new WorkspaceAutoName({
+    isAutoNameEnabled: () => true,
     agentManager: asAgentManager({}),
     workspaceRegistry: {
       update: async (workspaceId, updater) => {
@@ -9159,6 +9162,7 @@ test("workspace auto-name replaces the unchanged prompt title", async () => {
   });
   const stored = new Map([[workspace.workspaceId, workspace]]);
   const workspaceAutoName = new WorkspaceAutoName({
+    isAutoNameEnabled: () => true,
     agentManager: asAgentManager({}),
     workspaceRegistry: {
       update: async (workspaceId, updater) => {
@@ -9234,6 +9238,7 @@ test("workspace auto-name uses the backing root for a nested worktree", async ()
   const gitMutations: string[] = [];
   const emittedCwds: string[] = [];
   const workspaceAutoName = new WorkspaceAutoName({
+    isAutoNameEnabled: () => true,
     agentManager: asAgentManager({}),
     workspaceRegistry: {
       update: async (workspaceId, updater) => {

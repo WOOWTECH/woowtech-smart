@@ -933,6 +933,14 @@ node --test woowtech/*.test.mjs
 - 上游讓掃描器或「貼上配對連結」改用 URL 類別讀 fragment：那兩個 App 測試會失敗，改回字串運算。上游改寫 `OfferLinkListener`（限定平台、改用 URL 類別、不再交給 `handlePairingLink`）：守門的 `OfferLinkListener` 那一項會失敗，照訊息改回交給 `handlePairingLink`。
 - 上游在新 home 的 CORS 預設或 `bootstrap.ts` 的固定清單加回網頁版：`cors-defaults.test.ts` 和守門會失敗。
 
+### 20. 暫停工作區自動命名
+
+- 依 owner 的 D4 修正，daemon 暫時完全停用工作區的 LLM 自動命名，不做開關。上游會把第一則 Agent 提示與附件交給 metadata provider，可能與使用者操作的 provider 不同；先停止這條額外內容傳送與額度消耗路徑，之後再另做明確開啟、只用同一家 provider 的功能。
+- 政策在 `packages/server/src/server/woowtech-metadata-policy.ts`。`WorkspaceAutoName` 的 directory/worktree 入口都在排程前拒絕：沒有 timer、沒有 generator、provider snapshot 列舉、instructions 載入或 structured generation。新舊 home 一樣關閉，不讀任何命名設定，也不從既有 metadata provider 清單推定使用者同意。
+- 保留建立時的名稱、初始 prompt title 與分支；不回改以前的命名，不阻擋手動改名。commit 訊息／PR 草稿生成、正常 Agent 工作與 OpenCode 設定頁探測都維持現狀；這不是全域禁止 metadata 或 provider 網路使用。
+- 上游接點只有 `workspace-auto-name.ts` 的排程 gate 與 typed policy/scheduler ports，以及 `worktree-branch-name-generator.ts` 的 instructions-builder 測試 port。production bootstrap 不傳 policy override；既有上游行為測試明確注入 enabled policy 以保留原斷言，另以真正預設 OFF 的 service 驗零呼叫，不能用測試開啟值當 production 預設。
+- 合併上游後跑 `workspace-auto-name.test.ts` 與 `node --test woowtech/workspace-auto-name.test.mjs`。守門鎖住 production OFF、兩個 daemon 入口、排程前 gate 與 bootstrap 接點；共享 commit/PR 生成不接這個 policy。
+
 ## Mac 開發環境
 
 `woowtech/scripts/mac/` 是在 M2、8GB RAM 的 Mac 上建置和測試用的腳本。路徑是寫死的：repo 在 `~/projects/woowtech-smart`，腳本透過 `~/.local/share/woowtech-smart/` 的 symlink 呼叫，log 和截圖也存在那裡。
@@ -982,6 +990,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- F5-min 停用工作區自動命名（2026-09-26）：先紅確認 directory/worktree 仍排程，接入預設 OFF policy 後真實 service 測試 3/3；OFF 的 scheduler、generator、snapshot、instructions、structured generation、設定讀取與命名寫入全部零呼叫，另用明確 enabled 的測試 policy 驗證觀測 ports 能收到呼叫。上游 session 定向 7/7、MCP 定向 5/5，保留原斷言與手動 title 行為；fork 守門 3/3。拿掉 gate、policy 預設開啟、constructor 繞過預設 policy 三個突變都讓 service 與守門 exit 1，還原後 3/3、3/3。實作階段未跑完整套件、build、真實 provider 或網路測試；提交另由既有 hook 執行完整 typecheck。
 
 - F7a 共用取消鈕（2026-09-26）：先紅確認繁中呼叫真正 renderer helper 仍送 Cancel，再改用既有 `common.actions.cancel`；沒有新增翻譯 key。定向 Vitest 4/4、繁中守門新增項 1/1。英文硬編碼、忽略 caller override、空字串 override 被當缺值、固定繁中不隨語言切換四個突變皆 exit 1；英文硬編碼也讓接點守門失敗，還原後 4/4、1/1。format/lint 通過；未跑 build/typecheck、Electron UI 或原生裝置驗收。
 
