@@ -9,10 +9,9 @@ declare global {
   }
 }
 
-// woowtech smart: the help menu's Discord item opens WoowTech's LINE official account and
-// its GitHub item writes to WoowTech support.
-const LINE_OFFICIAL_ACCOUNT_DESTINATION =
-  /^https:\/\/line\.me\/R\/ti\/p\/(?:@|%40)lwo6431z(?:[/?#]|$)/;
+// woowtech smart: the help menu's Discord item opens WoowTech's website and its GitHub item
+// writes to WoowTech support.
+const WEBSITE_DESTINATION = /^https:\/\/aiot\.woowtech\.io\/?(?:[?#]|$)/;
 const SUPPORT_EMAIL = "mailto:woowtech@designsmart.com.tw";
 const CHANGELOG_DESTINATION =
   /^https:\/\/github\.com\/WOOWTECH\/woowtech-smart-releases\/releases(?:[/?#]|$)/;
@@ -102,7 +101,7 @@ test("opens troubleshooting and support destinations", async ({ page }) => {
 
   await test.step("opens support pages", async () => {
     await openHelpMenu(page);
-    await expectExternalPage(page, "sidebar-help-discord", LINE_OFFICIAL_ACCOUNT_DESTINATION);
+    await expectExternalPage(page, "sidebar-help-discord", WEBSITE_DESTINATION);
 
     await openHelpMenu(page);
     await expectMailtoLink(page, "sidebar-help-github", SUPPORT_EMAIL);

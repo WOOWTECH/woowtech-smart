@@ -229,9 +229,12 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 說明文件：官網 aiot.woowtech.io 還沒有說明頁，App 的 8 處和 CLI 的 2 處都先開官網首頁。哪個主題有了頁面，就改 `docs` 裡對應的那一項。
 - 回報問題：寄信到 woowtech@designsmart.com.tw。
   上游的外部連結開啟器只放行 http/https。現在 App 的 `utils/open-external-url.ts` 和桌面版的 `features/opener.ts` 多放行 `mailto:`，`file:`、`javascript:` 照樣擋掉。
-- 社群：LINE 官方帳號 @lwo6431z。
-  - 說明選單的 Discord 改成 LINE。
-  - 設定的「關於」頁和專案首頁底部，原本有 GitHub Star、贊助上游作者、Discord 三個按鈕，現在只留 LINE。
+- 社群與快速求助：官網首頁 aiot.woowtech.io（`BRAND_LINKS.website`）。2026-09-26 起不再導向 LINE 官方帳號（擁有者決定）。
+  - 說明選單的 Discord 改成「官方網站」。
+  - 設定的「關於」頁和專案首頁底部，原本有 GitHub Star、贊助上游作者、Discord 三個按鈕，現在只留「官方網站」（地球圖示）。
+  - help 技能的「Questions and quick help」也改成官網（`woowtech/tools/skill-rewrites.mjs`，改完用 `generate-skills.mjs` 重新產生）。
+  - 標籤是上游 key `sidebar.help.discord`，十種語言的譯文在 `packages/app/src/i18n/support-copy.ts`。
+  - `woowtech/help-links.test.mjs` 擋住 LINE：出貨原始碼和技能檔都不准出現 line.me、lin.ee 或帳號 ID；說明選單與「關於」頁的按鈕都要開 `BRAND_LINKS.website`。
 - 更新紀錄：App 讀發佈 repo 的 `CHANGELOG.md`，右上角的外部連結開發佈頁。
   - 發佈 repo 還沒有 `CHANGELOG.md`（HTTP 404），或檔案裡還沒有任何版本時，「新功能」顯示「還沒有釋出說明／第一個版本釋出後，釋出說明就會顯示在這裡。」，沒有重試按鈕。狀態是 `changelog-source.ts` 的 `empty`，畫面在 `changelog/internal/changelog-empty.tsx`，文字在 `woowtech-copy.ts`（第 14 節）。
   - 連不上網路或其他 HTTP 錯誤，才顯示「無法載入更新記錄／請檢查網路連線後重試。」和重試按鈕。
@@ -415,7 +418,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - 沒寫遷移：內部測試時裝過的 `paseo*` 技能要手動刪，刪之前先確認不是官方 Paseo 裝的。
 - 合併到 main 之後要重建 server 的 dist（至少 `build:lib`），不然開發模式的桌面版會從舊的 `dist/server/skills` 裝上游名字的技能。
 - 測試：
-  - `woowtech/skills.test.mjs`：提交的技能等於重新產生的結果；6 個名字和 frontmatter；不准出現 6767、`~/.paseo`、`Paseo.app`、官方 App 的資料夾、`paseo <指令>`、上游技能名、Discord、GitHub issues 和 discussions，paseo.sh 和上游 GitHub 只准外掛技能用在外掛 API 文件；指令、port、資料夾、log、`$PASEO_CLI`、relay、官網、信箱、LINE 都要出現；`build:lib` 複製的是 `woowtech/skills`；改寫規則對上游日後可能加的文字（`/paseo`、`Paseo Hub`、`/paseo-plugin.json` 這種路徑）也對。
+  - `woowtech/skills.test.mjs`：提交的技能等於重新產生的結果；6 個名字和 frontmatter；不准出現 6767、`~/.paseo`、`Paseo.app`、官方 App 的資料夾、`paseo <指令>`、上游技能名、Discord、GitHub issues 和 discussions，paseo.sh 和上游 GitHub 只准外掛技能用在外掛 API 文件；指令、port、資料夾、log、`$PASEO_CLI`、relay、官網（含「Questions and quick help」的官網連結）、信箱都要出現；`build:lib` 複製的是 `woowtech/skills`；改寫規則對上游日後可能加的文字（`/paseo`、`Paseo Hub`、`/paseo-plugin.json` 這種路徑）也對。
     另外從原始碼在暫存 HOME 跑 daemon 的技能操作，裡面已經有官方的現行和舊名技能：daemon 管理的名字只有 `woowtech-smart*`，安裝和解除安裝都不動官方的，儲存時暫存在 `.woowtech-smart-skills-transaction-*`。開發路徑、舊名清單或暫存前綴在合併時被改回上游的，這項會失敗。
   - `server/src/server/orchestration-skills/internal/coexistence.test.ts`：把真正出貨的技能裝進已經有官方技能（現行和舊名）的暫存 HOME。安裝、啟動時修正、更新、縮小選擇、解除安裝都不碰官方的，舊名只刪我們的；儲存時的暫存資料夾用我們的前綴；官方中斷的交易原樣保留，也不會讓我們的操作失敗。
   - 改了預期值的上游測試：`paths.test.ts`（開發路徑）、`desktop-packaging.test.ts`（`build:lib`）、`operations.test.ts` 和 `controller.test.ts`（舊名和暫存資料夾前綴）。
@@ -1129,6 +1132,10 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - browser E2E 的截圖：守門先紅（`callTool`，隱藏視窗那個直接呼叫）後綠。突變：改回直接呼叫、改走不重試的 `callBrowserTool`、非作用中分頁那個改成直接呼叫、重試函式改名，都紅。重試函式的內容被改壞（例如不重試）守門抓不到；另外把新舊兩版的函式切出來、用假的 MCP client 比對：`callBrowserToolUntilReady` 在 6 種回應序列下結果和呼叫次數都相同，新的呼叫點遇到 retryable 會重試、其他錯誤照樣失敗、一直 retryable 到期會失敗。
   - 跑過的：守門 74 個全過（`node --test woowtech/*.test.mjs`）；CI 第一個 job 的三個 node 測試 27/27，上游的 `ci-workflow.test.mjs` 不用改；全 repo 的 `npm run lint`、`npm run format:check` 通過；每個 commit 的 pre-commit 都跑了完整 typecheck。
   - 沒跑的：Playwright、桌面版 browser E2E 本身和 GitHub 上的執行。
+
+- 2026-09-26 說明與求助連結改成官網（分支 `woowtech/website-links`）：原本導向 LINE 官方帳號的三處（說明選單、關於頁與專案首頁的按鈕、help 技能）都改開 https://aiot.woowtech.io 首頁，十種語言的標籤改成「官方網站」一類的譯文，`BRAND_LINKS` 拿掉 LINE 的連結。
+  - 守門 `help-links.test.mjs` 先紅（技能檔還有 LINE、兩處按鈕沒開 `BRAND_LINKS.website`、標籤還寫 LINE）後綠；`brand.test.ts` 先紅（仍是 LINE official account）後綠 10/10；`skills.test.mjs` 更新期望後綠；`generate-skills.mjs --check` 一致。
+  - 瀏覽器 e2e `sidebar-help.spec.ts` 的預期已改成官網，還沒實跑（Playwright 改成手動觸發）。
 
 ## 接下來
 

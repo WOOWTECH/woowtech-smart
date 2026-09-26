@@ -86,8 +86,8 @@ export function SidebarHelpMenu() {
     setShortcutsDialogOpen(true);
   }, [setShortcutsDialogOpen]);
 
-  const openLineOfficialAccount = useCallback(() => {
-    void openExternalUrl(BRAND_LINKS.lineOfficialAccount);
+  const openWebsite = useCallback(() => {
+    void openExternalUrl(BRAND_LINKS.website);
   }, []);
 
   const openSupportEmail = useCallback(() => {
@@ -148,7 +148,7 @@ export function SidebarHelpMenu() {
         <DropdownMenuItem
           testID="sidebar-help-discord"
           leading={lineLeadingIcon}
-          onSelect={openLineOfficialAccount}
+          onSelect={openWebsite}
         >
           {t("sidebar.help.discord")}
         </DropdownMenuItem>

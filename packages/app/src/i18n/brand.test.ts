@@ -123,8 +123,9 @@ describe("CLI commands in translations", () => {
   });
 });
 
-// The help menu's Discord and GitHub items open our LINE official account and
-// support email instead.
+// The help menu's Discord and GitHub items open WoowTech's website and support
+// email instead. (Until 2026-09-26 the Discord item opened our LINE official
+// account; the owner retired that channel.)
 const HELP_CHANNEL_KEYS = [
   "sidebar.help.discord",
   "sidebar.help.github",
@@ -133,7 +134,7 @@ const HELP_CHANNEL_KEYS = [
 
 function upstreamHelpChannels(language: string): string[] {
   return HELP_CHANNEL_KEYS.map((key) => i18n.t(key, { lng: language })).filter((text) =>
-    /Discord|GitHub/.test(text),
+    /Discord|GitHub|LINE/.test(text),
   );
 }
 
@@ -144,17 +145,17 @@ describe("help channels in translations", () => {
     }
   });
 
-  it("names the LINE official account and support email", () => {
-    expect(i18n.t("sidebar.help.discord", { lng: "en" })).toBe("LINE official account");
+  it("names the website and support email", () => {
+    expect(i18n.t("sidebar.help.discord", { lng: "en" })).toBe("Official website");
     expect(i18n.t("sidebar.help.github", { lng: "en" })).toBe("Email support");
-    expect(i18n.t("sidebar.help.discord", { lng: "zh-TW" })).toBe("LINE 官方帳號");
+    expect(i18n.t("sidebar.help.discord", { lng: "zh-TW" })).toBe("官方網站");
     expect(i18n.t("sidebar.help.github", { lng: "zh-TW" })).toBe("寄信給客服");
     expect(i18n.t("startup.errorDescription", { lng: "zh-TW" })).toBe(
       "本機伺服器啟動失敗。如果持續發生，請寄信給客服並附上下方記錄。",
     );
   });
 
-  it("sends no language to Discord or GitHub for help", () => {
+  it("sends no language to Discord, GitHub or LINE for help", () => {
     for (const language of Object.keys(i18n.store.data)) {
       expect({ language, upstream: upstreamHelpChannels(language) }).toEqual({
         language,

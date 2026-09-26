@@ -100,7 +100,8 @@ function passageRewrites({ cliCommand, links, port, productName, relayHost }) {
       ].join("\n"),
     },
     {
-      // WoowTech's help channels instead of Paseo's GitHub and Discord.
+      // WoowTech's help channels instead of Paseo's GitHub and Discord. Quick help
+      // goes to the website's home page (the LINE account was retired on 2026-09-26).
       skill: "paseo-help",
       find: [
         "- Bugs: [GitHub Issues](https://github.com/getpaseo/paseo/issues)",
@@ -109,7 +110,7 @@ function passageRewrites({ cliCommand, links, port, productName, relayHost }) {
       ].join("\n"),
       replace: [
         `- Bugs and problems: email support at [${supportAddress}](${links.supportEmail})`,
-        `- Questions and quick help: [LINE official account](${links.lineOfficialAccount})`,
+        `- Questions and quick help: [${productName} website](${links.website})`,
       ].join("\n"),
     },
   ];
