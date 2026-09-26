@@ -10,7 +10,7 @@ import {
 
 interface FakeEnvironmentInput {
   isWeb?: boolean;
-  desktopHost?: DesktopHostBridge | null;
+  desktopHost?: Pick<DesktopHostBridge, "notification"> | null;
   notification?: NotificationConstructorLike | null;
   navigator?: NavigatorLike | null;
 }
@@ -25,6 +25,88 @@ function fakeEnvironment(input: FakeEnvironmentInput = {}): DesktopPermissionEnv
 }
 
 describe("desktop-permissions", () => {
+  it("does not infer native notification permission from support", async () => {
+    const permissions = createDesktopPermissions(
+      fakeEnvironment({
+        desktopHost: { notification: { isSupported: async () => true } },
+        notification: { permission: "granted" },
+      }),
+    );
+    expect((await permissions.getDesktopPermissionSnapshot()).notifications).toEqual({
+      state: "unknown",
+      detail: "Notifications are supported; system permission has not been confirmed.",
+    });
+  });
+  it("does not use browser permission as native authorization when requesting", async () => {
+    let browserRequests = 0;
+    const permissions = createDesktopPermissions(
+      fakeEnvironment({
+        desktopHost: { notification: { isSupported: async () => true } },
+        notification: {
+          requestPermission: async () => {
+            browserRequests += 1;
+            return "granted";
+          },
+        },
+      }),
+    );
+    expect((await permissions.requestDesktopPermission({ kind: "notifications" })).state).toBe(
+      "unknown",
+    );
+    expect(browserRequests).toBe(0);
+  });
+
+  it("keeps native permission unknown when support IPC fails despite browser grant", async () => {
+    const permissions = createDesktopPermissions(
+      fakeEnvironment({
+        desktopHost: {
+          notification: {
+            isSupported: async () => {
+              throw new Error("IPC failed");
+            },
+          },
+        },
+        notification: { permission: "granted" },
+      }),
+    );
+    expect((await permissions.getDesktopPermissionSnapshot()).notifications.state).toBe("unknown");
+  });
+
+  it("reports unsupported native notification APIs as unavailable", async () => {
+    const permissions = createDesktopPermissions(
+      fakeEnvironment({
+        desktopHost: { notification: { isSupported: async () => false } },
+      }),
+    );
+    expect((await permissions.getDesktopPermissionSnapshot()).notifications.state).toBe(
+      "unavailable",
+    );
+  });
+
+  it("does not fall back to browser authorization when the native notification bridge is absent", async () => {
+    let browserRequests = 0;
+    const permissions = createDesktopPermissions(
+      fakeEnvironment({
+        desktopHost: {},
+        notification: {
+          permission: "granted",
+          requestPermission: async () => {
+            browserRequests += 1;
+            return "granted";
+          },
+        },
+      }),
+    );
+    expect((await permissions.getDesktopPermissionSnapshot()).notifications).toEqual({
+      state: "unknown",
+      detail: "System notification permission could not be checked.",
+    });
+    expect((await permissions.requestDesktopPermission({ kind: "notifications" })).state).toBe(
+      "unknown",
+    );
+    expect(browserRequests).toBe(0);
+  });
+
   it("shows section only in desktop web runtime", () => {
     expect(
       createDesktopPermissions(

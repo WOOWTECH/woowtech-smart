@@ -47,7 +47,7 @@ export interface NavigatorLike {
 
 export interface DesktopPermissionEnvironment {
   isWeb: boolean;
-  getDesktopHost: () => DesktopHostBridge | null;
+  getDesktopHost: () => Pick<DesktopHostBridge, "notification"> | null;
   getNotification: () => NotificationConstructorLike | null;
   getNavigator: () => NavigatorLike | null;
 }
@@ -135,17 +135,26 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
     }
 
     const desktopHost = env.getDesktopHost();
-    if (desktopHost && typeof desktopHost.notification?.isSupported === "function") {
+    if (desktopHost) {
+      if (typeof desktopHost.notification?.isSupported !== "function") {
+        return status({
+          state: "unknown",
+          detail: i18n.t("woowtech.desktopNotifications.unknown"),
+        });
+      }
       try {
         const supported = await desktopHost.notification.isSupported();
         return status({
-          state: supported ? "granted" : "unavailable",
+          state: supported ? "unknown" : "unavailable",
           detail: supported
-            ? i18n.t("desktop.permissions.notifications.supported")
+            ? i18n.t("woowtech.desktopNotifications.supported")
             : i18n.t("desktop.permissions.notifications.unsupported"),
         });
       } catch {
-        // Fall through to web API check
+        return status({
+          state: "unknown",
+          detail: i18n.t("woowtech.desktopNotifications.unknown"),
+        });
       }
     }
 
@@ -239,6 +248,11 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
         state: "unavailable",
         detail: i18n.t("desktop.permissions.notifications.requestsWebOnly"),
       });
+    }
+
+    const desktopHost = env.getDesktopHost();
+    if (desktopHost) {
+      return getNotificationPermissionStatus();
     }
 
     const NotificationConstructor = env.getNotification();

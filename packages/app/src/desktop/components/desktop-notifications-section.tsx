@@ -10,6 +10,7 @@ import { DesktopPermissionRow } from "@/desktop/components/desktop-permission-ro
 import { useDesktopPermissions } from "@/desktop/permissions/use-desktop-permissions";
 import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
+import { canTestNotification } from "@/desktop/permissions/woowtech-notification-test";
 import { settingsStyles } from "@/styles/settings";
 
 const ThemedRotateCw = withUnistyles(RotateCw, (theme) => ({
@@ -73,8 +74,8 @@ export function DesktopNotificationsSection() {
   const permissionLabels = useMemo(
     () => ({
       granted: t("settings.permissions.actions.granted"),
-      request: t("settings.permissions.actions.request"),
-      requesting: t("settings.permissions.actions.requesting"),
+      request: t("settings.permissions.refresh"),
+      requesting: t("settings.permissions.refreshing"),
     }),
     [t],
   );
@@ -83,7 +84,7 @@ export function DesktopNotificationsSection() {
     return null;
   }
 
-  const notificationsGranted = snapshot?.notifications.state === "granted";
+  const notificationsTestable = canTestNotification(snapshot?.notifications.state);
 
   return (
     <SettingsSection title={t("settings.notifications.title")} trailing={refreshButton}>
@@ -112,8 +113,8 @@ export function DesktopNotificationsSection() {
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>{t("settings.notifications.test")}</Text>
             <Text style={settingsStyles.rowHint}>
-              {notificationsGranted
-                ? t("settings.notifications.testHint")
+              {notificationsTestable
+                ? t("woowtech.desktopNotifications.testHint")
                 : t("settings.notifications.permissionRequired")}
             </Text>
           </View>
@@ -121,19 +122,19 @@ export function DesktopNotificationsSection() {
             variant="outline"
             size="sm"
             onPress={handleSendTestNotification}
-            disabled={!notificationsGranted || isPermissionBusy || isSendingTestNotification}
+            disabled={!notificationsTestable || isPermissionBusy || isSendingTestNotification}
           >
             {isSendingTestNotification
               ? t("settings.notifications.sending")
-              : t("settings.notifications.send")}
+              : t("woowtech.desktopNotifications.send")}
           </Button>
         </View>
       </View>
       {testNotificationState.status === "success" ? (
         <Alert
           variant="success"
-          title={t("settings.notifications.sentTitle")}
-          description={t("settings.notifications.sentDescription")}
+          title={t("woowtech.desktopNotifications.successTitle")}
+          description={t("woowtech.desktopNotifications.successDescription")}
           testID="desktop-notifications-test-success"
         />
       ) : null}

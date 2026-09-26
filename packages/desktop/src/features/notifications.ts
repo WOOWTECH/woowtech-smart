@@ -2,6 +2,7 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { app, BrowserWindow, Notification, ipcMain, nativeImage } from "electron";
 import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
+import { showNotificationWithDelivery } from "./woowtech-notification-delivery.js";
 
 interface NotificationInput {
   title?: unknown;
@@ -62,20 +63,30 @@ function focusSenderWindow(sender: Electron.WebContents): BrowserWindow | null {
   return win;
 }
 
-/**
- * macOS requires a notification to have been shown at least once before
- * the app appears in System Preferences > Notifications. We fire a
- * silent no-op notification during startup to ensure registration.
- */
+/** Best-effort registration probe; support does not establish system authorization. */
 export function ensureNotificationCenterRegistration(): void {
   if (process.platform !== "darwin" || !Notification.isSupported()) {
     return;
   }
 
-  const probe = new Notification({ title: app.name, silent: true });
-  probe.on("show", () => probe.close());
-  setTimeout(() => probe.close(), 2_000);
-  probe.show();
+  try {
+    const probe = new Notification({ title: app.name, silent: true });
+    void showNotificationWithDelivery({
+      notification: probe,
+      onClick: () => {},
+      release: () => {},
+    })
+      .then((shown) => {
+        if (shown) probe.close();
+        else console.warn("[Notifications] Registration probe display was not confirmed");
+        return undefined;
+      })
+      .catch(() => {
+        console.warn("[Notifications] Registration probe could not close");
+      });
+  } catch {
+    console.warn("[Notifications] Registration probe could not be created");
+  }
 }
 
 export function registerNotificationHandlers(): void {
@@ -106,20 +117,18 @@ export function registerNotificationHandlers(): void {
 
     activeNotifications.add(notification);
 
-    notification.on("click", () => {
-      const win = focusSenderWindow(event.sender);
-      if (win && data && Object.keys(data).length > 0) {
-        const payload: NotificationClickPayload = { data };
-        win.webContents.send("paseo:event:notification-click", payload);
-      }
-      activeNotifications.delete(notification);
+    return showNotificationWithDelivery({
+      notification,
+      onClick: () => {
+        const win = focusSenderWindow(event.sender);
+        if (win && data && Object.keys(data).length > 0) {
+          const payload: NotificationClickPayload = { data };
+          win.webContents.send("paseo:event:notification-click", payload);
+        }
+      },
+      release: () => {
+        activeNotifications.delete(notification);
+      },
     });
-
-    notification.on("close", () => {
-      activeNotifications.delete(notification);
-    });
-
-    notification.show();
-    return true;
   });
 }
