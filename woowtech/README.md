@@ -860,6 +860,13 @@ owner 的決定是「直接叫起 App」：配對連結和 QR Code 打開渥屋�
 - 帶 `#offer=` 的 https 連結照樣能配對，例如 `app.baseUrl` 設成 daemon 自己的網頁版時。程式沒有寫死任何主機。
 - 在電腦上點連結只會打開桌面版：macOS 的 `open-url` 只處理 agent 連結，配對連結直接忽略。Windows 和 Linux（不在 v1）的 second-instance 會多開一個視窗，跟上游處理不認得的連結一樣。
 
+連線後補主機名稱：
+
+- 深連結可先離線匯入，不為取名字另開 probe。後續正常連線的 `server_info` 有非空 hostname、serverId 相符時，才把仍是 serverId 或空白的 label 補成主機名稱並存檔；重連與已連線後的新 server_info 都走同一條路。
+- 已有名字不覆蓋，等待連線期間的手動 rename 優先；已移除主機不重建，舊連線或舊主機世代的 callback 不處理。registry 尚未載入不寫入，載入完成後再讀目前連線快取的 server_info，避免遺漏先到的名稱。
+- 沿用上游 label 判別慣例，沒有新增名稱來源欄位：使用者若刻意把名稱設成完全相同的 serverId，無法與自動 fallback 區分，仍會被 hostname 取代。可先取其他名字以保留手動名稱。
+- 政策與監聽在 `runtime/woowtech-host-label.ts`，上游只接 `runtime/host-runtime.ts` 的 controller 生命週期、registry 載入完成與 label 持久化。只改 label 時不呼叫會啟動 probe cycle 的 updateHost；沒有改連線探測、路由或網路 protocol。
+
 預設值和遷移：
 
 - 常數在 `packages/protocol/src/brand-pairing.ts`：`BRAND_PAIRING.appBaseUrl` 是 `woowtech-smart:///`，`linkExample` 是「貼上配對連結」的範例文字。scheme 要跟 `app.config.js` 的 `scheme` 一致（第 5 節）。改了這個檔案，要重建 protocol 和 server 的 dist。
@@ -887,7 +894,7 @@ CORS：
   - 在 app.woowtech.io 自架網頁版：要多維運一個能操作使用者 daemon 的網頁 App，每次發版都要更新。
   - 維持 app.paseo.sh：上游隨時可能改或停掉那個網站。
 
-接點（上游的檔）：`persisted-config.ts`（4 行）、`config.ts`（3 行）、`pairing-offer.ts`（2 行）、`bootstrap.ts`（4 行，熱檔）、`protocol/src/connection-offer.ts`（1 行註解）、`cli/src/commands/onboard.ts`（4 行）、`app/src/components/pair-link-modal.tsx`（2 行）、`app/src/app/_layout.tsx`（`OfferLinkListener` 的 `handleUrl` 改成呼叫 `handlePairingLink`，加 1 行 import，熱檔），以及上游測試 `app/src/runtime/host-runtime.test.ts` 加的 1 個測試。
+接點（上游的檔）：`persisted-config.ts`（4 行）、`config.ts`（3 行）、`pairing-offer.ts`（2 行）、`bootstrap.ts`（4 行，熱檔）、`protocol/src/connection-offer.ts`（1 行註解）、`cli/src/commands/onboard.ts`（4 行）、`app/src/components/pair-link-modal.tsx`（2 行）、`app/src/app/_layout.tsx`（`OfferLinkListener` 的 `handleUrl` 改成呼叫 `handlePairingLink`，加 1 行 import，熱檔），以及上游測試 `app/src/runtime/host-runtime.test.ts` 加的 1 個測試。F6 補名另在 `app/src/runtime/host-runtime.ts` 加 43 行，政策及整合測試留 fork 自有檔。
 
 測試：
 
@@ -896,12 +903,14 @@ CORS：
 - CLI `commands/daemon/pair.app-link.test.ts`：新 home 和寫著上游預設的 home，`daemon pair` 的連結都是 `woowtech-smart:///`。`utils/daemon-target.app-link.test.ts`：`--host` 帶配對連結時，訊息裡的 offer 會遮掉。
 - App：`runtime/woowtech-pairing-link.test.ts` 是 `OfferLinkListener` 收到連結後的每一步：`woowtech-smart:///#offer=` 和帶 offer 的 https 連結都會匯入並轉到「開啟專案」、沒有 offer 的連結不處理、連結不交給 URL 類別、匯入失敗時 warn 不轉頁、監聽已經卸載時不轉頁；用真的 `HostRuntimeStore`（記憶體 storage）照冷啟動的順序先讀連結再 `boot()`，記憶體和存檔都有舊主機和新主機。`host-runtime.test.ts` 的新測試是 `handlePairingLink` 呼叫的匯入（`upsertConnectionFromOfferUrl`）；`components/pair-link-modal.app-link.test.tsx` 和 `components/pair-scan.app-link.test.tsx`（掃描器是 `src/app` 裡的路由，測試放外面，因為 Expo Router 會把 `src/app` 裡的每個檔案當成路由）：貼上和掃描新連結都能配對，範例文字是新連結。三個都把 URL 類別換成會記錄的版本，確認配對連結沒有交給它。
 - protocol `brand-pairing.test.ts`：CLI 的 `--host` 和 daemon 匯出的解析函式讀得到新連結的 offer。
-- 守門 `woowtech/pairing.test.mjs`，6 項：
+- App 補名：`runtime/woowtech-host-label.test.ts` 用真實 HostRuntimeStore、controller、DaemonClient，注入記憶體 transport/storage，驗首次補名及存檔／重開、等待期間 rename/remove、身分不符／空 hostname、離線匯入後恢復、同 client 重連、舊連線與移除後重建的 callback、registry hydration 與冷啟動深連結；沒有打網路或假元件測試。
+- 守門 `woowtech/pairing.test.mjs`，7 項：
   - 從原始碼跑 daemon 的設定和配對：新 home 的連結是 `woowtech-smart:///#offer=`，offer 是這個 home 的；沒給 `app.baseUrl` 也一樣。
   - 用 expo-router 自己的函式（`build/fork/extractPathFromURL`）確認連結落在 index 路由；用 `expo config --type introspect` 確認正式版和 Debug 版在 iOS（`CFBundleURLSchemes`）和 Android（VIEW + BROWSABLE，沒有 host 或路徑限制的 intent filter）都註冊了 `woowtech-smart`。
   - `_layout.tsx` 只掛一個 `OfferLinkListener`，不在任何條件裡；它把 `Linking.getInitialURL()` 和 `url` 事件的連結都交給 `handlePairingLink`，裡面沒有平台判斷（`Platform.`、`isWeb`、`isNative`、`getIsElectron`），也沒有 `new URL(`。上游自己的配對連結只會從網頁版進來，所以這個監聽被限定在網頁或改成讀 https 主機時，只有這一項會失敗。
   - 上游預設的 home 改用 App 連結，自己設的值不動。
   - 新 home 沒有 web origin，CLI 讀的預設（`readPersistedConfig` 的 `defaultsIfMissing`）也沒有。
+  - 補名用目前 controller 的正常 server_info；保留 request version／client、主機世代、registry ready、重連快取與持久化接點，不另啟動 probe。
   - 出貨的原始碼不准出現 app.paseo.sh。「出貨的原始碼」是 `shipped-sources.mjs` 的 app、cli、client、desktop、protocol、server 的 `src`（含 App 的翻譯 `src/i18n`），加上 relay、plugin、highlight、expo-two-way-audio 的 `src`（App 和 daemon 相依的套件）、App 的 `plugins/`、`woowtech/skills`，以及 `app.config.js`、`eas.json`、`public/index.html`、`public/manifest.json`、`electron-builder.yml`、`wrangler.woowtech.toml`。不掃：測試、e2e、test-utils，`docs/`、`public-docs/`、`SECURITY.md`、`CHANGELOG.md` 這些說明文件，`scripts/`、`nix/`，以及上游的官網 `packages/website`。唯一的例外是 `app-base-url.ts` 辨認上游預設的那一行，守門也檢查它只有那一行。
   - 突變都被抓到：新 home 的 `app.baseUrl` 或 CORS 改回、`config.ts` 不遷移、遷移少了結尾斜線那種寫法、`pairing-offer.ts` 或 `bootstrap.ts` 的預設改回、`onboard` 加回 Web app、範例文字改回、`app.config.js` 的 scheme 改掉、`BRAND_PAIRING` 改成有 host 的網址（要重建 protocol 的 dist）、`app-base-url.ts` 多一行提到 app.paseo.sh。
 
@@ -972,6 +981,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- F6 主機補名（2026-09-26）：先紅確認正常 server_info 到達後 label 仍是 serverId；補名後 fork 整合測試 11/11、配對守門新增項 1/1。移除 store 接點、rename 保護、身分檢查、連線世代檢查、hydration gate／補查、持久化、持續監聽、主機世代及卸載接點共 10 個突變均 exit 1；還原後 11/11、1/1。App 測試使用既有 unit 設定，未跑完整配對／host-runtime suite、build 或實機；提交時另由既有 hook 執行完整 typecheck。沒有新 probe 或外部網路。
 
 - F3 追加修正 C-014（2026-09-26，F4 之後）：先紅確認逾時會 close、三態字串被舊布林邏輯當 success，以及缺少三態文案，再修正。生命週期／測試回饋／共用 copy 定向 Vitest 25/25，桌面接點守門 3/3。timeout close、release、late click、late show 清引用、錯誤 settlement、三個 UI 結果、舊布林推定成功、IPC 布林契約、probe 接點、畫面接點、timeout 文案、語言 fallback 共 14 個突變皆 exit 1；還原後 25/25、3/3。未跑 typecheck/build 或 Electron UI，實際 macOS 通知仍待另驗。
 

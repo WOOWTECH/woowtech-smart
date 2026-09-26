@@ -234,3 +234,34 @@ test("no shipped source names upstream's web app", () => {
     'const UPSTREAM_DEFAULT_APP_BASE_URL = "https://app.paseo.sh";',
   ]);
 });
+
+test("host labels use normal server_info with hydration and generation guards", () => {
+  const runtime = readFileSync(
+    path.join(repoRoot, "packages/app/src/runtime/host-runtime.ts"),
+    "utf8",
+  );
+  assert.match(runtime, /onServerInfo: \(info\) => this.fillHostLabel\(controller, info\)/);
+  assert.match(runtime, /const unobserve = observeHostLabelServerInfo\(\{/);
+  assert.match(
+    runtime,
+    /isCurrent: \(\) =>\s*this.isCurrentSwitchRequest\(requestVersion\) && this.activeClient === client/,
+  );
+  assert.match(
+    runtime,
+    /this.unsubscribeClientHandlers = \(\) => \{\s*unobserve\(\);\s*unmount\?\.\(\);/,
+  );
+  assert.match(
+    runtime,
+    /this.hostRegistryLoaded = true;\s*for \(const controller of this.controllers.values\(\)\) \{\s*this.fillHostLabel\(controller, controller.getClient\(\)\?\.getLastServerInfoMessage\(\) \?\? null\)/,
+  );
+  const fill = runtime.slice(
+    runtime.indexOf("  private fillHostLabel("),
+    runtime.indexOf("  private async persistHosts("),
+  );
+  assert.match(fill, /!this.hostRegistryLoaded/);
+  assert.match(fill, /this.controllers.get\(snapshot.serverId\) !== controller/);
+  assert.match(fill, /snapshot.connectionStatus !== "online"/);
+  assert.match(fill, /fillHostLabel\(\{ hosts: this.hosts, serverId: snapshot.serverId, info \}\)/);
+  assert.match(fill, /this.hosts = next;\s*this.emitHostList\(\);\s*void this.persistHosts\(\)/);
+  assert.doesNotMatch(fill, /(?:connectToDaemon|setHostsAndSync|updateHost)\(/);
+});
