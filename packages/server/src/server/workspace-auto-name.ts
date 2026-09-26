@@ -2,6 +2,7 @@ import type pino from "pino";
 import type { FirstAgentContext } from "@getpaseo/protocol/messages";
 
 import { resolveFirstAgentPromptTitle } from "./agent/create-agent-title.js";
+import { isWorkspaceAutoNameEnabled } from "./woowtech-metadata-policy.js";
 import type { AgentManager } from "./agent/agent-manager.js";
 import type { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type { StructuredGenerationDaemonConfig } from "./agent/structured-generation-providers.js";
@@ -25,14 +26,16 @@ type CurrentSelection = GenerateBranchNameFromFirstAgentContextOptions["currentS
 interface WorkspaceAutoNameOptions {
   agentManager: AgentManager;
   workspaceRegistry: Pick<WorkspaceRegistry, "update">;
-  workspaceGitService: WorkspaceGitService;
-  providerSnapshotManager: ProviderSnapshotManager;
+  workspaceGitService: Pick<WorkspaceGitService, "resolveRepoRoot">;
+  providerSnapshotManager: Pick<ProviderSnapshotManager, "listProviders">;
   readDaemonConfig: () => StructuredGenerationDaemonConfig;
   gitMutation: Pick<GitMutationService, "notifyGitMutation">;
   emitWorkspaceUpdateForCwd: (cwd: string) => Promise<void>;
   emitWorkspaceUpdateForWorkspaceId: (workspaceId: string) => Promise<void>;
   logger: pino.Logger;
   generateWorkspaceName?: WorkspaceNameGenerator;
+  scheduleTask?: (run: () => void) => void;
+  isAutoNameEnabled?: typeof isWorkspaceAutoNameEnabled;
 }
 
 interface ScheduleContext {
@@ -42,14 +45,16 @@ interface ScheduleContext {
 export class WorkspaceAutoName {
   private readonly agentManager: AgentManager;
   private readonly workspaceRegistry: Pick<WorkspaceRegistry, "update">;
-  private readonly workspaceGitService: WorkspaceGitService;
-  private readonly providerSnapshotManager: ProviderSnapshotManager;
+  private readonly workspaceGitService: Pick<WorkspaceGitService, "resolveRepoRoot">;
+  private readonly providerSnapshotManager: Pick<ProviderSnapshotManager, "listProviders">;
   private readonly readDaemonConfig: () => StructuredGenerationDaemonConfig;
   private readonly gitMutation: Pick<GitMutationService, "notifyGitMutation">;
   private readonly emitWorkspaceUpdateForCwd: (cwd: string) => Promise<void>;
   private readonly emitWorkspaceUpdateForWorkspaceId: (workspaceId: string) => Promise<void>;
   private readonly logger: pino.Logger;
   private readonly generateWorkspaceName: WorkspaceNameGenerator;
+  private readonly scheduleTask: (run: () => void) => void;
+  private readonly isAutoNameEnabled: typeof isWorkspaceAutoNameEnabled;
 
   constructor(options: WorkspaceAutoNameOptions) {
     this.agentManager = options.agentManager;
@@ -63,6 +68,12 @@ export class WorkspaceAutoName {
     this.logger = options.logger;
     this.generateWorkspaceName =
       options.generateWorkspaceName ?? generateBranchNameFromFirstAgentContext;
+    this.scheduleTask =
+      options.scheduleTask ??
+      ((run) => {
+        setTimeout(run, 0);
+      });
+    this.isAutoNameEnabled = options.isAutoNameEnabled ?? isWorkspaceAutoNameEnabled;
   }
 
   scheduleForWorktree(
@@ -212,10 +223,11 @@ export class WorkspaceAutoName {
   }
 
   private schedule(run: () => Promise<void>, context: { cwd: string; message: string }): void {
-    setTimeout(() => {
+    if (!this.isAutoNameEnabled()) return;
+    this.scheduleTask(() => {
       void run().catch((error) => {
         this.logger.warn({ err: error, cwd: context.cwd }, context.message);
       });
-    }, 0);
+    });
   }
 }

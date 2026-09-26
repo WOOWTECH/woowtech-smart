@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import type { NotificationDeliveryResult } from "../../../desktop/src/features/woowtech-notification-delivery";
 import { getElectronHost } from "@/desktop/electron/host";
 import type { BrowserKeyboardPolicy } from "@/desktop/browser/shortcuts";
 import type { SessionInboundMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
@@ -11,6 +12,8 @@ type BrowserAutomationExecuteResponse = Extract<
   SessionInboundMessage,
   { type: "browser.automation.execute.response" }
 >;
+
+export type { NotificationDeliveryResult };
 
 export type DesktopNotificationPermission = "granted" | "denied" | "default";
 export type DesktopWindowChromeMode = "native-mac" | "custom-windows" | "custom-linux";
@@ -54,6 +57,9 @@ export interface DesktopDialogBridge {
 }
 
 export interface DesktopNotificationBridge {
+  sendNotificationWithResult?: (
+    payload: Parameters<NonNullable<DesktopNotificationBridge["sendNotification"]>>[0],
+  ) => Promise<NotificationDeliveryResult>;
   isSupported?: () => Promise<boolean>;
   sendNotification?: (
     payload: string | { title: string; body?: string; data?: Record<string, unknown> },

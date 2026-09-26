@@ -1,6 +1,11 @@
 import { Alert } from "react-native";
-import { getDesktopHost, type DesktopDialogAskOptions } from "@/desktop/host";
+import {
+  getDesktopHost,
+  type DesktopDialogAskOptions,
+  type DesktopHostBridge,
+} from "@/desktop/host";
 import { isNative } from "@/constants/platform";
+import { i18n } from "@/i18n/i18next";
 
 export interface ConfirmDialogInput {
   title: string;
@@ -8,6 +13,10 @@ export interface ConfirmDialogInput {
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+}
+
+export interface ConfirmDialogPorts {
+  getDesktopHost: () => Pick<DesktopHostBridge, "dialog"> | null;
 }
 
 interface ConfirmButtonConfig {
@@ -18,7 +27,7 @@ interface ConfirmButtonConfig {
 function resolveButtonLabels(input: ConfirmDialogInput): ConfirmButtonConfig {
   return {
     confirmLabel: input.confirmLabel ?? "Confirm",
-    cancelLabel: input.cancelLabel ?? "Cancel",
+    cancelLabel: input.cancelLabel ?? i18n.t("common.actions.cancel"),
   };
 }
 
@@ -49,11 +58,11 @@ async function showNativeConfirmDialog(input: ConfirmDialogInput): Promise<boole
   });
 }
 
-function getDesktopApi() {
+function getDesktopApi(ports: ConfirmDialogPorts) {
   if (isNative) {
     return null;
   }
-  return getDesktopHost();
+  return ports.getDesktopHost();
 }
 
 function buildDesktopAskOptions(input: ConfirmDialogInput): DesktopDialogAskOptions {
@@ -75,8 +84,11 @@ function blurActiveWebElement(): void {
   (activeElement as HTMLElement | null)?.blur?.();
 }
 
-async function showDesktopConfirmDialog(input: ConfirmDialogInput): Promise<boolean | null> {
-  const desktopApi = getDesktopApi();
+async function showDesktopConfirmDialog(
+  input: ConfirmDialogInput,
+  ports: ConfirmDialogPorts,
+): Promise<boolean | null> {
+  const desktopApi = getDesktopApi(ports);
   if (!desktopApi) {
     return null;
   }
@@ -103,12 +115,15 @@ function showWebConfirmDialog(input: ConfirmDialogInput): boolean {
   return browserConfirm(promptMessage);
 }
 
-export async function confirmDialog(input: ConfirmDialogInput): Promise<boolean> {
+export async function confirmDialog(
+  input: ConfirmDialogInput,
+  ports: ConfirmDialogPorts = { getDesktopHost },
+): Promise<boolean> {
   if (isNative) {
     return showNativeConfirmDialog(input);
   }
 
-  const desktopResult = await showDesktopConfirmDialog(input);
+  const desktopResult = await showDesktopConfirmDialog(input, ports);
   if (desktopResult !== null) {
     return desktopResult;
   }

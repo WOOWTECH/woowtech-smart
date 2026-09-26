@@ -7,7 +7,12 @@ import {
   type DesktopPermissionKind,
   type DesktopPermissionSnapshot,
 } from "@/desktop/permissions/desktop-permissions";
-import { sendOsNotification } from "@/utils/os-notifications";
+import { getDesktopHost } from "@/desktop/host";
+import {
+  runNotificationTest,
+  sendDesktopTestNotification,
+  type TestNotificationState,
+} from "./woowtech-notification-test";
 
 export interface UseDesktopPermissionsReturn {
   isDesktopApp: boolean;
@@ -20,16 +25,11 @@ export interface UseDesktopPermissionsReturn {
   sendTestNotification: () => Promise<void>;
 }
 
-export type TestNotificationState =
-  | { status: "idle" }
-  | { status: "sending" }
-  | { status: "success" }
-  | { status: "error"; message: string };
-
 export function useDesktopPermissions(): UseDesktopPermissionsReturn {
   const { t } = useTranslation();
   const isDesktopApp = shouldShowDesktopPermissionSection();
   const isMountedRef = useRef(true);
+  const testNotificationPendingRef = useRef(false);
   const [snapshot, setSnapshot] = useState<DesktopPermissionSnapshot | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [requestingPermission, setRequestingPermission] = useState<DesktopPermissionKind | null>(
@@ -119,34 +119,29 @@ export function useDesktopPermissions(): UseDesktopPermissionsReturn {
   );
 
   const sendTestNotification = useCallback(async () => {
-    if (!isDesktopApp) {
+    if (!isDesktopApp || testNotificationPendingRef.current) {
       return;
     }
 
-    setTestNotificationState({ status: "sending" });
+    testNotificationPendingRef.current = true;
     try {
-      const sent = await sendOsNotification({
-        title: t("desktop.permissions.testNotification.title"),
-        body: t("desktop.permissions.testNotification.body"),
-      });
-      if (!isMountedRef.current) {
-        return;
-      }
-      setTestNotificationState(
-        sent
-          ? { status: "success" }
-          : {
-              status: "error",
-              message: t("desktop.permissions.testNotification.notDelivered"),
+      await runNotificationTest({
+        send: () =>
+          sendDesktopTestNotification({
+            bridge: getDesktopHost()?.notification,
+            payload: {
+              title: t("desktop.permissions.testNotification.title"),
+              body: t("desktop.permissions.testNotification.body"),
             },
-      );
-    } catch {
-      if (isMountedRef.current) {
-        setTestNotificationState({
-          status: "error",
-          message: t("desktop.permissions.testNotification.failed"),
-        });
-      }
+          }),
+        failureMessage: t("woowtech.desktopNotifications.failed"),
+        unconfirmedMessage: t("woowtech.desktopNotifications.unconfirmed"),
+        onState: (state) => {
+          if (isMountedRef.current) setTestNotificationState(state);
+        },
+      });
+    } finally {
+      testNotificationPendingRef.current = false;
     }
   }, [isDesktopApp, t]);
 

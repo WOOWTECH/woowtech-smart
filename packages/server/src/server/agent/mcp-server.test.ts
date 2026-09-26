@@ -740,6 +740,7 @@ function createPaseoWorktreeForMcpTest(options: {
     logger: createTestLogger(),
   });
   const workspaceAutoName = new WorkspaceAutoName({
+    isAutoNameEnabled: () => true,
     agentManager: buildAgentManagerSpies() as unknown as AgentManager,
     workspaceRegistry,
     workspaceGitService,
@@ -2235,6 +2236,7 @@ describe("create_agent MCP tool", () => {
       deps: { github: createGitHubServiceStub() },
     });
     const workspaceAutoName = new WorkspaceAutoName({
+      isAutoNameEnabled: () => true,
       agentManager,
       workspaceRegistry: {
         update: async (workspaceId, updater) => {

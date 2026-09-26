@@ -87,6 +87,11 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     open: (options?: Record<string, unknown>) => ipcRenderer.invoke("paseo:dialog:open", options),
   },
   notification: {
+    sendNotificationWithResult: (payload: {
+      title: string;
+      body?: string;
+      data?: Record<string, unknown>;
+    }) => ipcRenderer.invoke("woowtech:notification:sendWithResult", payload),
     isSupported: () => ipcRenderer.invoke("paseo:notification:isSupported"),
     sendNotification: (payload: { title: string; body?: string; data?: Record<string, unknown> }) =>
       ipcRenderer.invoke("paseo:notification:send", payload),

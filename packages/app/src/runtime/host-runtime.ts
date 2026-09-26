@@ -80,6 +80,11 @@ import { projectIconCache } from "@/projects/icon-cache";
 import { nativePerformanceTrace } from "@/performance/native-trace";
 import { revokePushNotifications } from "@/push-notifications";
 import { createAppWebSocketFactory } from "./websocket-factory";
+import {
+  fillHostLabel,
+  observeHostLabelServerInfo,
+  type HostLabelServerInfo,
+} from "./woowtech-host-label";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
 export type HostRegistryStatus = "loading" | "ready";
@@ -599,6 +604,7 @@ export class HostRuntimeController {
   private host: HostProfile;
   private deps: HostRuntimeControllerDeps;
   private onReconcileServerId: ((oldId: string, newId: string) => void) | null;
+  private onServerInfo: ((info: HostLabelServerInfo) => void) | undefined;
   private connectionMachineState: HostRuntimeConnectionMachineState;
   private connectionEpoch = 0;
   private snapshot: HostRuntimeSnapshot;
@@ -622,10 +628,12 @@ export class HostRuntimeController {
     host: HostProfile;
     deps?: HostRuntimeControllerDeps;
     onReconcileServerId?: (oldId: string, newId: string) => void;
+    onServerInfo?: (info: HostLabelServerInfo) => void;
   }) {
     this.host = input.host;
     this.deps = input.deps ?? createDefaultDeps();
     this.onReconcileServerId = input.onReconcileServerId ?? null;
+    this.onServerInfo = input.onServerInfo;
     this.connectionMachineState = {
       tag: "booting",
     };
@@ -1287,6 +1295,19 @@ export class HostRuntimeController {
           client,
         });
       });
+      if (this.onServerInfo) {
+        const unmount = this.unsubscribeClientHandlers;
+        const unobserve = observeHostLabelServerInfo({
+          client,
+          isCurrent: () =>
+            this.isCurrentSwitchRequest(requestVersion) && this.activeClient === client,
+          receive: this.onServerInfo,
+        });
+        this.unsubscribeClientHandlers = () => {
+          unobserve();
+          unmount?.();
+        };
+      }
     } catch (error) {
       await failConnection(error);
     }
@@ -1531,6 +1552,9 @@ export class HostRuntimeStore {
       return;
     }
     this.hostRegistryLoaded = true;
+    for (const controller of this.controllers.values()) {
+      this.fillHostLabel(controller, controller.getClient()?.getLastServerInfoMessage() ?? null);
+    }
     this.emitHostList();
   }
 
@@ -2011,6 +2035,24 @@ export class HostRuntimeStore {
     this.emitHostList();
   }
 
+  private fillHostLabel(controller: HostRuntimeController, info: HostLabelServerInfo | null): void {
+    const snapshot = controller.getSnapshot();
+    if (
+      !this.hostRegistryLoaded ||
+      this.controllers.get(snapshot.serverId) !== controller ||
+      snapshot.connectionStatus !== "online"
+    )
+      return;
+    const next = fillHostLabel({ hosts: this.hosts, serverId: snapshot.serverId, info });
+    if (next === this.hosts) return;
+    // A label-only change must not invoke updateHost and start another probe cycle.
+    this.hosts = next;
+    this.emitHostList();
+    void this.persistHosts().catch((error) =>
+      console.error("[HostRuntime] Failed to persist host label", error),
+    );
+  }
+
   private async persistHosts(hosts = this.hosts): Promise<void> {
     await this.storage.setItem(REGISTRY_STORAGE_KEY, JSON.stringify(hosts));
   }
@@ -2065,6 +2107,7 @@ export class HostRuntimeStore {
         host,
         deps: this.deps,
         onReconcileServerId: (oldId, newId) => this.reconcileServerId(oldId, newId),
+        onServerInfo: (info) => this.fillHostLabel(controller, info),
       });
       this.controllers.set(host.serverId, controller);
       useSessionStore.getState().initializeSession(host.serverId, null);

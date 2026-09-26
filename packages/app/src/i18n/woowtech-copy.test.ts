@@ -89,6 +89,10 @@ describe("woowtech smart's own text", () => {
       const untranslated = [...english].flatMap(([key, text]) => {
         const newSurface = key.startsWith("addProject.") || key.startsWith("hostPicker.");
         if (newSurface && !["zh-TW", "zh-CN"].includes(language)) return [];
+        // Desktop delivery feedback is translated only in Traditional Chinese.
+        const traditionalChineseOnly =
+          key.startsWith("desktopNotifications.") || key.startsWith("agentNotificationTitles.");
+        if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });
       expect({ language, untranslated }).toEqual({ language, untranslated: [] });
@@ -128,6 +132,54 @@ it("keeps fork project-copy keys and placeholders in every locale with English f
         expect(copy.get(key)).toBe(text);
       }
     }
+  }
+});
+
+it("localizes only agent notification titles in Traditional Chinese with English fallback", () => {
+  const titles = ["finished", "permission", "attention"];
+  for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
+    const copy = new Map(strings(woowtechCopyFor(language)));
+    const expected =
+      language === "zh-TW"
+        ? ["工作完成了", "需要你的授權", "需要你的注意"]
+        : ["Agent finished", "Agent needs permission", "Agent needs attention"];
+    expect(titles.map((reason) => copy.get(`agentNotificationTitles.${reason}`))).toEqual(expected);
+  }
+});
+
+it("keeps desktop notification feedback exact with English fallback outside zh-TW", () => {
+  const english = {
+    supported: "Notifications are supported; system permission has not been confirmed.",
+    unknown: "System notification permission could not be checked.",
+    testHint: "Try a notification to check delivery. System permission is not confirmed.",
+    send: "Test notification",
+    successTitle: "Notification displayed",
+    successDescription:
+      "The system reported display, but this does not confirm that you saw a banner.",
+    failedTitle: "Notification failed",
+    unconfirmedTitle: "Unable to confirm notification display",
+    unconfirmed:
+      "Notification display could not be confirmed. Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+    failed:
+      "Notification display failed. Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+  };
+  expect(woowtechCopyFor("zh-TW").desktopNotifications).toEqual({
+    supported: "系統支援通知，但尚未確認系統授權狀態。",
+    unknown: "無法確認系統通知的授權狀態。",
+    testHint: "可傳送測試通知來檢查是否顯示；目前尚未確認系統授權。",
+    send: "傳送測試通知",
+    successTitle: "通知已顯示",
+    successDescription: "系統已回報顯示通知，但不代表你一定看到了通知橫幅。",
+    failedTitle: "通知顯示失敗",
+    unconfirmedTitle: "無法確認通知是否顯示",
+    unconfirmed:
+      "無法確認通知是否顯示。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+    failed: "通知顯示失敗。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+  });
+  for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
+    const copy = woowtechCopyFor(language).desktopNotifications;
+    if (language !== "zh-TW") expect(copy).toEqual(english);
+    for (const text of Object.values(copy)) expect(text.match(/\{\{[^}]*\}\}/g)).toBeNull();
   }
 });
 
