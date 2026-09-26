@@ -138,10 +138,18 @@ export function DesktopNotificationsSection() {
           testID="desktop-notifications-test-success"
         />
       ) : null}
+      {testNotificationState.status === "unconfirmed" ? (
+        <Alert
+          variant="warning"
+          title={t("woowtech.desktopNotifications.unconfirmedTitle")}
+          description={testNotificationState.message}
+          testID="desktop-notifications-test-unconfirmed"
+        />
+      ) : null}
       {testNotificationState.status === "error" ? (
         <Alert
           variant="error"
-          title={t("settings.notifications.sendFailedTitle")}
+          title={t("woowtech.desktopNotifications.failedTitle")}
           description={testNotificationState.message}
           testID="desktop-notifications-test-error"
         />

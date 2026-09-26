@@ -648,8 +648,9 @@ node --test woowtech/*.test.mjs
 #### 桌面通知的回饋
 
 - Electron 的通知支援不代表系統已授權；設定頁顯示尚未確認，仍可按「傳送測試通知」。不拿瀏覽器的授權值冒充原生通知授權。
-- 桌面主程序要等原生 `show` 才回報成功，`failed`、同步錯誤或 5 秒內沒有結果都回報未確認。`show` 也不代表使用者一定看到橫幅。失敗提示引導到「系統設定 → 通知」，並說明未簽章測試版可能無法顯示；這不表示已證明所有 ad-hoc 版本都會失敗。
-- 生命週期放在 `packages/desktop/src/features/woowtech-notification-delivery.ts`；上游接點是 `features/notifications.ts`。成功後保留點擊導頁，關閉、點擊、失敗時才清引用。啟動時的靜音 probe 仍是 best effort，不當成授權證據。
+- 桌面測試通知分三種結果：原生 `show` 顯示「通知已顯示」；`failed` 或同步錯誤顯示「通知顯示失敗」；5 秒內沒有結果顯示「無法確認通知是否顯示」。`show` 不代表使用者一定看到橫幅。後兩者都引導到「系統設定 → 通知」，並說明未簽章測試版可能無法顯示；這不表示已證明所有 ad-hoc 版本都會失敗。
+- 生命週期放在 `packages/desktop/src/features/woowtech-notification-delivery.ts`；上游接點是 `features/notifications.ts`。一般通知逾時只結束等待，不關通知、不清引用；之後點擊仍導頁，關閉、點擊、失敗時才清引用。晚到的 show 不改已回報的未確認結果。只允許靜音註冊 probe 逾時關閉，它仍是 best effort，不當成授權證據。
+- 三態只新增桌面內部 `sendNotificationWithResult` bridge／IPC，接點另有 `preload.ts` 與 App `desktop/host.ts`；沒有修改網路 protocol。一般 `sendOsNotification` 與既有 `sendNotification` IPC 仍回布林，僅 show 為 true。舊 bridge 仍能傳送測試，但舊布林不能證明是否收到 show，畫面一律回報未確認；不以重送來猜測結果。相容接點帶 `COMPAT(notificationDeliveryResult)` 標記。
 - Renderer 接點是 `desktop-permissions.ts`、`use-desktop-permissions.ts`、`desktop-notifications-section.tsx`；測試狀態放 fork helper，文案放 `i18n/woowtech-copy.ts`，繁中以外先沿用英文。合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，再跑同名 fork helper 與 permission 的定向 Vitest。沒有變更手機推播。
 - Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；合併時不能漏掉 `t` 的 callback 依賴。
 - 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。
@@ -971,6 +972,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- F3 追加修正 C-014（2026-09-26，F4 之後）：先紅確認逾時會 close、三態字串被舊布林邏輯當 success，以及缺少三態文案，再修正。生命週期／測試回饋／共用 copy 定向 Vitest 25/25，桌面接點守門 3/3。timeout close、release、late click、late show 清引用、錯誤 settlement、三個 UI 結果、舊布林推定成功、IPC 布林契約、probe 接點、畫面接點、timeout 文案、語言 fallback 共 14 個突變皆 exit 1；還原後 25/25、3/3。未跑 typecheck/build 或 Electron UI，實際 macOS 通知仍待另驗。
 
 - F4 桌面 Agent 通知標題（2026-09-26）：先驗缺少文案 key 與原 sender 仍傳英文的紅燈，再接 renderer reason 翻譯。helper／共用 fork copy 定向 Vitest 11/11、桌面通知守門 3/3；移除接點、移除語言依賴、移除 error 抑制、改 body、讓簡中套繁中五個突變皆 exit 1；還原後 11/11、3/3。format、lint 通過；未驗實際系統橫幅，未改手機推播、protocol 或 daemon。
 

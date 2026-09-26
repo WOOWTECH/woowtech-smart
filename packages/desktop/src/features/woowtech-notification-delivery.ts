@@ -1,3 +1,5 @@
+export type NotificationDeliveryResult = "shown" | "failed" | "unconfirmed";
+
 export interface NotificationDeliveryPort {
   on(event: "show" | "failed" | "click" | "close", listener: () => void): unknown;
   removeListener(event: "show" | "failed" | "click" | "close", listener: () => void): unknown;
@@ -10,6 +12,7 @@ export interface NotificationDeliveryInput {
   onClick: () => void;
   release: () => void;
   schedule?: (callback: () => void, delayMs: number) => () => void;
+  closeOnTimeout?: boolean;
 }
 
 function scheduleTimeout(callback: () => void, delayMs: number): () => void {
@@ -17,7 +20,9 @@ function scheduleTimeout(callback: () => void, delayMs: number): () => void {
   return () => clearTimeout(timer);
 }
 
-export function showNotificationWithDelivery(input: NotificationDeliveryInput): Promise<boolean> {
+export function showNotificationWithDelivery(
+  input: NotificationDeliveryInput,
+): Promise<NotificationDeliveryResult> {
   const { notification, onClick, release, schedule = scheduleTimeout } = input;
   return new Promise((resolve) => {
     let settled = false;
@@ -35,20 +40,19 @@ export function showNotificationWithDelivery(input: NotificationDeliveryInput): 
       release();
     }
 
-    function finish(delivered: boolean): void {
+    function finish(result: NotificationDeliveryResult): void {
       if (settled) return;
       settled = true;
       cancelTimeout();
       notification.removeListener("show", shown);
-      if (!delivered) cleanup();
-      resolve(delivered);
+      resolve(result);
     }
 
     function shown(): void {
-      finish(true);
+      finish("shown");
     }
     function failed(): void {
-      finish(false);
+      finish("failed");
       cleanup();
     }
     function clicked(): void {
@@ -60,7 +64,7 @@ export function showNotificationWithDelivery(input: NotificationDeliveryInput): 
     }
     function closed(): void {
       // A close without show is not delivery evidence.
-      finish(false);
+      finish("unconfirmed");
       cleanup();
     }
 
@@ -69,7 +73,10 @@ export function showNotificationWithDelivery(input: NotificationDeliveryInput): 
     notification.on("click", clicked);
     notification.on("close", closed);
     cancelTimeout = schedule(() => {
-      finish(false);
+      // Keep ordinary notifications clickable even without timely show evidence.
+      finish("unconfirmed");
+      if (!input.closeOnTimeout) return;
+      cleanup();
       try {
         notification.close();
       } catch {

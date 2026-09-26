@@ -7,8 +7,12 @@ import {
   type DesktopPermissionKind,
   type DesktopPermissionSnapshot,
 } from "@/desktop/permissions/desktop-permissions";
-import { sendOsNotification } from "@/utils/os-notifications";
-import { runNotificationTest, type TestNotificationState } from "./woowtech-notification-test";
+import { getDesktopHost } from "@/desktop/host";
+import {
+  runNotificationTest,
+  sendDesktopTestNotification,
+  type TestNotificationState,
+} from "./woowtech-notification-test";
 
 export interface UseDesktopPermissionsReturn {
   isDesktopApp: boolean;
@@ -123,11 +127,15 @@ export function useDesktopPermissions(): UseDesktopPermissionsReturn {
     try {
       await runNotificationTest({
         send: () =>
-          sendOsNotification({
-            title: t("desktop.permissions.testNotification.title"),
-            body: t("desktop.permissions.testNotification.body"),
+          sendDesktopTestNotification({
+            bridge: getDesktopHost()?.notification,
+            payload: {
+              title: t("desktop.permissions.testNotification.title"),
+              body: t("desktop.permissions.testNotification.body"),
+            },
           }),
         failureMessage: t("woowtech.desktopNotifications.failed"),
+        unconfirmedMessage: t("woowtech.desktopNotifications.unconfirmed"),
         onState: (state) => {
           if (isMountedRef.current) setTestNotificationState(state);
         },

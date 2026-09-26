@@ -622,11 +622,15 @@ const DESKTOP_NOTIFICATIONS_ENGLISH = {
   unknown: "System notification permission could not be checked.",
   testHint: "Try a notification to check delivery. System permission is not confirmed.",
   send: "Test notification",
-  successTitle: "Notification display reported",
+  successTitle: "Notification displayed",
   successDescription:
     "The system reported display, but this does not confirm that you saw a banner.",
-  failed:
+  failedTitle: "Notification failed",
+  unconfirmedTitle: "Unable to confirm notification display",
+  unconfirmed:
     "Notification display could not be confirmed. Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+  failed:
+    "Notification display failed. Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
 };
 
 const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
@@ -634,9 +638,13 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
   unknown: "無法確認系統通知的授權狀態。",
   testHint: "可傳送測試通知來檢查是否顯示；目前尚未確認系統授權。",
   send: "傳送測試通知",
-  successTitle: "系統已回報通知顯示",
+  successTitle: "通知已顯示",
   successDescription: "系統已回報顯示通知，但不代表你一定看到了通知橫幅。",
-  failed: "無法確認通知是否顯示。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+  failedTitle: "通知顯示失敗",
+  unconfirmedTitle: "無法確認通知是否顯示",
+  unconfirmed:
+    "無法確認通知是否顯示。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+  failed: "通知顯示失敗。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
 };
 
 const AGENT_NOTIFICATION_TITLES_ENGLISH = {

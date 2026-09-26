@@ -2,7 +2,10 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { app, BrowserWindow, Notification, ipcMain, nativeImage } from "electron";
 import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
-import { showNotificationWithDelivery } from "./woowtech-notification-delivery.js";
+import {
+  showNotificationWithDelivery,
+  type NotificationDeliveryResult,
+} from "./woowtech-notification-delivery.js";
 
 interface NotificationInput {
   title?: unknown;
@@ -73,11 +76,12 @@ export function ensureNotificationCenterRegistration(): void {
     const probe = new Notification({ title: app.name, silent: true });
     void showNotificationWithDelivery({
       notification: probe,
+      closeOnTimeout: true,
       onClick: () => {},
       release: () => {},
     })
-      .then((shown) => {
-        if (shown) probe.close();
+      .then((result) => {
+        if (result === "shown") probe.close();
         else console.warn("[Notifications] Registration probe display was not confirmed");
         return undefined;
       })
@@ -94,14 +98,17 @@ export function registerNotificationHandlers(): void {
     return Notification.isSupported();
   });
 
-  ipcMain.handle("paseo:notification:send", async (event, rawInput?: NotificationInput) => {
+  async function sendWithResult(
+    event: Electron.IpcMainInvokeEvent,
+    rawInput?: NotificationInput,
+  ): Promise<NotificationDeliveryResult> {
     if (!Notification.isSupported()) {
-      return false;
+      return "failed";
     }
 
     const title = toTrimmedString(rawInput?.title);
     if (!title) {
-      return false;
+      return "failed";
     }
 
     const body = toTrimmedString(rawInput?.body) ?? undefined;
@@ -130,5 +137,10 @@ export function registerNotificationHandlers(): void {
         activeNotifications.delete(notification);
       },
     });
+  }
+
+  ipcMain.handle("paseo:notification:send", async (event, rawInput?: NotificationInput) => {
+    return (await sendWithResult(event, rawInput)) === "shown";
   });
+  ipcMain.handle("woowtech:notification:sendWithResult", sendWithResult);
 }

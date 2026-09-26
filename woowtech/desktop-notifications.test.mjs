@@ -14,7 +14,22 @@ test("desktop IPC waits for native delivery and retains click routing", () => {
   assert.match(main, /release: \(\) => \{\s*activeNotifications.delete\(notification\)/);
   assert.match(main, /win.webContents.send\("paseo:event:notification-click", payload\)/);
   assert.doesNotMatch(main, /notification.show\(\);\s*return true/);
-  assert.match(main, /notification: probe/);
+  assert.match(main, /notification: probe,\s*closeOnTimeout: true/);
+  const regularSend = main.slice(main.indexOf("async function sendWithResult"));
+  assert.doesNotMatch(regularSend, /closeOnTimeout/);
+  assert.match(main, /return \(await sendWithResult\(event, rawInput\)\) === "shown"/);
+  assert.match(main, /ipcMain.handle\("woowtech:notification:sendWithResult", sendWithResult\)/);
+  const preload = source("packages/desktop/src/preload.ts");
+  assert.match(
+    preload,
+    /sendNotificationWithResult:[\s\S]*?ipcRenderer.invoke\("woowtech:notification:sendWithResult", payload\)/,
+  );
+  assert.match(
+    preload,
+    /sendNotification:[\s\S]*?ipcRenderer.invoke\("paseo:notification:send", payload\)/,
+  );
+  const osNotifications = source("packages/app/src/utils/os-notifications.ts");
+  assert.match(osNotifications, /return await desktopNotificationSender\(payload\)/);
 });
 
 test("renderer uses unknown permission, test policy and visible translated result feedback", () => {
@@ -26,13 +41,31 @@ test("renderer uses unknown permission, test policy and visible translated resul
     section,
     /disabled=\{!notificationsTestable \|\| isPermissionBusy \|\| isSendingTestNotification\}/,
   );
-  for (const key of ["testHint", "send", "successTitle", "successDescription"]) {
+  for (const key of [
+    "testHint",
+    "send",
+    "successTitle",
+    "successDescription",
+    "failedTitle",
+    "unconfirmedTitle",
+  ]) {
     assert.ok(section.includes(`t("woowtech.desktopNotifications.${key}")`), key);
   }
   assert.match(section, /description=\{testNotificationState.message\}/);
+  assert.match(
+    section,
+    /testNotificationState.status === "unconfirmed"[\s\S]*?variant="warning"[\s\S]*?testID="desktop-notifications-test-unconfirmed"/,
+  );
+  assert.match(section, /testNotificationState.status === "error"[\s\S]*?variant="error"/);
+  assert.match(section, /testNotificationState.status === "success"[\s\S]*?variant="success"/);
   const hook = source("packages/app/src/desktop/permissions/use-desktop-permissions.ts");
   assert.match(hook, /await runNotificationTest\(\{/);
   assert.match(hook, /failureMessage: t\("woowtech.desktopNotifications.failed"\)/);
+  assert.match(hook, /unconfirmedMessage: t\("woowtech.desktopNotifications.unconfirmed"\)/);
+  assert.match(
+    hook,
+    /sendDesktopTestNotification\(\{\s*bridge: getDesktopHost\(\)\?\.notification,/,
+  );
   assert.match(hook, /if \(!isDesktopApp \|\| testNotificationPendingRef.current\)/);
   assert.match(hook, /if \(isMountedRef.current\) setTestNotificationState\(state\)/);
 });
