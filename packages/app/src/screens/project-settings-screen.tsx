@@ -760,7 +760,7 @@ function ProjectConfigForm({
 
       <SettingsGroup
         title={t("settings.project.metadata.title")}
-        info={t("settings.project.metadata.info")}
+        info={t("woowtech.metadataGeneration.projectInfo")}
         testID="metadata-group"
       >
         {METADATA_PROMPT_KEYS.map((key, index) => (

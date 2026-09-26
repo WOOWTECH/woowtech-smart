@@ -187,6 +187,8 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
 
 it("explains inactive metadata preferences in zh-TW and English without changing old translations", () => {
   const english = {
+    projectInfo:
+      "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
     description:
       "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
     automaticHint: "Automatic model selection is inactive while generation is disabled.",
@@ -194,11 +196,13 @@ it("explains inactive metadata preferences in zh-TW and English without changing
     fallbackHint: "This preference is retained; no model is called for metadata generation.",
   };
   const traditionalChinese = {
+    projectInfo:
+      "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。",
     description:
-      "woowtech smart 目前不會自動產生工作區標題、分支名稱、commit 訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
+      "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
     automaticHint: "自動產生已停用，目前不會自動選擇模型。",
     preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
-    fallbackHint: "此偏好會保留；不會呼叫任何模型來產生中繼資料。",
+    fallbackHint: "此偏好會保留；不會呼叫任何模型來產生後設資料。",
   };
   for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
     const copy = new Map(strings(woowtechCopyFor(language)));
@@ -212,7 +216,14 @@ it("explains inactive metadata preferences in zh-TW and English without changing
     join(__dirname, "../screens/settings/metadata-generation-page.tsx"),
     "utf8",
   );
+  const projectPage = readFileSync(
+    join(__dirname, "../screens/project-settings-screen.tsx"),
+    "utf8",
+  );
+  expect(projectPage).toContain('info={t("woowtech.metadataGeneration.projectInfo")}');
+  expect(projectPage).not.toContain('t("settings.project.metadata.info")');
   for (const key of Object.keys(english)) {
+    if (key === "projectInfo") continue;
     expect(page).toContain(`t("woowtech.metadataGeneration.${key}")`);
     expect(page).not.toContain(`t("settings.metadataGeneration.${key}")`);
   }

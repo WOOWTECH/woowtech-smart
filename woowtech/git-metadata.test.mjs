@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import ts from "typescript";
 import { test } from "node:test";
 import { importSource } from "./source-modules.mjs";
 
@@ -43,4 +44,52 @@ test("production checkout wiring uses the guarded generator without enabling a t
   assert.match(wiring, /gitMetadataGenerator: createGitMetadataGenerator\(\{/);
   assert.match(wiring, /generation: createAgentStructuredTextGeneration\(\{/);
   assert.doesNotMatch(wiring, /isGenerationEnabled|buildMetadataPrompt/);
+});
+
+function policyOverrides(file, text) {
+  if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file)) return [];
+  const tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const violations = [];
+  const policyNames = new Set([
+    "isGitMetadataGenerationEnabled",
+    "isWorkspaceAutoNameEnabled",
+    "isGenerationEnabled",
+    "isAutoNameEnabled",
+  ]);
+  function visit(node) {
+    if (
+      (ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node)) &&
+      policyNames.has(node.name.getText(tree).replace(/["']/g, ""))
+    ) {
+      violations.push(file);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  return violations;
+}
+
+function productionPolicyOverrides(
+  directory = new URL("../packages/server/src/", import.meta.url),
+  prefix = "",
+) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const file = `${prefix}${entry.name}`;
+    const url = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
+    if (entry.isDirectory()) return productionPolicyOverrides(url, `${file}/`);
+    return /\.[cm]?[jt]sx?$/.test(file) ? policyOverrides(file, readFileSync(url, "utf8")) : [];
+  });
+}
+
+test("metadata policy overrides are confined to tests, including the upstream Session mock", () => {
+  const override =
+    'vi.mock("./woowtech-metadata-policy.js", () => ({ isGitMetadataGenerationEnabled: () => true }));';
+  assert.deepEqual(policyOverrides("server/session.test.ts", override), []);
+  assert.deepEqual(policyOverrides("server/unexpected.ts", override), ["server/unexpected.ts"]);
+  assert.deepEqual(
+    policyOverrides("server/unexpected.ts", "factory({ isGenerationEnabled: () => true });"),
+    ["server/unexpected.ts"],
+  );
+  assert.deepEqual(productionPolicyOverrides(), []);
+  assert.match(source("server/session.test.ts"), /isGitMetadataGenerationEnabled: \(\) => true/);
 });
