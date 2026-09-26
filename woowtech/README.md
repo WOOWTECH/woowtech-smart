@@ -646,6 +646,21 @@ node --test woowtech/*.test.mjs
 - 留在電腦上的通知照舊有內容：桌面版的系統通知和 App 裡的提醒，用的是 daemon 經自己的連線（直接連線，或端對端加密的 relay）送給 App 的 attention 訊息，裡面仍有回覆預覽和 terminal 名稱。手機 App 不顯示本機通知，只收推播。
 - 中繼和 push.woowtech.io 在 2026-09-25 部署：中繼 `smart-mode` 的 `dff78a1`，Cloud Run `smart-push`（`woowtech-smart`、asia-east1，revision `smart-push-00001-8v9`），前面是 Worker `smart-push-proxy`（自訂網域 push.woowtech.io，workers.dev 和 Workers Logs 都關掉）。還沒做的是實機驗收，見「接下來」。
 
+#### T1：通知指向尚未載入的工作區
+
+- C-020 的 Android 既有取證（2026-09-26，非本次修法驗收）：三次卡住時 host、workspace、route key 都正確，但 store 沒有 descriptor、沒有 tab，full demand 為 0、agent route demand 為空，daemon 沒收到 `fetch_workspaces`。只開側欄、不點列就取得 descriptor，同 key 在 8–230 ms 內變 ready，接著消費 agent intent。重裝後首次尚未 hydrated 的「Loading workspace」也由只開側欄解除。這排除了 epoch 去重、#5079、key 和 memo 的先前猜測。
+- 根因是未知工作區等 descriptor 才建 tab，沒有 tab 就沒有 agent demand；原 `prepareWorkspaceRoute` 只查 cache。`screens/workspace/use-missing-workspace-directory-demand.ts` 補上暫時的目錄 owner：聚焦且缺 descriptor 時持有既有 `acquireDirectoryDemand`，不等首次 hydration，也不因離線提早放棄；descriptor 到達、失焦或卸載時釋放。已知工作區、cache 準備與原 agent intent／subscriber 交接不改，不加 probe、路由或 protocol。
+- 維護接點只有 `workspace-screen.tsx` 的 import 和 cache prepare effect 旁的一次 hook 呼叫。合併上游時保留 hook 的 host／workspace／focus／descriptor-presence 四個依賴與 effect cleanup 回傳。純 acquisition seam 的測試使用真實 HostRuntimeStore、DirectorySync、DaemonClient 和 typed memory ports，斷言序列化 RPC、訂閱釋放、首次 hydration、新 epoch 與 agent target 一致；`woowtech/workspace-directory-demand.test.mjs` 只守原始碼接線，不能當成 hook runtime 或 GUI 證據。
+- 本次紅綠：兩個現況見證先綠；cache-only 基線對「owner 應發 request」斷言得到 0 而非 1，補 demand 後 14/14 綠、接線守門 2/2 綠。八個定向突變都 exit 1（cache-only、少 focus、少 missing、丟 cleanup、等 hydration、拔 hook、漏 descriptor dependency、effect 不回 cleanup），還原後再驗。測試 adapter 的 metadata／wire 欄位錯誤與測試期待值修正不算修法紅燈。修後 Android 三情境仍由 Claude 排程；沒有新增裝置驗收結論。
+- recovery inspect 可能比目錄刷新早回，短暫出現 unavailable；本切片不改。若另排，需由 runtime 提供目前 epoch 的目錄刷新完成狀態，再讓 recovery inspect 等待，另 commit 並測離線、失敗與重連，不能用全域 hydrated 代替本 epoch 完成。
+
+定向檢查（依賴與 dist 已備妥時，不需 build）：
+
+```bash
+node --test woowtech/workspace-directory-demand.test.mjs
+(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)
+```
+
 #### 桌面通知的回饋
 
 - Electron 的通知支援不代表系統已授權；設定頁顯示尚未確認，仍可按「傳送測試通知」。不拿瀏覽器的授權值冒充原生通知授權。

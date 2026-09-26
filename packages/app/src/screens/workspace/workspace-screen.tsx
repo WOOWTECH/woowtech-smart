@@ -1,4 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useMissingWorkspaceDirectoryDemand } from "./use-missing-workspace-directory-demand";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { getOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
 import {
@@ -1555,6 +1556,12 @@ function WorkspaceScreenContent({
     [workspaceId],
   );
   const workspaceDescriptor = useWorkspace(normalizedServerId, normalizedWorkspaceId);
+  useMissingWorkspaceDirectoryDemand({
+    serverId: normalizedServerId,
+    workspaceId: normalizedWorkspaceId,
+    isRouteFocused,
+    hasWorkspaceDescriptor: workspaceDescriptor !== null,
+  });
   useEffect(() => {
     if (!normalizedServerId || !normalizedWorkspaceId || workspaceDescriptor) return;
     void getHostRuntimeStore()
