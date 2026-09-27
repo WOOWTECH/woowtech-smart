@@ -226,7 +226,8 @@ export const zhTW: TranslationResources = {
     states: {
       notFound: "未找到 Agent",
       failedToLoad: "載入 Agent 失敗",
-      reconnecting: "正在重連",
+      reconnecting: "正在重新連線主機",
+      updating: "正在更新訊息",
       timelineSyncFailed: "無法重新整理代理歷史記錄。",
       timelineSyncRetrying: "正在重試…",
       archivingTitle: "正在封存 Agent...",
