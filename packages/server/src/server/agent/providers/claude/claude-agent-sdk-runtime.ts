@@ -8,6 +8,9 @@ import type * as ClaudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
 
 import { execCommand } from "../../../../utils/spawn.js";
 import { resolvePaseoHome } from "../../../paseo-home.js";
+import { claudeAgentSdkRegistry, fetchFromRegistry } from "./claude-agent-sdk-download.js";
+
+export { ClaudeAgentSdkDownloadError } from "./claude-agent-sdk-download.js";
 
 export type ClaudeAgentSdkModule = typeof ClaudeAgentSdk;
 
@@ -21,16 +24,6 @@ export const CLAUDE_AGENT_SDK_VERSION = "0.3.246";
  */
 export const CLAUDE_AGENT_SDK_INTEGRITY =
   "sha512-FtR0HoHHNqeqJWjZN8qLUAzZVFUI9ztXYNPPwv98Ecmv9qq2QTauI8IzkY26CC0mleWAqb9RQEW2C0OtiUliug==";
-
-export class ClaudeAgentSdkDownloadError extends Error {
-  constructor(
-    public readonly url: string,
-    public readonly status: number,
-  ) {
-    super(`Claude Agent SDK download from ${url} failed with HTTP ${status}`);
-    this.name = "ClaudeAgentSdkDownloadError";
-  }
-}
 
 export class ClaudeAgentSdkIntegrityError extends Error {
   constructor(
@@ -52,6 +45,8 @@ export interface LoadClaudeAgentSdkOptions {
   /** Fetches the SDK tarball from the npm registry. */
   fetchTarball: (url: string) => Promise<Uint8Array>;
   version?: string;
+  /** Registry base URL, including an optional repository subpath. */
+  registry?: string;
   /** Subresource-integrity string of the tarball, e.g. `sha512-…`. */
   integrity?: string;
 }
@@ -71,7 +66,7 @@ export function peekClaudeAgentSdk(): ClaudeAgentSdkModule | null {
  * ("All rights reserved"), so the daemon fetches the pinned version from the npm
  * registry on first use, verifies it, and keeps it under $PASEO_HOME. Development
  * checkouts still resolve it from node_modules (it is a devDependency). A failed
- * attempt is not cached, so the next Claude session retries.
+ * attempt is not cached, so the next Claude message retries.
  */
 export function ensureClaudeAgentSdk(): Promise<ClaudeAgentSdkModule> {
   if (loadedSdk) {
@@ -81,6 +76,7 @@ export function ensureClaudeAgentSdk(): Promise<ClaudeAgentSdkModule> {
     runtimeDir: path.join(resolvePaseoHome(), "runtime-deps"),
     importLocal: () => import("@anthropic-ai/claude-agent-sdk"),
     fetchTarball: fetchFromRegistry,
+    registry: claudeAgentSdkRegistry(process.env),
   }).then(
     (sdk) => {
       loadedSdk = sdk;
@@ -92,14 +88,6 @@ export function ensureClaudeAgentSdk(): Promise<ClaudeAgentSdkModule> {
     },
   );
   return loadingSdk;
-}
-
-async function fetchFromRegistry(url: string): Promise<Uint8Array> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
-  if (!response.ok) {
-    throw new ClaudeAgentSdkDownloadError(url, response.status);
-  }
-  return new Uint8Array(await response.arrayBuffer());
 }
 
 export async function loadClaudeAgentSdk(
@@ -119,14 +107,32 @@ export async function loadClaudeAgentSdk(
     return importInstalledSdk(installDir);
   }
 
-  const bytes = await options.fetchTarball(tarballUrl(version));
+  const bytes = await options.fetchTarball(tarballUrl(version, options.registry));
   verifyIntegrity(bytes, options.integrity ?? CLAUDE_AGENT_SDK_INTEGRITY);
   await extractTarball(bytes, installDir);
   return importInstalledSdk(installDir);
 }
 
-function tarballUrl(version: string): string {
-  return `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-${version}.tgz`;
+function tarballUrl(version: string, registry = "https://registry.npmjs.org/"): string {
+  let base: URL;
+  try {
+    base = new URL(registry);
+  } catch {
+    throw new Error("Claude Agent SDK registry URL is invalid");
+  }
+  if (
+    !["http:", "https:"].includes(base.protocol) ||
+    base.username ||
+    base.password ||
+    base.href.includes("?") ||
+    base.href.includes("#")
+  ) {
+    throw new Error(
+      "Claude Agent SDK registry must be HTTP(S) without credentials, query or fragment",
+    );
+  }
+  base.pathname = `${base.pathname.replace(/\/+$/, "")}/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-${version}.tgz`;
+  return base.href;
 }
 
 function isModuleNotFound(error: unknown): boolean {
