@@ -57,6 +57,9 @@ vi.mock("react-native-reanimated", () => ({
       return this;
     }
   },
+  // The toast host the page imports builds its enter and exit transitions at module scope.
+  FadeIn: { duration: () => undefined },
+  FadeOut: { duration: () => undefined },
   Easing: { ease: "ease", inOut: (value: unknown) => value },
   interpolateColor: (value: number, _input: number[], output: string[]) =>
     value >= 1 ? output[1] : output[0],
