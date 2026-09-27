@@ -964,6 +964,8 @@ node --test woowtech/*.test.mjs
 
 ## 上游同步紀錄（2026-09-27，挑選式）
 
+### 第一批：上游 `836f1a9..d6861f81e`
+
 - 範圍：上游 `836f1a9`（v0.8.0）到本機 `upstream-main` 的 `d6861f81e`（上游 0.9.1），共 79 個 commit。沒有 fetch，`d6861f81e` 不一定是 GitHub 上最新的上游。
 - 分支 `woowtech/upstream-picks-0927`，從 `woowtech/integration-0926` 的 `ce3dffa70` 開出，含 T1 修正。沒有 push。
 - owner 的原則：只拿產品需要的。我們有出貨的功能，拿它的錯誤、安全、資料完整性、穩定性和效能修正；新功能、我們拿掉的功能（例如本地語音）、網站、Windows、發版、版本號和 lock 簽章／Nix hash 都不拿。
@@ -1080,6 +1082,141 @@ node --test woowtech/*.test.mjs
   - 上傳中的附件（`46529146a`）。
 - 延後：`5d70ab2ab` 裡反轉清單在 Android 上的文字選取修正。
 - 這個分支沒有 push。`woowtech/integration-0926` 已經前進到 `30207e6a7`，合回去時再 rebase 或 merge，之後重跑守門和 T1 測試。
+
+### 第二批：上游 `d6861f81e..d7b7016cc`
+
+- 範圍：本機 `upstream-main` 的 `d6861f81e`（第一批的終點）到 9/27 抓的 `upstream/main` `d7b7016cc`，共 67 個 commit，含上游 0.9.2（9/24）。固定用 `d7b7016cc`，不用會移動的 ref，之後沒有再 fetch。
+- 接在第一批的 `8010f71b1` 後面，同一條分支。原則和做法照第一批：照上游的時間順序 `cherry-pick -x`，fork 的調整各自一個 commit。
+- 挑選清單標了 38 個「拿」、16 個「條件式」、11 個「不拿」、2 個「延後」。
+- 結果：拿 53 個（38 個原本就要拿、15 個條件式），不拿 12 個（11 個原本就不拿，加上條件式的 `829cc5e17`），延後 2 個。
+
+拿進來的：
+
+| 上游 commit                  | 內容                                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `9a3f3a0dc`（#5272，條件式） | 多鍵快捷鍵的第二鍵按著修飾鍵時也能完成（第一批拿了 `d6861f81e`）                                            |
+| `34c9fd03c`（#5273）         | Codex 的 GPT-6 Sol、GPT-6 Luna 顯示 Fast                                                                    |
+| `ba4595d4e`（#5274，條件式） | Cursor 在沒有 Fast 版本的模型上也能啟動 Agent                                                               |
+| `faee1cd95`（#5277）         | 重開機後舊 PID 被別的程序拿走時 daemon 照樣啟動：lock 的時間早於這次開機就當成棄置，也不會對那個 PID 發訊號 |
+| `c4771ca46`（#5285）         | Claude 對話可以回溯到沒有回應的回合之前                                                                     |
+| `897a0abb1`（#5286）         | Agent 重新整理時 timeline 只留一份                                                                          |
+| `ec43e9067`（#5287，條件式） | 改綁的窗格焦點快捷鍵在打字時也能用                                                                          |
+| `89073d4c5`（#5289）         | Claude 回溯的錨點不落在子 Agent 的訊息上                                                                    |
+| `8768500fc`（#5290）         | 副本快取的儲存拒絕寫入時，讀取不再空轉                                                                      |
+| `9978988e3`                  | 對話關閉後 daemon 的 heap 不再持續增長                                                                      |
+| `c3e1e084a`                  | 晚出現的忽略目錄會更新 Git 排除規則，Linux 和原生監看的分類工作有上限（CI 的部分沒拿，見下面）              |
+| `222d45a2f`（#5298）         | 外掛 provider 的請求失敗不讓 daemon 當掉                                                                    |
+| `2c7b38bc7`（#5296）         | OpenCode Agent 照給定的權限規則執行                                                                         |
+| `48384cafd`（#5249）         | 新分支不設 upstream，第一次 push 不會推到預設分支                                                           |
+| `ae42b0afb`（#3258）         | OMP 送出自訂訊息後等終止事件                                                                                |
+| `e998e0a08`（#5170）         | 監看不到的 repo 不再讓 daemon 吃滿一顆 CPU                                                                  |
+| `fbe5005aa`（#5224，條件式） | 自訂快捷鍵可以用 Backspace                                                                                  |
+| `d615d3d42`（#5190）         | 新增專案的目錄建議掃描變便宜，搜尋不再逾時                                                                  |
+| `b2bb512b3`（#5231）         | 外掛重新載入時子程序不會當掉                                                                                |
+| `c976e2e5a`（#5303）         | 測試：等 repo 觀察完成再斷言 ref 更新                                                                       |
+| `f4efdbded`（#5301）         | schedules 資料夾有不是排程的檔案時 daemon 照樣啟動，那個檔案只記錄一次                                      |
+| `7fa78244f`（#5305）         | CLI 的 `permit ls`、`allow`、`deny` 顯示完整的權限請求 ID                                                   |
+| `1bf531229`（#5306）         | 留下空的 `paseo.pid` 時 daemon 照樣啟動                                                                     |
+| `e6085c1e9`（#5310，條件式） | CLI 認證失敗時提示設定 `PASEO_PASSWORD`，不再叫人啟動 daemon                                                |
+| `c356394bf`（#5315）         | 有 UTF-8 BOM 的 `config.json` 也讀得進來                                                                    |
+| `fbc83613c`（#5317）         | 對話上傳保留原始檔名，只換掉各平台檔名不能用的字元，長度限 255 bytes                                        |
+| `8e858f0e3`（#5320）         | 多選問題的勾選項和「其他」答案一起送出                                                                      |
+| `6016ed705`（#5322）         | Agent 建立本機工作區時拒絕不存在或不是資料夾的路徑                                                          |
+| `bbf8cce3f`（#5326）         | 列出 Claude `settings.json` 對應的 Fable 模型                                                               |
+| `27d6a7185`（#5332）         | 背景啟動在開 log 之前就失敗時說明原因，也寫進 `daemon.log`                                                  |
+| `e07da55f8`（#5335，條件式） | 有密碼的桌面版 daemon 也顯示「在編輯器開啟」：`daemon status` 不用密碼也回報 server id                      |
+| `49f9cec6b`（#5337）         | CLI 解析失敗時指名 `config.json`                                                                            |
+| `e3c853df5`（條件式）        | Android 商店建置略過 lint，避免記憶體不足                                                                   |
+| `db4fd3340`（#5338）         | 舊的 OpenCode server 結束後，Agent 重連新的 server                                                          |
+| `28507224d`（#5341）         | 上週同一個星期幾的訊息顯示完整日期                                                                          |
+| `84304b553`（#5343）         | 沒指定模型的 Pi Agent 用 Pi 設定的預設模型                                                                  |
+| `5c9f767d5`（#5347，條件式） | `send_agent_prompt` 等超過 30 秒時，結果改用完成通知告訴呼叫者                                              |
+| `bf4dc22c2`（#5358，條件式） | `daemon set-password` 的輸入是管線時，說明需要終端機                                                        |
+| `315803688`（#5372，條件式） | provider 檢查超過 1.5 秒的 daemon 也能從設定頁更新和重啟                                                    |
+| `a048094da`（#5374，條件式） | 外掛主題太多時，主題清單可以捲動                                                                            |
+| `90d978ab6`（#3628）         | OMP 保留有說明的選項                                                                                        |
+| `43a2a7969`（#5383）         | Pi 回溯過一次後，仍能回溯到指定的訊息                                                                       |
+| `dc9799f6f`（#5388，條件式） | 終端機的 OSC 8 連結和一般網址一樣開                                                                         |
+| `04c3e003f`（#5404）         | 網頁版模型選擇列不再有巢狀按鈕                                                                              |
+| `8cd989529`（#5407，條件式） | 提示還在執行的子 Agent 時，呼叫者只收到一次通知                                                             |
+| `aa3ffaeb6`（#5415，條件式） | checkout 切換分支後，/ 選單的專案技能重新整理                                                               |
+| `26f227bed`（#5432）         | daemon 重啟後 Pi 仍能回溯                                                                                   |
+| `a272a22d7`（#5434）         | 隱藏 OpenCode 標為合成的使用者訊息                                                                          |
+| `76a9781ba`（#5437）         | 從 provider 自己的設定目錄（`CLAUDE_CONFIG_DIR`）讀 Claude 歷史                                             |
+| `3dc17b7f3`（#5439）         | ACP Agent 起不來時 daemon 繼續運作                                                                          |
+| `cb9654a65`（#5445）         | `daemon.log` 寫不進去時 daemon 繼續運作，之後再重試                                                         |
+| `d2e2154a8`（#5394）         | 目錄重新整理時保留已還原的工作區（directory-sync，T1 的修正保留）                                           |
+| `fffd76e8f`（#5446，條件式） | 「匯入工作階段」列出自訂 Codex provider 的對話                                                              |
+
+條件式的都先確認過功能我們有、也不需要不拿的 commit：多鍵快捷鍵（第一批拿了 `d6861f81e`）、自訂快捷鍵、Cursor provider、daemon 密碼（`daemon set-password`）、Android 的 EAS 設定、`send_agent_prompt`、設定頁的更新和重啟、外掛主題、終端機連結、/ 選單的專案技能、自訂 Codex provider。
+
+不拿的，依原因：
+
+- 新功能：
+  - `829cc5e17`（#5206，條件式）：providerOptions 新增 `extraArgs`，把任意 Claude Code CLI 旗標（例如 `--chrome`）原樣交給 SDK。這是新能力，不是我們出貨功能的修正；後面拿的 commit 都沒用到它，`d7b7016cc` 上 Claude 的 `extraArgs` 只出現在它自己改的 4 個檔。沒拿它，`providerOptions.extraArgs` 會被 strict 的 `ClaudeProviderOptionsSchema` 拒絕，錯誤指出這個路徑。
+  - `e68553f75`（#5392，從 agent 裡在別台 daemon 跑 agent）、`513f2a9ea`（#5411，一般 ACP agent 的 / 選單）、`c081e0350`（#5309，Pi 擴充的轉接，48 檔、5773 行）。
+- 工作區自動命名（第 20 節維持關閉）：`067937bac`（#5302，Hub 替它執行時建立的工作區命名）。
+- 本地語音（第 2 節已拿掉）：`05bfffad4`（#5281）。
+- 外觀：`d7b7016cc`（#5459，設定頁的導覽和控制項改版，36 檔）。
+- 網站：`373da7069`（#5297）。
+- 發版與版本號：`c67b7158b`（0.9.2）；更新紀錄：`91dc92733`。
+- lock 簽章／Nix hash：`ea7a74185`、`e2de6df2e`。
+
+延後，要 owner 決定：
+
+- `c906c2f4a`（#5198）：OpenCode v2，並自動選版本。45 檔、5199 行。
+- `e1c769c01`（#5393）：有密碼的 daemon 在本機和遠端連線都能用。77 檔、2800 行，動到連線和 relay（第 11 節）。
+
+衝突與調整：
+
+- `c3e1e084a`：沒拿 `.github/workflows/ci.yml` 新增的 macOS server 測試 job，和 `scripts/ci-workflow.test.mjs` 對應的一行（第 18 節：`.github/` 不動，CI 只跑 Ubuntu）。其他照上游，commit 訊息有寫。上游用這個 job 在 macOS 上測原生監看，所以這次在這台 Mac 跑了 file-observer 和 Git 觀察的測試（見下面）。
+- `3dc17b7f3`：上游把 `acp-agent.ts` 的 ACP 初始化併成一個 helper，搬動了寫著 `clientInfo` 的那兩行；兩處都留我們的 `woowtech smart`（第 17 節）。53 個 pick 逐一跟上游比對過增刪的行，除了這裡和上面 `c3e1e084a` 少拿的 CI 設定，其他都跟上游一字不差。
+- `bf4dc22c2`：新的 `PASSWORD_TTY_REQUIRED` 錯誤寫死 `paseo daemon set-password`。`set-password.ts` 在守門的 `printsHints` 清單裡，改用 `CLI_COMMAND`（fork 的 `20c50018f`，1 行）。說明裡的 `PASEO_PASSWORD` 照第 12 節不改。
+- fork 的 `f5ae3f039`：`host-page-translations.test.tsx` 的 reanimated mock 補上 `FadeIn`、`FadeOut`，頁面程式沒改。第一批的 `425157595`（#4925）讓 `toast-host.tsx` 在模組載入時就建立轉場，設定頁經過 `toast-context` 載入它。佐證：把 `8010f71b1` 版的這個測試放成暫存檔在 HEAD 跑，整個檔載入失敗、3 個都沒跑，錯誤是 mock 沒有 `FadeIn`，位置 `toast-host.tsx:56`；`host-page.tsx` 在 `8010f71b1..HEAD` 只改了 1.5 秒逾時，所以 `8010f71b1` 一樣失敗。
+- `e6085c1e9`（條件式）：新的提示只提 `PASEO_PASSWORD`，沒有指令名和產品名。同一個函式原本的「Start with: paseo daemon start …」照第 12 節由 `renderError` 換成 `woowtech-smart`。
+- `e3c853df5`（條件式）：`eas.json` 的 `production` 改成跟我們的 `preview`、`production-apk` 一樣略過 lint（第 1 節）。
+- `dc9799f6f`（條件式）：OSC 8 連結改交給 `onOpenExternalUrl`，也就是我們的 `openExternalUrl`：只放行 http、https 和 mailto，桌面版交給 Electron 的開啟器（第 10 節）。之前 xterm 會自己問一次再 `window.open()`。
+- `315803688`（條件式）：只拿掉設定頁讀 daemon 狀態的 1.5 秒逾時。npm 自我更新仍停用（第 4 節）。
+- 繁中：這批沒有新的介面文字或翻譯 key，不用重新產生 zh-TW。
+- lock：`package-lock.json` 沒變。
+- 檢查過沒有帶回原版的東西：品牌和 CLI 名、home、port、官方版共存、技能路徑；推播（FCM、push.woowtech.io、`woowtechPush`、不帶內容的推播、Expo 登記停用）；配對 scheme（沒有新的 `paseo://`）、relay 預設與明確 false；LINE 仍拿掉，官網、客服信箱和通用開啟器的 mailto 不變；工作區自動命名、commit 訊息和 PR 的 AI 生成仍關閉；Claude Agent SDK 仍第一次用到才下載，出貨程式沒有 SDK 的值 import，沒開 `verbatimModuleSyntax`，SDK 仍是 devDependency；沒有本地語音；更新來源不變；`.github/`、`website/` 沒動，版本號都還是 0.8.0。
+- 逐檔比對第二批改到的 128 個檔：第一批之後 fork 自己加的行都還在（只有上面 ACP 那行換了縮排），fork 刪掉的上游行沒有回來。
+- cherry-pick 和 commit 都設 `LEFTHOOK=0`，理由同第一批。
+
+測試（這台 Mac，Node 22，`--maxWorkers=1 --no-file-parallelism`，每個重的指令都經過 `heavy.sh`，一次一個）：
+
+- 環境：`env -i`，PATH 只有 node@22 和系統資料夾（沒有 claude、codex、opencode、pi、gemini），HOME 和 TMPDIR 用暫存資料夾；除了 `tests/35`（見下面）都在 `sandbox-exec` 裡跑，只准連 loopback，擋 6767、6768、6770，也擋讀寫 `~/.woowtech-smart`、`~/.paseo`。
+- typecheck：改到的 4 個 workspace（server、app、cli、desktop）逐一 `npm run typecheck --workspace=…`，全過。
+- format、lint：`npm run format:check` 整個 repo 4669 檔通過；改到的 124 個 ts／tsx／js 檔 `lint` 0 個 warning、0 個 error。
+- 守門 `node --test woowtech/*.test.mjs`：121/121，沒有改任何守門。
+- 挑進來的 commit 新增或改過的測試（Playwright、桌面版 e2e、App 的 browser 模式和要真的 provider 的除外，見最後）：
+  - server 36 檔：Claude（含新的 rewind 錨點測試）、Codex、Cursor、OpenCode、Pi、OMP、ACP、外掛 provider、agent manager、MCP 和 in-process 的 agent-mcp e2e 16 檔 1102/1103；daemon 啟動（`pid-lock`、`daemon-instance`、supervisor 的 logging 和 readiness）、config、排程、上傳、目錄建議、file-observer（含 macOS 的 `native-recursive`）、Git 觀察（含 integration）、git-mutation、owned-subscriptions、外掛生命週期 e2e 和新的 `claude-provider-config-dir-history` e2e 20 檔 339/340。沒過的 2 個見下面。
+  - App 8 檔 242/242（快捷鍵 131、`directory-sync` 28、副本快取 28、時間 28、checkout 狀態 14、問題表單 6、指令查詢 4、`host-page-translations` 3）。
+  - CLI：`lifecycle.e2e.test.ts` 17 過、1 略過（Windows 限定；含這批新加的 2 個），`permit-output` 2/2；`tests/32-daemon-set-password` 4/4（含新的管線輸入）、`tests/40-daemon-stale-boot-lock` 2/2、`tests/41-daemon-auth-command-errors` 2/2，照 `run-all.ts` 的方式用暫存 HOME、不帶 `PASEO_*`。`tests/40` 寫進舊 lock 的位址是 `127.0.0.1:6767`，sandbox 擋了這個埠，碰不到真的 daemon。
+- T1：`missing-workspace-directory-demand` 25/25、`directory-sync/index` 28/28、`host-runtime` 72/72、`sidebar-workspace-list` 3/3、`use-projects` 2/2、`viewed-timeline-sync` 39/39，共 169/169。`directory-sync` 比第一批多 5 個，都是 `d2e2154a8` 新加的。
+- fork 自己的：
+  - server 30 檔 229/229：推播 4 檔、配對 4 檔、relay 5 檔（含 `config-relay`）、工作區自動命名和 Git metadata 關閉 4 檔、daemon 指令訊息、`paseo-home`、config 3 檔、CORS、daemon 設定、bootstrap、supervisor 的 lifecycle、自我更新停用 3 檔和 SDK 載入器。
+  - App 17 檔 105/105：推播（含兩個 Expo config plugin、FCM token、Expo 登記停用）、配對連結、relay 關閉時的配對畫面、主機補名、fork 文案、通知導頁和網址開啟器。
+  - CLI 7 檔 17/17：品牌和 Usage、`daemon pair` 的 App 連結與 relay、配對輸出、App 連結的 daemon 目標、下一步提示。
+- daemon 的啟動、停止和 supervisor（CLI 腳本，照 `run-all.ts` 的方式跑）：`tests/22`、`23`、`24`、`25`、`33`、`34-daemon-status-auth`、`34-daemon-stop-stale-reachable` 全過。`tests/35-daemon-worker-supervisor-disconnect` 用 `/bin/ps` 找 worker，macOS 的 sandbox 不准執行 setuid 的程式，所以在 sandbox 裡失敗；不包 sandbox、其他條件一樣（`env -i`、Node 22、暫存 HOME、系統分配的 port）重跑，2/2。server 端的 `pid-lock`、`daemon-instance` 和 supervisor 的測試在上面。
+- 上面 server 沒過的 2 個都要 PATH 上找得到 `claude` 執行檔，這裡照規定不放真的 claude，不是回歸：
+  - `claude/agent.test.ts` 的「resolves the installed Claude Code version」直接執行 `claude --version`（c9fb31f70 起就有，`resolveClaudeCodeVersion` 在這個範圍沒改）。
+  - 新的 `claude-provider-config-dir-history` e2e 的「an agent's timeline survives a daemon restart」：`extends: "claude"` 的 provider 要找得到 claude 執行檔才算可用（`checkProviderLaunchAvailable` 只找路徑，不執行），否則回 `Provider 'claude-secondary' is not available`。
+  - PATH 最前面放一個假的 `claude`（只回答 `--version`，其他呼叫一律失敗並記錄；跑完記錄是空的）重跑這兩個檔，85/85。真的 claude 留給 CI：CI 的 server 測試會先 `npm install -g @anthropic-ai/claude-code`。
+- 這一批沒有找到回歸，沒有另外的修正 commit。跑過的檔案在 HEAD 沒有剩下的失敗；`8010f71b1` 就壞的只有上面 `f5ae3f039` 修掉的那一個。
+
+留給 CI 和裝置驗證的：
+
+- push 之後手動跑一次 CI 並勾 Playwright（第 18 節）。這台 Mac 只跑了上面的定向測試，還要看：
+  - server 全部的單元測試（包括上面要真的 claude 的兩個）和 `test:integration`；CLI 的 e2e 分片。
+  - Playwright：`agent-profiles-picker`、`daemon-lifecycle`、`keyboard-chord-modifier-step`、`plugin-theme`、`sidebar-workspace`；桌面版 e2e 的 `keyboard-shortcut-unassign`。
+  - App 的 browser 模式單元測試 `question-form-card.browser.test.tsx`、`terminal-emulator-runtime.browser.test.ts`：要 Playwright 的 Chromium，這台 Mac 沒裝，沒跑。
+- 要真的 provider 才能跑、CI 也不跑的：`codex-custom-provider-import.local.e2e`（codex）、`opencode-bridge.local.e2e`（OpenCode）、`pi-rewind.real.e2e`（Pi）。照規定不在這台 Mac 執行真的 provider，沒跑。
+- iOS、Android 正式版實機：多選問題的「其他」答案（`8e858f0e3`）、上傳的檔名（`fbc83613c`）、終端機的 OSC 8 連結（`dc9799f6f`，手機的終端機 webview 也經過 `openExternalUrl`）、訊息日期（`28507224d`）。Android 的 `production` 建置改了 gradle 指令（`e3c853df5`），下一次 EAS 正式建置時確認。
+- 桌面版：有密碼的 daemon 顯示「在編輯器開啟」（`e07da55f8`）；多鍵、改綁和 Backspace 的快捷鍵（`9a3f3a0dc`、`ec43e9067`、`fbe5005aa`）；主題清單捲動（`a048094da`）；網頁版模型選擇列（`04c3e003f`）；從設定頁更新和重啟 daemon（`315803688`）。
+- daemon：重開機後 PID 被占用（`faee1cd95`）要實際重開機才驗得到；`daemon.log` 寫不進去（`cb9654a65`）；大型 repo 的監看 CPU 和記憶體（`c3e1e084a`、`e998e0a08`、`9978988e3`）。
+- 延後的 `c906c2f4a`、`e1c769c01` 要 owner 決定。
+- 這個分支沒有 push。`woowtech/integration-0926` 已經前進到 `2a706980b`，從 `ce3dffa70` 起兩邊都改到的只有這個 README；合回去之後重跑守門和 T1 測試。
 
 ## Mac 開發環境
 
