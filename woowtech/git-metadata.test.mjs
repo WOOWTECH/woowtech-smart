@@ -97,6 +97,16 @@ function policyOverrides(file, text) {
       const name = memberName(node.left);
       if (policyNames.has(name) && !keepsForkDefault(node, name)) violations.push(file);
     }
+    // Defaults that supply a policy: const { name = … } = deps, ({ name: local = … }), (name = …)
+    if (
+      (ts.isBindingElement(node) || ts.isParameter(node)) &&
+      node.initializer &&
+      [node.propertyName, node.name].some(
+        (name) => name && policyNames.has(name.getText(tree).replace(/["']/g, "")),
+      )
+    ) {
+      violations.push(file);
+    }
     // A policy named in a string: defineProperty, Reflect.set, a computed key. Reads through
     // x["name"] are fine; writes through it are caught above.
     if (
@@ -150,6 +160,10 @@ test("metadata policy overrides are confined to tests, including the upstream Se
     'const key = "isGenerationEnabled"; factory({ [key]: () => true });',
     "class Stub { isAutoNameEnabled = () => true; }",
     "factory({ get isGenerationEnabled() { return () => true; } });",
+    "const { isGenerationEnabled = () => true } = deps;",
+    "const { isGenerationEnabled: enabled = () => true } = deps;",
+    "export function make({ isGenerationEnabled = () => true }: Deps) {}",
+    "export function make(isAutoNameEnabled = () => true) {}",
   ]) {
     assert.deepEqual(
       policyOverrides("server/unexpected.ts", text),
@@ -163,6 +177,8 @@ test("metadata policy overrides are confined to tests, including the upstream Se
     "class Real { private readonly isAutoNameEnabled: () => boolean; }",
     "if (!isGenerationEnabled()) return COMMIT_MESSAGE_FALLBACK;",
     'if (!deps["isGenerationEnabled"]?.()) return COMMIT_MESSAGE_FALLBACK;',
+    "const { isGenerationEnabled } = deps;",
+    "export function make({ isGenerationEnabled }: Deps, isAutoNameEnabled: () => boolean) {}",
   ]) {
     assert.deepEqual(policyOverrides("server/unexpected.ts", text), [], `flagged: ${text}`);
   }
