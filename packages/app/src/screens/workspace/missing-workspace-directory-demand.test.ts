@@ -322,7 +322,7 @@ describe("directory demand that leaves while its own refresh is still running", 
   // Both directory lists land, then refreshAll() still waits for the label catalog. The only
   // demand leaves in that window, and the refresh finishes afterwards.
   async function leaveMidRefresh(f: Fixture, leave: () => void) {
-    await expect.poll(() => f.transport.count("workspace.label.list.request")).toBe(1);
+    await expect.poll(() => f.transport.heldLabelRequests()).toBe(1);
     expect(f.session()?.workspaces.has(workspaceId)).toBe(true);
     leave();
     await expect.poll(() => f.transport.activeSubscriptions.size).toBe(0);
@@ -372,7 +372,7 @@ describe("directory demand that leaves while its own refresh is still running", 
     const route = missingWorkspaceRoute(f, missingInput);
     const timeline = directoryOnlyTimeline(f);
     try {
-      await expect.poll(() => f.transport.count("workspace.label.list.request")).toBe(1);
+      await expect.poll(() => f.transport.heldLabelRequests()).toBe(1);
       // One render pass: the descriptor releases the owner and the notification's agent tab
       // opens, so the tab's route demand joins the refresh whose subscriptions were dropped.
       route.rerender({ hasWorkspaceDescriptor: true });
@@ -386,6 +386,55 @@ describe("directory demand that leaves while its own refresh is still running", 
         .toEqual({ workspaceRequests: 2, subscriptions: 3 });
     } finally {
       timeline.dispose();
+    }
+  });
+
+  it("a sidebar opened after the agent tab, the last demand, closed mid-refresh refreshes a new workspace", async () => {
+    const f = await fixtureWithSlowLabels();
+    const route = missingWorkspaceRoute(f, missingInput);
+    const timeline = directoryOnlyTimeline(f);
+    try {
+      await leaveMidRefresh(f, () => {
+        // The agent tab opens before the descriptor releases the owner, so the subscriptions stay.
+        timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
+        route.rerender({ hasWorkspaceDescriptor: true });
+        expect(f.transport.activeSubscriptions.size).toBe(3);
+        // The user leaves the agent before the label catalog arrives: route demand drops last.
+        timeline.replaceVisibleAgentIds("workspace-screen", []);
+      });
+      const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
+      try {
+        await expectSecondWorkspaceRefreshed(f);
+      } finally {
+        closeSidebar();
+      }
+    } finally {
+      timeline.dispose();
+    }
+  });
+
+  it("switching from one missing workspace to another while the first refresh is in flight loads the second", async () => {
+    const f = await fixture();
+    useSessionStore.getState().setHasHydratedWorkspaces(serverId, true);
+    f.transport.entries = [workspace, secondWorkspace];
+    f.transport.holdWorkspaces = true;
+    const first = missingWorkspaceRoute(f, missingInput);
+    await expect.poll(() => f.transport.count("fetch_workspaces_request")).toBe(1);
+    // One commit: the first route's cleanup releases the pending workspace subscription, which
+    // fails its refresh, and the second route's setup joins that failing refresh.
+    first.unmount();
+    const second = missingWorkspaceRoute(f, secondInput);
+    try {
+      await expect.poll(() => f.transport.count("fetch_workspaces_request")).toBe(2);
+      f.transport.deliverWorkspaces();
+      await expect
+        .poll(() => ({
+          hasSecond: f.session()?.workspaces.has(secondWorkspace.id) ?? false,
+          subscriptions: f.transport.activeSubscriptions.size,
+        }))
+        .toEqual({ hasSecond: true, subscriptions: 3 });
+    } finally {
+      second.unmount();
     }
   });
 

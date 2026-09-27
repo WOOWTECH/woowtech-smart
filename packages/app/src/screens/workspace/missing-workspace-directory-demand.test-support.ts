@@ -240,6 +240,11 @@ class DirectoryTransport implements DaemonTransport {
     this.holdLabels = false;
     for (const request of this.pendingLabels.splice(0)) this.labelReply(request);
   }
+  // Label requests waiting for deliverLabels(). Counts only held ones: after upstream #5079 the
+  // connection itself asks for the catalog once, before holdLabels is set.
+  heldLabelRequests() {
+    return this.pendingLabels.length;
+  }
   count(type: SessionInboundMessage["type"]) {
     return this.requests.filter((request) => request.type === type).length;
   }

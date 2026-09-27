@@ -1,4 +1,5 @@
-// Source wiring only, not React hook execution or GUI evidence. Behavior is covered by
+// Source wiring only, not React hook execution or GUI evidence. Behavior, including the directory
+// sync race fix pinned at the end, is covered by
 // packages/app/src/screens/workspace/missing-workspace-directory-demand.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -115,4 +116,96 @@ test("hook returns its directory cleanup and tracks identity, focus and descript
     dependencies.elements.map((element) => element.getText(tree)),
     ["serverId", "workspaceId", "isRouteFocused", "hasWorkspaceDescriptor"],
   );
+});
+
+// The race fix lives in an upstream file (woowtech/README.md, 16 T1). A merge that takes upstream's
+// requestDemandRefresh or releaseSubscriptions drops it without a conflict, so pin its four parts.
+test("directory sync never lets a refresh that outlived its subscriptions satisfy the connection", () => {
+  const tree = source("packages/app/src/runtime/directory-sync/index.ts");
+  const text = (node) => node.getText(tree).replace(/\s+/g, " ");
+  const method = (name) => {
+    const found = findAll(
+      tree,
+      (node) => ts.isMethodDeclaration(node) && node.name.getText(tree) === name,
+    );
+    assert.equal(found.length, 1, `DirectorySync.${name} not found`);
+    return found[0];
+  };
+  const isGeneration = (node) => text(node) === "this.subscriptionGeneration";
+  const bumps = (node) =>
+    (ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+      isGeneration(node.left) &&
+      text(node.right) === "1") ||
+    ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      node.operator === ts.SyntaxKind.PlusPlusToken &&
+      isGeneration(node.operand));
+  assert.ok(
+    method("releaseSubscriptions").body.statements.some(
+      (statement) => ts.isExpressionStatement(statement) && bumps(statement.expression),
+    ),
+    "releaseSubscriptions must count every drop: this.subscriptionGeneration += 1",
+  );
+
+  const refresh = method("requestDemandRefresh");
+  const statements = refresh.body.statements;
+  const check = statements.findIndex(
+    (statement) =>
+      ts.isIfStatement(statement) &&
+      text(statement.expression).includes("this.satisfiedDemandSource?."),
+  );
+  const start = statements.findIndex(
+    (statement) =>
+      ts.isVariableStatement(statement) &&
+      statement.declarationList.declarations.some(
+        (declaration) => declaration.name.getText(tree) === "refresh",
+      ),
+  );
+  assert.ok(check >= 0 && start > check, "satisfied check or refresh start not found");
+  const between = new Set(statements.slice(check + 1, start).map(text));
+  assert.ok(
+    between.has("this.satisfiedDemandSource = null;") &&
+      between.has("const generation = this.subscriptionGeneration;"),
+    "after the satisfied check, clear the mark and capture the generation before the refresh starts",
+  );
+
+  const satisfies = findAll(
+    tree,
+    (node) =>
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      text(node.left) === "this.satisfiedDemandSource" &&
+      node.right.kind !== ts.SyntaxKind.NullKeyword,
+  );
+  assert.ok(satisfies.length > 0, "no write marks the connection satisfied");
+  for (const node of satisfies) {
+    let guarded = false;
+    for (let child = node; child.parent && !guarded; child = child.parent) {
+      guarded =
+        ts.isIfStatement(child.parent) &&
+        child.parent.thenStatement === child &&
+        text(child.parent.expression) === "generation === this.subscriptionGeneration";
+    }
+    assert.ok(
+      guarded,
+      `${text(node)} must sit under if (generation === this.subscriptionGeneration)`,
+    );
+  }
+
+  const finallies = findAll(
+    refresh,
+    (node) =>
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "finally",
+  );
+  assert.equal(finallies.length, 1, "demand refresh must keep one finally");
+  const retries = findAll(
+    finallies[0].arguments[0],
+    (node) =>
+      ts.isIfStatement(node) &&
+      text(node.expression).includes("generation !== this.subscriptionGeneration") &&
+      text(node.thenStatement).includes("this.requestDemandRefresh()"),
+  );
+  assert.equal(retries.length, 1, "finally must refresh again when subscriptions were dropped");
 });

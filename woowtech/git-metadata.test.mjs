@@ -50,18 +50,40 @@ function policyOverrides(file, text) {
   if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file)) return [];
   const tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const violations = [];
-  const policyNames = new Set([
-    "isGitMetadataGenerationEnabled",
-    "isWorkspaceAutoNameEnabled",
-    "isGenerationEnabled",
-    "isAutoNameEnabled",
-  ]);
+  const forkPolicies = new Set(["isGitMetadataGenerationEnabled", "isWorkspaceAutoNameEnabled"]);
+  const policyNames = new Set([...forkPolicies, "isGenerationEnabled", "isAutoNameEnabled"]);
+  // x.name and x["name"]
+  function memberName(node) {
+    if (ts.isPropertyAccessExpression(node)) return node.name.text;
+    if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)) {
+      return node.argumentExpression.text;
+    }
+    return undefined;
+  }
+  // x.name = options.name ?? forkPolicy keeps the injected option, which is checked where it is
+  // passed, or the fork default.
+  function keepsForkDefault(node, name) {
+    const value = node.right;
+    return (
+      ts.isBinaryExpression(value) &&
+      value.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
+      memberName(value.left) === name &&
+      ts.isIdentifier(value.right) &&
+      forkPolicies.has(value.right.text)
+    );
+  }
   function visit(node) {
     if (
-      (ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node)) &&
+      (ts.isPropertyAssignment(node) ||
+        ts.isShorthandPropertyAssignment(node) ||
+        ts.isMethodDeclaration(node)) &&
       policyNames.has(node.name.getText(tree).replace(/["']/g, ""))
     ) {
       violations.push(file);
+    }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const name = memberName(node.left);
+      if (policyNames.has(name) && !keepsForkDefault(node, name)) violations.push(file);
     }
     ts.forEachChild(node, visit);
   }
@@ -89,6 +111,28 @@ test("metadata policy overrides are confined to tests, including the upstream Se
   assert.deepEqual(
     policyOverrides("server/unexpected.ts", "factory({ isGenerationEnabled: () => true });"),
     ["server/unexpected.ts"],
+  );
+  for (const text of [
+    "const isGenerationEnabled = () => true; factory({ generation, isGenerationEnabled });",
+    "deps.isGenerationEnabled = () => true;",
+    'deps["isGenerationEnabled"] = () => true;',
+    "this.isAutoNameEnabled = () => true;",
+    "this.isAutoNameEnabled = options.isAutoNameEnabled ?? (() => true);",
+    "this.isAutoNameEnabled = (() => true) ?? isWorkspaceAutoNameEnabled;",
+  ]) {
+    assert.deepEqual(
+      policyOverrides("server/unexpected.ts", text),
+      ["server/unexpected.ts"],
+      `not flagged: ${text}`,
+    );
+  }
+  // The one production write: WorkspaceAutoName keeps the injected option or the fork policy.
+  assert.deepEqual(
+    policyOverrides(
+      "server/unexpected.ts",
+      "this.isAutoNameEnabled = options.isAutoNameEnabled ?? isWorkspaceAutoNameEnabled;",
+    ),
+    [],
   );
   assert.deepEqual(productionPolicyOverrides(), []);
   assert.match(source("server/session.test.ts"), /isGitMetadataGenerationEnabled: \(\) => true/);

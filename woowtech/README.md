@@ -23,7 +23,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
   守門發現新的 workflow 檔時，push 之前先照第 18 節處理：GitHub 會啟用新的 workflow，觸發條件有 push 的話，加進它的那次 push 就會跑。
 
-  推播和配對連結另外要跑的單元測試，分別列在第 16 節的「合併上游之後」和第 19 節的「上游合併後要再確認」。
+  推播、T1 通知導頁和配對連結另外要跑的單元測試，分別列在第 16 節的「合併上游之後」和第 19 節的「上游合併後要再確認」。
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
   `packages/server/src/server/agent/providers/claude/agent.ts`、`packages/server/package.json`、`packages/server/src/server/bootstrap.ts`。
@@ -637,6 +637,7 @@ node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/woowtech-push.test.ts src/messages.test.ts --bail=1)
 (cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts --bail=1)
 (cd packages/app && npx vitest run plugins/woowtech-ios-firebase.test.ts plugins/with-woowtech-push.test.ts plugins/woowtech-metro-resolver.test.ts src/push-notifications src/utils/notification-routing.woowtech-push.test.ts --bail=1)
+(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1 小節
 ```
 
 - 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛和 `expo-build-properties` 的 `ios`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
@@ -651,18 +652,14 @@ node --test woowtech/*.test.mjs
 - C-020 的 Android 既有取證（2026-09-26，非本次修法驗收）：三次卡住時 host、workspace、route key 都正確，但 store 沒有 descriptor、沒有 tab，full demand 為 0、agent route demand 為空，daemon 沒收到 `fetch_workspaces`。只開側欄、不點列就取得 descriptor，同 key 在 8–230 ms 內變 ready，接著消費 agent intent。重裝後首次尚未 hydrated 的「Loading workspace」也由只開側欄解除。這排除了 epoch 去重、#5079、key 和 memo 的先前猜測。
 - 根因是未知工作區等 descriptor 才建 tab，沒有 tab 就沒有 agent demand；原 `prepareWorkspaceRoute` 只查 cache。`screens/workspace/use-missing-workspace-directory-demand.ts` 補上暫時的目錄 owner：聚焦且缺 descriptor 時持有既有 `acquireDirectoryDemand`，不等首次 hydration，也不因離線提早放棄；descriptor 到達、失焦或卸載時釋放。已知工作區、cache 準備與原 agent intent／subscriber 交接不改，不加 probe、路由或 protocol。
 - 審查找到的 race（2026-09-27 修）：hook 是這台主機唯一的 directory demand 時，descriptor 一到就釋放，這時它自己那次 refresh 還沒結束：`refreshAll()` 最後在等工作區標籤的訂閱，裝置上 descriptor 到達後還要 1.4–2.25 秒。釋放讓 `releaseSubscriptions()` 丟掉所有 live subscription，refresh 結束時卻照樣把這個連線 epoch 記成已滿足。之後直到重連，這台主機的工作區和 agent 清單不再更新，開側欄也不 refresh，同一個連線裡第二則指向另一個新工作區的通知又卡在「Workspace unavailable」。先前裝置測試沒遇到，是因為 agent 清單比 descriptor 早約 100 ms 到，tab 先接手了 demand。
-- 修法在上游檔 `runtime/directory-sync/index.ts`（+11／−2 行），hook 不變、仍在 descriptor 到達時釋放：`releaseSubscriptions()` 每次把 `subscriptionGeneration` 加一；demand refresh 開始時清掉已滿足記號，成功而且期間 generation 沒變才記成已滿足；結束時 generation 變了又有 demand（例如 tab 的 route demand 在釋放後才加入同一次 refresh），就再 refresh 一次。失敗的 refresh（包括換掉原本 live 訂閱的 pull-to-refresh）不留下已滿足記號，也不自己重試；訂閱請求逾時會讓 client 斷線，由重連 refresh 一次；一直等不到的已刪除或封存工作區，每個連線只 refresh 一次。
-- 這是上游本來就有的潛在 race，跟 fork 無關：側欄在自己那次 refresh 結束前關掉，同一個連線裡再打開也不 refresh。`missing-workspace-directory-demand.test.ts` 的「upstream: a sidebar reopened after closing mid-refresh…」不經 fork 的 hook 重現它，可以連同 `index.ts` 的差異回報上游。
-- 維護接點：`workspace-screen.tsx` 的 import 和 cache prepare effect 旁的一次 hook 呼叫，以及 `directory-sync/index.ts` 的 `subscriptionGeneration`。合併上游時保留 hook 的 host／workspace／focus／descriptor-presence 四個依賴與 effect cleanup 回傳；上游改寫 `requestDemandRefresh` 或 `releaseSubscriptions` 時，保留三件事：refresh 開始時清掉已滿足記號、期間丟過訂閱就不算滿足、結束時又有 demand 就再 refresh。純 acquisition seam 的測試使用真實 HostRuntimeStore、DirectorySync、DaemonClient 和 typed memory ports（假主機可以支援工作區標籤並延後標籤回覆，或對工作區請求回錯誤），斷言序列化 RPC、訂閱釋放、首次 hydration、新 epoch、agent target，以及上面的 race、失敗、逾時和不迴圈。`woowtech/workspace-directory-demand.test.mjs` 只守原始碼接線：hook 呼叫必須是 `WorkspaceScreenContent` 本體的直接陳述式（不在 if、?:、&&、區塊或 callback 裡），前面沒有 early return；它不能當成 hook runtime 或 GUI 證據。
+- 修法在上游檔 `runtime/directory-sync/index.ts`（+11／−2 行，註解以 `woowtech smart:` 開頭），hook 不變、仍在 descriptor 到達時釋放：`releaseSubscriptions()` 每次把 `subscriptionGeneration` 加一；demand refresh 開始時清掉已滿足記號，成功而且期間 generation 沒變才記成已滿足；結束時不論成敗，只要期間 generation 變了又有 demand，就再 refresh 一次。例如 tab 的 route demand 在釋放後才加入同一次 refresh；或從缺工作區 A 切到缺工作區 B：A 的釋放讓還在等的訂閱失敗，B 在同一個 tick 加入那次注定失敗的 refresh。失敗的 refresh（包括換掉原本 live 訂閱的 pull-to-refresh）不留下已滿足記號，也不自己重試；訂閱請求逾時會讓 client 斷線，由重連 refresh 一次；一直等不到的已刪除或封存工作區，每個聚焦期間、每個連線只 refresh 一次（離開再回來會再 refresh 一次）。
+- 已知限制：hook 持有 demand 時 refresh 失敗而連線沒斷（daemon 回錯誤，或 `listProjects`、第二頁這類非訂閱請求逾時），開側欄不會再 refresh，因為 `setDemand` 只在 full demand 從 0 變 1 時 refresh。要用側欄的重新整理、重連，或離開再進入；T1 之前開側欄就能解。
+- 這是上游本來就有的潛在 race，跟 fork 無關：側欄在自己那次 refresh 結束前關掉，同一個連線裡再打開也不 refresh。`missing-workspace-directory-demand.test.ts` 的「upstream: a sidebar reopened after closing mid-refresh…」不經 fork 的 hook 重現它，可以連同 `index.ts` 的差異回報上游。同一段還有一個上游行為沒改：demand 在 refresh 中途離開時，還在等的 agent 訂閱以「Subscription released」失敗，agent 目錄狀態停在錯誤，直到下一個 demand 再 refresh。T1 在 descriptor 比 agent 清單早到時會碰到（裝置上 agent 清單通常早約 100 ms 到）；回報時可以建議把 DirectorySync 自己釋放造成的失敗當成 superseded。
+- 維護接點：`workspace-screen.tsx` 的 import 和 cache prepare effect 旁的一次 hook 呼叫，以及 `directory-sync/index.ts` 的 `subscriptionGeneration`。合併上游時保留 hook 的 host／workspace／focus／descriptor-presence 四個依賴與 effect cleanup 回傳；上游改寫 `requestDemandRefresh` 或 `releaseSubscriptions` 時，保留三件事：refresh 開始時清掉已滿足記號、期間丟過訂閱就不算滿足、期間丟過訂閱而結束時又有 demand 就再 refresh 一次。純 acquisition seam 的測試使用真實 HostRuntimeStore、DirectorySync、DaemonClient 和 typed memory ports（假主機可以支援工作區標籤並延後標籤回覆，或對工作區請求回錯誤），斷言序列化 RPC、訂閱釋放、首次 hydration、新 epoch、agent target，以及上面的 race、失敗、逾時和不迴圈。race 案例等到「有一個被扣住的標籤請求」（`heldLabelRequests()`）才讓 demand 離開，不數標籤請求總數：合併上游 #5079 後，連線時就會先要一次標籤，那次照常回覆。`woowtech/workspace-directory-demand.test.mjs` 只守原始碼：hook 呼叫必須是 `WorkspaceScreenContent` 本體的直接陳述式（不在 if、?:、&&、區塊或 callback 裡），前面沒有 early return；`index.ts` 的 generation 遞增和上面三件事都在，每個把連線記成已滿足的寫入都在 generation 比對之下。它不能當成 hook runtime 或 GUI 證據。上游如果用別的寫法修好這個 race，這個守門會紅：先確認拿掉 fork 的修法後 T1 vitest 仍全綠，再改守門。
 - 首次修法（`ff410974f`）的紅綠：兩個現況見證先綠；cache-only 基線對「owner 應發 request」斷言得到 0 而非 1，補 demand 後 14/14 綠、接線守門 2/2 綠。八個定向突變都 exit 1（cache-only、少 focus、少 missing、丟 cleanup、等 hydration、拔 hook、漏 descriptor dependency、effect 不回 cleanup），還原後再驗。測試 adapter 的 metadata／wire 欄位錯誤與測試期待值修正不算修法紅燈。修後 Android 三情境仍由 Claude 排程；沒有新增裝置驗收結論。
 - recovery inspect 可能比目錄刷新早回，短暫出現 unavailable；本切片不改。若另排，需由 runtime 提供目前 epoch 的目錄刷新完成狀態，再讓 recovery inspect 等待，另 commit 並測離線、失敗與重連，不能用全域 hydrated 代替本 epoch 完成。
 
-定向檢查（依賴與 dist 已備妥時，不需 build）：
-
-```bash
-node --test woowtech/workspace-directory-demand.test.mjs
-(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)
-```
+定向檢查就是本節「合併上游之後」的 `node --test woowtech/*.test.mjs` 和 T1 那行 vitest；依賴與 dist 已備妥時不需 build。
 
 #### 桌面通知的回饋
 
@@ -678,8 +675,8 @@ node --test woowtech/workspace-directory-demand.test.mjs
 
 - 原因：daemon 寫給人看、或會離開電腦的文字仍叫 Paseo：請舊版 App 更新的提示、「Another Paseo daemon is already running」、App 和 CLI 顯示的 worktree 錯誤、使用者寄給我們的診斷報告，以及本地語音 worker 的行程名。
 - 產品名寫在 `packages/protocol/src/brand-name.ts`（`PRODUCT_NAME`），這些訊息都讀它。改了這個檔案，要重建 protocol 和 server 的 dist。行程名照第 5 節寫字面值，守門直接讀。
-- 改了的（server 共 20 行）：
-  - PR fallback 內文目前留空，不加產品署名，見第 20 節。
+- 改了的（server 共 19 行）：
+  - PR fallback 內文目前留空，不加產品署名，見第 20 節；這行不算在 19 行裡。
   - App 和 CLI 顯示的：
     - 舊版 App 打開子 agent 對話時的「Please upgrade the woowtech smart app…」，以及 fork 來的 PR 在等核准時給舊版 App 的「Update woowtech smart to review and run setup.」（`session.ts`）。
     - 「Another woowtech smart daemon is already running」（`pid-lock.ts`）。
@@ -696,7 +693,7 @@ node --test woowtech/workspace-directory-demand.test.mjs
 - `session.ts` 是熱檔（上游 90 天改了 82 次），只動了兩句和一行 import。
 - 測試：
   - `woowtech/names.test.mjs` 掃描 server 出貨的原始碼：上面保留的幾類以外，不准出現 Paseo。上游改回、或新增一句提到 Paseo 的文字時會失敗。這時看那句是誰在讀：人看得到的改用 `PRODUCT_NAME`，只給 agent 或外掛的，在守門的清單加一條並寫理由。同一個檔案也檢查三個行程名（第 5 節）。
-  - 上游測試改了預期值：`pid-lock.test.ts`（5 處）、`session/checkout/git-metadata-generator.test.ts`、`session.test.ts`、`wire-compat.test.ts`（2 處）、`selective-timeline-delivery.e2e.test.ts`。合併時衝突的話，照上游改完再把產品名換成我們的。
+  - 上游測試改了預期值：`pid-lock.test.ts`（5 處）、`wire-compat.test.ts`（2 處）、`selective-timeline-delivery.e2e.test.ts`。合併時衝突的話，照上游改完再把產品名換成我們的。`session/checkout/git-metadata-generator.test.ts` 和 `session.test.ts` 的 PR fallback 內文期待值是空字串，屬第 20 節。
   - protocol 的 `messages.test.ts` 和 `messages.wire-compat.test.ts` 用「Paseo diagnostics」「Update Paseo…」當範例資料，不是在檢查 daemon 的輸出，沒改。
 
 ### 18. GitHub Actions：只跑 Ubuntu 上的 CI 測試
@@ -794,7 +791,7 @@ secret 和外部服務：
   - 另有 flaky 的 `command-center-host.spec.ts:12`。
   - 分類完之前，勾了 Playwright 的手動執行會是紅的；每週的排程不受影響。
 
-第三次執行（[run 36163380457](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36163380457)，main `1f4b2b00f`，手動、不勾 Playwright）**成功**。實際 41 分 15 秒，各 job 工作時間合計約 131 分鐘。來源是本機 `plans/ci-run-1-findings.md` 的「CI 第三次執行」紀錄，本次文件更新沒有重新查詢 GitHub。
+第三次執行（[run 36163380457](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36163380457)，main `1f4b2b00f`，手動、不勾 Playwright）**成功**。實際 41 分 15 秒，各 job 工作時間合計約 131 分鐘。來源是本機 `/Users/elmolin/.local/share/woowtech-smart/plans/ci-run-1-findings.md` 的「CI 第三次執行」紀錄，本次文件更新沒有重新查詢 GitHub。
 
 | job                           | 時間                  | 結果                            |
 | ----------------------------- | --------------------- | ------------------------------- |
@@ -1012,6 +1009,12 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- T1 審查修正第 1 輪（2026-09-27，整合分支 `woowtech/integration-0926`，第 16、17、18、20 節）：
+  - 合併上游後的同步點：把 HEAD 和 upstream-main 合併出的 `directory-sync/index.ts`、`agent-replica.ts`、`workspace-labels/index.ts` 在 scratch 用 vitest 的 resolve 蓋上去，原測試 19/22，3 個紅都在「標籤請求數到 1」之後（#5079 讓連線時先要一次標籤）。同步點改成 `heldLabelRequests()` 後，現行 HEAD 和合併版都 24/24；兩邊拿掉 fork 修法都是同樣 7 紅。
+  - 新增兩個案例：從缺工作區 A 切到 B、A 的釋放讓 refresh 失敗；agent tab 是最後離開的 demand。「只在成功時再 refresh」和「遞增搬到 `setDemand`」兩個突變原本 22/22，現在各紅對應的一個。審查的 13 個 directory-sync 突變全部被抓，identity 對照 24/24。
+  - 守門：`workspace-directory-demand.test.mjs` 加 directory-sync 修法的原始碼守門，21 個變體都符合預期：14 個應紅的都紅在新項目、訊息對得上；合併上游版、`++`、條件寫成一行等 5 個應綠；「多一個檢查前的清除」和「只在成功時再 refresh」刻意交給 vitest。`git-metadata.test.mjs` 補簡寫屬性和成員賦值；照字面加成員賦值會把 production `workspace-auto-name.ts` 的建構子接線當成違規，所以只放行 `x.name = options.name ?? <fork policy>`，6 個突變都紅。
+  - 逐檔跑 T1 24/24（連跑 3 次）、directory-sync 18/18、`node --test woowtech/*.test.mjs` 120/120，format、lint 通過。`index.ts` 只改註解，沒重跑 host runtime 和側欄。沒跑 build、commit hook 以外的 typecheck、全套測試、裝置或模擬器。紀錄在 `/Users/elmolin/.local/share/woowtech-smart/logs/ultra-fix-round-1.md`。
 
 - T1 race 修正（2026-09-27，整合分支 `woowtech/integration-0926`，第 16 節 T1）：`missing-workspace-directory-demand.test.ts` 新增 8 個案例。先紅的五個：唯一 demand 在 refresh 等標籤時離開後，側欄、第二則通知路由和上游的側欄重開都停在 1 次請求、拿不到新工作區；tab 的 route demand 加入那次 refresh 後剩 0 條訂閱、沒有再 refresh；pull-to-refresh 失敗後 route demand 不 refresh。改 `directory-sync/index.ts` 後 22/22。首次失敗不自己重試、已刪除工作區每個連線一次、訂閱逾時（fake timers 推 60 秒，client 斷線）重連一次，這三個到場就綠，用突變確認會失敗；假主機超過 10 次工作區請求就不回，refresh 迴圈會變成斷言失敗而不是卡住（原本 60 秒被強殺）。offline 案例改成直接斷言請求數：require-online 突變原本 5 秒 timeout，改後 1.1 秒「expected +0 to be 1」。接線守門：舊版放過 if 區塊和 early return，新版對拔掉、if 區塊、單行 if、&&、?:、early return 六種都紅。revert 整個修法或其中任一段、cleanup 不釋放、effect 不回 cleanup、有 descriptor 仍持有、取得後立刻釋放、失敗也記滿足、兩種迴圈，全部 exit 1，每次用 sha256 確認改回原檔。逐檔跑 directory-sync（18、10、5、7）、host runtime 72、timeline replica 14、sidebar（3、3、40）、route（7、10、8）、notification routing（10、4）和 `node --test woowtech/*.test.mjs` 119/119 都綠，format、lint 通過。沒跑 build、commit hook 以外的 typecheck、全套測試、裝置或模擬器；Android 修後驗收仍待排。紀錄與原始 log 在 `/Users/elmolin/.local/share/woowtech-smart/logs/ultra-t1fix.md`。
 
