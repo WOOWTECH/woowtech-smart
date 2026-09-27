@@ -62,7 +62,7 @@ function terminalPasswordPrompt(): PromptPassword {
   if (!process.stdin.isTTY) {
     throw createCommandError(
       "PASSWORD_TTY_REQUIRED",
-      "paseo daemon set-password needs a terminal to read the password",
+      `${CLI_COMMAND} daemon set-password needs a terminal to read the password`,
       "Run it in an interactive terminal, or set PASEO_PASSWORD in the daemon's environment instead.",
     );
   }
