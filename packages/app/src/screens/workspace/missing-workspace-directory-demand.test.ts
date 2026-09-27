@@ -453,7 +453,8 @@ describe("directory demand that leaves while its own refresh is still running", 
 });
 
 describe("failed directory refresh", () => {
-  // An open sidebar holds the directory demand throughout. Opening an agent adds route demand.
+  // An open sidebar or a missing-workspace owner holds the directory demand throughout. Opening
+  // an agent adds route demand.
   async function sidebarFixture() {
     const f = await fixture();
     useSessionStore.getState().setHasHydratedWorkspaces(serverId, true);
@@ -481,6 +482,32 @@ describe("failed directory refresh", () => {
     } finally {
       timeline.dispose();
       closeSidebar();
+    }
+  });
+
+  it("opening the sidebar retries a refresh that failed while the missing-workspace owner held demand", async () => {
+    const f = await sidebarFixture();
+    f.transport.failWorkspaces = true;
+    const route = missingWorkspaceRoute(f, missingInput);
+    try {
+      // Joins the owner's refresh, which the host rejects while the connection stays up.
+      await expect(f.runtime.refreshDirectories(serverId)).rejects.toThrow(
+        "Workspace directory unavailable",
+      );
+      await settle();
+      expect(directory(f, workspaceId)).toEqual({ workspaceRequests: 1, hasWorkspace: false });
+      f.transport.failWorkspaces = false;
+      // The owner still holds demand, so the sidebar's demand is not the host's first one.
+      const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
+      try {
+        await expect
+          .poll(() => directory(f, workspaceId))
+          .toEqual({ workspaceRequests: 2, hasWorkspace: true });
+      } finally {
+        closeSidebar();
+      }
+    } finally {
+      route.unmount();
     }
   });
 

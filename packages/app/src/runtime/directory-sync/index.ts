@@ -203,6 +203,9 @@ export class DirectorySync {
     if (!wasDemanded && this.fullDemandSources.size > 0) {
       void this.loadCachedDirectory().catch(() => undefined);
       if (this.getOnlineConnection()) void this.requestDemandRefresh().catch(() => undefined);
+    } else if (demanded && this.getOnlineConnection()) {
+      // woowtech smart: a joining owner retries a failed refresh (woowtech/README.md, 16 T1).
+      void this.requestDemandRefresh().catch(() => undefined);
     }
   }
 

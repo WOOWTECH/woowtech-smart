@@ -209,3 +209,27 @@ test("directory sync never lets a refresh that outlived its subscriptions satisf
   );
   assert.equal(retries.length, 1, "finally must refresh again when subscriptions were dropped");
 });
+
+// While the missing-workspace owner holds demand, opening the sidebar is not the host's first
+// demand, so without this a failed refresh waits for a reconnect (woowtech/README.md, 16 T1).
+test("directory sync retries an unsatisfied connection when another directory owner joins", () => {
+  const tree = source("packages/app/src/runtime/directory-sync/index.ts");
+  const text = (node) => node.getText(tree).replace(/\s+/g, " ");
+  const setDemand = findAll(
+    tree,
+    (node) => ts.isMethodDeclaration(node) && node.name.getText(tree) === "setDemand",
+  );
+  assert.equal(setDemand.length, 1, "DirectorySync.setDemand not found");
+  const joins = findAll(
+    setDemand[0],
+    (node) =>
+      ts.isIfStatement(node) &&
+      /\bdemanded\b/.test(text(node.expression)) &&
+      text(node.thenStatement).includes("this.requestDemandRefresh()"),
+  );
+  assert.equal(
+    joins.length,
+    1,
+    "setDemand must call this.requestDemandRefresh() when an owner joins: if (demanded && …)",
+  );
+});
