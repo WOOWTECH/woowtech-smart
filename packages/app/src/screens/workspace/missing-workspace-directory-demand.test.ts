@@ -399,8 +399,10 @@ describe("directory demand that leaves while its own refresh is still running", 
         timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
         route.rerender({ hasWorkspaceDescriptor: true });
         expect(f.transport.activeSubscriptions.size).toBe(3);
-        // The user leaves the agent before the label catalog arrives: route demand drops last.
-        timeline.replaceVisibleAgentIds("workspace-screen", []);
+        // The agent tab closes before the label catalog arrives: route demand drops last.
+        // dispose() ends it on both sides of upstream #5040, where a hidden chat stays demanded
+        // until its tab closes.
+        timeline.dispose();
       });
       const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
       try {
