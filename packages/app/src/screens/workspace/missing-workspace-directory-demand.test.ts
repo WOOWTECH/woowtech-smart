@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useSessionStore } from "@/stores/session-store";
-import { useWorkspaceLabels } from "@/workspace-labels";
 import {
   navigateToWorkspace,
   type NavigateToWorkspaceDeps,
@@ -483,47 +482,6 @@ describe("directory demand that leaves while its own refresh is still running", 
       await expectSecondWorkspaceRefreshed(f);
     } finally {
       closeSidebar();
-    }
-  });
-
-  // An upstream gap the fork leaves alone (woowtech/README.md, 16 T1): a route-only refresh
-  // satisfies the connection without the label catalog. Upstream #5079 connects the catalog in
-  // connectionChanged; after merging it this witness fails, and it goes with the README point.
-  it("witness: with the descriptor before the agent list, the sidebar leaves the label catalog unloaded until pull-to-refresh", async () => {
-    const f = await fixture({ workspaceLabels: true });
-    useSessionStore.getState().setHasHydratedWorkspaces(serverId, true);
-    f.transport.entries = [workspace];
-    f.transport.holdAgents = true;
-    const route = missingWorkspaceRoute(f, missingInput);
-    const timeline = directoryOnlyTimeline(f);
-    const requests = () => ({
-      workspaceRequests: f.transport.count("fetch_workspaces_request"),
-      labelRequests: f.transport.count("workspace.label.list.request"),
-    });
-    try {
-      await expect.poll(() => f.session()?.workspaces.has(workspaceId) ?? false).toBe(true);
-      // One render pass: the descriptor releases the owner, whose refresh then fails before the
-      // label step, and the notification's agent tab takes over with route demand.
-      route.rerender({ hasWorkspaceDescriptor: true });
-      timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
-      f.transport.deliverAgents();
-      // The tab's route-only refresh satisfies the connection without asking for labels.
-      await expect.poll(() => f.runtime.getSnapshot(serverId)?.agentDirectoryStatus).toBe("ready");
-      expect(requests()).toEqual({ workspaceRequests: 2, labelRequests: 0 });
-      const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
-      try {
-        await settle();
-        expect(requests()).toEqual({ workspaceRequests: 2, labelRequests: 0 });
-        // Pull-to-refresh loads the catalog.
-        await f.runtime.refreshDirectories(serverId);
-        expect(requests()).toEqual({ workspaceRequests: 3, labelRequests: 1 });
-        expect(useWorkspaceLabels.getState().hosts[serverId]?.status).toBe("online");
-      } finally {
-        closeSidebar();
-      }
-    } finally {
-      timeline.dispose();
-      route.unmount();
     }
   });
 
