@@ -249,7 +249,9 @@ async function expectNewLauncher(page: Page): Promise<void> {
   ).toBeVisible();
   await expect(draftTabChip(page)).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "Message agent..." })).toHaveCount(0);
-  await expect(page.getByText("Paseo ran into a problem.", { exact: true })).toHaveCount(0);
+  // The crash screen's title, with woowtech smart's name in place of Paseo's.
+  const crashTitle = page.getByText("woowtech smart ran into a problem.", { exact: true });
+  await expect(crashTitle).toHaveCount(0);
 }
 
 async function openAgentDraftFromLauncher(page: Page): Promise<void> {
