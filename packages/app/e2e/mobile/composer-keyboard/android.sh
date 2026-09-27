@@ -658,7 +658,7 @@ run_host_scenario() {
   run_host_scroll "${host}"
 }
 
-adb shell am start -a android.intent.action.VIEW -d "paseo://h/${SERVER_ID}/agent/${agent_id}" "${APP_ID}" >/dev/null
+adb shell am start -a android.intent.action.VIEW -d "woowtech-smart://h/${SERVER_ID}/agent/${agent_id}" "${APP_ID}" >/dev/null
 ad wait "text=\"${AGENT_TITLE}\"" 10000
 run_host_scenario chat
 ad keyboard dismiss || true
