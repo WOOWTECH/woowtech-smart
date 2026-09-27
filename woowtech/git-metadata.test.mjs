@@ -52,6 +52,12 @@ function policyOverrides(file, text) {
   const violations = [];
   const forkPolicies = new Set(["isGitMetadataGenerationEnabled", "isWorkspaceAutoNameEnabled"]);
   const policyNames = new Set([...forkPolicies, "isGenerationEnabled", "isAutoNameEnabled"]);
+  const writes = new Set([
+    ts.SyntaxKind.EqualsToken,
+    ts.SyntaxKind.QuestionQuestionEqualsToken,
+    ts.SyntaxKind.BarBarEqualsToken,
+    ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+  ]);
   // x.name and x["name"]
   function memberName(node) {
     if (ts.isPropertyAccessExpression(node)) return node.name.text;
@@ -61,34 +67,49 @@ function policyOverrides(file, text) {
     return undefined;
   }
   // x.name = options.name ?? forkPolicy keeps the injected option, which is checked where it is
-  // passed, or the fork default.
+  // passed, or the fork default. Only a plain `=` from `options` qualifies.
   function keepsForkDefault(node, name) {
     const value = node.right;
     return (
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
       ts.isBinaryExpression(value) &&
       value.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
-      memberName(value.left) === name &&
+      ts.isPropertyAccessExpression(value.left) &&
+      value.left.expression.getText(tree) === "options" &&
+      value.left.name.text === name &&
       ts.isIdentifier(value.right) &&
       forkPolicies.has(value.right.text)
     );
   }
   function visit(node) {
+    // Members that supply a policy: { name: … }, { name }, name() {}, get name() {}, name = …
     if (
       (ts.isPropertyAssignment(node) ||
         ts.isShorthandPropertyAssignment(node) ||
-        ts.isMethodDeclaration(node)) &&
+        ts.isMethodDeclaration(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        (ts.isPropertyDeclaration(node) && node.initializer)) &&
       policyNames.has(node.name.getText(tree).replace(/["']/g, ""))
     ) {
       violations.push(file);
     }
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+    if (ts.isBinaryExpression(node) && writes.has(node.operatorToken.kind)) {
       const name = memberName(node.left);
       if (policyNames.has(name) && !keepsForkDefault(node, name)) violations.push(file);
+    }
+    // A policy named in a string: defineProperty, Reflect.set, a computed key. Reads through
+    // x["name"] are fine; writes through it are caught above.
+    if (
+      ts.isStringLiteralLike(node) &&
+      policyNames.has(node.text) &&
+      !ts.isElementAccessExpression(node.parent)
+    ) {
+      violations.push(file);
     }
     ts.forEachChild(node, visit);
   }
   visit(tree);
-  return violations;
+  return [...new Set(violations)];
 }
 
 function productionPolicyOverrides(
@@ -119,12 +140,31 @@ test("metadata policy overrides are confined to tests, including the upstream Se
     "this.isAutoNameEnabled = () => true;",
     "this.isAutoNameEnabled = options.isAutoNameEnabled ?? (() => true);",
     "this.isAutoNameEnabled = (() => true) ?? isWorkspaceAutoNameEnabled;",
+    "this.isAutoNameEnabled = forced.isAutoNameEnabled ?? isWorkspaceAutoNameEnabled;",
+    "deps.isGenerationEnabled ??= () => true;",
+    "deps.isGenerationEnabled ||= () => true;",
+    "this.isAutoNameEnabled &&= () => true;",
+    "this.isAutoNameEnabled ??= options.isAutoNameEnabled ?? isWorkspaceAutoNameEnabled;",
+    'factory({ "isGenerationEnabled": () => true });',
+    'Object.defineProperty(deps, "isGenerationEnabled", { value: () => true });',
+    'const key = "isGenerationEnabled"; factory({ [key]: () => true });',
+    "class Stub { isAutoNameEnabled = () => true; }",
+    "factory({ get isGenerationEnabled() { return () => true; } });",
   ]) {
     assert.deepEqual(
       policyOverrides("server/unexpected.ts", text),
       ["server/unexpected.ts"],
       `not flagged: ${text}`,
     );
+  }
+  // Declaring or calling a policy is not an override.
+  for (const text of [
+    "interface Deps { isGenerationEnabled?: () => boolean }",
+    "class Real { private readonly isAutoNameEnabled: () => boolean; }",
+    "if (!isGenerationEnabled()) return COMMIT_MESSAGE_FALLBACK;",
+    'if (!deps["isGenerationEnabled"]?.()) return COMMIT_MESSAGE_FALLBACK;',
+  ]) {
+    assert.deepEqual(policyOverrides("server/unexpected.ts", text), [], `flagged: ${text}`);
   }
   // The one production write: WorkspaceAutoName keeps the injected option or the fork policy.
   assert.deepEqual(
