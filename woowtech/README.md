@@ -637,7 +637,7 @@ node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/woowtech-push.test.ts src/messages.test.ts --bail=1)
 (cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts --bail=1)
 (cd packages/app && npx vitest run plugins/woowtech-ios-firebase.test.ts plugins/with-woowtech-push.test.ts plugins/woowtech-metro-resolver.test.ts src/push-notifications src/utils/notification-routing.woowtech-push.test.ts --bail=1)
-(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1 小節
+(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1 和 T1 S3 小節
 ```
 
 - 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛和 `expo-build-properties` 的 `ios`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
@@ -663,6 +663,22 @@ node --test woowtech/*.test.mjs
 - recovery inspect 可能比目錄刷新早回，短暫出現 unavailable；本切片不改。若另排，需由 runtime 提供目前 epoch 的目錄刷新完成狀態，再讓 recovery inspect 等待，另 commit 並測離線、失敗與重連，不能用全域 hydrated 代替本 epoch 完成。
 
 定向檢查就是本節「合併上游之後」的 `node --test woowtech/*.test.mjs` 和 T1 那行 vitest；依賴與 dist 已備妥時不需 build。
+
+#### T1 S3：從根層畫面經通知進入工作區後，之後的通知停在前一個 agent
+
+- Android（2026-09-27，`logs/ultra-device.md` 的 S2、S3、S3b、S3c）：重裝後停在主機首頁，點新工作區的通知（S2），T1 讓它載入後開出 agent X。同一個 App 行程裡再點已知工作區 B 的通知（S3），B 先加了通知的 agent，接著又加進 X 並聚焦，畫面停在 X；換成另一個已知工作區也一樣（S3b）。重開 App 行程就正常（S3c）。T1 之前 S2 一直卡在 Loading workspace，意圖從來沒被消費，所以碰不到這條路。
+- 原因在上游，跟 fork 的推播無關：中繼只換了送達的路，點擊照樣走上游的 `PushNotificationRouter`、`navigateToAgent`、`navigateToWorkspace`。
+  - 重裝後主機還沒有上次的工作區，主機首頁是根層的 Open Project（`/open-project`，歡迎頁連線後也是 `router.replace` 到這裡），根 stack 沒有 `h/[serverId]`。工作區未知，`navigateToWorkspace` 把 agent 延後成 `?open=agent:X`；`navigateToHostWorkspaceRoute` 找不到掛著的主機路由，改用 `router.dismissTo`。
+  - expo-router 6.0.23 在根 stack 分歧時用 `getPayloadFromStateRoute` 組 action：每一層的 params 都併進更深路由的 params，所以新建的 `h/[serverId]` 路由也帶著 `open`。在根層畫面點 terminal 通知（`router.navigate(buildNotificationRoute(...))`）一樣會帶。
+  - 工作區路由 `app/h/[serverId]/workspace/[workspaceId]/index.tsx` 原本用 `useGlobalSearchParams` 讀 `open`，那是從根到葉合併每一層 params 的結果；消費後只用 `navigation.setParams` 清掉自己那份。之後每次 `dismissTo` 換工作區，工作區路由的 params 整個換掉，主機路由那份又露出來。消費 key 含 workspaceId，於是當成新意圖，在新工作區加開並聚焦 X，直到 App 行程結束。
+  - 上游 `5e5fc9779`（2026-05-06）把消費從 `workspace/[workspaceId]/_layout.tsx` 搬到葉路由時沿用了 `useGlobalSearchParams`：搬之前 `open` 在 layout 底下的子路由，layout 才需要合併的 params。merge-base `836f1a9c2` 到 upstream/main `d7b7016cc` 沒動這兩個檔，歷史裡也沒有相關修正。terminal 通知在上游不需要 T1 就碰得到，可以回報上游。
+- 修法：工作區路由只讀自己路由上的 `open`。`index.tsx` 拿掉 `useGlobalSearchParams`，改從 `useLocalSearchParams` 經 fork 的 `navigation/woowtech-workspace-open-intent.ts`（`readWorkspaceRouteOpenParam`）取值（+4／−4 行，註解 `woowtech smart:`）。每一條進入的路，工作區路由自己都帶著 `open`：解析網址時 query 只放在葉路由，攤平時葉路由也有一份，`dispatchHostWorkspacePopTo` 只放在巢狀的 params。主機路由那份還在，但沒有人讀；網址列只序列化葉路由的 params。
+  - 沒採用：清主機路由的 `open`（`getParent().setParams`）。React Navigation 7.16 看到父路由換成新的 params 物件，會用裡面的 `screen`／`params` 再導覽一次子 stack，把人帶回 S2 的工作區，`open` 也跟著回來。也沒採用只改 `navigateToHostWorkspaceRoute`：terminal 通知不經過它。
+- 測試：
+  - `navigation/woowtech-workspace-open-intent.test.ts`（7 個）：reader 本身；S1（從工作區畫面點通知，`open` 只在工作區路由）；S2；S3（B 只開通知的 agent）；換到別的工作區再回來都不重開 X；在 Open Project 點 terminal 通知後換工作區，terminal 不跟過去；見證：主機路由的 params 跟裝置的 navstate（`logs/ultra-device-s3b.txt`）一樣，用合併的 params 讀會在 B 的通知 agent 之後再加開 X，就是裝置上的樣子。
+  - `navigation/woowtech-workspace-open-intent.test-support.ts`：用真的 App 通知與導覽程式（`resolveNotificationTarget`、`resolveNavigateToAgent`、`navigateToWorkspace`、`navigateToHostWorkspaceRoute`、`buildNotificationRoute`、`prepareWorkspaceTab`）、React Navigation 的 `StackRouter`，以及 expo-router 從 `src/app` 檔名建出的路由樹。expo-router 的路由模組會載入 react-native，unit project 載不起來（`vitest.setup.ts` 也 mock 了 `expo-router`），所以 `router.navigate`、`router.dismissTo` 的 action（`findDivergentState`、`getPayloadFromStateRoute`）和 `useGlobalSearchParams` 的合併照 6.0.23 的原始碼轉寫。另外模型化兩段：巢狀 navigator 依父路由的 `screen`／`params` 啟動，以及工作區路由的 open-intent effect。升級 expo-router 時，對照 `build/global-state/routing.js` 和 `routeInfo.js` 更新轉寫。
+  - 守門 `woowtech/workspace-open-intent.test.mjs` 只看原始碼：工作區路由沒有 `useGlobalSearchParams`，`openValue` 是 `readWorkspaceRouteOpenParam` 讀 `useLocalSearchParams` 的結果。vitest 裡的路由讀法照這一行寫，所以把 `index.tsx` 改回上游時，紅的是守門。
+- 合併上游：上游改成讀自己的 params，或用別的方式修好時，先確認新測試仍綠，再拿掉 fork 的讀法和守門。
 
 #### 桌面通知的回饋
 
@@ -1013,6 +1029,12 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- T1 S3 修正（2026-09-27，整合分支 `woowtech/integration-0926`，第 16 節 T1 S3）：
+  - 紅：新測試的路由先照上游的讀法（合併的 params），7 個裡 3 紅、原因跟裝置一樣：S3 的工作區收到通知的 agent 之後又收到 S2 的 agent（pin 在後，等於聚焦它）；換到別的工作區收到 S2 的 agent，回到 S2 的工作區又收到一次；從 Open Project 點的 terminal 換工作區時跟過去。S2 和見證綠，見證的主機路由 params 跟 `logs/ultra-device-s3b.txt` 的 navstate 一樣。守門對上游的 `index.tsx` 紅在「must not read useGlobalSearchParams」。
+  - 綠：`index.tsx` 改讀自己的 params、路由讀法跟著改之後，新測試 7/7、守門 1/1。
+  - 突變（都照備份還原，`shasum` 相同）：只把 `index.tsx` 改回上游，守門紅、新測試 7/7（它不讀 `index.tsx`）；`index.tsx` 和測試的路由讀法一起改回合併的 params，守門紅、新測試 3 紅（同紅燈）；reader 丟掉所有意圖，新測試 4 紅（reader、S1、S2、terminal）。
+  - 逐檔跑：新測試 7/7；既有的 11 個檔 239/239（`workspace-route-navigation`、`host-runtime-bootstrap`、`workspace-deck-retention`、`host-routes`、`notification-routing`、`notification-routing.woowtech-push`、導覽 store 的 `navigation`、`navigate-to-agent/resolve`、T1 的 `missing-workspace-directory-demand`、`directory-sync`、`host-runtime`）；`node --test woowtech/*.test.mjs` 122/122；App 的 typecheck、format（含 `format:check`）、lint 通過。沒跑 build、全套測試、裝置或模擬器，也沒有 fetch 上游。紀錄在 `/Users/elmolin/.local/share/woowtech-smart/logs/t1-s3-open-intent.md`。
+
 - T1 審查修正第 3 輪（2026-09-27，整合分支 `woowtech/integration-0926`，第 14、16、20 節）：
   - 非 race 路徑：審查的突變「`releaseSubscriptions()` 不清已滿足記號」（上游的行）讓原本的 T1 25/25 照綠。新增三個案例：owner 在自己的 refresh 結束後才釋放、同一個連線再開第二個缺工作區路由（標籤關、開各一），以及已刪除或封存的工作區離開再回來。HEAD 綠；這個突變只紅這三個（工作區請求停在 1 次），其餘 27 綠。
   - 上游缺口的見證：假主機加上延後 agent 清單；agents、workspaces 的回覆改成只有帶 subscribe 的請求才開訂閱，跟真的 daemon 一樣（原本 plain fetch 也配訂閱 ID，「沒有 demand 就不訂閱」的修法會被算成剩 2 條，孤兒見證抓不到）。兩個見證都斷言現況，沒用 `it.fails`，因為它遇到任何失敗都算通過。套上 #5079 那一行（`connectionChanged` 裡的 `connectWorkspaceLabels()`）只紅標籤見證；讓 `fetchAgents`、`fetchWorkspaceSnapshot` 沒有 demand 時不訂閱，只紅孤兒見證（剩 0 條）。拿掉 fork 修法（main 的 `index.ts`）時 30 個裡 9 紅：原本 8 個加標籤見證。
@@ -1268,6 +1290,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
+- T1 S3（第 16 節）的 Android 重驗：重裝後在 Open Project 做 S2，同一個 App 行程接著做 S3、S3b，再用側欄切到別的工作區又切回來，已知工作區的通知要開到自己的 agent，也不能多出別的工作區的 agent tab；S1、S5 各跑一次確認延後開啟照舊。主機路由的 navstate 仍會看到 `open`，那是預期的。
 - CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
 - 商標（TIPO）與 D-U-N-S。
