@@ -81,6 +81,8 @@ class DirectoryTransport implements DaemonTransport {
   readonly activeSubscriptions = new Set<string>();
   entries: WorkspaceDescriptor[] = [];
   holdWorkspaces = false;
+  // The agent list lands after the workspace descriptor.
+  holdAgents = false;
   // A host with workspace labels: refreshAll() then waits for the label catalog after both
   // directory lists have landed. That tail took 1.4-2.25 s on the device.
   workspaceLabels = false;
@@ -88,6 +90,8 @@ class DirectoryTransport implements DaemonTransport {
   // The host answers workspace requests with an error while the connection stays up.
   failWorkspaces = false;
   private pending: Array<Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>> = [];
+  private pendingAgents: Array<Extract<SessionInboundMessage, { type: "fetch_agents_request" }>> =
+    [];
   private pendingLabels: Array<
     Extract<SessionInboundMessage, { type: "workspace.label.list.request" }>
   > = [];
@@ -152,15 +156,8 @@ class DirectoryTransport implements DaemonTransport {
         });
         break;
       case "fetch_agents_request":
-        this.reply({
-          type: "fetch_agents_response",
-          payload: {
-            requestId: message.requestId,
-            subscriptionId: this.subscription(),
-            entries: [],
-            pageInfo: { hasMore: false, nextCursor: null, prevCursor: null },
-          },
-        });
+        if (this.holdAgents) this.pendingAgents.push(message);
+        else this.agentsReply(message);
         break;
       case "fetch_workspaces_request":
         // Replies are microtasks, so a refresh loop would starve the event loop and hang the
@@ -190,6 +187,22 @@ class DirectoryTransport implements DaemonTransport {
     this.activeSubscriptions.add(id);
     return id;
   }
+  // Only a subscribing request opens a subscription on the host; a plain fetch gets none.
+  private agentsReply(message: Extract<SessionInboundMessage, { type: "fetch_agents_request" }>) {
+    this.reply({
+      type: "fetch_agents_response",
+      payload: {
+        requestId: message.requestId,
+        subscriptionId: message.subscribe ? this.subscription() : null,
+        entries: [],
+        pageInfo: { hasMore: false, nextCursor: null, prevCursor: null },
+      },
+    });
+  }
+  deliverAgents() {
+    this.holdAgents = false;
+    for (const request of this.pendingAgents.splice(0)) this.agentsReply(request);
+  }
   private workspaceReply(
     message: Extract<SessionInboundMessage, { type: "fetch_workspaces_request" }>,
   ) {
@@ -197,7 +210,7 @@ class DirectoryTransport implements DaemonTransport {
       type: "fetch_workspaces_response",
       payload: {
         requestId: message.requestId,
-        subscriptionId: this.subscription(),
+        subscriptionId: message.subscribe ? this.subscription() : null,
         entries: this.entries.map((entry) => ({
           ...entry,
           statusEnteredAt: entry.statusEnteredAt?.toISOString() ?? null,
