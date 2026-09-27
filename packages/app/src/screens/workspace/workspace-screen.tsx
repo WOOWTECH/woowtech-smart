@@ -1560,7 +1560,7 @@ function WorkspaceScreenContent({
     serverId: normalizedServerId,
     workspaceId: normalizedWorkspaceId,
     isRouteFocused,
-    hasWorkspaceDescriptor: workspaceDescriptor !== null,
+    hasWorkspaceDescriptor: Boolean(workspaceDescriptor),
   });
   useEffect(() => {
     if (!normalizedServerId || !normalizedWorkspaceId || workspaceDescriptor) return;

@@ -30,7 +30,7 @@ function calls(tree, name) {
     (node) => ts.isCallExpression(node) && node.expression.getText(tree) === name,
   );
 }
-// A return that leaves the component itself; nested functions return only from themselves.
+// A return that leaves the component or hook itself; nested functions return only from themselves.
 function returnsFromComponent(node) {
   if (ts.isReturnStatement(node)) return true;
   if (ts.isFunctionLike(node)) return false;
@@ -65,11 +65,13 @@ test("workspace-screen wires the focused missing descriptor owner beside cache p
   const matches = calls(tree, "useMissingWorkspaceDirectoryDemand");
   assert.equal(matches.length, 1, "missing or duplicate workspace demand hook call");
   const call = matches[0];
+  // Truthiness, like the cache prepare effect: `!== null` would count an undefined lookup as a
+  // descriptor, and then the owner would never ask for the directory.
   assert.deepEqual(properties(call.arguments[0], tree), {
     serverId: "normalizedServerId",
     workspaceId: "normalizedWorkspaceId",
     isRouteFocused: "isRouteFocused",
-    hasWorkspaceDescriptor: "workspaceDescriptor !== null",
+    hasWorkspaceDescriptor: "Boolean(workspaceDescriptor)",
   });
   // Rules of hooks: one plain statement of the component body, reached on every render.
   const components = findAll(
@@ -97,6 +99,23 @@ test("hook returns its directory cleanup and tracks identity, focus and descript
   const tree = source(`${base}use-missing-workspace-directory-demand.ts`);
   const effects = calls(tree, "useEffect");
   assert.equal(effects.length, 1);
+  // Rules of hooks inside the hook as well: the effect is reached on every render.
+  const hooks = findAll(
+    tree,
+    (node) =>
+      ts.isFunctionDeclaration(node) && node.name?.text === "useMissingWorkspaceDirectoryDemand",
+  );
+  assert.equal(hooks.length, 1, "useMissingWorkspaceDirectoryDemand not found");
+  const body = hooks[0].body;
+  const effect = effects[0].parent;
+  assert.ok(
+    ts.isExpressionStatement(effect) && effect.parent === body,
+    "useEffect must be a direct statement of the hook, not inside if, ?:, &&, a block or a callback",
+  );
+  assert.ok(
+    !body.statements.slice(0, body.statements.indexOf(effect)).some(returnsFromComponent),
+    "useEffect must run before any early return of the hook",
+  );
   const [setup, dependencies] = effects[0].arguments;
   assert.ok(ts.isArrowFunction(setup));
   assert.ok(
