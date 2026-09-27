@@ -42,12 +42,13 @@ import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { BinaryFrame } from "@getpaseo/protocol/binary-frames/index";
 import { CursorError } from "./pagination/cursor.js";
 import { SortablePager, type SortSpec } from "./pagination/sortable-pager.js";
-import { describeAgentHistoryMatches, rankAgentHistoryCandidates } from "./agent-history-search.js";
+import { matchesAgentHistoryQuery } from "./agent-history-search.js";
 import type { SpeechToTextProvider, TextToSpeechProvider } from "./speech/speech-provider.js";
 import type { TurnDetectionProvider } from "./speech/turn-detection-provider.js";
 import {
   buildConfigOverrides,
   isStoredAgentProviderAvailable,
+  resolveStoredAgentUpdatedAt,
   toAgentPersistenceHandle,
 } from "./persistence-hooks.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent/agent-loading.js";
@@ -113,11 +114,7 @@ import {
   setAgentModeCommand,
   updateAgentCommand,
 } from "./agent/lifecycle-command.js";
-import {
-  buildStoredAgentPayload,
-  resolveStoredAgentPayloadUpdatedAt,
-  toAgentPayload,
-} from "./agent/agent-projections.js";
+import { buildStoredAgentPayload, toAgentPayload } from "./agent/agent-projections.js";
 import {
   appendTimelineItemIfAgentKnown,
   emitLiveTimelineItemIfAgentKnown,
@@ -898,6 +895,7 @@ export class Session {
       workspaceRegistry: this.workspaceRegistry,
       projectRegistry: this.projectRegistry,
       workspaceGitService: this.workspaceGitService,
+      isDirectory: (path) => this.filesystem.isDirectory(path),
       logger: this.sessionLogger,
     });
     this.workspaceRecovery = createWorkspaceRecoveryService({
@@ -3298,8 +3296,8 @@ export class Session {
         return candidate;
       }
       const updatedDelta =
-        Date.parse(resolveStoredAgentPayloadUpdatedAt(candidate)) -
-        Date.parse(resolveStoredAgentPayloadUpdatedAt(latest));
+        Date.parse(resolveStoredAgentUpdatedAt(candidate)) -
+        Date.parse(resolveStoredAgentUpdatedAt(latest));
       if (updatedDelta !== 0) {
         return updatedDelta > 0 ? candidate : latest;
       }
@@ -5295,8 +5293,9 @@ export class Session {
     limit: number;
     getPlacement: (workspaceId: string | undefined) => Promise<ProjectPlacementPayload | null>;
     filter: AgentUpdatesFilter | undefined;
+    search?: string;
   }): Promise<FetchAgentsResponseEntry[]> {
-    const { candidates, limit, getPlacement, filter } = params;
+    const { candidates, limit, getPlacement, filter, search } = params;
     const matchedEntries: FetchAgentsResponseEntry[] = [];
     const batchSize = 25;
     for (
@@ -5324,6 +5323,7 @@ export class Session {
         ) {
           continue;
         }
+        if (search && !matchesAgentHistoryQuery(search, entry)) continue;
         matchedEntries.push(entry);
         if (matchedEntries.length > limit) {
           break;
@@ -5382,17 +5382,6 @@ export class Session {
     };
 
     const search = agentDirectorySearchQuery(request);
-    if (search) {
-      return this.listRankedAgentHistoryEntries({
-        search,
-        agents,
-        sort,
-        filter,
-        getPlacement,
-        page: request.page,
-      });
-    }
-
     let candidates = [...agents];
     candidates.sort((left, right) => this.agentsPager.compare(left, right, sort));
     const cursorToken = request.page?.cursor;
@@ -5410,6 +5399,7 @@ export class Session {
       limit,
       getPlacement,
       filter,
+      search,
     });
 
     const pagedEntries = matchedEntries.slice(0, limit);
@@ -5426,64 +5416,6 @@ export class Session {
         prevCursor: request.page?.cursor ?? null,
         hasMore,
       },
-    };
-  }
-
-  /**
-   * The searched history page. Ranking has to see every candidate before it can
-   * name the best one, so this path resolves placements for the whole set
-   * instead of stopping at the page limit — that is what makes a query answer
-   * from all persisted sessions rather than from the first page of them.
-   */
-  private async listRankedAgentHistoryEntries(params: {
-    search: string;
-    agents: AgentSnapshotPayload[];
-    sort: FetchAgentsRequestSort[];
-    filter: AgentUpdatesFilter | undefined;
-    getPlacement: (workspaceId: string | undefined) => Promise<ProjectPlacementPayload | null>;
-    page: AgentDirectoryRequestMessage["page"];
-  }): Promise<{
-    entries: FetchAgentsResponseEntry[];
-    pageInfo: FetchAgentsResponsePageInfo;
-    searchTruncated: boolean;
-  }> {
-    const { search, agents, sort, filter, getPlacement, page } = params;
-    if (page?.cursor) {
-      // A ranked result set has no pages to walk, so a cursor here is caller
-      // misuse. Returning the ranked head instead would hide it.
-      throw new SessionRequestError(
-        "invalid_cursor",
-        "A history search returns one ranked page; it cannot be paged with a cursor.",
-      );
-    }
-
-    const allEntries = await this.collectFetchAgentsEntries({
-      candidates: agents,
-      limit: Number.MAX_SAFE_INTEGER,
-      getPlacement,
-      filter,
-    });
-
-    const ranked = rankAgentHistoryCandidates(search, allEntries, (left, right) =>
-      this.agentsPager.compare(left.agent, right.agent, sort),
-    );
-
-    const limit = page?.limit ?? 200;
-    // Ranges are derived only for the rows that will be rendered; ranking
-    // itself never needs them.
-    const entries = ranked.slice(0, limit).map((result) =>
-      Object.assign({}, result.candidate, {
-        searchScore: result.searchScore,
-        searchMatches: describeAgentHistoryMatches(search, result.candidate),
-      }),
-    );
-
-    return {
-      entries,
-      // No next page exists, so `hasMore` is false and truncation is reported
-      // on its own field. See the note on rankAgentHistoryCandidates.
-      pageInfo: { nextCursor: null, prevCursor: null, hasMore: false },
-      searchTruncated: ranked.length > limit,
     };
   }
 

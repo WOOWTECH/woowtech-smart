@@ -1167,6 +1167,7 @@ export class DaemonClient {
   private runtimeMetricsInterval: ReturnType<typeof setInterval> | null = null;
   private runtimeMetrics: DaemonClientRuntimeMetrics | null = null;
   private pingProbe: PingProbe | null = null;
+  private connectionVerification: DaemonTransport | null = null;
   private livenessHeartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   private lastLivenessRttMs: number | null = null;
   private consecutiveLivenessFailures = 0;
@@ -1254,6 +1255,12 @@ export class DaemonClient {
 
     if (this.connectionState.status === "connecting") {
       return;
+    }
+    // This attempt supersedes any retry the last disconnect scheduled. Left
+    // armed, that retry would tear down the connection this attempt opens.
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
     }
 
     const headers: Record<string, string> = {};
@@ -1451,28 +1458,45 @@ export class DaemonClient {
     );
   }
 
-  ensureConnected(): void {
+  ensureConnected(options?: { verify?: boolean }): void {
     if (this.connectionState.status === "disposed") {
       return;
     }
     if (!this.shouldReconnect) {
       this.shouldReconnect = true;
     }
-    if (
-      this.connectionState.status === "connected" ||
-      this.connectionState.status === "connecting"
-    ) {
+    if (this.connectionState.status === "connected") {
+      if (options?.verify) this.verifyConnection();
       return;
     }
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
+    if (this.connectionState.status === "connecting") return;
     if (this.connectPromise) {
       this.attemptConnect();
       return;
     }
     void this.connect();
+  }
+
+  private verifyConnection(): void {
+    const transport = this.transport;
+    if (!transport || this.connectionVerification === transport) return;
+    this.connectionVerification = transport;
+    // A session probe has its own deadline, independent of a heartbeat that the OS
+    // may have suspended. A successful response also proves the session can serve RPCs.
+    void this.ping({ timeoutMs: 3_000 })
+      .catch((error: unknown) => {
+        if (this.transport !== transport || this.connectionState.status !== "connected") return;
+        this.disposeTransport(1001, "Connection verification failed");
+        this.scheduleReconnect({
+          reason: error instanceof Error ? error.message : String(error),
+          event: "CONNECTION_VERIFICATION_FAILED",
+          reasonCode: "liveness_timeout",
+        });
+        this.ensureConnected();
+      })
+      .finally(() => {
+        if (this.connectionVerification === transport) this.connectionVerification = null;
+      });
   }
 
   getConnectionState(): ConnectionState {
@@ -2676,7 +2700,7 @@ export class DaemonClient {
   // ============================================================================
 
   private readonly creations = new CreationClient({
-    supports: () => this.lastServerInfoMessage?.features?.creationLifecycle === true,
+    supports: (feature) => this.lastServerInfoMessage?.features?.[feature] === true,
     requestId: () => this.createRequestId(),
     request: (kind, input) =>
       kind === "workspace"
@@ -2712,7 +2736,6 @@ export class DaemonClient {
     },
     legacyAgent: (input) => this.createLegacyAgent(input),
     legacyWorkspace: (input) => this.createLegacyWorkspace(input, input.requestId),
-    sendMessage: (id, text, options) => this.sendMessage(id, text, options),
   });
 
   async createAgent(options: CreateAgentRequestOptions): Promise<AgentSnapshotPayload> {
@@ -2727,7 +2750,6 @@ export class DaemonClient {
   private async createLegacyAgent(
     options: CreateAgentRequestOptions,
   ): Promise<AgentSnapshotPayload> {
-    if (options.idempotencyKey !== undefined) this.requireAgentRequestReceipts();
     const requestId = this.createRequestId(options.requestId);
     const config = resolveAgentConfig(options);
 
@@ -2779,13 +2801,6 @@ export class DaemonClient {
     }
 
     return status.agent;
-  }
-
-  private requireAgentRequestReceipts(): void {
-    // COMPAT(agentRequestReceipts): added in v0.7.3; remove gate after 2027-03-05.
-    if (this.lastServerInfoMessage?.features?.agentRequestReceipts !== true) {
-      throw new Error("Update the host to use retry-safe agent creation.");
-    }
   }
 
   async deleteAgent(agentId: string): Promise<void> {
@@ -4428,19 +4443,16 @@ export class DaemonClient {
     input: CreateWorkspaceRequestOptions,
     requestId?: string,
   ): Promise<WorkspaceCreatePayload> {
-    // COMPAT(workspaceRequestReceipts): added in v0.8.0; remove gate after 2027-03-07.
-    if (
-      input.idempotencyKey !== undefined &&
-      !this.lastServerInfoMessage?.features?.workspaceRequestReceipts
-    ) {
-      throw new Error("Update the host to use retry-safe workspace creation.");
-    }
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {
         type: "workspace.create.request",
         source: input.source,
-        ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
+        // COMPAT(workspaceRequestReceipts): added in v0.8.0; remove after 2027-03-15 once the daemon floor supports workspace receipts.
+        ...(this.lastServerInfoMessage?.features?.workspaceRequestReceipts &&
+        input.idempotencyKey !== undefined
+          ? { idempotencyKey: input.idempotencyKey }
+          : {}),
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.firstAgentContext !== undefined
           ? { firstAgentContext: input.firstAgentContext }
@@ -4723,6 +4735,7 @@ export class DaemonClient {
     if (!bytes) {
       throw new Error("File bytes are required.");
     }
+    const uploadTransport = this.transport;
     const resolvedRequestId = this.createRequestId(input.requestId);
     const modifiedAt = input.modifiedAt ?? new Date().toISOString();
     const responsePromise = this.sendCorrelatedRequest({
@@ -4739,37 +4752,63 @@ export class DaemonClient {
       options: { skipQueue: true },
     });
 
-    this.sendBinaryFrame(
-      encodeFileTransferFrame({
-        opcode: FileTransferOpcode.FileBegin,
-        requestId: resolvedRequestId,
-        metadata: {
-          mime: input.mimeType,
-          size: bytes.byteLength,
-          encoding: "binary",
-          modifiedAt,
-          fileName: input.fileName,
-        },
-      }),
+    let settled = false;
+    void responsePromise.then(
+      () => {
+        settled = true;
+        return undefined;
+      },
+      () => {
+        settled = true;
+        return undefined;
+      },
     );
-
-    const chunkSize = input.chunkSize ?? 1024 * 1024;
-    for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
+    try {
       this.sendBinaryFrame(
         encodeFileTransferFrame({
-          opcode: FileTransferOpcode.FileChunk,
+          opcode: FileTransferOpcode.FileBegin,
           requestId: resolvedRequestId,
-          payload: bytes.subarray(offset, Math.min(offset + chunkSize, bytes.byteLength)),
+          metadata: {
+            mime: input.mimeType,
+            size: bytes.byteLength,
+            encoding: "binary",
+            modifiedAt,
+            fileName: input.fileName,
+          },
         }),
       );
-    }
 
-    this.sendBinaryFrame(
-      encodeFileTransferFrame({
-        opcode: FileTransferOpcode.FileEnd,
-        requestId: resolvedRequestId,
-      }),
-    );
+      const chunkSize = input.chunkSize ?? 128 * 1024;
+      for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
+        // Native WebSocket.send encodes binary synchronously. Let rendering and
+        // incoming messages run between bounded pieces on every platform.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        if (settled) return await responsePromise;
+        if (this.transport !== uploadTransport || this.connectionState.status !== "connected") {
+          throw new DaemonConnectionError("Connection changed during file upload");
+        }
+        this.sendBinaryFrame(
+          encodeFileTransferFrame({
+            opcode: FileTransferOpcode.FileChunk,
+            requestId: resolvedRequestId,
+            payload: bytes.subarray(offset, Math.min(offset + chunkSize, bytes.byteLength)),
+          }),
+        );
+      }
+
+      this.sendBinaryFrame(
+        encodeFileTransferFrame({
+          opcode: FileTransferOpcode.FileEnd,
+          requestId: resolvedRequestId,
+        }),
+      );
+    } catch (error) {
+      this.rejectWaitersForRequestId(
+        resolvedRequestId,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      throw error;
+    }
 
     return responsePromise;
   }

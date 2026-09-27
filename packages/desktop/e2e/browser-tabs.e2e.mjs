@@ -375,7 +375,8 @@ async function readPresentation(page, browserId) {
 async function readViewport(client, browserId) {
   const evaluated = await callBrowserTool(client, "browser_evaluate", {
     browserId,
-    function: "() => ({ width: window.innerWidth, height: window.innerHeight })",
+    function:
+      "() => ({ width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio })",
   });
   return JSON.parse(evaluated.resultJson);
 }
@@ -642,10 +643,11 @@ async function runRegression({
 
   const deviceSizeMenuPainted = await selectDeviceSize(page, "iPhone SE · 375×667");
   assert(deviceSizeMenuPainted, "Device size menu did not paint above the browser surface");
+  const deviceViewport = await readViewport(client, browserId);
   recordViewportMismatch(
     failures,
     "device size menu paints and receives input above the browser surface",
-    await readViewport(client, browserId),
+    deviceViewport,
     { width: 375, height: 667 },
   );
 
@@ -654,6 +656,14 @@ async function runRegression({
     text: "Bridge target",
     timeoutMs: 5_000,
   });
+  const resizedScreenshot = await callBrowserToolUntilReady(client, "browser_screenshot", {
+    browserId,
+  });
+  assert(
+    resizedScreenshot.width === Math.round(375 * deviceViewport.scale) &&
+      resizedScreenshot.height === Math.round(667 * deviceViewport.scale),
+    `Screenshot after resize returned ${resizedScreenshot.width}×${resizedScreenshot.height}`,
+  );
   const requestedViewport = { width: 640, height: 480 };
   await callBrowserTool(client, "browser_resize", { browserId, ...requestedViewport });
   recordViewportMismatch(
