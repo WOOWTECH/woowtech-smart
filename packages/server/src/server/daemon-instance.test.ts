@@ -24,7 +24,8 @@ function lockFor(pid: number, startedAt: Date): PidLockInfo {
     startedAt: startedAt.toISOString(),
     hostname: "old-host",
     uid: process.getuid?.() ?? 0,
-    listen: "127.0.0.1:6767",
+    // Nothing listens on port 1, so a status probe cannot reach an installed daemon.
+    listen: "127.0.0.1:1",
     desktopManaged: true,
     heartbeat: true,
   };
