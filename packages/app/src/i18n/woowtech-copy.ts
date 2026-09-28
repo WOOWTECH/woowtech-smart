@@ -692,11 +692,37 @@ const CLAUDE_SDK_ZH_TW: typeof CLAUDE_SDK_ENGLISH = {
   runtime: "無法安裝或載入 Claude 元件。傳送下一則訊息時會自動重試。",
 };
 
+// Claude's login state in the provider list (woowtech/README.md §3). The variable names and the
+// command stay as they are typed.
+const CLAUDE_AUTH_ENGLISH = {
+  needsLogin: "Login required",
+  needsLoginHint: "Run claude auth login on the host, or set an API key.",
+  subscription: "Signed in with a Claude subscription",
+  signedIn: "Signed in",
+  apiKey: "Uses an API key (billed per use), not a Claude subscription",
+  authToken: "ANTHROPIC_AUTH_TOKEN is set",
+  oauthToken: "CLAUDE_CODE_OAUTH_TOKEN is set",
+  configured: "Credentials are set",
+  unknown: "Login status unknown",
+};
+const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
+  needsLogin: "需要登入",
+  needsLoginHint: "請在主機上執行 claude auth login，或設定 API key。",
+  subscription: "已使用 Claude 訂閱登入",
+  signedIn: "已登入",
+  apiKey: "使用 API key（按用量計費），不是 Claude 訂閱",
+  authToken: "已設定 ANTHROPIC_AUTH_TOKEN",
+  oauthToken: "已設定 CLAUDE_CODE_OAUTH_TOKEN",
+  configured: "已設定認證資訊",
+  unknown: "無法確認登入狀態",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
     ...(WOOWTECH_COPY[language] ?? ENGLISH),
     claudeSdk: language === "zh-TW" ? CLAUDE_SDK_ZH_TW : CLAUDE_SDK_ENGLISH,
+    claudeAuth: language === "zh-TW" ? CLAUDE_AUTH_ZH_TW : CLAUDE_AUTH_ENGLISH,
     confirmDialog: { confirm: language === "zh-TW" ? "確認" : "Confirm" },
     metadataGeneration:
       language === "zh-TW" ? METADATA_GENERATION_ZH_TW : METADATA_GENERATION_ENGLISH,

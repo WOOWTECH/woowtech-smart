@@ -71,6 +71,39 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 寫在 fork 檔 `packages/server/src/executable-resolution/woowtech-claude-fallback.ts`。接點只有上游 `provider-launch-config.ts` 的 `checkProviderLaunchAvailable`（+4／-2 行）：呼叫端沒給 launch default、指令是預設的 `claude` 時補上備援。Claude 的可用狀態、診斷、版本和啟動都經過這裡；其他 provider 和熱檔 `agent.ts` 都沒動。
   - 測試：`woowtech-claude-fallback.test.ts` 在暫存目錄模擬 home、PATH 和 `/opt/homebrew`、`/usr/local`，不碰真的 home，也不執行真的 `claude`：四個位置各自、前面的位置優先、PATH 優先、手動指令優先（也不會改用備援）、不可執行／資料夾／`--version` 失敗的檔案跳過、原生安裝程式的連結、都沒有時找不到、Windows 不套用。守門 `woowtech/claude-executable.test.mjs` 把 HOME、PATH 指到暫存目錄，從原始碼確認 Claude provider 真的找得到 `~/.local/bin/claude`、版本由那個檔案回報，手動指令照舊；上游改寫 `checkProviderLaunchAvailable` 或 Claude provider 改傳自己的 launch default 時會失敗。
   - 上游測試 `provider-availability.test.ts` 的「Claude reports unavailable when the default command cannot be resolved」原本只把 PATH 指到空資料夾，現在也把 HOME 指過去（+8 行）。`/opt/homebrew/bin`、`/usr/local/bin` 沒辦法用環境變數隔開：在那裡裝了 `claude` 的機器上，這個上游測試會找到它、執行它的 `--version` 而失敗。
+- 登入狀態：設定頁的供應商列表（App、桌面版）和 Claude 的診斷會顯示 Claude 的登入狀態。**只顯示，不擋**：可用狀態（ready）、`isAvailable` 和建立 Agent 都不看它。有些 API 設定偵測不到，擋下來反而錯。
+  - 判斷順序照 Claude Code 的認證優先序（code.claude.com/docs/en/authentication）。先看 provider 的有效環境：daemon 的環境加上 provider 設定的 `env`，值是空字串等於沒設。環境決定不了，才執行 `claude auth status`（5 秒逾時）：
+
+    | 偵測到的                                                       | 狀態                      | 設定頁（zh-TW／英文）                                                                                                                              |
+    | -------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `CLAUDE_CODE_USE_BEDROCK`／`VERTEX`／`FOUNDRY` 為真            | unknown                   | 可用 · 無法確認登入狀態／Login status unknown                                                                                                      |
+    | `ANTHROPIC_AUTH_TOKEN`                                         | configured                | 可用 · 已設定 ANTHROPIC_AUTH_TOKEN／ANTHROPIC_AUTH_TOKEN is set                                                                                    |
+    | `ANTHROPIC_API_KEY`                                            | configured（api_key）     | 可用 · 使用 API key（按用量計費），不是 Claude 訂閱／Uses an API key (billed per use), not a Claude subscription                                   |
+    | `CLAUDE_CODE_OAUTH_TOKEN`                                      | configured                | 可用 · 已設定 CLAUDE_CODE_OAUTH_TOKEN／CLAUDE_CODE_OAUTH_TOKEN is set                                                                              |
+    | `ANTHROPIC_PROFILE`，或聯邦的兩個變數都有                      | unknown                   | 可用 · 無法確認登入狀態                                                                                                                            |
+    | 登入狀態 `loggedIn:false`                                      | needs_login               | **需要登入**（警告色）· 請在主機上執行 claude auth login，或設定 API key。／Login required · Run claude auth login on the host, or set an API key. |
+    | claude.ai 登入、有方案、沒有 API key                           | signed_in（subscription） | 可用 · 已使用 Claude 訂閱登入／Signed in with a Claude subscription                                                                                |
+    | Claude 設定檔裡的 API key（`apiKeySource: ANTHROPIC_API_KEY`） | configured（api_key）     | 同上面的 API key                                                                                                                                   |
+    | apiKeyHelper、雲端供應商（`third_party`、非 firstParty）       | unknown                   | 可用 · 無法確認登入狀態                                                                                                                            |
+    | Claude 設定檔裡的 token（`oauth_token`）                       | configured                | 可用 · 已設定認證資訊／Credentials are set                                                                                                         |
+    | 其他已登入（例如 Console 的 API key、沒有方案資訊）            | signed_in                 | 可用 · 已登入／Signed in                                                                                                                           |
+    | 找不到 `claude`、逾時、被中止、輸出不是 JSON                   | unknown                   | 可用 · 無法確認登入狀態                                                                                                                            |
+
+  - 先看環境變數的原因：Agent 用的非互動模式只要有 `ANTHROPIC_API_KEY` 就一定用它，即使同時登入了訂閱；這時 `claude auth status` 仍回報 claude.ai 登入。
+  - 不外洩：`claude auth status` 的輸出含帳號 email 和組織。程式只把固定欄位分類成上表的狀態，診斷、snapshot、log 和錯誤訊息都不帶原始輸出、email、key 或 token；變數只寫名稱。
+  - 更新時機：跟著供應商重新整理（daemon 啟動、在供應商視窗按重新整理或重新跑診斷）。在主機上登入後要按一次重新整理；不另外監看登入檔。
+  - 偵測不到、會顯示成別的：同時設了 `CLAUDE_CODE_OAUTH_TOKEN` 和 apiKeyHelper 時，Claude 用 apiKeyHelper，這裡顯示「已設定 CLAUDE_CODE_OAUTH_TOKEN」；Anthropic 的 active profile（`~/.config/anthropic`）和企業的 Claude apps gateway 不讀，gateway 使用者設了 `ANTHROPIC_API_KEY` 時會看到 API key 那一行。都只影響說明文字，不影響能不能用。
+  - protocol：provider snapshot 的 entry 多一個選填欄位 `auth: { state, method? }`（fork 檔 `packages/protocol/src/woowtech-provider-auth.ts`，接到 `messages.ts`、`agent-types.ts` 各 +3 行）。兩個值在線上都是字串：App 遇到之後才加的值，顯示成「無法確認登入狀態」，不會整份 snapshot 解析失敗。舊 App 收到新 daemon 的 entry 會略過這欄；新 App 連舊 daemon 沒有這欄，照舊顯示「可用」。
+  - 其他接點：
+    - server：`AgentClient` 多一個選填的 `getAuthStatus`（`agent-sdk-types.ts`）；`provider-snapshot-manager.ts` 在 provider 可用後跟 `fetchCatalog` 同時讀（fork 檔 `server/agent/woowtech-provider-auth.ts`，失敗一律當沒有，只抄 `state`、`method` 兩欄）；`provider-registry.ts` 的包裝 client 轉接它（+2 行），所以繼承 Claude 的自訂 provider 讀自己的 `env`。
+    - Claude：分類寫在 fork 檔 `providers/claude/woowtech-auth.ts`，機器 I/O 走 `woowtech-auth-io.ts`（測試換成假的）。熱檔 `agent.ts` 改了三處：`getDiagnostic` 的 Auth 行改用 fork 檔、刪掉上游把 `auth status` 原始輸出串進診斷的 `resolveClaudeAuth`、多一個 `getAuthStatus`。合併上游時如果上游又改回原始輸出，保留 fork 的版本。
+    - App：`screens/settings/providers-section.tsx` 只在 provider 啟用且 ready 時套用（+10／-3 行）；文字與判斷在 fork 檔 `woowtech-provider-auth.ts`、`woowtech-provider-auth-detail.tsx`，文案在 `i18n/woowtech-copy.ts` 的 `claudeAuth`（只譯繁中，其他語言用英文）。說明那一行手機也顯示；手機的列本來就不顯示狀態文字，需要登入時看的是警告色的點和說明。CLI 的 `provider ls` 沒改。
+  - 測試（都不執行真的 `claude`、不讀真的 `~/.claude`，也不看跑測試那台機器的環境變數）：
+    - `providers/claude/agent.woowtech-auth.test.ts`：假的 `claude auth status` 含 email、org 和像 key 的字串，逐一驗證上表每個狀態的診斷行和 `getAuthStatus`、環境變數的優先序（含 API key 優先於訂閱）、空字串覆蓋、旗標為 0，以及診斷和結果都不含那些字串（斷言只印布林值）。
+    - `server/agent/woowtech-provider-auth.test.ts`：snapshot 帶 `auth` 且仍是 ready、需要登入時 `validateAgentConfiguration`／`resolveCreateConfig` 照常通過、讀取失敗時仍 ready 且沒有這欄、不可用的 provider 不讀、重新整理後更新、繼承 Claude 的自訂 provider 與加了模型的 Claude 都讀得到。
+    - `protocol/src/woowtech-provider-auth.test.ts`：新 App 保留、舊 daemon 沒有、舊 App 略過、之後才加的值、compact 編解碼、App 實際用的 generated validator。
+    - App：`woowtech-provider-auth.test.ts` 用真的翻譯檢查 zh-TW、英文每個狀態的標籤、顏色和說明；`woowtech-provider-auth-row.test.tsx` 實際 render 供應商列表（zh-TW、英文），確認需要登入、token、API key、訂閱、未知和舊 daemon 的列。
+
 - 升級 SDK 時，這三個地方要一起改：
   - `CLAUDE_AGENT_SDK_VERSION`
   - `CLAUDE_AGENT_SDK_INTEGRITY`，用 `npm view @anthropic-ai/claude-agent-sdk@<版本> dist.integrity` 取得

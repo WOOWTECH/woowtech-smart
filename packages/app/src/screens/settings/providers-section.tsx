@@ -36,6 +36,8 @@ import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { ChevronRight, MoreHorizontal, Trash2 } from "lucide-react-native";
+import { describeProviderAuth, type ProviderAuthDisplay } from "./woowtech-provider-auth";
+import { ProviderAuthDetail } from "./woowtech-provider-auth-detail";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
 type ProviderEntry = NonNullable<ReturnType<typeof useProvidersSnapshot>["entries"]>[number];
@@ -53,6 +55,8 @@ function getProviderStatus(
   enabled: boolean,
   modelCount: number,
   t: TFunction,
+  // woowtech smart: a ready provider's login state (woowtech/README.md §3).
+  auth: ProviderAuthDisplay | null = null,
 ): ProviderStatus {
   if (!enabled)
     return { tone: "muted", label: t("settings.providers.statuses.disabled"), modelCount: null };
@@ -64,8 +68,8 @@ function getProviderStatus(
   }
   if (status === "ready") {
     return {
-      tone: "success",
-      label: t("settings.providers.statuses.available"),
+      tone: auth?.tone ?? "success",
+      label: auth?.label ?? t("settings.providers.statuses.available"),
       modelCount: modelCount > 0 ? modelCount : null,
     };
   }
@@ -192,7 +196,9 @@ function ProviderRow({
       ? entry.error.trim()
       : null;
   const modelCount = filterSelectableModels(entry.models ?? null)?.length ?? 0;
-  const providerStatus = getProviderStatus(entry.status, enabled, modelCount, t);
+  // woowtech smart: Claude's login state (woowtech/README.md §3).
+  const auth = describeProviderAuth({ status: entry.status, enabled, auth: entry.auth }, t);
+  const providerStatus = getProviderStatus(entry.status, enabled, modelCount, t, auth);
 
   const handlePress = useCallback(() => {
     onPress(def.id);
@@ -237,6 +243,7 @@ function ProviderRow({
                 {!isCompact ? <Text style={styles.separator}>·</Text> : null}
                 <StatusIndicator status={providerStatus} compact={isCompact} />
               </View>
+              {auth ? <ProviderAuthDetail detail={auth.detail} /> : null}
               {providerError && !isCompact ? (
                 <Text style={styles.errorText} numberOfLines={3}>
                   {providerError}

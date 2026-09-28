@@ -95,7 +95,8 @@ describe("woowtech smart's own text", () => {
           key.startsWith("agentNotificationTitles.") ||
           key.startsWith("metadataGeneration.") ||
           key.startsWith("confirmDialog.") ||
-          key.startsWith("claudeSdk.");
+          key.startsWith("claudeSdk.") ||
+          key.startsWith("claudeAuth.");
         if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });
