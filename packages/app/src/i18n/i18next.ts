@@ -2,6 +2,7 @@ import { createInstance } from "i18next";
 import { initReactI18next } from "react-i18next";
 import { rebrandResources } from "./brand";
 import { observeI18nInit } from "./init";
+import { followDocumentLanguage } from "./woowtech-document-language";
 import { ar } from "./resources/ar";
 import { en } from "./resources/en";
 import { es } from "./resources/es";
@@ -40,5 +41,6 @@ observeI18nInit(
     },
   }),
 );
+followDocumentLanguage(i18n);
 
 export { i18n };

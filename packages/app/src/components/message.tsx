@@ -625,6 +625,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   durationMs,
   onFork,
 }: AssistantTurnFooterProps) {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const [pressedReveal, setPressedReveal] = useState(false);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -641,9 +642,9 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   const durationLabel = useMemo(
     () =>
       durationMs !== undefined && durationMs !== null
-        ? `Worked for ${formatDuration(durationMs)}`
+        ? t("woowtech.message.workedFor", { duration: formatDuration(durationMs) })
         : "",
-    [durationMs],
+    [durationMs, t],
   );
   const timestampLabel = useMemo(
     () => (completedAt ? formatMessageTimestamp(completedAt) : ""),
@@ -688,7 +689,11 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
           onHoverIn={handleHoverIn}
           onHoverOut={handleHoverOut}
           accessibilityRole={canSwap ? "button" : undefined}
-          accessibilityLabel={canSwap ? `${durationLabel}, ended ${timestampLabel}` : primaryLabel}
+          accessibilityLabel={
+            canSwap
+              ? t("woowtech.message.turnEnded", { label: durationLabel, time: timestampLabel })
+              : primaryLabel
+          }
         >
           <View style={assistantTurnFooterStylesheet.labelWrapper}>
             {/* Sizer reserves space for whichever label is longer so the

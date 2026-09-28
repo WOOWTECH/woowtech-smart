@@ -1,4 +1,6 @@
+import type { TFunction } from "i18next";
 import type { ScheduleCadence } from "@getpaseo/protocol/schedule/types";
+import { i18n } from "@/i18n/i18next";
 import { everyMsToParts } from "@/utils/schedule-format";
 
 type CronCadence = Extract<ScheduleCadence, { type: "cron" }>;
@@ -11,13 +13,30 @@ export interface CadencePresetOption {
 
 export const CUSTOM_CRON_PRESET_ID = "custom";
 
-export const CADENCE_PRESET_OPTIONS: CadencePresetOption[] = [
-  { id: "every-minute", label: "Every minute", expression: "* * * * *" },
-  { id: "every-hour", label: "Every hour", expression: "0 * * * *" },
-  { id: "daily-9", label: "Daily 9:00", expression: "0 9 * * *" },
-  { id: "weekdays-9", label: "Weekdays 9:00", expression: "0 9 * * 1-5" },
-  { id: "mondays-9", label: "Mondays 9:00", expression: "0 9 * * 1" },
-];
+// woowtech smart: preset labels come from the woowtech.schedules translations.
+const CADENCE_PRESETS = [
+  { id: "every-minute", labelKey: "everyMinute", expression: "* * * * *" },
+  { id: "every-hour", labelKey: "everyHour", expression: "0 * * * *" },
+  { id: "daily-9", labelKey: "daily9", expression: "0 9 * * *" },
+  { id: "weekdays-9", labelKey: "weekdays9", expression: "0 9 * * 1-5" },
+  { id: "mondays-9", labelKey: "mondays9", expression: "0 9 * * 1" },
+] as const;
+
+/** A preset's label, or the custom cron label for any other id, in the language of `t`. */
+export function cadencePresetLabel(id: string, t: TFunction = i18n.t): string {
+  const labelKey = CADENCE_PRESETS.find((preset) => preset.id === id)?.labelKey ?? "custom";
+  return t(`woowtech.schedules.cadence.presets.${labelKey}`);
+}
+
+export const CADENCE_PRESET_OPTIONS: CadencePresetOption[] = CADENCE_PRESETS.map(
+  ({ id, expression }) => ({
+    id,
+    expression,
+    get label() {
+      return cadencePresetLabel(id);
+    },
+  }),
+);
 
 export function resolveCronPresetId(cadence: CronCadence): string {
   const expression = cadence.expression.trim();
@@ -27,12 +46,11 @@ export function resolveCronPresetId(cadence: CronCadence): string {
   );
 }
 
-export function resolveCronPresetDisplay(cadence: CronCadence): { label: string } {
-  return {
-    label:
-      CADENCE_PRESET_OPTIONS.find((option) => option.id === resolveCronPresetId(cadence))?.label ??
-      "Custom cron",
-  };
+export function resolveCronPresetDisplay(
+  cadence: CronCadence,
+  t: TFunction = i18n.t,
+): { label: string } {
+  return { label: cadencePresetLabel(resolveCronPresetId(cadence), t) };
 }
 
 export function normalizeScheduleFormCadence(

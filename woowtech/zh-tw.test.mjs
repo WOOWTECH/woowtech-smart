@@ -184,3 +184,78 @@ test("confirm dialog and subagent actions keep localized defaults and caller ove
   }
   assert.equal(committedTraditional().get("common.actions.cancel"), "取消");
 });
+
+// Screens upstream hardcodes in English that read woowtech.* translations instead (README
+// section 14). An upstream merge that adds English text to them fails here until it does too.
+const TRANSLATED_SCREENS = [
+  "packages/app/src/screens/schedules-screen.tsx",
+  "packages/app/src/components/schedules/schedule-row.tsx",
+  "packages/app/src/components/schedules/schedules-table.tsx",
+  "packages/app/src/components/schedules/cadence-editor.tsx",
+  "packages/app/src/components/schedules/schedule-form-sheet.tsx",
+];
+const HARDCODED_ENGLISH = [
+  // JSX text: words after a tag (not an arrow), up to the next tag or expression.
+  /(?<=[^=]>)[^\S\n]*\n?\s*[A-Za-z][^<>{}\n]*[A-Za-z.!?…](?=\s*[<{])/g,
+  // Text props people read or hear.
+  /\b(?:label|title|placeholder|searchPlaceholder|emptyText|hint|accessibilityLabel|pendingLabel|confirmLabel|cancelLabel|message|description)=["'][^"']*[A-Za-z]{2}[^"']*["']/g,
+  // Option and header objects.
+  /\b(?:label|title|message|placeholder|description):\s*["'`][^"'`]*[A-Za-z]{2}[^"'`]*["'`]/g,
+  // A phrase of English words in a string literal.
+  /(["'])[A-Z][a-z]+(?: [A-Za-z][a-z-]*)+[.?!…]*\1/g,
+  // A template literal that starts with an English word.
+  /`[A-Z][a-z]+ [^`\n]*`?/g,
+  // English words after an interpolation, before the template literal closes on that line.
+  /\}[^`$\n]*\b[a-z]{2,} [a-z]{2,}[^`$\n]*`/g,
+];
+
+/** Code without comments, which are prose for developers. Line numbers stay the same. */
+function withoutComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "))
+    .replace(/(^|\s)\/\/.*$/gm, (comment, before) => before.padEnd(comment.length, " "));
+}
+
+function hardcodedEnglish(source) {
+  const code = withoutComments(source);
+  return HARDCODED_ENGLISH.flatMap((pattern) =>
+    [...code.matchAll(pattern)].map(
+      (match) => `${code.slice(0, match.index).split("\n").length}: ${match[0].trim()}`,
+    ),
+  );
+}
+
+test("the translated schedule screens have no hardcoded English", () => {
+  const found = TRANSLATED_SCREENS.flatMap((file) =>
+    hardcodedEnglish(readFileSync(new URL(`../${file}`, import.meta.url), "utf8")).map(
+      (hit) => `${file}:${hit}`,
+    ),
+  );
+  assert.deepEqual(found, []);
+  // The patterns find the shapes upstream wrote before these screens were translated.
+  const upstreamShapes = [
+    "<Text style={styles.message}>Unable to load schedules</Text>",
+    '<Field label="Cadence">',
+    '{ value: "ended", label: "Ended" },',
+    '{mode === "edit" ? "Save changes" : "Create schedule"}',
+    "`Created ${formatTimeAgo(date)}`,",
+    "{`${error.serverName}: Could not load schedules`}",
+    "        >",
+    "          Edit {productNameLower}",
+  ];
+  assert.deepEqual(
+    hardcodedEnglish(upstreamShapes.join("\n"))
+      .map((hit) => hit.replace(/^\d+: /, ""))
+      .sort(),
+    [
+      '"Create schedule"',
+      '"Save changes"',
+      "Edit",
+      "Unable to load schedules",
+      "`Created ${formatTimeAgo(date)}`",
+      'label: "Ended"',
+      'label="Cadence"',
+      "}: Could not load schedules`",
+    ],
+  );
+});

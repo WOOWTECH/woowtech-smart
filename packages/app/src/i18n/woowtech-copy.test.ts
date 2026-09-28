@@ -38,6 +38,25 @@ const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
   ],
   "components/left-sidebar.tsx": [">Workspaces<", '"Display preferences"'],
   "screens/settings/browser-tools-card.tsx": ['"Enable browser tools"'],
+  "utils/schedule-format.ts": [
+    'return "Every minute"',
+    '? "Every hour"',
+    'return "Daily"',
+    'return "Weekdays"',
+    '"Enter a cron expression"',
+    'return "soon"',
+    "`Untitled ",
+  ],
+  "schedules/schedule-cadence-options.ts": ['label: "Every minute"', '"Custom cron"'],
+  "schedules/schedule-derivation.ts": ['"Untitled agent"', '"Agent unavailable"'],
+  "schedules/schedule-form-model.ts": ['{ label: "Default mode" }'],
+  "utils/time.ts": ['return "just now"', " ago`", 'label: "now"'],
+  "utils/daemons.ts": ['return "Online"', 'return "Offline"', 'return "Connecting"'],
+  "components/message.tsx": ["`Worked for ", ", ended ${"],
+  "screens/workspace/workspace-route-state.ts": [
+    '"Update woowtech smart to recover this workspace."',
+    "message: input.recovery.recovery.message",
+  ],
   "screens/settings/host-page.tsx": [
     ">Archive merged PR workspaces<",
     '"Archive merged PR workspaces"',
@@ -94,7 +113,11 @@ describe("woowtech smart's own text", () => {
           key.startsWith("desktopNotifications.") ||
           key.startsWith("agentNotificationTitles.") ||
           key.startsWith("metadataGeneration.") ||
-          key.startsWith("confirmDialog.");
+          key.startsWith("confirmDialog.") ||
+          key.startsWith("schedules.") ||
+          key.startsWith("time.") ||
+          key.startsWith("message.") ||
+          key.startsWith("workspaceRecovery.");
         if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });

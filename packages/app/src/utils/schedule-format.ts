@@ -1,5 +1,6 @@
 import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import { validateCronExpression } from "@getpaseo/protocol/schedule/cron-expression";
+import { i18n } from "@/i18n/i18next";
 
 export type IntervalUnit = "minutes" | "hours" | "days";
 type CronCadence = Extract<ScheduleCadence, { type: "cron" }>;
@@ -13,16 +14,6 @@ const UNIT_MS: Record<IntervalUnit, number> = {
   hours: MS_PER_HOUR,
   days: MS_PER_DAY,
 };
-
-const DAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
 
 export function isNewAgentSchedule(schedule: ScheduleSummary): boolean {
   return schedule.target.type === "new-agent";
@@ -47,11 +38,20 @@ export function resolveScheduleTitle(schedule: ScheduleSummary): string {
     .split("\n")
     .map((line) => line.trim())
     .find((line) => line.length > 0);
-  return firstPromptLine || `Untitled ${scheduleProductName(schedule).toLowerCase()}`;
+  return firstPromptLine || scheduleCopy(schedule, "untitled");
 }
 
-function pluralize(value: number, noun: string): string {
-  return value === 1 ? `1 ${noun}` : `${value} ${noun}s`;
+/**
+ * woowtech smart: the schedule or heartbeat wording of a label in the app language, such as
+ * "Edit heartbeat". Upstream built these from scheduleProductName() in English.
+ */
+export function scheduleCopy(
+  schedule: ScheduleSummary,
+  key: "untitled" | "edit" | "editTitle" | "delete" | "actions",
+  values?: Record<string, string>,
+): string {
+  const product = schedule.target.type === "agent" ? "heartbeat" : "schedule";
+  return i18n.t(`woowtech.schedules.${product}.${key}`, values);
 }
 
 export function everyMsToParts(ms: number): { value: number; unit: IntervalUnit } {
@@ -72,7 +72,7 @@ export function partsToEveryMs(value: number, unit: IntervalUnit): number {
   return normalized * UNIT_MS[unit];
 }
 
-const UNIT_NOUN: Record<IntervalUnit, string> = {
+const UNIT_NOUN: Record<IntervalUnit, "minute" | "hour" | "day"> = {
   minutes: "minute",
   hours: "hour",
   days: "day",
@@ -80,7 +80,9 @@ const UNIT_NOUN: Record<IntervalUnit, string> = {
 
 function formatEvery(everyMs: number): string {
   const { value, unit } = everyMsToParts(everyMs);
-  return `Every ${pluralize(value, UNIT_NOUN[unit])}`;
+  return value === 1
+    ? i18n.t(`woowtech.schedules.cadence.every.${UNIT_NOUN[unit]}`)
+    : i18n.t(`woowtech.schedules.cadence.every.${unit}`, { value });
 }
 
 export function formatCadence(cadence: ScheduleCadence): string {
@@ -111,7 +113,7 @@ export function describeCron(cadence: CronCadence): string | null {
   const isWildcardDom = dayOfMonth === "*";
 
   if (minute === "*" && hour === "*" && isWildcardMonth && isWildcardDom && dayOfWeek === "*") {
-    return "Every minute";
+    return i18n.t("woowtech.schedules.cadence.everyMinute");
   }
 
   if (!isLiteralMinute || !isWildcardMonth || !isWildcardDom) {
@@ -123,7 +125,9 @@ export function describeCron(cadence: CronCadence): string | null {
     if (dayOfWeek !== "*") {
       return null;
     }
-    return minuteNum === 0 ? "Every hour" : `Every hour at :${pad2(minuteNum)}`;
+    return minuteNum === 0
+      ? i18n.t("woowtech.schedules.cadence.everyHour")
+      : i18n.t("woowtech.schedules.cadence.everyHourAt", { minute: pad2(minuteNum) });
   }
 
   if (!/^\d+$/.test(hour)) {
@@ -131,34 +135,48 @@ export function describeCron(cadence: CronCadence): string | null {
   }
   const time = `${pad2(Number.parseInt(hour, 10))}:${pad2(minuteNum)}`;
   const timezone = cadence.timezone ?? "UTC";
-  const dayLabel = describeCronDay(dayOfWeek);
-  return dayLabel ? `${dayLabel} at ${time} ${timezone}` : null;
+  const days = describeCronDay(dayOfWeek);
+  return days ? i18n.t("woowtech.schedules.cadence.at", { days, time, timezone }) : null;
 }
 
 function describeCronDay(dayOfWeek: string): string | null {
   if (dayOfWeek === "*") {
-    return "Daily";
+    return i18n.t("woowtech.schedules.cadence.days.daily");
   }
   if (dayOfWeek === "1-5") {
-    return "Weekdays";
+    return i18n.t("woowtech.schedules.cadence.days.weekdays");
   }
   if (dayOfWeek === "0,6" || dayOfWeek === "6,0") {
-    return "Weekends";
+    return i18n.t("woowtech.schedules.cadence.days.weekends");
   }
-  if (/^\d$/.test(dayOfWeek)) {
-    const day = DAY_NAMES[Number.parseInt(dayOfWeek, 10)];
-    return day ? `${day}s` : null;
+  if (/^[0-6]$/.test(dayOfWeek)) {
+    return i18n.t(`woowtech.schedules.cadence.days.${dayOfWeek}`);
   }
   return null;
 }
 
+// The shared cron validator's English messages, which the form shows in the app language.
+const CRON_FIELD_ERROR =
+  /^Invalid cron (minute|hour|day-of-month|month|day-of-week) (step|field|range|value)$/;
+const CRON_FIELD_COUNT_ERROR = "Cron expressions must have 5 fields";
+
 export function validateCron(expr: string): string | null {
   const trimmed = expr.trim();
   if (!trimmed) {
-    return "Enter a cron expression";
+    return i18n.t("woowtech.schedules.cadence.enterExpression");
   }
 
   const error = validateCronExpression(trimmed);
+  if (error === CRON_FIELD_COUNT_ERROR) {
+    return i18n.t("woowtech.schedules.cadence.wrongFieldCount");
+  }
+  const fieldError = error ? CRON_FIELD_ERROR.exec(error) : null;
+  if (fieldError) {
+    return i18n.t("woowtech.schedules.cadence.invalid", {
+      field: i18n.t(`woowtech.schedules.cadence.fields.${fieldError[1]}`),
+      problem: i18n.t(`woowtech.schedules.cadence.problems.${fieldError[2]}`),
+    });
+  }
   return error?.replace(/^Invalid cron /, "Invalid ") ?? null;
 }
 
@@ -181,16 +199,18 @@ export function formatNextRun(iso: string | null): string {
 
   const diffMs = target - Date.now();
   if (diffMs <= 0) {
-    return "soon";
+    return i18n.t("woowtech.schedules.nextRun.soon");
   }
   if (diffMs < MS_PER_MINUTE) {
-    return "soon";
+    return i18n.t("woowtech.schedules.nextRun.soon");
   }
   if (diffMs < MS_PER_HOUR) {
-    return `in ${Math.round(diffMs / MS_PER_MINUTE)}m`;
+    return i18n.t("woowtech.schedules.nextRun.minutes", {
+      value: Math.round(diffMs / MS_PER_MINUTE),
+    });
   }
   if (diffMs < MS_PER_DAY) {
-    return `in ${Math.round(diffMs / MS_PER_HOUR)}h`;
+    return i18n.t("woowtech.schedules.nextRun.hours", { value: Math.round(diffMs / MS_PER_HOUR) });
   }
-  return `in ${Math.round(diffMs / MS_PER_DAY)}d`;
+  return i18n.t("woowtech.schedules.nextRun.days", { value: Math.round(diffMs / MS_PER_DAY) });
 }
