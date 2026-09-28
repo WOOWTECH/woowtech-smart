@@ -446,7 +446,8 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - 合併上游後要注意：T5 在 `components/add-project-flow.tsx` 約 171 行差異，另接到 `add-project-flow/options.ts`、`components/hosts/host-picker.tsx`、`host-picker-constants.ts`、`host-filter.tsx`；上游重整這些流程時，保留 fork 翻譯接點與 `t` 的快取依賴，並重跑下列定向測試。
 - 2026-09-27 Android 與桌面輪次在繁中介面看到的英文（fixes-0928），原因都是上游寫死或沒用翻譯，不是產生器漏掉；`zh-tw-untranslated.mjs` 和 `KEEP_ENGLISH` 都沒有這些 key。文字只給繁中和英文（`woowtechCopyFor` 用 `language === "zh-TW"` 選），其他語言沿用英文：
   - 「排程」頁（`woowtech.schedules`）：上游整個功能沒有翻譯 key。接點是 `screens/schedules-screen.tsx`、`components/schedules/` 的 row、table、cadence editor、form sheet，以及純函式 `utils/schedule-format.ts`（頻率說明、cron 錯誤、下次執行）、`schedules/schedule-cadence-options.ts`（預設頻率）、`schedule-derivation.ts`、`schedule-form-model.ts`。純函式讀全域 `i18n.t`，英文與上游逐字相同，上游的英文單元測試照樣過；元件用 `t`，切語言時跟著更新。共用的 cron 驗證（protocol）只有一組固定的英文訊息，`validateCron` 依格式換成翻譯。「Schedule／Heartbeat」這兩種產品名的文字改用 `scheduleCopy()`；`scheduleProductName()` 沒改（上游的單元測試還在用），介面不再用它組字。daemon 回的錯誤（例如排程不存在）照原文顯示。
-  - 相對時間與時間長度（`woowtech.time`）：`utils/time.ts` 的 `formatTimeAgo`（剛剛、N 分鐘前，提交清單、排程、Agent 清單都用）、`describeCompactTimeAgo`（側欄和分頁）、`formatDuration`（「工作了 25 秒」和進行中的計時）。一週以上的日期用 `woowtech.time.dateLocale` 指定的語系排版（en-US 的「Sep 27」、zh-TW 的「9月27日」）。
+  - 相對時間與時間長度（`woowtech.time`）：`utils/time.ts` 的 `describeTimeAgo`／`formatTimeAgo`（剛剛、N 分鐘前）、`describeCompactTimeAgo`（精簡版）、`formatDuration`（「工作了 25 秒」和進行中的計時）。前兩者共用上游的 `describeAge`，不到一分鐘一律「剛剛」（上游 `05874e289`，第三批）。一週以上的日期用 `woowtech.time.dateLocale` 指定的語系排版（en-US 的「Sep 27」、zh-TW 的「9月27日」）。
+    - Agent 清單、排程、匯入工作階段、提交清單和供應商設定的列用 `hooks/use-time-ago.ts` 的 `useTimeAgo`，側欄和分頁用 `useCompactTimeAgo`。標籤存在 state，靠共用的計時器更新；fork 讓它在 App 語言改變時立刻重算（註解 `woowtech smart:`），否則還開著的列會停在舊語言。測試是 `hooks/woowtech-use-time-ago.test.tsx`。
   - 主機狀態徽章「Online」：`utils/daemons.ts` 改用上游本來就有、卻沒人用的 `common.connectionStatus.*`（線上／正在連線／離線）。
   - 「工作區不可用」的內文：daemon 的 recovery inspect 回應有 `reason` 代碼，`workspace-recovery/woowtech-recovery-copy.ts` 依代碼顯示繁中翻譯（`woowtech.workspaceRecovery`）；其他語言和不認得的代碼照舊顯示 daemon 原文。
   - 「Transport not connected (status: disconnected)」：client 連線中斷時的英文錯誤。`utils/error-messages.ts` 的 `toErrorMessage` 遇到它、socket 已關但 client 還沒發現時的「WebSocket not open」，或 `DaemonConnectionError` 的 `DAEMON_CONNECTION_LOST`，改顯示上游的「主機未連線」；檔案總管的清單和預覽錯誤改經 `toErrorMessage`。
@@ -1011,7 +1012,7 @@ node --test woowtech/*.test.mjs
 - 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
 - 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送在定向輪（integration-0928）驗過，見「驗證紀錄」。
 
-## 上游同步紀錄（2026-09-27，挑選式）
+## 上游同步紀錄（2026-09-27 起，挑選式）
 
 ### 第一批：上游 `836f1a9..d6861f81e`
 
@@ -1295,6 +1296,107 @@ node --test woowtech/*.test.mjs
 - 審查後補拿的：用一般 ACP Agent 開新 Agent，/ 選單要列出它的斜線指令（`513f2a9ea`）；在官方 Paseo 的 Agent 終端機裡跑 `woowtech-smart run`，要建立頂層 Agent，不報「Caller agent not found」（`e68553f75`）；桌面版載入有建置指令的目錄外掛，建置照常成功（`f9fb992dc`）。
 - 延後的 `c906c2f4a`、`e1c769c01` 要 owner 決定。
 - 這個分支沒有 push。`woowtech/integration-0926` 已經前進到 `2a706980b`，從 `ce3dffa70` 起兩邊都改到的只有這個 README；合回去之後重跑守門和 T1 測試。
+
+### 第三批：上游 `d7b7016cc..4965af219`
+
+- 範圍：第二批的終點 `d7b7016cc` 到 `4965af219`（上游 0.10.1 的更新紀錄，9/28），共 30 個 commit，含上游 0.10.0-beta.1（9/27）和 0.10.0（9/28）。commit 已經在本機，這次沒有 fetch。
+- 分支 `woowtech/upstream-picks-0929`，從 main 的 `ea9f49e49` 開出（worktree `woowtech-smart-b3`）。原則和做法照前兩批：照上游的時間順序 `cherry-pick -x`，保留上游作者；衝突的解法寫在該 commit 訊息的 `woowtech:` 段落；fork 的調整各自一個 commit。
+- 挑選清單標了 6 個「拿」、6 個「條件式」、2 個「延後」、16 個「不拿」。
+- 結果：拿 11 個：6 個「拿」和 5 個「條件式」，其中 `940dbfd24` 只拿 OpenCode v1 的部分。不拿 17 個（16 個「不拿」，加上條件式的 `da48803a4`），延後 2 個。fork 的調整 2 個 commit。
+
+拿進來的：
+
+| 上游 commit                           | 內容                                                                                                                   |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `827178df9`                           | Codex 回溯（fork 出新 thread）時帶上原本的設定：自訂 provider 和 Paseo 工具不再掉回預設（Closes #4542、#3205）         |
+| `dffde6ae8`（#5450）                  | 自訂 Codex provider 從它自己的 `CODEX_HOME` 讀自訂提示詞和技能，/ 選單不再列出別的 home 的提示詞                       |
+| `8de52a3c9`（#5386）                  | 背景的 `send_agent_prompt` 等 provider 接受回合才回報，狀態是執行中，不是閒置                                          |
+| `7bb7d4ed0`（#5451，條件式）          | 分割窗格裡，從某個 Agent 開的子 Agent 放在那個 Agent 所在的窗格，不是目前聚焦的窗格                                    |
+| `b85b44aea`（#5351，條件式）          | daemon 重啟或升級後，主機頁和說明選單顯示新的版本：每次連線變化都把 server_info 寫進 session store，斷線時保留上次的值 |
+| `05874e289`（#5340，條件式）          | Agent 清單、排程、匯入工作階段、提交清單和供應商設定的相對時間會自己更新；不到一分鐘一律「剛剛」                       |
+| `9d010211a`（#5572）                  | 封存自訂 Codex provider 的 Agent 時，一併封存它的 Codex 對話，「匯入工作階段」不再列出它                               |
+| `f4ba16a0b`（#5577，條件式）          | 串流中的一段以縮排結尾時保留換行，Codex 的 Mermaid 圖不再被併成一行                                                    |
+| `849a876bc`（#5579）                  | 外掛重新載入時，已經完成的外掛 provider 工作階段不再多出「Provider connection closed」錯誤，只有進行中的回合會中斷     |
+| `434060709`（#5583）                  | 加入 Claude Sonnet 5.5（Claude Code 2.1.284 起才列出），Sonnet 5 改標 Previous release                                 |
+| `940dbfd24`（#5587，條件式，只拿 v1） | OpenCode 換模型時，清掉新模型不支援的 thinking 選項，並立刻更新續接資料，重新載入不會回到舊的選項                      |
+
+條件式的都先確認過功能我們有、也不需要不拿或延後的 commit：
+
+- `7bb7d4ed0`：`open-beside.ts` 跟上游的前一版相同，分割窗格、`parentTabId` 和 `findPaneContainingTab` 都是既有的，修的是既有行為（#5433），不是新能力。
+- `b85b44aea`：只改 server_info 進 session store 的路（`host-runtime.ts`、`session-store.ts`、`session-context.tsx`）和測試用的 daemon。沒有碰 daemon 自我更新、`unavailable-npm-global-cli.ts` 和桌面版的更新來源（第 4 節）。新的 e2e 只讓測試 daemon 回報 0.8.0 和 0.9.1 兩個版本，不跑 npm。
+- `05874e289`：碰到 fixes-0928 的繁中（`time.ts` 的「剛剛」、排程頁），兩邊都保住，見下面。它改的 `usage/card.tsx` 來自延後的 `792715e76`，只是 hook 改名，沒帶。
+- `f4ba16a0b`：修的是 `presentation.ts` 裡來自 `0aca3b605`（第一批拿了）的結尾換行處理，不需要第一批沒拿的串流淡入（`6215e08ef`、`5d70ab2ab`）。
+- `940dbfd24`：我們出貨的是 OpenCode v1（`providers/opencode-agent.ts`）。v1 的修正用到的 `reconnectIfServerExited`、`parseModel`、`thinking_option_changed`、`refreshSessionPersistence` 和測試 harness 都是既有的，不需要 v2 或 `792715e76`。
+- `434060709`（拿）：Sonnet 5.5 的條目跟第一批的 Opus 5.5（`aeb98f813`）同一種形狀：`minimumClaudeCodeVersion`、預設 thinking `medium`、1M context、沒有 `supportsThinkingDisabled`（Sonnet 5.5 拒絕關掉 thinking）。沒有動到 Claude Agent SDK 的 import。
+
+不拿的，依原因：
+
+- 要 OpenCode v2（`c906c2f4a`，第二批延後）：`da48803a4`（#5526，條件式）。改的 4 個檔有 3 個是 `opencode/v2/`，第 4 個（`provider-launch-config.ts`）只把 `createProviderEnv` 的回傳型別改給 v2 的呼叫點用。v1 在 `opencode/server-manager.ts` 用 launch env 起專屬的 `opencode serve`，沒有 v2 重新連線後遺失 session 環境的問題。
+- 新的介面能力、廠商標誌：`a43c8d888`（#5379，執行 cursor-agent 的終端機設定檔顯示 Cursor 圖示），要 owner 決定。
+- 只有 Windows：`cf4509631`（#1987）。
+- 網站：`dec2d861e`（#5538）、`7f5d32cdd`（#5537）、`c54f20e53`（#5138）、`d0a30ed4d`（#5555）、`8b5201fed`（#5575）。
+- 發版與版本號：`52d345db7`（0.10.0-beta.1）、`c481ecf3e`（0.10.0）；更新紀錄：`a50a47600`、`dfc9add77`、`4965af219`；發版前的 lock 排序：`6ca001c3e`。
+- lock 簽章／Nix hash：`30178c4f5`、`c7e7e52b0`、`dd5df9ec6`。
+
+延後，要 owner 決定：
+
+- `78a0f093e`（#5488）：OpenCode v2 的 helper 結束後恢復對話，要先有 v2（`c906c2f4a`）。
+- `792715e76`（#5465）：用量來源改成內建外掛並跟著工作階段的帳號，189 檔、約 1.4 萬行的新能力。這批挑進來的 commit 碰到它的地方都沒帶：`usage/card.tsx`、`formatCompactTimeAgoAsProse`、`opencode-agent.test.ts` 的兩個 usage 測試。
+
+衝突與調整：
+
+- `b85b44aea`：`e2e/support/helpers/isolated-host-daemon.ts` 衝突。上游把挑 port 抽成 `getAvailableHostDaemonPort()`（新的可重啟測試 daemon 也用它）；取上游的寫法，函式裡保留 fork 的保留埠 6767、6768、6770 和 `E2E_DAEMON_PORT`（第 10 節），新的 helper 也不會用到 woowtech smart 自己的 port。`test-utils/paseo-daemon.ts` 自動合併，沒有帶回 `792715e76` 的 `BuiltinPluginLoader`。
+- `05874e289`：
+  - `utils/time.ts`：用上游的 `describeAge`（散文和精簡兩種共用，不到一分鐘一律「剛剛」），但經過的時間帶單位和數字，不是上游的「5m」，`describeTimeAgo` 和 `describeCompactTimeAgo` 照舊經 `woowtech.time` 的翻譯組字，日期照舊用 `formatMonthDay`。`woowtech-copy.test.ts` 的 `REPLACED_ENGLISH` 擋的上游英文字面值都沒有回來。
+  - `components/schedules/schedule-row.tsx`：上游的 `ScheduleMeta` 用 `useTimeAgo`；`buildMeta` 照舊用 `woowtech.schedules.meta` 的翻譯（建立、上次執行、從未執行），`stateBadge` 照舊用 `t`。守門「the translated schedule screens have no hardcoded English」照樣通過。
+  - `screens/workspace/workspace-desktop-tabs-row.tsx`：只把 `useCompactTimeAgo` 的 import 改到 `hooks/use-time-ago`。
+  - `usage/card.tsx`：來自延後的 `792715e76`，不帶。
+- `f4ba16a0b`：測試只是位置衝突。上游下一個測試來自第一批沒拿的 Find（`135a3b4c9`），新測試改放在我們的下一個測試前面，內容一字不差。
+- `940dbfd24`：只拿 v1。`opencode/v2/session.ts`、`opencode/v2/agent.test.ts` 不存在（`c906c2f4a` 延後），不帶；`opencode-agent.test.ts` 新的 `test.each` 放在 `buildConfig` 後面，它旁邊的兩個 usage 測試和這個 commit 改的 `model_changed` 期待值來自 `792715e76`，不帶。v1 的修正、`agent-manager.ts` 的一行和兩個測試檔的新測試跟上游一字不差。
+- fork 的調整：
+  - `04813c06f`：`05874e289` 之後不到一分鐘都是「剛剛」，`i18n/woowtech-zh-tw-screens.test.ts` 原本期待 30 秒前是「30 秒前」，改成「剛剛」，並加上整一分鐘是「1 分鐘前」。沒有人再讀的 `woowtech.time.ago.seconds` 從英文和繁中拿掉。
+  - `6bf542525`：`05874e289` 讓這些列改用 `useTimeAgo`，標籤存在 state，只在共用的計時器觸發時重算。fork 的標籤是翻譯過的，換語言後，還開著的列會停在舊語言，直到下一次觸發：最多一分鐘、一小時或一天，一週以上的日期永遠不會觸發；排程列會混成「建立：5m ago」。挑之前這些列在 render 時組字，換語言立刻跟著變。現在 `hooks/use-time-ago.ts` 經 `useTranslation` 讀 App 語言，語言改變時重算（註解 `woowtech smart:`）。`useCompactTimeAgo`（側欄和分頁）共用同一個 hook，fixes-0928 以來就有同樣的缺口，一起修好。新的 `hooks/woowtech-use-time-ago.test.tsx` 在改之前 0/3（切到 zh-TW 後仍是「5m ago」「Jan 15」「5m」），改之後 3/3。
+- 找到但這批沒改的（fixes-0928 以來就有，不是這批造成的）：桌面版分頁的 Agent 提示框（`workspace-desktop-tabs-row.tsx` 的 `formatAgentTooltipActivity`）把已經翻譯的精簡標籤再接上英文的「 ago」，照程式的邏輯，繁中會顯示「5 分 ago」「9月27日 ago」（沒有在畫面上確認）。上游在 `792715e76` 改用 `formatCompactTimeAgoAsProse`，一樣只處理英文。可以改成直接用 `useTimeAgo(lastActivityAt)`，英文的結果不變。
+- 繁中：這批沒有新的翻譯 key，也沒有改到簡體中文，不用重新產生 zh-TW。
+- lock：`package-lock.json` 沒變。
+- 檢查過沒有帶回原版的東西：品牌和 CLI 名、home、port（新的測試 helper 也避開 6770）、官方版共存、技能路徑；推播（FCM、push.woowtech.io、`woowtechPush`、不帶內容的推播、Expo 登記停用）；配對 scheme（沒有新的 `paseo://`）、relay；LINE 仍拿掉，官網、客服信箱和通用開啟器的 mailto 不變；工作區自動命名、commit 訊息和 PR 的 AI 生成仍關閉；Claude Agent SDK 仍是 devDependency，出貨程式沒有新的值 import，沒開 `verbatimModuleSyntax`；沒有本地語音；更新來源不變；`.github/`、`packages/website` 沒動，版本號都還是 0.8.0。新加的 `6767` 只在測試的假資料裡（`host-runtime.test.ts` 本來就有 104 處、`codex-app-server-agent.test.ts` 的 MCP 設定網址交給假的 Codex），不會真的連線。
+- 11 個 pick 的增刪行逐一跟上游比對：8 個一字不差（`f4ba16a0b` 只換了位置）；`b85b44aea`、`05874e289`、`940dbfd24` 只差上面寫的地方。
+- cherry-pick 和 commit 都設 `LEFTHOOK=0`，理由同第一批。
+
+測試（這台 Mac，Node 22，`--maxWorkers=1 --no-file-parallelism`，重的都經過 `heavy.sh`）：
+
+- 環境：同第二批。`env -i`，PATH 只有 node@22 和系統資料夾（沒有 claude、codex、opencode、pi），HOME 和 TMPDIR 用暫存資料夾，在 `sandbox-exec` 裡跑：只准連 loopback，擋 6767、6768、6770，也擋讀寫 `~/.woowtech-smart`、`~/.paseo`。
+- 相依套件：沒有 `npm install`。`node_modules` 從相依狀態跟 main 相同的 `woowtech-smart-links` 用 APFS clone（`cp -c -R`）複製，守門要的 `woowtech/tools/node_modules`（opencc-js）一起複製；內部磁碟可用空間前後都是 13 GB。
+- 建置：挑之前在 `ea9f49e49` 跑一次 `npm run build:server`，守門 123/123 當基準；挑完再建一次。
+- typecheck：改到的 3 個 workspace（server、app、cli）逐一 `npm run typecheck --workspace=…`，全過。desktop、protocol、client 沒有改到。
+- format、lint：`npm run format:check` 整個 repo 4690 檔通過；改到的 53 個 ts／tsx 檔 `lint` 0 個 warning、0 個 error。
+- 守門 `node --test woowtech/*.test.mjs`：123/123，沒有改任何守門。
+- 挑進來的 commit 新增或改過的測試（Playwright 和要真的 provider 的除外，見最後）：
+  - server 10 檔 838/839：agent-manager 190、mcp-server 123、codex-app-server-agent 163、opencode-agent 140、provider-registry 50、plugin-provider 26、外掛生命週期 e2e 8、test-utils 的 `paseo-daemon`（新）2、Claude 的 models 53 和 agent 83/84。沒過的 1 個見下面。
+  - App 6 檔 144/144：`host-runtime` 73、`time` 34、`presentation` 16、`woowtech-zh-tw-screens` 9、`woowtech-copy` 9、fork 新的 `woowtech-use-time-ago` 3。
+- 直接受影響的：
+  - server 28 檔 396 過、1 略過（只在 Windows 跑的 OpenCode npm shim）：Codex 另外 7 檔 118、OpenCode 另外 13 檔 135、Claude 的 query、SDK 載入器和子 Agent 重播 7 檔 129、`agent-prompt` 14（`send_agent_prompt` 等回合開始）。
+  - App 67 檔 820/820，都是用到這批改的模組的測試：相對時間的計時器 6、排程 6 檔 38 和 `schedule-format` 12、匯入工作階段 2 檔 77、提交清單 1、分割窗格的 `workspace-layout-store` 133 和 `workspace-subagents-integration` 5、設定頁的 `host-page-translations` 3、zh-TW 7、品牌 10，以及其他 import 這些模組（多半是 session store）的 51 檔 528，包括下面 T1 的 5 檔。
+- T1：`missing-workspace-directory-demand` 29/29、`directory-sync/index` 28/28、`woowtech-workspace-open-intent` 7/7、`host-runtime` 73/73、`sidebar-workspace-list` 3/3、`use-projects` 2/2、`viewed-timeline-sync` 39/39、`woowtech-workspace-directory-settled` 4/4，共 185/185。`host-runtime` 比之前多 1 個，是 `b85b44aea` 新加的。
+- fork 自己的：server 29 檔 225/225（推播、配對、relay、自動命名和 Git metadata 關閉、config、CORS、daemon 指令訊息、自我更新停用、supervisor）；App 16 檔 96/96（推播、配對、主機補名、通知標題、網址開啟器等）。`b85b44aea` 改到的 `session-context.tsx`（通知標題的接點）和 `host-runtime.ts`（主機補名、配對、T1 的接點）都在這些測試裡。
+- 沒過的 1 個：`claude/agent.test.ts` 的「resolves the installed Claude Code version」直接執行 `claude --version`，這裡照規定 PATH 上沒有 claude（Claude binary not found）。這個測試的內容在 `ea9f49e49` 和 HEAD 完全相同。PATH 最前面放第二批那個只回答 `--version` 的假 claude 重跑整個檔，84/84，其他呼叫的記錄是空的。跟第二批一樣是環境造成，不是回歸。
+- 這一批沒有找到回歸。fork 的 `6bf542525` 補的是 `05874e289` 在 fork 才有的缺口（見上面）。
+
+留給 CI 和裝置驗證的：
+
+- push 之後手動跑一次 CI 並勾 Playwright（第 18 節）。這台 Mac 只跑了上面的定向測試，還要看：
+  - server 全部的單元測試（包括要真的 claude 的 `claude/agent.test.ts`）和 `test:integration`；CLI 的 e2e 分片，包括改了期待值的 `tests/15-provider.test.ts`（Sonnet 5.5，會查真的 provider，本機沒跑）。
+  - Playwright：新的 `subagent-origin-pane`、`host-version-after-daemon-restart`、`agent-relative-time`、`schedules-relative-time`，改過的 `import-session-flow`、`commit-diff-panel`、`provider-settings-refresh`。新的時間 spec 期待英文的「just now」「3m ago」「Created just now」，跟我們的英文文案相同。
+- 要真的 provider 才能跑、CI 也不跑的：`codex-custom-provider-archive.local.e2e`（codex，`9d010211a`）、`opencode-model-switch.real.spec.ts`（OpenCode 和免費模型，`940dbfd24`；Playwright 預設的 project 不跑 `*.real.spec.ts`）。照規定不在這台 Mac 執行真的 provider，沒跑。
+- 實機和桌面版：
+  - 相對時間（`05874e289`、`6bf542525`）：Agent 清單、排程頁、匯入工作階段、提交清單和供應商設定頁開著不動，標籤從「剛剛」變成「1 分鐘前」再往上走；繁中和英文各看一次；在設定換語言後回到這些畫面，標籤立刻是新語言，排程列不會混成「建立：5m ago」。
+  - daemon 重啟或升級（`b85b44aea`）：主機頁的版本和說明選單的版本不用重開 App 就換成新的；斷線時保留舊版本。這條路也經過 T1 的接點，照第 16 節再點一次指向新工作區和已知工作區的通知。
+  - 桌面版分割窗格（`7bb7d4ed0`）：焦點在另一個窗格時，從 Agent 開子 Agent，子 Agent 出現在那個 Agent 的窗格。
+  - 模型：Claude Code 2.1.284 以上列出 Sonnet 5.5，thinking 沒有「關閉」；舊版不列。OpenCode 選了 Medium 之後換到沒有這個選項的模型，thinking 選項被清掉，重新載入也不回來（`940dbfd24`）。
+  - 自訂 Codex provider（`827178df9`、`dffde6ae8`、`9d010211a`）：回溯後仍是同一個 provider、工具還在；/ 選單列的是它自己 `CODEX_HOME` 的提示詞；封存後「匯入工作階段」不再列出它。
+  - Codex 串流中的 Mermaid 圖（`f4ba16a0b`）、背景 `send_agent_prompt` 回報執行中（`8de52a3c9`）、外掛 provider 重新載入後已完成的工作階段沒有錯誤（`849a876bc`）。
+- 延後的 `78a0f093e`、`792715e76` 和不拿的 `a43c8d888`（Cursor 圖示）要 owner 決定。桌面版分頁提示框的「5 分 ago」（見上面）要不要修，也一起決定。
+- 這個分支沒有 push。main 仍在 `ea9f49e49`；合進 main 之後重跑守門和 T1 測試，並重建 server 的 dist。
 
 ## Mac 開發環境
 
