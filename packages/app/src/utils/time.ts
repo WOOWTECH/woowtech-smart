@@ -1,30 +1,79 @@
 import { i18n } from "@/i18n/i18next";
 
 /**
- * How long ago something was, before it's worded. The two formatters below share this so
+ * How often a relative label can change, which is all a caller needs to know to keep it honest.
+ * `static` means it never will again.
+ */
+export type RelativeTimeResolution = "minute" | "hour" | "day" | "static";
+
+export interface RelativeTimeLabel {
+  label: string;
+  resolution: RelativeTimeResolution;
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+/** Past a week the elapsed count stops meaning anything; the date itself is more use. */
+const ABSOLUTE_AFTER_MS = 7 * DAY_MS;
+
+/**
+ * How long ago something was, before it's worded. The prose and compact formatters share this so
  * their thresholds can't drift apart; they differ only in how much room they have to say it.
  *
  * `elapsed` takes an "ago" in prose, `now` and `date` read as absolutes and never do.
+ * woowtech smart: `elapsed` carries its unit and count rather than a worded "5m", so each
+ * formatter words it through the woowtech.time translations.
+ *
+ * Deliberately never sub-minute. A seconds label is only correct for the second it was rendered,
+ * so it either lies or forces a once-a-second re-render of a list that has nothing new to say.
+ * Everything under a minute is "now", which is both true and stable.
+ *
+ * The resolution comes back with the value so a caller can wake at the rate the label actually
+ * changes instead of guessing — see `useTimeAgo`.
  */
-type Elapsed =
-  | { kind: "now" }
-  | { kind: "elapsed"; unit: "seconds" | "minutes" | "hours" | "days"; value: number }
-  | { kind: "date"; value: string };
+type Age =
+  | { kind: "now"; resolution: "minute" }
+  | {
+      kind: "elapsed";
+      unit: "minutes" | "hours" | "days";
+      value: number;
+      resolution: Exclude<RelativeTimeResolution, "static">;
+    }
+  | { kind: "date"; value: string; resolution: "static" };
 
-function describeElapsed(date: Date, now: Date): Elapsed {
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
+function describeAge(date: Date, now: Date): Age {
+  const elapsedMs = now.getTime() - date.getTime();
 
-  if (diffSec < 10) return { kind: "now" };
-  if (diffMin < 1) return { kind: "elapsed", unit: "seconds", value: diffSec };
-  if (diffHour < 1) return { kind: "elapsed", unit: "minutes", value: diffMin };
-  if (diffDay < 1) return { kind: "elapsed", unit: "hours", value: diffHour };
-  if (diffDay < 7) return { kind: "elapsed", unit: "days", value: diffDay };
+  if (elapsedMs < MINUTE_MS) {
+    return { kind: "now", resolution: "minute" };
+  }
+  if (elapsedMs < HOUR_MS) {
+    return {
+      kind: "elapsed",
+      unit: "minutes",
+      value: Math.floor(elapsedMs / MINUTE_MS),
+      resolution: "minute",
+    };
+  }
+  if (elapsedMs < DAY_MS) {
+    return {
+      kind: "elapsed",
+      unit: "hours",
+      value: Math.floor(elapsedMs / HOUR_MS),
+      resolution: "hour",
+    };
+  }
+  if (elapsedMs < ABSOLUTE_AFTER_MS) {
+    return {
+      kind: "elapsed",
+      unit: "days",
+      value: Math.floor(elapsedMs / DAY_MS),
+      resolution: "day",
+    };
+  }
 
-  return { kind: "date", value: formatMonthDay(date) };
+  return { kind: "date", value: formatMonthDay(date), resolution: "static" };
 }
 
 /**
@@ -39,73 +88,44 @@ function formatMonthDay(date: Date): string {
 }
 
 /**
- * Format a date as a human-friendly relative time string
- * Examples: "just now", "5m ago", "2h ago", "3d ago", "Jan 15"
+ * A human-friendly relative time, with the resolution it changes at.
+ * Examples: "just now", "5m ago", "2h ago", "3d ago", "Jan 15".
  */
-export function formatTimeAgo(date: Date, now: Date = new Date()): string {
-  const elapsed = describeElapsed(date, now);
-  if (elapsed.kind === "now") return i18n.t("woowtech.time.justNow");
-  if (elapsed.kind === "elapsed") {
-    return i18n.t(`woowtech.time.ago.${elapsed.unit}`, { value: elapsed.value });
+export function describeTimeAgo(date: Date, now: Date = new Date()): RelativeTimeLabel {
+  const age = describeAge(date, now);
+  if (age.kind === "now") {
+    return { label: i18n.t("woowtech.time.justNow"), resolution: age.resolution };
   }
-  return elapsed.value;
+  if (age.kind === "elapsed") {
+    return {
+      label: i18n.t(`woowtech.time.ago.${age.unit}`, { value: age.value }),
+      resolution: age.resolution,
+    };
+  }
+  return { label: age.value, resolution: age.resolution };
 }
 
-/**
- * How often a compact label can change, which is all a caller needs to know to keep it honest.
- * `static` means it never will again.
- */
-export type RelativeTimeResolution = "minute" | "hour" | "day" | "static";
-
-export interface CompactTimeAgo {
-  label: string;
-  resolution: RelativeTimeResolution;
+export function formatTimeAgo(date: Date, now: Date = new Date()): string {
+  return describeTimeAgo(date, now).label;
 }
-
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-/** Past a week the elapsed count stops meaning anything; the date itself is more use. */
-const ABSOLUTE_AFTER_MS = 7 * DAY_MS;
 
 /**
  * The same instant with the prose removed, for somewhere with no room for it — a dense list
  * where the column is understood to be a timestamp and "ago" is the only word on the line.
  * Examples: "now", "5m", "2h", "3d", "Jan 15".
- *
- * Deliberately never sub-minute. A seconds label is only correct for the second it was rendered,
- * so it either lies or forces a once-a-second re-render of a list that has nothing new to say.
- * Everything under a minute is "now", which is both true and stable.
- *
- * The resolution comes back with the label so a caller can wake at the rate the label actually
- * changes instead of guessing — see `useCompactTimeAgo`.
  */
-export function describeCompactTimeAgo(date: Date, now: Date = new Date()): CompactTimeAgo {
-  const elapsedMs = now.getTime() - date.getTime();
-
-  if (elapsedMs < MINUTE_MS) {
-    return { label: i18n.t("woowtech.time.compact.now"), resolution: "minute" };
+export function describeCompactTimeAgo(date: Date, now: Date = new Date()): RelativeTimeLabel {
+  const age = describeAge(date, now);
+  if (age.kind === "now") {
+    return { label: i18n.t("woowtech.time.compact.now"), resolution: age.resolution };
   }
-  if (elapsedMs < HOUR_MS) {
+  if (age.kind === "elapsed") {
     return {
-      label: i18n.t("woowtech.time.compact.minutes", { value: Math.floor(elapsedMs / MINUTE_MS) }),
-      resolution: "minute",
+      label: i18n.t(`woowtech.time.compact.${age.unit}`, { value: age.value }),
+      resolution: age.resolution,
     };
   }
-  if (elapsedMs < DAY_MS) {
-    return {
-      label: i18n.t("woowtech.time.compact.hours", { value: Math.floor(elapsedMs / HOUR_MS) }),
-      resolution: "hour",
-    };
-  }
-  if (elapsedMs < ABSOLUTE_AFTER_MS) {
-    return {
-      label: i18n.t("woowtech.time.compact.days", { value: Math.floor(elapsedMs / DAY_MS) }),
-      resolution: "day",
-    };
-  }
-
-  return { label: formatMonthDay(date), resolution: "static" };
+  return { label: age.value, resolution: age.resolution };
 }
 
 export function formatCompactTimeAgo(date: Date, now: Date = new Date()): string {

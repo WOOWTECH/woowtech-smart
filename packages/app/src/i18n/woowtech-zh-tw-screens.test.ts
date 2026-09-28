@@ -97,7 +97,9 @@ describe("zh-TW text on the screens the device rounds found in English", () => {
 
   it("says how long ago and for how long in Traditional Chinese", () => {
     expect(formatTimeAgo(new Date("2026-09-27T11:59:55.000Z"), now)).toBe("剛剛");
-    expect(formatTimeAgo(new Date("2026-09-27T11:59:30.000Z"), now)).toBe("30 秒前");
+    // Upstream 05874e289: the whole first minute is "just now", in prose and compact alike.
+    expect(formatTimeAgo(new Date("2026-09-27T11:59:30.000Z"), now)).toBe("剛剛");
+    expect(formatTimeAgo(new Date("2026-09-27T11:59:00.000Z"), now)).toBe("1 分鐘前");
     expect(formatTimeAgo(new Date("2026-09-27T11:55:00.000Z"), now)).toBe("5 分鐘前");
     expect(formatTimeAgo(new Date("2026-09-24T12:00:00.000Z"), now)).toBe("3 天前");
     expect(formatTimeAgo(new Date("2026-01-15T12:00:00.000Z"), now)).toBe("1月15日");
