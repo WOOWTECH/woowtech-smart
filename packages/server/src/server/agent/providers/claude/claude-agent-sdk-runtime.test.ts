@@ -20,7 +20,7 @@ let runtimeDir: string;
 let scratchDir: string;
 
 beforeEach(async () => {
-  const tempRoot = path.resolve(".dev");
+  const tempRoot = path.resolve(".dev/f11-repair/fixtures");
   await mkdir(tempRoot, { recursive: true });
   runtimeDir = await mkdtemp(path.join(tempRoot, "claude-agent-sdk-runtime-"));
   scratchDir = await mkdtemp(path.join(tempRoot, "claude-agent-sdk-tarball-"));
@@ -252,7 +252,12 @@ test.each(["non-2xx", "disconnect", "slow-body", "wrong-sha512"])(
       expect(paths).toEqual(
         Array(2).fill("/mirror/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.246.tgz"),
       );
-      expect(await readdir(runtimeDir)).toEqual(["claude-agent-sdk-0.3.246"]);
+      const pointerName = "claude-agent-sdk-0.3.246.json";
+      const generation: unknown = JSON.parse(
+        await readFile(path.join(runtimeDir, pointerName), "utf8"),
+      );
+      expect(generation).toMatch(/^claude-agent-sdk-0\.3\.246\.generation-[0-9a-f-]{36}$/);
+      expect(await readdir(runtimeDir)).toEqual([generation, pointerName]);
     } finally {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve, reject) =>

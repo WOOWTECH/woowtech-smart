@@ -94,7 +94,8 @@ describe("woowtech smart's own text", () => {
           key.startsWith("desktopNotifications.") ||
           key.startsWith("agentNotificationTitles.") ||
           key.startsWith("metadataGeneration.") ||
-          key.startsWith("confirmDialog.");
+          key.startsWith("confirmDialog.") ||
+          key.startsWith("claudeSdk.");
         if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });

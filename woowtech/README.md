@@ -54,8 +54,10 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 原因：SDK 是 Anthropic 的專有授權（All rights reserved），不隨產品散佈。
 - 載入順序（`packages/server/src/server/agent/providers/claude/claude-agent-sdk-runtime.ts`）：
   1. node_modules 裡有就直接用。開發機會有，因為它是 devDependency。
-  2. 否則用 `$PASEO_HOME/runtime-deps/claude-agent-sdk-<版本>/`。
-  3. 都沒有才從 npm registry 下載，sha512 對不上就拒絕，什麼都不裝。下載約 1.33 MB，解壓後約 4.6 MB；首次等待時間取決於網路。
+  2. 否則讀 `$PASEO_HOME/runtime-deps/claude-agent-sdk-<版本>.json` 指向的同版本 generation；沒有 pointer 時仍相容舊的 `claude-agent-sdk-<版本>/` 目錄。
+  3. 沒有可載入副本，才從 npm registry 或鏡像下載；sha512 對不上就拒絕。下載約 1.33 MB，解壓後約 4.6 MB；首次等待時間取決於網路。
+- 受管理副本缺檔、語法錯誤或初始化失敗時，只把選中的副本移到同層 quarantine，重新下載一次。新副本用獨立實體 generation 目錄，完整性驗證與真正 import 成功後才原子更新 pointer，避免 Node 把舊 entry／相對依賴的失敗快取帶回來。local/dev SDK 的其他載入錯誤不自動修復。
+- pointer 只接受同版本、合法 UUID 的 basename；格式錯誤、越界或含符號連結的路徑安全拒絕。失敗時清自己的 partial／未發布副本，不刪其他 generation 或整個 runtime-deps；舊副本與 quarantine 不自動回收。這是路徑檢查，不是防同權限惡意程序競態的檔案系統沙箱。
 - `claudeQuery()` 必須立刻回傳 Query，所以 SDK 還沒載入時，它會先回傳 `DeferredQuery`（`deferred-query.ts`）。
   Query 的每個方法都寫明轉發，SDK 升版改了介面時會直接編譯失敗，不會默默漏掉某個呼叫。
 - Claude 本身一律使用使用者自己安裝的 `claude`，這是上游原本的設計，SDK 內附的執行檔用不到。
@@ -65,6 +67,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `packages/server/package.json` 的 devDependency
 - 不要開 TypeScript 的 `verbatimModuleSyntax`。一開，`agent.ts` 的 `import { type … } from "@anthropic-ai/claude-agent-sdk"` 會被編譯成 `import {} from …`，SDK 又變回啟動必要的相依套件，沒裝的話 daemon 會起不來。
 - 第一次使用需要連到 npm registry 或設定的鏡像站。失敗不快取，同一個 daemon 的下一則訊息會再試，不必重開對話，也不會自動重送失敗的訊息。下載連同讀取 body 的總逾時是 120 秒。
+- App 對 loader 自己的完整錯誤格式提供繁中提示，說明首次需要下載、來源無法連線，以及下一則訊息會重試；完整性與安裝失敗各有自己的提示。只作用於 error notification，不翻一般 Agent 輸出或未知錯誤，也不把原始 URL、代理認證或 cause 帶進新提示。
 - 公司網路設定（只影響 SDK 下載，不更換 daemon 的全域 dispatcher）：
   - `https_proxy`／`HTTPS_PROXY`、`http_proxy`／`HTTP_PROXY`：小寫優先；HTTPS 沒有專用代理（或設為空字串）時使用 HTTP 代理。代理 URL 可含認證，錯誤不回傳 URL、headers 或原始網路錯誤。
   - `no_proxy`／`NO_PROXY`：小寫優先（含空字串），支援主機、主機加 port、子網域 suffix、逗號或空白分隔清單，以及 `*` 全部直連。
@@ -1317,6 +1320,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- F11 SDK repair／retry：在 `b103338e7` 新基準重建 server 後，transport、runtime、managed repair、同 session retry、query、rewind、runtime-exit、error mapper、copy 九個定向檔合計 88/88，SDK 守門 5/5。測試使用隔離 HOME／CLAUDE_CONFIG_DIR／PASEO_HOME 與本機 synthetic SDK，沒有執行真 Claude 或外部下載；既有與新 generation 的相對依賴失敗快取、一次修復上限、pointer／symlink 邊界、失敗後下一則訊息和不重送舊提示均有定向案例。完整 typecheck 由提交 hook 另驗；GUI、公司代理與實際 asar 留待整合驗收。
 
 - T1 S3 修正（2026-09-27，整合分支 `woowtech/integration-0926`，第 16 節 T1 S3）：
   - 紅：新測試的路由先照上游的讀法（合併的 params），7 個裡 3 紅、原因跟裝置一樣：S3 的工作區收到通知的 agent 之後又收到 S2 的 agent（pin 在後，等於聚焦它）；換到別的工作區收到 S2 的 agent，回到 S2 的工作區又收到一次；從 Open Project 點的 terminal 換工作區時跟過去。S2 和見證綠，見證的主機路由 params 跟 `logs/ultra-device-s3b.txt` 的 navstate 一樣。守門對上游的 `index.tsx` 紅在「must not read useGlobalSearchParams」。

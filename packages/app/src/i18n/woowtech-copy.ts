@@ -678,10 +678,25 @@ const METADATA_GENERATION_ZH_TW: typeof METADATA_GENERATION_ENGLISH = {
   fallbackHint: "此偏好會保留；不會呼叫任何模型來產生後設資料。",
 };
 
+const CLAUDE_SDK_ENGLISH = {
+  download:
+    "First use of Claude requires downloading a component, but the registry or mirror could not be reached. Send your next message to retry.",
+  integrity:
+    "The downloaded Claude component failed its integrity check and was not installed. Send your next message to retry.",
+  runtime: "Claude component could not be installed or loaded. Send your next message to retry.",
+};
+const CLAUDE_SDK_ZH_TW: typeof CLAUDE_SDK_ENGLISH = {
+  download:
+    "首次使用 Claude 需要下載元件，但目前無法連線到 registry 或鏡像站。傳送下一則訊息時會自動重試。",
+  integrity: "下載的 Claude 元件未通過完整性檢查，因此沒有安裝。傳送下一則訊息時會自動重試。",
+  runtime: "無法安裝或載入 Claude 元件。傳送下一則訊息時會自動重試。",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
     ...(WOOWTECH_COPY[language] ?? ENGLISH),
+    claudeSdk: language === "zh-TW" ? CLAUDE_SDK_ZH_TW : CLAUDE_SDK_ENGLISH,
     confirmDialog: { confirm: language === "zh-TW" ? "確認" : "Confirm" },
     metadataGeneration:
       language === "zh-TW" ? METADATA_GENERATION_ZH_TW : METADATA_GENERATION_ENGLISH,

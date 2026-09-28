@@ -6,8 +6,11 @@ import { promisify } from "node:util";
 import { createServer, type RequestListener } from "node:http";
 import { connect, type Socket, type Server } from "node:net";
 import { afterEach, expect, test } from "vitest";
-import { getGlobalDispatcher } from "undici";
+import { EnvHttpProxyAgent, getGlobalDispatcher } from "undici";
 import { fetchFromRegistry } from "./claude-agent-sdk-download.js";
+
+const downloadFailure = (status?: number) =>
+  `[woowtech:claude-sdk:download] Claude Agent SDK download failed${status === undefined ? "" : ` with HTTP ${status}`}. First use of Claude requires downloading a component, but the registry or mirror could not be reached. Send your next message to retry.`;
 
 // C-030 explicitly permits loopback registry/proxy fixtures for this transport contract.
 const cleanups: Array<() => Promise<void>> = [];
@@ -136,7 +139,7 @@ test("rejects non-2xx without exposing response headers or URL secrets", async (
   expect(error).toMatchObject({
     name: "ClaudeAgentSdkDownloadError",
     status: 503,
-    message: "Claude Agent SDK download failed with HTTP 503",
+    message: downloadFailure(503),
   });
   expect(JSON.stringify(error)).not.toMatch(/secret|127\.0\.0\.1|cause/);
 });
@@ -145,7 +148,7 @@ test("sanitizes invalid authenticated proxy errors", async () => {
   const error = await fetchFromRegistry("http://127.0.0.1:1", {
     env: { HTTP_PROXY: "not-a-url:fixture-user:fixture-password?fixture-query" },
   }).catch((failure: unknown) => failure);
-  expect(error).toMatchObject({ message: "Claude Agent SDK download failed" });
+  expect(error).toMatchObject({ message: downloadFailure() });
   expect(error).not.toHaveProperty("cause");
   expect(JSON.stringify(error)).not.toMatch(/fixture|127\.0\.0\.1/);
 });
@@ -156,7 +159,7 @@ test("total timeout covers a body stalled after headers", async () => {
     res.write("partial");
   });
   await expect(fetchFromRegistry(target, { env: {}, timeoutMs: 80 })).rejects.toThrow(
-    "Claude Agent SDK download failed",
+    downloadFailure(),
   );
 });
 
@@ -169,14 +172,12 @@ test("disconnect rejects, and the next download can succeed", async () => {
       res.socket?.destroy();
     } else res.end("retry");
   });
-  await expect(fetchFromRegistry(target, { env: {} })).rejects.toThrow(
-    "Claude Agent SDK download failed",
-  );
+  await expect(fetchFromRegistry(target, { env: {} })).rejects.toThrow(downloadFailure());
   expect(Buffer.from(await fetchFromRegistry(target, { env: {} })).toString()).toBe("retry");
 });
 
 test("startup extra CA trusts direct and CONNECT downloads, never disables verification", async () => {
-  const root = path.resolve(".dev");
+  const root = path.resolve(".dev/f11-repair/fixtures");
   await mkdir(root, { recursive: true });
   const dir = await mkdtemp(path.join(root, "sdk-ca-"));
   cleanups.push(() => rm(dir, { recursive: true, force: true }));
@@ -216,7 +217,7 @@ test("startup extra CA trusts direct and CONNECT downloads, never disables verif
       config,
     ],
     {
-      env: { PATH: "/usr/bin:/bin", HOME: dir },
+      env: { PATH: "/usr/bin:/bin", HOME: dir, TMPDIR: dir },
       timeout: 10_000,
     },
   );
@@ -244,19 +245,31 @@ test("startup extra CA trusts direct and CONNECT downloads, never disables verif
       binary,
       ["--import", "tsx", "--input-type=module", "-e", script, target],
       {
-        env: { ELECTRON_RUN_AS_NODE: "1", TSX_DISABLE_CACHE: "1", ...proxyEnv },
+        env: {
+          ELECTRON_RUN_AS_NODE: "1",
+          HOME: dir,
+          TMPDIR: dir,
+          CLAUDE_CONFIG_DIR: dir,
+          PASEO_HOME: dir,
+          TSX_DISABLE_CACHE: "1",
+          ...proxyEnv,
+        },
         timeout: 10_000,
       },
     );
     const rejection = JSON.parse(rejected.stdout);
     expect(rejection.node).toBe(process.versions.node);
-    expect(rejection.error).toBe("Claude Agent SDK download failed");
+    expect(rejection.error).toBe(downloadFailure());
     const accepted = await execute(
       binary,
       ["--import", "tsx", "--input-type=module", "-e", script, target],
       {
         env: {
           ELECTRON_RUN_AS_NODE: "1",
+          HOME: dir,
+          TMPDIR: dir,
+          CLAUDE_CONFIG_DIR: dir,
+          PASEO_HOME: dir,
           TSX_DISABLE_CACHE: "1",
           NODE_EXTRA_CA_CERTS: cert,
           ...proxyEnv,
@@ -283,6 +296,10 @@ test("startup extra CA trusts direct and CONNECT downloads, never disables verif
       {
         env: {
           ELECTRON_RUN_AS_NODE: "1",
+          HOME: dir,
+          TMPDIR: dir,
+          CLAUDE_CONFIG_DIR: dir,
+          PASEO_HOME: dir,
           TSX_DISABLE_CACHE: "1",
           NODE_EXTRA_CA_CERTS: cert,
           ...proxyEnv,
@@ -301,6 +318,10 @@ test("startup extra CA trusts direct and CONNECT downloads, never disables verif
     {
       env: {
         ELECTRON_RUN_AS_NODE: "1",
+        HOME: dir,
+        TMPDIR: dir,
+        CLAUDE_CONFIG_DIR: dir,
+        PASEO_HOME: dir,
         TSX_DISABLE_CACHE: "1",
         NODE_EXTRA_CA_CERTS: cert,
         HTTPS_PROXY: tunnel.url,
@@ -330,12 +351,26 @@ test.each([false, true])(
     }).catch((failure: unknown) => failure);
     expect(tunnel.count()).toBe(withQuery ? 0 : 1);
     expect(error).toMatchObject({
-      message: withQuery
-        ? "Claude Agent SDK download failed"
-        : "Claude Agent SDK download failed with HTTP 503",
+      message: withQuery ? downloadFailure() : downloadFailure(503),
     });
     expect(error).not.toHaveProperty("cause");
     expect(error).not.toHaveProperty("url");
     expect(JSON.stringify(error)).not.toMatch(/fixture|127\.0\.0\.1/);
   },
 );
+
+test("dispatcher teardown errors cross the same safe download boundary", async () => {
+  class FailingTeardownAgent extends EnvHttpProxyAgent {
+    override async destroy() {
+      await new Promise<void>((resolve) => super.destroy(null, resolve));
+      throw new Error("fixture-user:fixture-password@fixture.invalid/?fixture-email headers cause");
+    }
+  }
+  const error = await fetchFromRegistry("http://127.0.0.1:1", {
+    env: {},
+    createDispatcher: (settings) => new FailingTeardownAgent(settings),
+  }).catch((failure: unknown) => failure);
+  expect(error).toMatchObject({ name: "ClaudeAgentSdkDownloadError", message: downloadFailure() });
+  expect(error).not.toHaveProperty("cause");
+  expect(JSON.stringify(error)).not.toMatch(/fixture|headers|cause/);
+});
