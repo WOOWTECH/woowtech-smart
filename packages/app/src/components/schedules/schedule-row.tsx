@@ -23,7 +23,7 @@ import {
   resolveScheduleTitle,
   scheduleCopy,
 } from "@/utils/schedule-format";
-import { formatTimeAgo } from "@/utils/time";
+import { useTimeAgo } from "@/hooks/use-time-ago";
 import type { TFunction } from "i18next";
 import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 
@@ -102,18 +102,21 @@ function stateBadge(
 // Meta reads left-to-right as identity → history → future: how often, when it
 // was created, when it last ran, and (only while it can still run) when it runs
 // next. Status lives on the badge, never repeated here.
-function buildMeta(
-  schedule: ScheduleSummary,
-  state: ScheduleDerivedState,
-  serverName: string | undefined,
-  singleHost: boolean,
-  t: TFunction,
-): string {
+function buildMeta(input: {
+  schedule: ScheduleSummary;
+  state: ScheduleDerivedState;
+  createdAgo: string;
+  lastRunAgo: string;
+  serverName: string | undefined;
+  singleHost: boolean;
+  t: TFunction;
+}): string {
+  const { schedule, state, serverName, singleHost, t } = input;
   const parts = [
     formatCadence(schedule.cadence),
-    t("woowtech.schedules.meta.created", { time: formatTimeAgo(new Date(schedule.createdAt)) }),
+    t("woowtech.schedules.meta.created", { time: input.createdAgo }),
     schedule.lastRunAt
-      ? t("woowtech.schedules.meta.lastRun", { time: formatTimeAgo(new Date(schedule.lastRunAt)) })
+      ? t("woowtech.schedules.meta.lastRun", { time: input.lastRunAgo })
       : t("woowtech.schedules.meta.neverRun"),
   ];
   if (state === "active") {
@@ -126,6 +129,28 @@ function buildMeta(
     parts.unshift(serverName);
   }
   return parts.join(" · ");
+}
+
+function ScheduleMeta({
+  schedule,
+  state,
+  serverName,
+  singleHost,
+}: {
+  schedule: ScheduleSummary;
+  state: ScheduleDerivedState;
+  serverName: string | undefined;
+  singleHost: boolean;
+}) {
+  const { t } = useTranslation();
+  const createdAgo = useTimeAgo(new Date(schedule.createdAt));
+  const lastRunAgo = useTimeAgo(schedule.lastRunAt ? new Date(schedule.lastRunAt) : null);
+  const meta = buildMeta({ schedule, state, createdAgo, lastRunAgo, serverName, singleHost, t });
+  return (
+    <Text style={settingsStyles.rowHint} numberOfLines={1}>
+      {meta}
+    </Text>
+  );
 }
 
 /** Small provider glyph. Reads the icon color off a StyleSheet object so the
@@ -177,7 +202,6 @@ export function ScheduleRow({
 
   const title = resolveScheduleTitle(schedule);
   const badge = stateBadge(state, t);
-  const meta = buildMeta(schedule, state, serverName, singleHost ?? false, t);
   const canRun = schedule.target.type === "new-agent" && (state === "active" || state === "paused");
 
   const rowStyle = useCallback(
@@ -215,9 +239,12 @@ export function ScheduleRow({
             <Text style={styles.target} numberOfLines={1}>
               {targetLabel}
             </Text>
-            <Text style={settingsStyles.rowHint} numberOfLines={1}>
-              {meta}
-            </Text>
+            <ScheduleMeta
+              schedule={schedule}
+              state={state}
+              serverName={serverName}
+              singleHost={singleHost ?? false}
+            />
           </View>
         </View>
 
