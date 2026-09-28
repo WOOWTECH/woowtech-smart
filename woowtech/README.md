@@ -137,7 +137,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 手機 App 的名稱和 bundle id 直接寫在 `app.config.js`：正式版 `io.woowtech.smart`，Debug 版 `io.woowtech.smart.debug`。
   - 中文手機桌面顯示「渥屋智能」（Debug 版是「渥屋智能 Debug」），兩個平台都由 Expo 的 `locales` 寫入：`ios` 底下的 `CFBundleDisplayName`、`CFBundleName` 進 iOS 的 `InfoPlist.strings`，`android` 底下的 `app_name` 進 `values-b+zh+Hans`、`values-b+zh+Hant` 的 `strings.xml`（fixes-0928）。
     - Expo 54 的 prebuild 會把 `ios`、`android` 以外的鍵同時寫進兩個平台。原本 `CFBundle*` 放在共用層，Android 多出兩筆預設語系沒有的字串，本機 `assembleRelease` 的 `lintVitalRelease` 報 4 個 ExtraTranslation（2026-09-27 Android 輪次），只能略過 lint 才建得起來。
-    - `plugins/with-localized-app-name.js` 當初是為了替 Android 補上 `app_name`：共用層只有 iOS 的鍵，Expo 寫到 Android 的只是用不到的 `CFBundle*`。現在 `android` 底下直接給 `app_name`，由 Expo 寫入，已從 `app.config.js` 拿掉註冊。檔案和它的單元測試還在，等擁有者確認後刪除。
+    - `plugins/with-localized-app-name.js` 和它的單元測試已刪除（integration-0928，協調者決定）。它當初替 Android 補上 `app_name`：那時共用層只有 iOS 的鍵，Expo 寫到 Android 的只是用不到的 `CFBundle*`。現在 `android` 底下直接給 `app_name`、由 Expo 寫入，fixes-0928 已從 `app.config.js` 拿掉註冊；它讀的是共用層的 `CFBundleDisplayName`，分平台之後就算再註冊也不會寫任何東西。
   - `apply-identity.mjs` 現在只處理 Expo 帳號相關的 owner、slug、project id。
 - iOS 的主畫面顯示名稱欄位是 `CFBundleDisplayName`，`CFBundleName` 是 bundle 的短名稱（[Apple 欄位說明](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html)）。沒有證據能保證名稱太長時會切換到短名稱，也不能僅憑截圖判斷改讀了 `PRODUCT_NAME`。
   - `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 設「渥屋智能」。這次只更正說明，不改顯示名稱、Xcode 的 `PRODUCT_NAME`、執行檔或 `.app` 名稱。
