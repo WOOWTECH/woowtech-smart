@@ -5,7 +5,6 @@ const withAndroidAsyncStorageSize = require("./plugins/with-android-async-storag
 const withAndroidProfileable = require("./plugins/with-android-profileable");
 const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
-const withLocalizedAppName = require("./plugins/with-localized-app-name");
 const withWoowtechPush = require("./plugins/with-woowtech-push");
 const { iosGoogleServiceInfoPlist } = require("./plugins/woowtech-ios-firebase");
 const { getNativeReleaseVersion } = require("./native-release-version");
@@ -107,6 +106,13 @@ const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 // the icon label's spacing or truncation. Debug and Release labels still need validation.
 const shortName = "woowtech smart";
 const chineseShortName = "渥屋智能";
+// Expo 54 writes every key outside `ios` and `android` into both platforms. On Android an
+// Info.plist key becomes a strings.xml entry the default locale lacks, and release lint fails
+// with ExtraTranslation, so each platform gets only its own name keys.
+const chineseLocale = {
+  ios: { CFBundleDisplayName: variant.chineseName, CFBundleName: chineseShortName },
+  android: { app_name: variant.chineseName },
+};
 
 export default {
   expo: {
@@ -116,10 +122,10 @@ export default {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "woowtech-smart",
-    // Chinese launchers show the Chinese name (iOS here; Android via withLocalizedAppName).
+    // Chinese launchers show the Chinese name.
     locales: {
-      "zh-Hans": { CFBundleDisplayName: variant.chineseName, CFBundleName: chineseShortName },
-      "zh-Hant": { CFBundleDisplayName: variant.chineseName, CFBundleName: chineseShortName },
+      "zh-Hans": chineseLocale,
+      "zh-Hant": chineseLocale,
     },
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
@@ -159,7 +165,6 @@ export default {
     plugins: [
       "expo-router",
       withPasteInput,
-      withLocalizedAppName,
       [withAndroidAsyncStorageSize, 64],
       ...buildProfile.cameraPlugins,
       [

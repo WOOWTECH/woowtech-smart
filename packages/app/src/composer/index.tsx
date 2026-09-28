@@ -81,6 +81,11 @@ import {
   type QueueWriter,
   type QueuedComposerMessage,
 } from "@/composer/actions";
+import {
+  UPLOAD_RECONNECT_WAIT_MS,
+  uploadErrorMessage,
+  waitForConnectedHostClient,
+} from "@/composer/woowtech-upload-reconnect";
 import { useVoiceOptional } from "@/contexts/voice-context";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1800,30 +1805,37 @@ function ComposerContentImpl({
     async (files: SelectedFile[]) => {
       if (files.length === 0) return;
       if (!client) {
-        toastErrorRef.current(t("composer.errors.daemonClientDisconnected"));
+        toastErrorRef.current(t("common.errors.daemonClientDisconnected"));
         return;
       }
 
       const placeholders = files.map((file) => ({ id: nextPendingFileId.current++, file }));
       setPendingFiles((pending) => [...pending, ...placeholders]);
       try {
-        const uploaded = await uploadFileAttachments({ client, files });
+        const uploaded = await uploadFileAttachments({
+          client,
+          files,
+          reconnect: () =>
+            waitForConnectedHostClient({
+              store: getHostRuntimeStore(),
+              serverId,
+              timeoutMs: UPLOAD_RECONNECT_WAIT_MS,
+            }),
+        });
         addFiles(uploaded);
       } catch (error) {
         console.error("[Composer] Failed to upload file:", error);
-        toastErrorRef.current(
-          error instanceof Error ? error.message : t("composer.errors.uploadFailed"),
-        );
+        toastErrorRef.current(uploadErrorMessage(error, t));
       } finally {
         setPendingFiles((pending) => pending.filter((entry) => !placeholders.includes(entry)));
       }
     },
-    [addFiles, client, t],
+    [addFiles, client, serverId, t],
   );
 
   const handlePickFile = useCallback(async () => {
     if (!client) {
-      toastErrorRef.current(t("composer.errors.daemonClientDisconnected"));
+      toastErrorRef.current(t("common.errors.daemonClientDisconnected"));
       return;
     }
     try {
@@ -1844,7 +1856,7 @@ function ComposerContentImpl({
         const files = droppedItemsToSelectedFiles(items);
         if (files.length === 0) return;
         if (!client || !isConnected) {
-          toastErrorRef.current(t("composer.errors.daemonClientDisconnected"));
+          toastErrorRef.current(t("common.errors.daemonClientDisconnected"));
           return;
         }
         await uploadSelectedFiles(files);

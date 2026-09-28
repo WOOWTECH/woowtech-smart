@@ -61,6 +61,7 @@ function label(words, term) {
 }
 
 const aboutTabs = ({ key, english }) => /tab/i.test(key) || /\btabs?\b/i.test(english);
+const aboutSchedules = ({ english }) => /\bschedules?\b/i.test(english);
 
 export const TERM_FIXES = [
   // Browser and terminal tabs are 分頁; workspace labels stay 標籤.
@@ -76,6 +77,8 @@ export const TERM_FIXES = [
   { find: "日誌檔案", replace: "記錄檔" },
   { find: "日誌", replace: "記錄" },
   { find: "計劃", replace: "計畫" },
+  // Scheduled agent runs are 排程; 計畫 stays for plans (plan mode, proposed plans).
+  { find: "計畫", replace: "排程", when: aboutSchedules },
   { find: "撤銷", replace: "復原" },
   { find: "滾動", replace: "捲動" },
   { find: "回滾", replace: "捲動記錄" },

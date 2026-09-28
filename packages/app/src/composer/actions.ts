@@ -18,6 +18,7 @@ import { createUserMessage, generateMessageId, type UserMessageItem } from "@/ty
 import type { MessageSubmissionRejectionOutcome } from "@/composer/submission/model";
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { i18n } from "@/i18n/i18next";
+import { uploadAcrossReconnects } from "@/composer/woowtech-upload-reconnect";
 
 export interface QueuedComposerMessage {
   id: string;
@@ -125,6 +126,8 @@ export async function pickAndPersistImages(input: {
 export async function uploadFileAttachments(input: {
   client: ComposerSendClient;
   files: SelectedFile[];
+  /** woowtech smart: the client to resend on after a lost connection, or null if none. */
+  reconnect?: () => Promise<ComposerSendClient | null>;
 }): Promise<Extract<ComposerAttachment, { kind: "file" }>[]> {
   const result: Extract<ComposerAttachment, { kind: "file" }>[] = [];
   const prepared: Array<{ fileName: string; mimeType: string; bytes: Uint8Array }> = [];
@@ -144,7 +147,11 @@ export async function uploadFileAttachments(input: {
   }
 
   for (const file of prepared) {
-    const response = await input.client.uploadFile(file);
+    const response = await uploadAcrossReconnects({
+      client: input.client,
+      reconnect: input.reconnect,
+      upload: (client) => client.uploadFile(file),
+    });
     if (response.error || !response.file) {
       throw new Error(response.error ?? "Upload failed.");
     }

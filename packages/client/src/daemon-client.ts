@@ -1736,6 +1736,49 @@ export class DaemonClient {
   }
 
   /**
+   * woowtech smart: resolves once the transport is connected. Like the send queue, it waits only
+   * while a connection is being established and gives up after the same timeout.
+   */
+  private waitUntilConnected(): Promise<void> {
+    const status = this.connectionState.status;
+    if (this.transport && status === "connected") {
+      return Promise.resolve();
+    }
+    if (status !== "connecting") {
+      return Promise.reject(
+        new DaemonConnectionError(`Transport not connected (status: ${status})`),
+      );
+    }
+    return new Promise((resolve, reject) => {
+      const stop = (): void => {
+        clearTimeout(timeoutHandle);
+        this.connectionListeners.delete(listener);
+      };
+      const listener = (state: ConnectionState): void => {
+        if (state.status === "connecting") {
+          return;
+        }
+        stop();
+        if (state.status === "connected") {
+          resolve();
+          return;
+        }
+        reject(new DaemonConnectionError(`Transport not connected (status: ${state.status})`));
+      };
+      const timeoutHandle = setTimeout(() => {
+        stop();
+        reject(
+          new DaemonConnectionError(
+            "Timed out waiting for connection to send message",
+            "DAEMON_REQUEST_TIMEOUT",
+          ),
+        );
+      }, DEFAULT_SEND_QUEUE_TIMEOUT_MS);
+      this.connectionListeners.add(listener);
+    });
+  }
+
+  /**
    * Flush pending send queue - called when connection is established.
    */
   private flushPendingSendQueue(): void {
@@ -4735,6 +4778,9 @@ export class DaemonClient {
     if (!bytes) {
       throw new Error("File bytes are required.");
     }
+    // woowtech smart: while connecting, the request waits in the send queue but binary frames
+    // are dropped, so the daemon saw chunks without FileBegin. Start on a connected transport.
+    await this.waitUntilConnected();
     const uploadTransport = this.transport;
     const resolvedRequestId = this.createRequestId(input.requestId);
     const modifiedAt = input.modifiedAt ?? new Date().toISOString();

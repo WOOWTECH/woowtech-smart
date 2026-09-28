@@ -1,6 +1,10 @@
 import type { HostRuntimeConnectionStatus } from "@/runtime/host-runtime";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import type { WorkspaceRecoveryModel } from "@/workspace-recovery/model";
+import {
+  unavailableRecoveryMessage,
+  unsupportedRecoveryMessage,
+} from "@/workspace-recovery/woowtech-recovery-copy";
 
 export type WorkspaceRouteState =
   | { kind: "ready" }
@@ -78,13 +82,13 @@ export function resolveWorkspaceRouteState(input: {
       return {
         kind: "recoveryUnavailable",
         hostName: input.hostName,
-        message: input.recovery.recovery.message,
+        message: unavailableRecoveryMessage(input.recovery.recovery),
       };
     case "unsupportedAction":
       return {
         kind: "recoveryUnavailable",
         hostName: input.hostName,
-        message: "Update woowtech smart to recover this workspace.",
+        message: unsupportedRecoveryMessage(),
       };
     case "inspectionFailed":
       return {

@@ -170,6 +170,8 @@ export class DirectorySync {
       markAgentLoading: () => void;
       markAgentReady: () => void;
       markAgentError: (error: string) => void;
+      // woowtech smart: this connection's demand refresh ended, well or not (README 16, T1 S1).
+      markDemandRefreshSettled?: (source: DirectorySourceToken) => void;
     },
     private readonly checkpoints?: DirectoryCheckpointStorage,
   ) {
@@ -340,6 +342,12 @@ export class DirectorySync {
             generation !== this.subscriptionGeneration)
         ) {
           void this.requestDemandRefresh().catch(() => undefined);
+        } else if (
+          current.clientGeneration === source.clientGeneration &&
+          current.connectionEpoch === source.connectionEpoch
+        ) {
+          // woowtech smart: no further refresh follows on this connection (README 16, T1 S1).
+          this.callbacks.markDemandRefreshSettled?.(source);
         }
       });
     return this.demandRefresh;

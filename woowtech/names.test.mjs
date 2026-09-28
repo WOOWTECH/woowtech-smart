@@ -4,8 +4,12 @@
 //
 //   node --test woowtech/names.test.mjs
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { expoIntrospectedConfig, expoPrebuildConfig } from "./expo-config.mjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
@@ -14,6 +18,46 @@ const repoRoot = new URL("../", import.meta.url);
 
 function read(relativePath) {
   return readFileSync(new URL(relativePath, repoRoot), "utf8");
+}
+
+// The config plugins prebuild runs (expo/config-plugins, as the app resolves it).
+const { AndroidConfig } = createRequire(new URL("../packages/app/package.json", import.meta.url))(
+  "expo/config-plugins",
+);
+
+/**
+ * The strings.xml entries Expo's own Android locales step writes for `config.locales`, keyed by
+ * resource qualifier. That step does not await its writes, so this waits for complete files.
+ */
+async function generatedAndroidLocaleStrings(config) {
+  const projectRoot = mkdtempSync(join(tmpdir(), "woowtech-android-locales-"));
+  try {
+    mkdirSync(join(projectRoot, "android"));
+    await AndroidConfig.Locales.setLocalesAsync(config, { projectRoot });
+    const resDir = join(projectRoot, "android", "app", "src", "main", "res");
+    const qualifiers = Object.keys(config.locales).map((tag) => `b+${tag.split("-").join("+")}`);
+    const files = qualifiers.map((qualifier) => join(resDir, `values-${qualifier}`, "strings.xml"));
+    const complete = (file) =>
+      existsSync(file) && /<\/resources>\s*$|<resources\/>\s*$/.test(readFileSync(file, "utf8"));
+    for (let waited = 0; !files.every(complete); waited += 10) {
+      assert.ok(waited < 5_000, `Expo did not write ${files.join(", ")}`);
+      await delay(10);
+    }
+    return Object.fromEntries(
+      qualifiers.map((qualifier, index) => [
+        qualifier,
+        Object.fromEntries(
+          [
+            ...readFileSync(files[index], "utf8").matchAll(
+              /<string name="([^"]+)">(.*?)<\/string>/g,
+            ),
+          ].map(([, name, value]) => [name, value.replace(/^"(.*)"$/, "$1")]),
+        ),
+      ]),
+    );
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true });
+  }
 }
 
 test("iOS naming documentation does not claim an unverified home-screen fallback", () => {
@@ -125,7 +169,7 @@ test("the daemon introduces itself to agents as woowtech smart", () => {
   );
 });
 
-test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", () => {
+test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", async () => {
   for (const [variant, nameSuffix, idSuffix] of [
     ["production", "", ""],
     ["development", " Debug", ".debug"],
@@ -134,7 +178,7 @@ test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", ()
     const displayNames = Object.fromEntries(
       Object.entries(config.locales).map(([language, strings]) => [
         language,
-        strings.CFBundleDisplayName,
+        strings.ios?.CFBundleDisplayName,
       ]),
     );
 
@@ -145,10 +189,15 @@ test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", ()
       "zh-Hans": `渥屋智能${nameSuffix}`,
       "zh-Hant": `渥屋智能${nameSuffix}`,
     });
-    // Expo applies `locales` to iOS only; this plugin carries them to Android.
-    assert.ok(
-      config._internal?.pluginHistory?.["with-localized-app-name"],
-      `${variant}: Android launchers would not get the localized name`,
+    // Android's localized strings.xml may only translate names the default locale has
+    // (app_name, from config.name). Anything else fails release lint with ExtraTranslation.
+    assert.deepEqual(
+      await generatedAndroidLocaleStrings(config),
+      {
+        "b+zh+Hans": { app_name: `渥屋智能${nameSuffix}` },
+        "b+zh+Hant": { app_name: `渥屋智能${nameSuffix}` },
+      },
+      variant,
     );
   }
 });
@@ -168,8 +217,8 @@ test("the iOS home screen falls back to a readable short name", () => {
     const { ios, locales } = expoIntrospectedConfig(variant);
     const shortNames = [
       ios.infoPlist.CFBundleName,
-      locales["zh-Hans"].CFBundleName,
-      locales["zh-Hant"].CFBundleName,
+      locales["zh-Hans"].ios.CFBundleName,
+      locales["zh-Hant"].ios.CFBundleName,
     ];
 
     assert.deepEqual(shortNames, ["woowtech smart", "渥屋智能", "渥屋智能"], variant);

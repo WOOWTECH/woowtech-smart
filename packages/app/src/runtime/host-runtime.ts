@@ -118,6 +118,8 @@ export interface HostRuntimeSnapshot {
   probeByConnectionId: Map<string, ConnectionProbeState>;
   clientGeneration: number;
   connectionEpoch: number;
+  // woowtech smart: the connection whose directory refresh has ended (README 16, T1 S1).
+  demandRefreshSettledFor?: { clientGeneration: number; connectionEpoch: number } | null;
 }
 
 type HostRuntimeSnapshotPatch = Partial<Omit<HostRuntimeSnapshot, "serverId" | "clientGeneration">>;
@@ -758,6 +760,15 @@ export class HostRuntimeController {
         : "error_before_first_success",
       agentDirectoryError: error,
       hasEverLoadedAgentDirectory,
+    });
+  }
+
+  markDemandRefreshSettled(source: { clientGeneration: number; connectionEpoch: number }): void {
+    this.updateSnapshot({
+      demandRefreshSettledFor: {
+        clientGeneration: source.clientGeneration,
+        connectionEpoch: source.connectionEpoch,
+      },
     });
   }
 
@@ -1681,6 +1692,7 @@ export class HostRuntimeStore {
         markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
         markAgentReady: () => controller.markAgentDirectorySyncReady(),
         markAgentError: (error) => controller.markAgentDirectorySyncError(error),
+        markDemandRefreshSettled: (source) => controller.markDemandRefreshSettled(source),
       },
       this.replicaCache,
     );
@@ -2118,6 +2130,7 @@ export class HostRuntimeStore {
           markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
           markAgentReady: () => controller.markAgentDirectorySyncReady(),
           markAgentError: (error) => controller.markAgentDirectorySyncError(error),
+          markDemandRefreshSettled: (source) => controller.markDemandRefreshSettled(source),
         },
         this.replicaCache,
       );
