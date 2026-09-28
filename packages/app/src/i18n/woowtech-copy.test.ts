@@ -114,6 +114,7 @@ describe("woowtech smart's own text", () => {
           key.startsWith("agentNotificationTitles.") ||
           key.startsWith("metadataGeneration.") ||
           key.startsWith("confirmDialog.") ||
+          key.startsWith("composer.") ||
           key.startsWith("schedules.") ||
           key.startsWith("time.") ||
           key.startsWith("message.") ||

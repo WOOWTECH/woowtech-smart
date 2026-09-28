@@ -1059,6 +1059,15 @@ const WORKSPACE_RECOVERY_ZH_TW: typeof WORKSPACE_RECOVERY_ENGLISH = {
   unsupportedAction: "請更新渥屋智能，才能恢復這個工作區。",
 };
 
+const COMPOSER_ENGLISH = {
+  uploadConnectionLost:
+    "The file was not uploaded because the connection to the host was lost. Add it again once the host is back.",
+};
+
+const COMPOSER_ZH_TW: typeof COMPOSER_ENGLISH = {
+  uploadConnectionLost: "與主機的連線中斷，檔案沒有上傳。主機連回來後請再加入一次。",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
@@ -1072,6 +1081,7 @@ export function woowtechCopyFor(language: string) {
       language === "zh-TW" ? DESKTOP_NOTIFICATIONS_ZH_TW : DESKTOP_NOTIFICATIONS_ENGLISH,
     agentNotificationTitles:
       language === "zh-TW" ? AGENT_NOTIFICATION_TITLES_ZH_TW : AGENT_NOTIFICATION_TITLES_ENGLISH,
+    composer: language === "zh-TW" ? COMPOSER_ZH_TW : COMPOSER_ENGLISH,
     schedules: language === "zh-TW" ? SCHEDULES_ZH_TW : SCHEDULES_ENGLISH,
     time: language === "zh-TW" ? TIME_ZH_TW : TIME_ENGLISH,
     message: language === "zh-TW" ? MESSAGE_ZH_TW : MESSAGE_ENGLISH,

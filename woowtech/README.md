@@ -996,6 +996,18 @@ node --test woowtech/*.test.mjs
 - metadata 設定頁保留，用 fork copy 覆寫總說明與三段模型提示，明說目前停用、已存偏好不會啟用生成。比隱藏頁面更少改動，也讓使用者知道舊設定仍保留。專案設定的後設資料區塊也用 fork 說明保留指令但不會用於自動產生，表單與磁碟設定不變。繁中使用「後設資料」及「提交訊息」，英文與其他語系使用英文；不改上游語系檔或 OpenCode 探測流程。
 - Git metadata 測試放 `session/checkout/woowtech-git-metadata.test.ts`：預設 OFF 零呼叫、固定值、原 instructions builder 接點、明確 ON 的 positive control，以及真實 handler 的手填／部分手填行為。handler 測試只寫臨時 Git repo 與本機 bare remote，forge 用 typed fake，不發外部請求。原 `git-metadata-generator.test.ts` 僅注入 ON policy 保留原斷言；`session.test.ts` 在既有 mock 區塊以測試端 ON 覆寫保留 prompt 行為測試（C-022 明確核准的既有 mock 例外）。production `session.ts` 不傳 override，守門禁止測試用 policy 覆寫出現在 server production source：提供 policy 的物件成員（屬性、簡寫、方法、getter、有值的 class field）、對同名成員的 `=`、`??=`、`||=`、`&&=`、解構和參數的預設值（`const { name = … } = deps`、`{ name: local = … }`、`(name = …)`），以及用字串寫出 policy 名稱（`defineProperty`、`Reflect.set`、computed key）都算覆寫；唯一放行的是 `x.name = options.name ?? <fork policy>`，也就是 `WorkspaceAutoName` 建構子的接線。字串相加組出的名稱（`deps["isGeneration" + "Enabled"]`）和區域變數的初始值（`const name = deps.name ?? …`）不在範圍內；生成器入口那一行由第 2 項的 regex 釘住。合併上游後務必逐檔跑這兩檔與 fork OFF suite；不要只跑 generator 單元測試而漏掉 Session 接線。另跑 `node --test woowtech/git-metadata.test.mjs woowtech/workspace-auto-name.test.mjs` 鎖住兩個 gate、policy 預設與 production 接點；`woowtech-copy.test.ts` 守住限定語系政策、placeholder 與頁面文案接點。
 
+### 21. 附件上傳撐過重連
+
+- 現象（2026-09-27 Android 輪次，`logs/integ0927-android-u-attach.txt`）：檔案挑選器開超過 daemon 的 socket lease，daemon 斷線；選好檔案時 App 正在重連，上傳中的附件轉一下就消失，沒有錯誤，daemon 也沒收到檔案。logcat 是 daemon 回的「Upload chunks arrived before file begin.」。挑選器只開 20 秒時正常。
+- 原因在上游的 client（`packages/client/src/daemon-client.ts` 的 `uploadFile`）：連線中（`connecting`）時，`file.upload.request` 這則 JSON 會排進送出佇列，但 FileBegin 等二進位框不排隊。App 的 client 設了 `suppressSendErrors`，所以 FileBegin 被默默丟掉；第一個 chunk 前連線剛好完成，佇列補送 request，chunk 照送，daemon 就回那個錯誤。App 收到失敗只在 catch 裡跳 toast，並把上傳中的附件拿掉；裝置輪次沒看到任何錯誤訊息。上游 main（`30178c4f5`）這兩處都沒改。
+- 修法：
+  - client：`uploadFile` 先等連線完成（`waitUntilConnected`，只在 `connecting` 時等，逾時跟送出佇列一樣），整個檔案都走同一條連線；沒連線、連線失敗或逾時就回 `DaemonConnectionError`，什麼都不送。上游檔 +40 行，註解 `woowtech smart:`。
+  - App：`composer/woowtech-upload-reconnect.ts`。上傳因為連線中斷（`DAEMON_CONNECTION_LOST`、「Transport not connected」或 socket 已關的「WebSocket not open」）失敗時，附件留在上傳中，等這台主機的 client 重新連上（同一個 client 自己重連，或 host runtime 換成新的 client，最多等 60 秒）再重送，一個檔案最多送 3 次。其他錯誤、逾時和等不到主機照舊失敗。接點是 `composer/actions.ts` 的 `uploadFileAttachments`（多一個 `reconnect` 參數）和 `composer/index.tsx` 的 `uploadSelectedFiles`。
+  - 最後還是失敗時，連線中斷的錯誤改顯示「與主機的連線中斷，檔案沒有上傳。主機連回來後請再加入一次。」（`woowtech.composer.uploadConnectionLost`，只有繁中和英文）。
+  - 順手修上游的 key：composer 在 client 不在時 toast `composer.errors.daemonClientDisconnected`，但這個 key 不存在，畫面會顯示 key 本身；改用 `common.errors.daemonClientDisconnected`。
+- 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
+- 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送要在下一輪驗。
+
 ## 上游同步紀錄（2026-09-27，挑選式）
 
 ### 第一批：上游 `836f1a9..d6861f81e`
