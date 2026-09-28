@@ -980,7 +980,6 @@ const TIME_ENGLISH = {
   dateLocale: "en-US",
   justNow: "just now",
   ago: {
-    seconds: "{{value}}s ago",
     minutes: "{{value}}m ago",
     hours: "{{value}}h ago",
     days: "{{value}}d ago",
@@ -1004,7 +1003,6 @@ const TIME_ZH_TW: typeof TIME_ENGLISH = {
   dateLocale: "zh-TW",
   justNow: "剛剛",
   ago: {
-    seconds: "{{value}} 秒前",
     minutes: "{{value}} 分鐘前",
     hours: "{{value}} 小時前",
     days: "{{value}} 天前",
