@@ -1311,6 +1311,20 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 合併輪驗收（2026-09-27～28，整合分支 `woowtech/integration-0927` 的 `b103338e7`，第 16、20 節與「上游同步紀錄」）：main `a6d169ee3` 之後 126 個 commit，三條線一起驗。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0927-*`（`integ0927-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0927-*`。
+  - 三條線：T1 通知路由（第 16 節），含 directory-sync 的 race 修正、三輪審查和 S3 open-intent 修正 `885ee8790`；metadata 政策（第 20 節），commit 與 PR 的 AI 產生關閉，守門另外抓複合、反射、解構和參數預設值的覆寫；挑選式上游同步 `836f1a9..d7b7016cc`，95 個 `cherry-pick -x`、`d8dd189b9` 的部分移植和 11 個 fork commit。合併 `24d70ea89` 沒有衝突，`b103338e7` 刪掉 #5079 合進來後照預期變紅的 T1 標籤見證。跟 main 比 464 檔、+24550／−4822，沒有二進位檔，`.github/` 沒動，金鑰掃描 0 筆。
+  - 本機（`integ0927-merge.md`，`env -i`、只准連 loopback 的 sandbox）：守門 122/122；typecheck app、server、cli、desktop 各一次，commit hook 的 11 個 workspace 也過；App 38 檔 445/445（T1 203、路由 119、fork 推播／配對／relay／metadata 123）；server 33 檔 537/537；protocol 180/180；CLI 15/15；`format:check` 4675 檔、lint 401 檔 0 個 warning、0 個 error。
+  - CI（`integ0927-ci.md`）：[run 36313608117](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36313608117) 是第 5 次，手動、不勾 Playwright，commit `b103338e7`，成功，總時長 37 分 57 秒。有執行的 12 個 job 都過，最久的是 desktop-tests（ubuntu）37 分 32 秒和 server-tests（ubuntu）15 分 11 秒。Windows 兩個（沒開 `vars.WOOWTECH_CI_WINDOWS`）和 Playwright 四片照設計略過，不算通過。12 則 annotation 都是 Node.js 20 淘汰警告。
+  - 平台矩陣（逐項結果表在各步驟紀錄的最後，「未測」都寫了原因）：
+    - Android 模擬器（`integ0927-android.md`）：原生沒變，沿用 main `1f4b2b00f` 的 Debug APK，JS 從這個分支的 Metro 載入。通過：官網連結、繁中用語、配對連結的主機名稱、確認框的「取消」、commit「Update files」與命名關閉；T1 的 S1 三次、S2、S3 兩次加側欄切換、S4、S5（S1 仍閃 0.61–0.78 秒「工作區不可用」）；推播經 push.woowtech.io 和 FCM 真的送到模擬器，換成 English 後只收到 1 則英文通知；Claude 授權推播（1 個 Haiku 回合），通知只有「需要你的授權／點一下查看要求。」；release 建置（`assembleRelease`、debug 簽章）冷啟動點通知開到被推的 agent，沒有 dev launcher；daemon 啟動韌性 3 項（空 pid、非排程檔、BOM）。不通過：OSC 8 連結。未測：PR（要 GitHub 與 gh）、多選問題的「其他」、舊 PID 與 `daemon.log` 寫不進去（桌面版、iOS 驗了）。
+    - iOS 模擬器（`integ0927-ios.md`）：Debug 重建，xcodebuild 16 分 02 秒。通過：官網連結、繁中用語、Expo 登記停用（4 次啟動都沒有「Failed to turn off Expo push registration」，exp.host 0 次）、配對連結的主機名稱、確認框的「取消」、commit「Update files」、daemon 啟動韌性 5 項；T1 的背景新工作區兩次（閃 0.33、0.32 秒「工作區不可用」）、同一連線的第二個新工作區、已知工作區、重裝後、S3 加側欄切換、冷啟動；英文主畫面名稱：標籤取 CFBundleDisplayName，正式版的「woowtech smart」完整顯示，Debug 的「woowtechsmart…」是截斷時拿掉空格。不通過：OSC 8 連結。未測：真的推播（模擬器拿不到 APNs／FCM token，T1 用 `simctl push` 只驗點擊導頁）、PR、多選問題的「其他」、上週日期（模擬器時鐘跟 Mac 走）。
+    - Mac 桌面版（`integ0927-desktop.md`）：從這個分支重新打包，未簽章、`--dir`、arm64。通過：靜態檢查（沒有 relay.paseo.sh、名稱、bundle id、URL scheme、SDK 不在 app.asar）、新 home 的 relay 開啟、官網連結、繁中用語、確認框的「取消」、通知標題（繁中與 English）、命名不呼叫 provider、commit「Update files」、配對 QR、快捷鍵 3/3、daemon 啟動韌性 5/5（含舊 PID、`daemon.log` 寫不進去）、ACP 的 / 選單（`513f2a9ea`）、`e68553f75`。不通過：OSC 8 連結。測試通知只出現「通知顯示失敗」那一態：未簽章的版本 macOS 不詢問就拒絕通知授權。未測：PR、上週日期、封存與恢復、多選問題的「其他」。
+    - 上傳的原檔名（`fbc83613c`）三個平台都通過；訊息日期（`28507224d`）只在 Android 驗過。
+  - 審查與合併前守門（`integ0927-review.md`、`integ0927-gate.md`）：blocker 0，結論 go。不通過的只有 OSC 8（`dc9799f6f`，三個平台都點不開，純文字網址正常）。app.asar 沒有 undici 是測試預期不符：代理下載的修正在 pi 的分支，還沒合進來。
+  - 發現、還沒修：Android 的檔案挑選器開超過約 50 秒再選檔，附件上傳失敗後無聲消失；本機 `assembleRelease` 不略過 lint 會失敗，因為 prebuild 把 iOS 的 CFBundleDisplayName、CFBundleName 寫進 Android 的中文資源（eas.json 都略過 lint）；繁中畫面還有英文：主機狀態「Online」、「工作區不可用」畫面的內文、「just now」、桌面版的「計畫」頁。
+  - 要實機或正式簽章才驗得到的：iOS 真的 APNs／FCM token 登記、推播送達、第二次啟動重新登記、TestFlight 的 production APNs；iOS 正式版冷啟動（Debug 點通知冷啟動，啟動畫面之後約 3.5 秒全白）；Android 正式簽章版（EAS `production`，`e3c853df5` 改過 gradle 指令）在實機上的推播與點擊，這輪的 release 建置用 debug 簽章；兩個平台用相機掃配對 QR Code；桌面版 Developer ID 簽章與公證後的通知授權、橫幅、點擊（另外兩種測試通知結果和「需要你的注意」）與自動更新。不綁實機、還沒做的：CI 手動勾 Playwright 完整跑一次；真的重開機後的舊 PID（這輪是模擬的）。
+  - 「接下來」的 T1 S3 Android 重驗就是上面 Android 的 S2、S3、側欄切換、S1、S5，已從清單拿掉。
+
 - T1 S3 修正（2026-09-27，整合分支 `woowtech/integration-0926`，第 16 節 T1 S3）：
   - 紅：新測試的路由先照上游的讀法（合併的 params），7 個裡 3 紅、原因跟裝置一樣：S3 的工作區收到通知的 agent 之後又收到 S2 的 agent（pin 在後，等於聚焦它）；換到別的工作區收到 S2 的 agent，回到 S2 的工作區又收到一次；從 Open Project 點的 terminal 換工作區時跟過去。S2 和見證綠，見證的主機路由 params 跟 `logs/ultra-device-s3b.txt` 的 navstate 一樣。守門對上游的 `index.tsx` 紅在「must not read useGlobalSearchParams」。
   - 綠：`index.tsx` 改讀自己的 params、路由讀法跟著改之後，新測試 7/7、守門 1/1。
@@ -1572,7 +1586,6 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
-- T1 S3（第 16 節）的 Android 重驗：重裝後在 Open Project 做 S2，同一個 App 行程接著做 S3、S3b，再用側欄切到別的工作區又切回來，已知工作區的通知要開到自己的 agent，也不能多出別的工作區的 agent tab；S1、S5 各跑一次確認延後開啟照舊。主機路由的 navstate 仍會看到 `open`，那是預期的。
 - CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
 - 商標（TIPO）與 D-U-N-S。
