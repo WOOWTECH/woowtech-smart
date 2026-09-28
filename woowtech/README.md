@@ -1302,7 +1302,7 @@ node --test woowtech/*.test.mjs
 - 範圍：第二批的終點 `d7b7016cc` 到 `4965af219`（上游 0.10.1 的更新紀錄，9/28），共 30 個 commit，含上游 0.10.0-beta.1（9/27）和 0.10.0（9/28）。commit 已經在本機，這次沒有 fetch。
 - 分支 `woowtech/upstream-picks-0929`，從 main 的 `ea9f49e49` 開出（worktree `woowtech-smart-b3`）。原則和做法照前兩批：照上游的時間順序 `cherry-pick -x`，保留上游作者；衝突的解法寫在該 commit 訊息的 `woowtech:` 段落；fork 的調整各自一個 commit。
 - 挑選清單標了 6 個「拿」、6 個「條件式」、2 個「延後」、16 個「不拿」。
-- 結果：拿 11 個：6 個「拿」和 5 個「條件式」，其中 `940dbfd24` 只拿 OpenCode v1 的部分。不拿 17 個（16 個「不拿」，加上條件式的 `da48803a4`），延後 2 個。fork 的調整 2 個 commit。
+- 結果：拿 11 個：6 個「拿」和 5 個「條件式」，其中 `940dbfd24` 只拿 OpenCode v1 的部分。不拿 17 個（16 個「不拿」，加上條件式的 `da48803a4`），延後 2 個。fork 的調整 3 個 commit，第 3 個是這批之後補修的分頁提示框。
 
 拿進來的：
 
@@ -1356,7 +1356,7 @@ node --test woowtech/*.test.mjs
 - fork 的調整：
   - `04813c06f`：`05874e289` 之後不到一分鐘都是「剛剛」，`i18n/woowtech-zh-tw-screens.test.ts` 原本期待 30 秒前是「30 秒前」，改成「剛剛」，並加上整一分鐘是「1 分鐘前」。沒有人再讀的 `woowtech.time.ago.seconds` 從英文和繁中拿掉。
   - `6bf542525`：`05874e289` 讓這些列改用 `useTimeAgo`，標籤存在 state，只在共用的計時器觸發時重算。fork 的標籤是翻譯過的，換語言後，還開著的列會停在舊語言，直到下一次觸發：最多一分鐘、一小時或一天，一週以上的日期永遠不會觸發；排程列會混成「建立：5m ago」。挑之前這些列在 render 時組字，換語言立刻跟著變。現在 `hooks/use-time-ago.ts` 經 `useTranslation` 讀 App 語言，語言改變時重算（註解 `woowtech smart:`）。`useCompactTimeAgo`（側欄和分頁）共用同一個 hook，fixes-0928 以來就有同樣的缺口，一起修好。新的 `hooks/woowtech-use-time-ago.test.tsx` 在改之前 0/3（切到 zh-TW 後仍是「5m ago」「Jan 15」「5m」），改之後 3/3。
-- 找到但這批沒改的（fixes-0928 以來就有，不是這批造成的）：桌面版分頁的 Agent 提示框（`workspace-desktop-tabs-row.tsx` 的 `formatAgentTooltipActivity`）把已經翻譯的精簡標籤再接上英文的「 ago」，照程式的邏輯，繁中會顯示「5 分 ago」「9月27日 ago」（沒有在畫面上確認）。上游在 `792715e76` 改用 `formatCompactTimeAgoAsProse`，一樣只處理英文。可以改成直接用 `useTimeAgo(lastActivityAt)`，英文的結果不變。
+- 這批之後補修（協調者要求；fixes-0928 以來就有，不是這批造成的）：桌面版分頁的 Agent 提示框原本在已經翻譯的精簡標籤後面再接英文的「 ago」，繁中顯示「5 分 ago」「9月27日 ago」。現在提示框經 fork 的 `screens/workspace/woowtech-agent-tab-tooltip.ts`（`useAgentTabTooltipActivity`，內容就是 `useTimeAgo`）取整句翻譯好的時間；上游檔 `workspace-desktop-tabs-row.tsx` 改一個 import 和一行呼叫（註解 `woowtech smart:`），拿掉 `formatAgentTooltipActivity`，英文跟之前一字不差。`woowtech-agent-tab-tooltip.test.tsx` 12 個：把上游原本的算法原封不動搬進 fork 檔時 8/12（繁中 4 個出現「5 分 ago」「2 小時 ago」「3 天 ago」「1月15日 ago」），改用 `useTimeAgo` 後 12/12；最後一個測試從原始碼確認提示框用的就是這個 hook。
 - 繁中：這批沒有新的翻譯 key，也沒有改到簡體中文，不用重新產生 zh-TW。
 - lock：`package-lock.json` 沒變。
 - 檢查過沒有帶回原版的東西：品牌和 CLI 名、home、port（新的測試 helper 也避開 6770）、官方版共存、技能路徑；推播（FCM、push.woowtech.io、`woowtechPush`、不帶內容的推播、Expo 登記停用）；配對 scheme（沒有新的 `paseo://`）、relay；LINE 仍拿掉，官網、客服信箱和通用開啟器的 mailto 不變；工作區自動命名、commit 訊息和 PR 的 AI 生成仍關閉；Claude Agent SDK 仍是 devDependency，出貨程式沒有新的值 import，沒開 `verbatimModuleSyntax`；沒有本地語音；更新來源不變；`.github/`、`packages/website` 沒動，版本號都還是 0.8.0。新加的 `6767` 只在測試的假資料裡（`host-runtime.test.ts` 本來就有 104 處、`codex-app-server-agent.test.ts` 的 MCP 設定網址交給假的 Codex），不會真的連線。
@@ -1389,13 +1389,13 @@ node --test woowtech/*.test.mjs
   - Playwright：新的 `subagent-origin-pane`、`host-version-after-daemon-restart`、`agent-relative-time`、`schedules-relative-time`，改過的 `import-session-flow`、`commit-diff-panel`、`provider-settings-refresh`。新的時間 spec 期待英文的「just now」「3m ago」「Created just now」，跟我們的英文文案相同。
 - 要真的 provider 才能跑、CI 也不跑的：`codex-custom-provider-archive.local.e2e`（codex，`9d010211a`）、`opencode-model-switch.real.spec.ts`（OpenCode 和免費模型，`940dbfd24`；Playwright 預設的 project 不跑 `*.real.spec.ts`）。照規定不在這台 Mac 執行真的 provider，沒跑。
 - 實機和桌面版：
-  - 相對時間（`05874e289`、`6bf542525`）：Agent 清單、排程頁、匯入工作階段、提交清單和供應商設定頁開著不動，標籤從「剛剛」變成「1 分鐘前」再往上走；繁中和英文各看一次；在設定換語言後回到這些畫面，標籤立刻是新語言，排程列不會混成「建立：5m ago」。
+  - 相對時間（`05874e289`、`6bf542525`）：Agent 清單、排程頁、匯入工作階段、提交清單和供應商設定頁開著不動，標籤從「剛剛」變成「1 分鐘前」再往上走；繁中和英文各看一次；在設定換語言後回到這些畫面，標籤立刻是新語言，排程列不會混成「建立：5m ago」；桌面版分頁的 Agent 提示框在繁中是「5 分鐘前」這種整句，沒有「ago」。
   - daemon 重啟或升級（`b85b44aea`）：主機頁的版本和說明選單的版本不用重開 App 就換成新的；斷線時保留舊版本。這條路也經過 T1 的接點，照第 16 節再點一次指向新工作區和已知工作區的通知。
   - 桌面版分割窗格（`7bb7d4ed0`）：焦點在另一個窗格時，從 Agent 開子 Agent，子 Agent 出現在那個 Agent 的窗格。
   - 模型：Claude Code 2.1.284 以上列出 Sonnet 5.5，thinking 沒有「關閉」；舊版不列。OpenCode 選了 Medium 之後換到沒有這個選項的模型，thinking 選項被清掉，重新載入也不回來（`940dbfd24`）。
   - 自訂 Codex provider（`827178df9`、`dffde6ae8`、`9d010211a`）：回溯後仍是同一個 provider、工具還在；/ 選單列的是它自己 `CODEX_HOME` 的提示詞；封存後「匯入工作階段」不再列出它。
   - Codex 串流中的 Mermaid 圖（`f4ba16a0b`）、背景 `send_agent_prompt` 回報執行中（`8de52a3c9`）、外掛 provider 重新載入後已完成的工作階段沒有錯誤（`849a876bc`）。
-- 延後的 `78a0f093e`、`792715e76` 和不拿的 `a43c8d888`（Cursor 圖示）要 owner 決定。桌面版分頁提示框的「5 分 ago」（見上面）要不要修，也一起決定。
+- 延後的 `78a0f093e`、`792715e76` 和不拿的 `a43c8d888`（Cursor 圖示）要 owner 決定。
 - 這個分支沒有 push。main 仍在 `ea9f49e49`；合進 main 之後重跑守門和 T1 測試，並重建 server 的 dist。
 
 ## Mac 開發環境
