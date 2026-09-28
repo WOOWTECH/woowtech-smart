@@ -7,7 +7,7 @@ interface ClaudeIconProps {
   color?: string;
 }
 
-// woowtech smart: a neutral text badge instead of Anthropic's Claude logo (woowtech/README.md §21).
+// woowtech smart: a neutral text badge instead of Anthropic's Claude logo (woowtech/README.md §22).
 export function ClaudeIcon({ size = 16, color = "currentColor" }: ClaudeIconProps) {
   const frame = CLAUDE_BADGE_FRAME;
   return (

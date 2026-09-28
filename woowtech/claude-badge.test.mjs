@@ -4,7 +4,7 @@
 // the badge on 2026-09-27. An upstream merge can bring the logo back as a vendored ACP icon, a
 // copied SVG or a new icon component, so this scans what ships in the app, its web page and
 // the desktop app. Other vendors' logos are the owner's open decision and are not checked here.
-// woowtech/README.md section 21.
+// woowtech/README.md section 22.
 //
 //   node --test woowtech/claude-badge.test.mjs
 import assert from "node:assert/strict";

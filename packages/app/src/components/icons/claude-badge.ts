@@ -1,7 +1,7 @@
 // woowtech smart: every Claude icon in the app is this neutral text badge, the letter C in
 // the caller's color inside a rounded square. Anthropic's terms let a product name Claude
 // Code in plain text, but using its logo takes written permission; the owner chose the badge
-// on 2026-09-27 (woowtech/README.md section 21). The letter is a path, not <text>, so it looks
+// on 2026-09-27 (woowtech/README.md section 22). The letter is a path, not <text>, so it looks
 // the same on iOS, Android and the web without depending on a font.
 
 export const CLAUDE_BADGE_VIEW_BOX = "0 0 24 24";
