@@ -135,7 +135,9 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 安裝檔改名為 `woowtech-smart-<版本>-<架構>.dmg` 等，App 的 Apple Silicon 下載連結跟著改。Linux 套件的維護者欄位改成 WoowTech。
 - agent 透過 ACP 看到的 `clientInfo.name` 改成 `woowtech smart`。
 - 手機 App 的名稱和 bundle id 直接寫在 `app.config.js`：正式版 `io.woowtech.smart`，Debug 版 `io.woowtech.smart.debug`。
-  - 中文手機桌面顯示「渥屋智能」（Debug 版是「渥屋智能 Debug」）。iOS 用 Expo 的 `locales`；Expo 只把 `locales` 套到 iOS，Android 由 `plugins/with-localized-app-name.js` 讀同一份設定寫進 Android 資源。
+  - 中文手機桌面顯示「渥屋智能」（Debug 版是「渥屋智能 Debug」），兩個平台都由 Expo 的 `locales` 寫入：`ios` 底下的 `CFBundleDisplayName`、`CFBundleName` 進 iOS 的 `InfoPlist.strings`，`android` 底下的 `app_name` 進 `values-b+zh+Hans`、`values-b+zh+Hant` 的 `strings.xml`（fixes-0928）。
+    - Expo 54 的 prebuild 會把 `ios`、`android` 以外的鍵同時寫進兩個平台。原本 `CFBundle*` 放在共用層，Android 多出兩筆預設語系沒有的字串，本機 `assembleRelease` 的 `lintVitalRelease` 報 4 個 ExtraTranslation（2026-09-27 Android 輪次），只能略過 lint 才建得起來。
+    - `plugins/with-localized-app-name.js` 當初是為了替 Android 補上 `app_name`：共用層只有 iOS 的鍵，Expo 寫到 Android 的只是用不到的 `CFBundle*`。現在 `android` 底下直接給 `app_name`，由 Expo 寫入，已從 `app.config.js` 拿掉註冊。檔案和它的單元測試還在，等擁有者確認後刪除。
   - `apply-identity.mjs` 現在只處理 Expo 帳號相關的 owner、slug、project id。
 - iOS 的主畫面顯示名稱欄位是 `CFBundleDisplayName`，`CFBundleName` 是 bundle 的短名稱（[Apple 欄位說明](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html)）。沒有證據能保證名稱太長時會切換到短名稱，也不能僅憑截圖判斷改讀了 `PRODUCT_NAME`。
   - `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 設「渥屋智能」。這次只更正說明，不改顯示名稱、Xcode 的 `PRODUCT_NAME`、執行檔或 `.app` 名稱。
@@ -144,7 +146,8 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`，而且只有英文，見「接下來」。
 - App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
 - `woowtech/names.test.mjs` 檢查安裝檔名稱與下載連結一致、App 裡寫死的文字、agent 看到的名稱，並用 `expo config` 檢查手機 App 的實際設定。
-  - iOS 短名稱查兩處，也查不超過 15 字：`expo config --type prebuild` 裡 `app.config.js` 自己設的 `ios.infoPlist.CFBundleName`；`expo config --type introspect`（`woowtech/expo-config.mjs` 的 `expoIntrospectedConfig`）算出的 Info.plist，和 zh-Hans／zh-Hant 的 `CFBundleName`。
+  - iOS 短名稱查兩處，也查不超過 15 字：`expo config --type prebuild` 裡 `app.config.js` 自己設的 `ios.infoPlist.CFBundleName`；`expo config --type introspect`（`woowtech/expo-config.mjs` 的 `expoIntrospectedConfig`）算出的 Info.plist，和 zh-Hans／zh-Hant 的 `ios.CFBundleName`。
+  - Android 的中文資源交給 Expo 自己的產生器（`expo/config-plugins` 的 `AndroidConfig.Locales.setLocalesAsync`）用實際設定寫一次，`values-b+zh+Hans`、`values-b+zh+Hant` 只能有 `app_name`：多出預設語系沒有的名字，正式版 lint 就會報 ExtraTranslation。
   - 只看 introspect 不夠：它會先讀既有的 `packages/app/ios/*/Info.plist` 再蓋上設定。prebuild 過的 `ios/` 裡已經有這個值時，`app.config.js` 的設定被拿掉，檢查照樣通過。
 - CLI 的說明文字跟 CLI 改名一起處理，見第 12 節。
 - 刻意沒改的：
