@@ -1243,6 +1243,11 @@ node --test woowtech/*.test.mjs
 - `e6085c1e9`（條件式）：新的提示只提 `PASEO_PASSWORD`，沒有指令名和產品名。同一個函式原本的「Start with: paseo daemon start …」照第 12 節由 `renderError` 換成 `woowtech-smart`。
 - `e3c853df5`（條件式）：`eas.json` 的 `production` 改成跟我們的 `preview`、`production-apk` 一樣略過 lint（第 1 節）。
 - `dc9799f6f`（條件式）：OSC 8 連結改交給 `onOpenExternalUrl`，也就是我們的 `openExternalUrl`：只放行 http、https 和 mailto，桌面版交給 Electron 的開啟器（第 10 節）。之前 xterm 會自己問一次再 `window.open()`。這個 pick 只改 `terminal-emulator-runtime.ts`，桌面版和網頁版直接用；手機的終端機要等重建 webview bundle 才有，見上面「審查後補拿」。
+  - fixes-0928 查證（2026-09-28）：pick 本身沒問題。上游的 `terminal-emulator-runtime.browser.test.ts` 在這台 Mac 改用已安裝的 Chrome 跑，25/25 過；提交的 webview bundle 在 headless Chrome 裡，滑鼠移到 OSC 8 連結上變 pointer，點下去交給 `onOpenExternalUrl`（桌面的滑鼠路徑、DOM 渲染器、⌘-點、分段寫入都一樣）。2026-09-27 裝置上點不開，是下面幾個上游缺口，要改 protocol 或 xterm，fork 不修，開啟器的放行清單也不動：
+    - 終端機重新訂閱後就沒有連結。daemon 的畫面快照不帶超連結（`TerminalCellSchema` 只有 `underline`，`renderTerminalSnapshotToAnsi` 只發 SGR 4），重新訂閱（`visible-snapshot` restore）、重連、輸出過量改送快照時，OSC 8 連結都變成一般的底線文字；headless 終端機的公開 API 也讀不到連結。桌面輪次剛印出來時是虛線（`shots/integ0927-desktop-20b-osc8.png`，xterm 的 OSC 8 樣式），點擊之後的 `-20c` 變實線；daemon 在那 30 秒收到 4 次 `subscribe_terminal_request`。純文字網址由 WebLinksAddon 從文字裡找，所以照樣能點。
+    - xterm 6.1.0-beta.213 的 Linkifier 按列快取連結結果，那一列的內容變了也不重算：滑鼠先停在某一列，那一列之後才印出 OSC 8 連結，在同一列移動都認不出來，要移到別列再回來（headless Chrome 重現）。
+    - 觸控：舊版 WebView 渲染器裡，xterm 的手勢處理（`browser/scrollable/touch.ts`）在 touchstart、touchend 呼叫 `preventDefault`，瀏覽器不產生相容的滑鼠事件，Linkifier 收不到移入和點擊，OSC 8 和純文字網址都點不開（headless Chrome 用觸控 tap 重現）。Android 預設的 native-grid 渲染器本來就沒有連結功能。
+    - xterm 只把 http、https 的 OSC 8 目標當成連結（`linkHandler` 沒開 `allowNonHttpProtocols`），OSC 8 的 mailto、file:、javascript: 都不是連結，不會送到開啟器。
 - `315803688`（條件式）：只拿掉設定頁讀 daemon 狀態的 1.5 秒逾時。npm 自我更新仍停用（第 4 節）。
 - 繁中：這批沒有新的介面文字或翻譯 key，不用重新產生 zh-TW。
 - lock：`package-lock.json` 沒變。
@@ -1281,7 +1286,7 @@ node --test woowtech/*.test.mjs
   - App 的 browser 模式單元測試 `question-form-card.browser.test.tsx`、`terminal-emulator-runtime.browser.test.ts`：要 Playwright 的 Chromium，這台 Mac 沒裝，沒跑。
 - CI 不跑、要手動跑的：`claude-provider-config-dir-history.e2e.test.ts`，在 PATH 上有 claude 的機器上跑（見上面）。
 - 要真的 provider 才能跑、CI 也不跑的：`codex-custom-provider-import.local.e2e`（codex）、`opencode-bridge.local.e2e`（OpenCode）、`pi-rewind.real.e2e`（Pi）。照規定不在這台 Mac 執行真的 provider，沒跑。
-- iOS、Android 正式版實機：多選問題的「其他」答案（`8e858f0e3`）、上傳的檔名（`fbc83613c`）、終端機的 OSC 8 連結（`dc9799f6f`，手機用重建的 webview bundle `301b4e894`；點 http、https、mailto 的連結會開，其他 scheme 不會）、訊息日期（`28507224d`）。Android 的 `production` 建置改了 gradle 指令（`e3c853df5`），下一次 EAS 正式建置時確認。
+- iOS、Android 正式版實機：多選問題的「其他」答案（`8e858f0e3`）、上傳的檔名（`fbc83613c`）、終端機的 OSC 8 連結（`dc9799f6f`：桌面版在終端機重新訂閱之前，點 http、https 的 OSC 8 連結會交給開啟器；手機點不開，mailto 也不算連結，見上面的 fixes-0928 查證）、訊息日期（`28507224d`）。Android 的 `production` 建置改了 gradle 指令（`e3c853df5`），下一次 EAS 正式建置時確認。
 - 桌面版：有密碼的 daemon 顯示「在編輯器開啟」（`e07da55f8`）；多鍵、改綁和 Backspace 的快捷鍵（`9a3f3a0dc`、`ec43e9067`、`fbe5005aa`）；主題清單捲動（`a048094da`）；網頁版模型選擇列（`04c3e003f`）；從設定頁更新和重啟 daemon（`315803688`）。
 - daemon：重開機後 PID 被占用（`faee1cd95`）要實際重開機才驗得到；`daemon.log` 寫不進去（`cb9654a65`）；大型 repo 的監看 CPU 和記憶體（`c3e1e084a`、`e998e0a08`、`9978988e3`）。
 - 審查後補拿的：用一般 ACP Agent 開新 Agent，/ 選單要列出它的斜線指令（`513f2a9ea`）；在官方 Paseo 的 Agent 終端機裡跑 `woowtech-smart run`，要建立頂層 Agent，不報「Caller agent not found」（`e68553f75`）；桌面版載入有建置指令的目錄外掛，建置照常成功（`f9fb992dc`）。
