@@ -289,3 +289,44 @@ test("non-required Docker and Nix workflows avoid runners with workflow path fil
     assert.doesNotMatch(source, /dorny\/paths-filter/);
   }
 });
+
+// woowtech smart: the typecheck job runs the fork's guards (woowtech/README.md section 18).
+// Deleting that step stops every guard without failing a job, so this contract names it.
+const FORK_GUARD_COMMAND =
+  "node --test --test-concurrency=1 " +
+  `--test-skip-pattern="^Traditional Chinese is regenerated from upstream's current Simplified Chinese$" ` +
+  "woowtech/*.test.mjs";
+
+/** The steps of a job block: each step's name, its one-line run command and its keys. */
+function jobSteps(jobLines) {
+  const steps = [];
+  for (const line of jobLines) {
+    if (/^ {6}- /.test(line)) steps.push([]);
+    steps.at(-1)?.push(line.replace(/^ {6}- /, "        "));
+  }
+  return steps.map((lines) => {
+    const text = lines.join("\n");
+    return {
+      name: /^ {8}name: (.+)$/m.exec(text)?.[1],
+      run: /^ {8}run: (.+)$/m.exec(text)?.[1],
+      keys: [...text.matchAll(/^ {8}([a-z-]+):/gm)].map(([, key]) => key),
+    };
+  });
+}
+
+test("typecheck runs the woowtech fork guards after building the server stack", () => {
+  const typecheck = jobBlocks(readFileSync(ciWorkflowPath, "utf8")).get("typecheck") ?? [];
+  const steps = jobSteps(typecheck);
+  const names = steps.map(({ name }) => name);
+  const guards = steps.filter(({ run }) => run === FORK_GUARD_COMMAND);
+
+  assert.equal(guards.length, 1, `typecheck has no step that runs: ${FORK_GUARD_COMMAND}`);
+  const guardIndex = steps.indexOf(guards[0]);
+  assert.ok(names.indexOf("Install dependencies") < names.indexOf("Build server stack"));
+  assert.ok(
+    names.indexOf("Build server stack") < guardIndex,
+    "the guards read the server stack's dist; run them after the build",
+  );
+  // No condition or continue-on-error: a failing guard fails the job.
+  assert.deepEqual(guards[0].keys, ["name", "run"]);
+});
