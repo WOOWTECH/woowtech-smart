@@ -1128,7 +1128,7 @@ export const zhTW: TranslationResources = {
     sections: {
       sessions: "歷史",
       search: "搜尋",
-      schedules: "計畫",
+      schedules: "排程",
     },
     worktreeSetup: {
       title: "設定 worktree 腳本",
@@ -2464,7 +2464,7 @@ export const zhTW: TranslationResources = {
         unavailable: "連線到這個主機以管理編排",
         enableTools: {
           title: "啟用 Paseo 工具",
-          hint: "Agent 將能夠管理 worktree、Agent 和計畫",
+          hint: "Agent 將能夠管理 worktree、Agent 和排程",
           accessibilityLabel: "注入 Paseo 工具",
         },
         systemPrompt: {
