@@ -61,6 +61,10 @@ interface AgentSnapshot {
   syncRemovals: Array<{ id: string; seq: number }>;
 }
 
+interface WorkspaceRefreshSnapshot extends WorkspaceDirectorySnapshot {
+  readonly requestCursors: Readonly<Pick<DirectoryCheckpoint, "projects" | "workspaces">>;
+}
+
 interface AgentPageInfo {
   hasMore?: boolean;
   hasMoreAfter?: boolean;
@@ -133,7 +137,7 @@ export class DirectorySync {
     AgentDirectoryDelta
   >();
   private readonly workspaceTransactions = new DirectoryTransactionOwner<
-    WorkspaceDirectorySnapshot,
+    WorkspaceRefreshSnapshot,
     WorkspaceDirectoryDelta
   >();
   private readonly agents: AgentDirectoryReplica;
@@ -155,6 +159,8 @@ export class DirectorySync {
   private readonly fullDemandSources = new Set<object>();
   private demandRefresh: Promise<void> | null = null;
   private satisfiedDemandSource: DirectorySourceToken | null = null;
+  // woowtech smart: counts drops of the demand subscriptions (woowtech/README.md, 16 T1).
+  private subscriptionGeneration = 0;
   private cursors: DirectoryCheckpoint = {};
 
   constructor(
@@ -189,6 +195,8 @@ export class DirectorySync {
     this.connection = connection;
     this.abortPendingSessionWaits();
     if (!connection.client || connection.status !== "online") return true;
+    // Reattach labels here because route-only demand can satisfy the epoch before full demand requests them.
+    void this.connectWorkspaceLabels().catch(() => undefined);
     if (this.hasDemand()) void this.requestDemandRefresh().catch(() => undefined);
     return true;
   }
@@ -201,6 +209,9 @@ export class DirectorySync {
     if (!wasDemanded && this.fullDemandSources.size > 0) {
       void this.loadCachedDirectory().catch(() => undefined);
       if (this.getOnlineConnection()) void this.requestDemandRefresh().catch(() => undefined);
+    } else if (demanded && this.getOnlineConnection()) {
+      // woowtech smart: a joining owner retries a failed refresh (woowtech/README.md, 16 T1).
+      void this.requestDemandRefresh().catch(() => undefined);
     }
   }
 
@@ -241,6 +252,7 @@ export class DirectorySync {
     this.workspaceSubscription = null;
     this.eventSubscription = null;
     this.satisfiedDemandSource = null;
+    this.subscriptionGeneration += 1;
   }
 
   private receiveAgentDelta(source: DirectorySourceToken, delta: AgentDirectoryDelta): void {
@@ -301,6 +313,9 @@ export class DirectorySync {
     ) {
       return Promise.resolve();
     }
+    // woowtech smart: a refresh replaces the subscriptions; only its success satisfies.
+    this.satisfiedDemandSource = null;
+    const generation = this.subscriptionGeneration;
     const refresh =
       this.fullDemandSources.size > 0
         ? this.refreshAll()
@@ -310,7 +325,8 @@ export class DirectorySync {
           ]).then(() => undefined);
     this.demandRefresh = refresh
       .then(() => {
-        this.satisfiedDemandSource = source;
+        // woowtech smart: subscriptions dropped mid-refresh leave the epoch unsatisfied.
+        if (generation === this.subscriptionGeneration) this.satisfiedDemandSource = source;
         return undefined;
       })
       .finally(() => {
@@ -319,7 +335,9 @@ export class DirectorySync {
         if (
           this.hasDemand() &&
           (current.clientGeneration !== source.clientGeneration ||
-            current.connectionEpoch !== source.connectionEpoch)
+            current.connectionEpoch !== source.connectionEpoch ||
+            // woowtech smart: demand that joined after a drop needs live subscriptions.
+            generation !== this.subscriptionGeneration)
         ) {
           void this.requestDemandRefresh().catch(() => undefined);
         }
@@ -476,14 +494,20 @@ export class DirectorySync {
     const onlineConnection = this.getOnlineConnection();
     if (!onlineConnection) return;
     const { client, source } = onlineConnection;
-    const transaction = this.workspaceTransactions.begin(source, () => ({
-      workspaces: new Map(useSessionStore.getState().sessions[this.serverId]?.workspaces),
-      projects: new Map(useSessionStore.getState().sessions[this.serverId]?.projects),
-      syncCursors: {},
-      syncModes: {},
-      touchedWorkspaceIds: new Set(),
-      touchedProjectIds: new Set(),
-    }));
+    const transaction = this.workspaceTransactions.begin(source, () => {
+      const baseline = this.workspaces.snapshot();
+      return {
+        workspaces: new Map(baseline.workspaces),
+        projects: new Map(baseline.projects),
+        // Cache hydration can advance the live replica while these requests await responses.
+        // Every page must use the cursors belonging to the maps captured here.
+        requestCursors: { ...this.cursors },
+        syncCursors: {},
+        syncModes: {},
+        touchedWorkspaceIds: new Set(),
+        touchedProjectIds: new Set(),
+      };
+    });
     try {
       await this.waitForSessionMetadata(client, source);
       const serverInfo = useSessionStore.getState().sessions[this.serverId]?.serverInfo;
@@ -515,7 +539,7 @@ export class DirectorySync {
   private async fetchWorkspaceSnapshot(
     client: DaemonClient,
     source: DirectorySourceToken,
-    transaction: DirectoryTransaction<WorkspaceDirectorySnapshot, WorkspaceDirectoryDelta>,
+    transaction: DirectoryTransaction<WorkspaceRefreshSnapshot, WorkspaceDirectoryDelta>,
     initialSubscribe: boolean,
     supportsDirectorySync: boolean,
   ): Promise<void> {
@@ -525,7 +549,9 @@ export class DirectorySync {
       const query: Parameters<DaemonClient["observeWorkspaces"]>[0] = {
         sort: [{ key: "activity_at", direction: "desc" }],
         page: cursor ? { limit: PAGE_LIMIT, cursor } : { limit: PAGE_LIMIT },
-        ...(supportsDirectorySync ? { sync: this.readCursors().workspaces ?? {} } : {}),
+        ...(supportsDirectorySync
+          ? { sync: transaction.snapshot.requestCursors.workspaces ?? {} }
+          : {}),
       };
       let payload: FetchWorkspacesPayload;
       if (subscribe) {
@@ -665,7 +691,7 @@ export class DirectorySync {
   private assertWorkspaceTransactionCurrent(
     client: DaemonClient,
     source: DirectorySourceToken,
-    transaction: DirectoryTransaction<WorkspaceDirectorySnapshot, WorkspaceDirectoryDelta>,
+    transaction: DirectoryTransaction<WorkspaceRefreshSnapshot, WorkspaceDirectoryDelta>,
   ): void {
     if (!this.workspaceTransactions.isCurrent(transaction) || !this.isCurrent(client, source)) {
       throw new DirectoryRefreshSupersededError("workspace fetch no longer current");
@@ -722,11 +748,13 @@ export class DirectorySync {
   private async fetchProjectSnapshot(
     client: DaemonClient,
     source: DirectorySourceToken,
-    transaction: DirectoryTransaction<WorkspaceDirectorySnapshot, WorkspaceDirectoryDelta>,
+    transaction: DirectoryTransaction<WorkspaceRefreshSnapshot, WorkspaceDirectoryDelta>,
     supportsDirectorySync: boolean,
   ): Promise<void> {
     const payload = await client.listProjects(
-      supportsDirectorySync ? { sync: this.readCursors().projects ?? {} } : undefined,
+      supportsDirectorySync
+        ? { sync: transaction.snapshot.requestCursors.projects ?? {} }
+        : undefined,
     );
     this.assertWorkspaceTransactionCurrent(client, source, transaction);
     if (payload.sync?.mode !== "changes") transaction.snapshot.projects.clear();
@@ -751,7 +779,7 @@ export class DirectorySync {
   private completeWorkspaceRefresh(
     client: DaemonClient,
     source: DirectorySourceToken,
-    transaction: DirectoryTransaction<WorkspaceDirectorySnapshot, WorkspaceDirectoryDelta>,
+    transaction: DirectoryTransaction<WorkspaceRefreshSnapshot, WorkspaceDirectoryDelta>,
   ): void {
     if (!this.isCurrent(client, source) || !this.hasMatchingSession(client, source)) {
       throw new DirectoryRefreshSupersededError("workspace completion no longer current");

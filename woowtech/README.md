@@ -23,7 +23,9 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
   守門發現新的 workflow 檔時，push 之前先照第 18 節處理：GitHub 會啟用新的 workflow，觸發條件有 push 的話，加進它的那次 push 就會跑。
 
-  推播和配對連結另外要跑的單元測試，分別列在第 16 節的「合併上游之後」和第 19 節的「上游合併後要再確認」。
+  推播、T1 通知導頁和配對連結另外要跑的單元測試，分別列在第 16 節的「合併上游之後」和第 19 節的「上游合併後要再確認」。
+
+  只挑需要的修正時，照「上游同步紀錄」的做法，並在那一節記下拿了什麼、沒拿什麼。
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
   `packages/server/src/server/agent/providers/claude/agent.ts`、`packages/server/package.json`、`packages/server/src/server/bootstrap.ts`。
@@ -436,7 +438,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - `browser-tools-config.ts` 回傳的卡片狀態仍帶上游英文，上游的單元測試會檢查它；畫面上的文字由 `browser-tools-card.tsx` 翻譯。
 - 新增專案整個流程與主機選擇器的本地文案已接到 `woowtech.addProject`、`woowtech.hostPicker`。繁中「Clone from GitHub」用「從 GitHub 複製專案」，進行中用「正在複製專案…」。原始 daemon 錯誤、儲存庫說明、網址、路徑與使用者名稱不翻譯。
 - 主機選擇器顯示與搜尋共用同一份選項文字；包含 `host-filter.tsx` 的觸發器在內，文字快取依賴翻譯函式，切語言時更新。其他設定頁外的硬編碼仍需逐頁盤點。
-- Renderer 共用 `utils/confirm-dialog.ts` 的 Cancel 預設使用既有 `common.actions.cancel`，依呼叫當下 App 語言取值，caller 的 `cancelLabel`（含空字串）優先。Confirm 預設與 caller 文字不改；Electron main 選單／原生對話框 fallback、瀏覽器系統按鈕及 html lang 不在這次範圍。`utils/woowtech-confirm-dialog.test.ts` 用 typed desktop bridge port 執行真正的 renderer helper，`woowtech/zh-tw.test.mjs` 的 confirm dialog 項守住接點。
+- Renderer 共用 `utils/confirm-dialog.ts` 的 Cancel 預設使用既有 `common.actions.cancel`；Confirm 沒有通用既有 key，使用 fork 的 `woowtech.confirmDialog.confirm`（繁中「確認」，其他語系沿用英文）。兩者依呼叫當下 App 語言取值，caller 的 label（含空字串）優先。子 Agent 的 archive／detach 確認也使用同一個 Cancel key，其餘文字不在這次範圍。這兩個檔把上游寫死的 `cancelLabel: "Cancel"` 改成 `i18n.t("common.actions.cancel")`，沒有直接刪掉那一行交給 `confirm-dialog.ts` 的預設：上游的 `archive-subagent.test.ts`、`detach-subagent.test.ts` 共 6 處斷言解析出的 `cancelLabel: "Cancel"`，刪掉就要再改這兩個上游測試檔。Electron main 選單／原生對話框 fallback、瀏覽器系統按鈕及 html lang 不改。`utils/woowtech-confirm-dialog.test.ts` 與 `subagents/woowtech-subagent-dialogs.test.ts` 透過 public ports 檢查 label、布林及錯誤行為，不新增 module mock；`woowtech/zh-tw.test.mjs` 守住接點。
 - 合併上游後要注意：T5 在 `components/add-project-flow.tsx` 約 171 行差異，另接到 `add-project-flow/options.ts`、`components/hosts/host-picker.tsx`、`host-picker-constants.ts`、`host-filter.tsx`；上游重整這些流程時，保留 fork 翻譯接點與 `t` 的快取依賴，並重跑下列定向測試。
 - 測試：
   - `i18n/woowtech-copy.test.ts`：既有文案與新文案各按上述語言政策驗證，檢查 key、插值一致及英文 fallback；已遷移的硬編碼不能回到原始碼裡。新增專案選項與主機選擇器的純 helper 測試也驗證切語言及使用者資料原樣保留，不以元件 mock 代替 UI 驗收。
@@ -637,6 +639,7 @@ node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/woowtech-push.test.ts src/messages.test.ts --bail=1)
 (cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts --bail=1)
 (cd packages/app && npx vitest run plugins/woowtech-ios-firebase.test.ts plugins/with-woowtech-push.test.ts plugins/woowtech-metro-resolver.test.ts src/push-notifications src/utils/notification-routing.woowtech-push.test.ts --bail=1)
+(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1 和 T1 S3 小節
 ```
 
 - 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛和 `expo-build-properties` 的 `ios`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
@@ -646,22 +649,54 @@ node --test woowtech/*.test.mjs
 - 留在電腦上的通知照舊有內容：桌面版的系統通知和 App 裡的提醒，用的是 daemon 經自己的連線（直接連線，或端對端加密的 relay）送給 App 的 attention 訊息，裡面仍有回覆預覽和 terminal 名稱。手機 App 不顯示本機通知，只收推播。
 - 中繼和 push.woowtech.io 在 2026-09-25 部署：中繼 `smart-mode` 的 `dff78a1`，Cloud Run `smart-push`（`woowtech-smart`、asia-east1，revision `smart-push-00001-8v9`），前面是 Worker `smart-push-proxy`（自訂網域 push.woowtech.io，workers.dev 和 Workers Logs 都關掉）。還沒做的是實機驗收，見「接下來」。
 
+#### T1：通知指向尚未載入的工作區
+
+- C-020 的 Android 既有取證（2026-09-26，非本次修法驗收）：三次卡住時 host、workspace、route key 都正確，但 store 沒有 descriptor、沒有 tab，full demand 為 0、agent route demand 為空，daemon 沒收到 `fetch_workspaces`。只開側欄、不點列就取得 descriptor，同 key 在 8–230 ms 內變 ready，接著消費 agent intent。重裝後首次尚未 hydrated 的「Loading workspace」也由只開側欄解除。這排除了 epoch 去重、#5079、key 和 memo 的先前猜測。
+- 根因是未知工作區等 descriptor 才建 tab，沒有 tab 就沒有 agent demand；原 `prepareWorkspaceRoute` 只查 cache。`screens/workspace/use-missing-workspace-directory-demand.ts` 補上暫時的目錄 owner：聚焦且缺 descriptor 時持有既有 `acquireDirectoryDemand`，不等首次 hydration，也不因離線提早放棄；descriptor 到達、失焦或卸載時釋放。已知工作區、cache 準備與原 agent intent／subscriber 交接不改，不加 probe、路由或 protocol。
+- 審查找到的 race（2026-09-27 修）：hook 是這台主機唯一的 directory demand 時，descriptor 一到就釋放，這時它自己那次 refresh 還沒結束：`refreshAll()` 最後在等工作區標籤的訂閱，裝置上 descriptor 到達後還要 1.4–2.25 秒。釋放讓 `releaseSubscriptions()` 丟掉所有 live subscription，refresh 結束時卻照樣把這個連線 epoch 記成已滿足。之後直到重連，這台主機的工作區和 agent 清單不再更新，開側欄也不 refresh，同一個連線裡第二則指向另一個新工作區的通知又卡在「Workspace unavailable」。先前裝置測試沒遇到，是因為 agent 清單比 descriptor 早約 100 ms 到，tab 先接手了 demand。
+- 修法在上游檔 `runtime/directory-sync/index.ts`（連同下一點共 +14／−2 行，註解以 `woowtech smart:` 開頭），hook 不變、仍在 descriptor 到達時釋放：`releaseSubscriptions()` 每次把 `subscriptionGeneration` 加一；demand refresh 開始時清掉已滿足記號，成功而且期間 generation 沒變才記成已滿足；結束時不論成敗，只要期間 generation 變了又有 demand，就再 refresh 一次。例如 tab 的 route demand 在釋放後才加入同一次 refresh；或從缺工作區 A 切到缺工作區 B：A 的釋放讓還在等的訂閱失敗，B 在同一個 tick 加入那次注定失敗的 refresh。失敗的 refresh（包括換掉原本 live 訂閱的 pull-to-refresh）不留下已滿足記號，也不自己重試；訂閱請求逾時會讓 client 斷線，由重連 refresh 一次；一直等不到的已刪除或封存工作區，每個聚焦期間、每個連線只 refresh 一次（離開再回來會再 refresh 一次）。
+- 失敗後有 owner 加入就重試（2026-09-27 第 2 輪）：hook 持有 demand 時 refresh 失敗而連線沒斷（daemon 回錯誤，或 `listProjects`、第二頁這類非訂閱請求逾時），原本開側欄不會再 refresh，因為 `setDemand` 只在 full demand 從 0 變 1 時 refresh；T1 之前，開側欄就是那次 0 變 1。現在 `setDemand` 在已有 full demand 時又有 owner（側欄、專案清單這類 `acquireDirectoryDemand`）加入，只要在線就呼叫 `requestDemandRefresh()`：已滿足直接返回，refresh 進行中就併入，所以只有這個連線還沒滿足時才多送一次請求。沒有 owner 加入時，失敗的 refresh 仍不自己重試，要用側欄的重新整理、重連，或離開再進入。
+- 這是上游本來就有的潛在 race，跟 fork 無關：側欄在自己那次 refresh 結束前關掉，同一個連線裡再打開也不 refresh。`missing-workspace-directory-demand.test.ts` 的「upstream: a sidebar reopened after closing mid-refresh…」不經 fork 的 hook 重現它，可以連同 `index.ts` 的差異回報上游。同一段還有一個上游行為沒改：demand 在 refresh 中途離開時，還在等的 agent 訂閱以「Subscription released」失敗，agent 目錄狀態停在錯誤，直到下一個 demand 再 refresh。T1 在 descriptor 比 agent 清單早到時會碰到（裝置上 agent 清單通常早約 100 ms 到）；回報時可以建議把 DirectorySync 自己釋放造成的失敗當成 superseded。
+- 另外一個上游本來就有的缺口，fork 不修：
+  - 孤兒訂閱：demand 在 refresh 送出訂閱之前就離開（例如同一個 tick 內 acquire 再 release），`fetchAgents` 和 `fetchWorkspaceSnapshot` 照樣訂閱，留下沒有 demand 的 agents、workspaces 訂閱各一條。不會累積，下一個 demand 的 refresh 會換掉，全部釋放後歸 0。T1 主流程碰不到：descriptor 到了才釋放，那時訂閱已經建立。回報上游時可以建議這兩個函式在 generation 已變或沒有 demand 時不再訂閱。「witness: a demand that leaves before its refresh subscribes…」斷言現況：同一個 tick 內 acquire 再 release，剩 2 條訂閱。上游改成不訂閱時它會紅，確認後連同這一點刪掉。
+- 維護接點：`workspace-screen.tsx` 的 import 和 cache prepare effect 旁的一次 hook 呼叫，以及 `directory-sync/index.ts` 的 `subscriptionGeneration` 和 `setDemand` 的加入重試。合併上游時保留 hook 的 host／workspace／focus／descriptor-presence 四個依賴與 effect cleanup 回傳；上游改寫 `requestDemandRefresh`、`releaseSubscriptions` 或 `setDemand` 時，保留四件事：refresh 開始時清掉已滿足記號、期間丟過訂閱就不算滿足、期間丟過訂閱而結束時又有 demand 就再 refresh 一次、已有 demand 時新加入的 owner 也要求 refresh。上游自己的 `releaseSubscriptions()` 也必須清掉已滿足記號：refresh 結束後才釋放的非 race 路徑（沒有標籤的主機，或標籤比 React cleanup 早到）靠它，同一個連線的第二則通知、離開再回來才會再 refresh。這一行由 vitest 的「directory demand that leaves after its own refresh finished」和「leaving a deleted or archived workspace and coming back…」守，原始碼守門不看。純 acquisition seam 的測試使用真實 HostRuntimeStore、DirectorySync、DaemonClient 和 typed memory ports（假主機可以支援工作區標籤並延後標籤回覆、延後 agent 清單，或對工作區請求回錯誤；跟真的 daemon 一樣，只有帶 subscribe 的請求才開訂閱），斷言序列化 RPC、訂閱釋放、首次 hydration、新 epoch、agent target，以及上面的 race、非 race、失敗、逾時和不迴圈。race 案例等到「有一個被扣住的標籤請求」（`heldLabelRequests()`）才讓 demand 離開，不數標籤請求總數：合併上游 #5079 後，連線時就會先要一次標籤，那次照常回覆。agent tab 最後離開的案例用 `timeline.dispose()` 結束 route demand：上游 #5040 讓隱藏的 chat 在 tab 關掉前仍保留訂閱，合併後只把可見清單設成空的，route demand 不會歸零，案例會卡在等訂閱歸零，量不到 race。`woowtech/workspace-directory-demand.test.mjs` 只守原始碼：hook 呼叫必須是 `WorkspaceScreenContent` 本體的直接陳述式（不在 if、?:、&&、區塊或 callback 裡），前面沒有 early return，descriptor-presence 傳 `Boolean(workspaceDescriptor)`（跟 cache prepare effect 一樣看真值，查不到時不管回 `null` 還是 `undefined` 都算缺）；hook 自己的 `useEffect` 也必須是 hook 本體的直接陳述式，前面沒有 early return；`index.ts` 的 generation 遞增和上面四件事都在，每個把連線記成已滿足的寫入都在 generation 比對之下。它不能當成 hook runtime 或 GUI 證據。上游如果用別的寫法修好這個 race，這個守門會紅：先確認拿掉 fork 的修法後 T1 vitest 仍全綠，再改守門。
+- 首次修法（`ff410974f`）的紅綠：兩個現況見證先綠；cache-only 基線對「owner 應發 request」斷言得到 0 而非 1，補 demand 後 14/14 綠、接線守門 2/2 綠。八個定向突變都 exit 1（cache-only、少 focus、少 missing、丟 cleanup、等 hydration、拔 hook、漏 descriptor dependency、effect 不回 cleanup），還原後再驗。測試 adapter 的 metadata／wire 欄位錯誤與測試期待值修正不算修法紅燈。修後 Android 三情境仍由 Claude 排程；沒有新增裝置驗收結論。
+- recovery inspect 可能比目錄刷新早回，短暫出現 unavailable；本切片不改。若另排，需由 runtime 提供目前 epoch 的目錄刷新完成狀態，再讓 recovery inspect 等待，另 commit 並測離線、失敗與重連，不能用全域 hydrated 代替本 epoch 完成。
+
+定向檢查就是本節「合併上游之後」的 `node --test woowtech/*.test.mjs` 和 T1 那行 vitest；依賴與 dist 已備妥時不需 build。
+
+#### T1 S3：從根層畫面經通知進入工作區後，之後的通知停在前一個 agent
+
+- Android（2026-09-27，`logs/ultra-device.md` 的 S2、S3、S3b、S3c）：重裝後停在主機首頁，點新工作區的通知（S2），T1 讓它載入後開出 agent X。同一個 App 行程裡再點已知工作區 B 的通知（S3），B 先加了通知的 agent，接著又加進 X 並聚焦，畫面停在 X；換成另一個已知工作區也一樣（S3b）。重開 App 行程就正常（S3c）。T1 之前 S2 一直卡在 Loading workspace，意圖從來沒被消費，所以碰不到這條路。
+- 原因在上游，跟 fork 的推播無關：中繼只換了送達的路，點擊照樣走上游的 `PushNotificationRouter`、`navigateToAgent`、`navigateToWorkspace`。
+  - 重裝後主機還沒有上次的工作區，主機首頁是根層的 Open Project（`/open-project`，歡迎頁連線後也是 `router.replace` 到這裡），根 stack 沒有 `h/[serverId]`。工作區未知，`navigateToWorkspace` 把 agent 延後成 `?open=agent:X`；`navigateToHostWorkspaceRoute` 找不到掛著的主機路由，改用 `router.dismissTo`。
+  - expo-router 6.0.23 在根 stack 分歧時用 `getPayloadFromStateRoute` 組 action：每一層的 params 都併進更深路由的 params，所以新建的 `h/[serverId]` 路由也帶著 `open`。在根層畫面點 terminal 通知（`router.navigate(buildNotificationRoute(...))`）一樣會帶。
+  - 工作區路由 `app/h/[serverId]/workspace/[workspaceId]/index.tsx` 原本用 `useGlobalSearchParams` 讀 `open`，那是從根到葉合併每一層 params 的結果；消費後只用 `navigation.setParams` 清掉自己那份。之後每次 `dismissTo` 換工作區，工作區路由的 params 整個換掉，主機路由那份又露出來。消費 key 含 workspaceId，於是當成新意圖，在新工作區加開並聚焦 X，直到 App 行程結束。
+  - 上游 `5e5fc9779`（2026-05-06）把消費從 `workspace/[workspaceId]/_layout.tsx` 搬到葉路由時沿用了 `useGlobalSearchParams`：搬之前 `open` 在 layout 底下的子路由，layout 才需要合併的 params。merge-base `836f1a9c2` 到 upstream/main `d7b7016cc` 沒動這兩個檔，歷史裡也沒有相關修正。terminal 通知在上游不需要 T1 就碰得到，可以回報上游。
+- 修法：工作區路由只讀自己路由上的 `open`。`index.tsx` 拿掉 `useGlobalSearchParams`，改從 `useLocalSearchParams` 經 fork 的 `navigation/woowtech-workspace-open-intent.ts`（`readWorkspaceRouteOpenParam`）取值（+4／−4 行，註解 `woowtech smart:`）。每一條進入的路，工作區路由自己都帶著 `open`：解析網址時 query 只放在葉路由，攤平時葉路由也有一份，`dispatchHostWorkspacePopTo` 只放在巢狀的 params。主機路由那份還在，但沒有人讀；網址列只序列化葉路由的 params。
+  - 沒採用：清主機路由的 `open`（`getParent().setParams`）。React Navigation 7.16 看到父路由換成新的 params 物件，會用裡面的 `screen`／`params` 再導覽一次子 stack，把人帶回 S2 的工作區，`open` 也跟著回來。也沒採用只改 `navigateToHostWorkspaceRoute`：terminal 通知不經過它。
+- 測試：
+  - `navigation/woowtech-workspace-open-intent.test.ts`（7 個）：reader 本身；S1（從工作區畫面點通知，`open` 只在工作區路由）；S2；S3（B 只開通知的 agent）；換到別的工作區再回來都不重開 X；在 Open Project 點 terminal 通知後換工作區，terminal 不跟過去；見證：主機路由的 params 跟裝置的 navstate（`logs/ultra-device-s3b.txt`）一樣，用合併的 params 讀會在 B 的通知 agent 之後再加開 X，就是裝置上的樣子。
+  - `navigation/woowtech-workspace-open-intent.test-support.ts`：用真的 App 通知與導覽程式（`resolveNotificationTarget`、`resolveNavigateToAgent`、`navigateToWorkspace`、`navigateToHostWorkspaceRoute`、`buildNotificationRoute`、`prepareWorkspaceTab`）、React Navigation 的 `StackRouter`，以及 expo-router 從 `src/app` 檔名建出的路由樹。expo-router 的路由模組會載入 react-native，unit project 載不起來（`vitest.setup.ts` 也 mock 了 `expo-router`），所以 `router.navigate`、`router.dismissTo` 的 action（`findDivergentState`、`getPayloadFromStateRoute`）和 `useGlobalSearchParams` 的合併照 6.0.23 的原始碼轉寫。另外模型化兩段：巢狀 navigator 依父路由的 `screen`／`params` 啟動，以及工作區路由的 open-intent effect。升級 expo-router 時，對照 `build/global-state/routing.js` 和 `routeInfo.js` 更新轉寫。
+  - 守門 `woowtech/workspace-open-intent.test.mjs` 只看原始碼：工作區路由沒有 `useGlobalSearchParams`，`openValue` 是 `readWorkspaceRouteOpenParam` 讀 `useLocalSearchParams` 的結果。vitest 裡的路由讀法照這一行寫，所以把 `index.tsx` 改回上游時，紅的是守門。
+- 合併上游：上游改成讀自己的 params，或用別的方式修好時，先確認新測試仍綠，再拿掉 fork 的讀法和守門。
+
 #### 桌面通知的回饋
 
 - Electron 的通知支援不代表系統已授權；設定頁顯示尚未確認，仍可按「傳送測試通知」。不拿瀏覽器的授權值冒充原生通知授權。
-- 桌面測試通知分三種結果：原生 `show` 顯示「通知已顯示」；`failed` 或同步錯誤顯示「通知顯示失敗」；5 秒內沒有結果顯示「無法確認通知是否顯示」。`show` 不代表使用者一定看到橫幅。後兩者都引導到「系統設定 → 通知」，並說明未簽章測試版可能無法顯示；這不表示已證明所有 ad-hoc 版本都會失敗。
+- 桌面測試通知分三種結果：原生 `show` 顯示「通知已顯示」；`failed` 或同步錯誤顯示「通知顯示失敗」；5 秒內沒有結果顯示「無法確認通知是否顯示」。`show` 不代表使用者一定看到橫幅。後兩者的說明不重複標題，直接引導到「系統設定 → 通知」，並說明未簽章測試版可能無法顯示；這不表示已證明所有 ad-hoc 版本都會失敗。
 - 生命週期放在 `packages/desktop/src/features/woowtech-notification-delivery.ts`；上游接點是 `features/notifications.ts`。一般通知逾時只結束等待，不關通知、不清引用；之後點擊仍導頁，關閉、點擊、失敗時才清引用。晚到的 show 不改已回報的未確認結果。只允許靜音註冊 probe 逾時關閉，它仍是 best effort，不當成授權證據。
-- 三態只新增桌面內部 `sendNotificationWithResult` bridge／IPC，接點另有 `preload.ts` 與 App `desktop/host.ts`；沒有修改網路 protocol。一般 `sendOsNotification` 與既有 `sendNotification` IPC 仍回布林，僅 show 為 true。舊 bridge 仍能傳送測試，但舊布林不能證明是否收到 show，畫面一律回報未確認；不以重送來猜測結果。相容接點帶 `COMPAT(notificationDeliveryResult)` 標記。
+- 三態只新增桌面內部 `sendNotificationWithResult` bridge／IPC，接點另有 `preload.ts` 與 App `desktop/host.ts`；沒有修改網路 protocol。App 與 Electron 各自宣告三態 union，由守門核對一致，不跨套件引用 sibling `src`。一般 `sendOsNotification` 與既有 `sendNotification` IPC 仍回布林，僅 show 為 true。舊 bridge 仍能傳送測試，但舊布林不能證明是否收到 show，畫面一律回報未確認；不以重送來猜測結果。相容接點帶 `COMPAT(notificationDeliveryResult)` 標記。
 - Renderer 接點是 `desktop-permissions.ts`、`use-desktop-permissions.ts`、`desktop-notifications-section.tsx`；測試狀態放 fork helper，文案放 `i18n/woowtech-copy.ts`，繁中以外先沿用英文。合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，再跑同名 fork helper 與 permission 的定向 Vitest。沒有變更手機推播。
-- Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；合併時不能漏掉 `t` 的 callback 依賴。
+- Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；翻譯函式存入 ref 並在 render 同步更新，通知 callback 只依賴 `serverId`，避免切換語言使 `observeEvents` 拆掉再訂閱；送出時仍讀最新翻譯。
 - 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。
 
 ### 17. daemon 自己的訊息用 woowtech smart
 
-- 原因：daemon 寫給人看、或會離開電腦的文字仍叫 Paseo：自動產生 PR 文字失敗時的內文「Automated PR generated by Paseo.」（會出現在 GitHub 上）、請舊版 App 更新的提示、「Another Paseo daemon is already running」、App 和 CLI 顯示的 worktree 錯誤、使用者寄給我們的診斷報告，以及本地語音 worker 的行程名。
+- 原因：daemon 寫給人看、或會離開電腦的文字仍叫 Paseo：請舊版 App 更新的提示、「Another Paseo daemon is already running」、App 和 CLI 顯示的 worktree 錯誤、使用者寄給我們的診斷報告，以及本地語音 worker 的行程名。
 - 產品名寫在 `packages/protocol/src/brand-name.ts`（`PRODUCT_NAME`），這些訊息都讀它。改了這個檔案，要重建 protocol 和 server 的 dist。行程名照第 5 節寫字面值，守門直接讀。
-- 改了的（server 共 20 行）：
-  - 會出現在 GitHub 上的：PR 內文的 fallback（`session/checkout/git-metadata-generator.ts`）。
+- 改了的（server 共 19 行）：
+  - PR fallback 內文目前留空，不加產品署名，見第 20 節；這行不算在 19 行裡。
   - App 和 CLI 顯示的：
     - 舊版 App 打開子 agent 對話時的「Please upgrade the woowtech smart app…」，以及 fork 來的 PR 在等核准時給舊版 App 的「Update woowtech smart to review and run setup.」（`session.ts`）。
     - 「Another woowtech smart daemon is already running」（`pid-lock.ts`）。
@@ -678,7 +713,7 @@ node --test woowtech/*.test.mjs
 - `session.ts` 是熱檔（上游 90 天改了 82 次），只動了兩句和一行 import。
 - 測試：
   - `woowtech/names.test.mjs` 掃描 server 出貨的原始碼：上面保留的幾類以外，不准出現 Paseo。上游改回、或新增一句提到 Paseo 的文字時會失敗。這時看那句是誰在讀：人看得到的改用 `PRODUCT_NAME`，只給 agent 或外掛的，在守門的清單加一條並寫理由。同一個檔案也檢查三個行程名（第 5 節）。
-  - 上游測試改了預期值：`pid-lock.test.ts`（5 處）、`session/checkout/git-metadata-generator.test.ts`、`session.test.ts`、`wire-compat.test.ts`（2 處）、`selective-timeline-delivery.e2e.test.ts`。合併時衝突的話，照上游改完再把產品名換成我們的。
+  - 上游測試改了預期值：`pid-lock.test.ts`（5 處）、`wire-compat.test.ts`（2 處）、`selective-timeline-delivery.e2e.test.ts`。合併時衝突的話，照上游改完再把產品名換成我們的。`session/checkout/git-metadata-generator.test.ts` 和 `session.test.ts` 的 PR fallback 內文期待值是空字串，屬第 20 節。
   - protocol 的 `messages.test.ts` 和 `messages.wire-compat.test.ts` 用「Paseo diagnostics」「Update Paseo…」當範例資料，不是在檢查 daemon 的輸出，沒改。
 
 ### 18. GitHub Actions：只跑 Ubuntu 上的 CI 測試
@@ -720,7 +755,7 @@ node --test woowtech/*.test.mjs
 
 secret 和外部服務：
 
-- `ci.yml` 把 `CLAUDE_CODE_OAUTH_TOKEN`、`OPENAI_API_KEY`、`OPENROUTER_API_KEY` 交給 server 測試和 Playwright。CI 跑的是 server 的單元測試（排除 `*.e2e.test.ts`）和 5 個用假 agent 的整合測試，以及 Playwright 的 `browser` project（排除 `*.real.spec.ts`），都不讀這三把 key。
+- `ci.yml` 把 `CLAUDE_CODE_OAUTH_TOKEN`、`OPENAI_API_KEY`、`OPENROUTER_API_KEY` 交給 server 測試和 Playwright。CI 跑的是 server 的單元測試（排除 `*.e2e.test.ts`）和 6 個用假 agent 的整合測試，以及 Playwright 的 `browser` project（排除 `*.real.spec.ts`），都不讀這三把 key。
 - repo 不要設這三個 secret，也不要設 Cloudflare、Expo、Apple 的 secret：停用的 workflow 被重新打開時會拿去用。
 - CI 會連公開的服務：npm registry（安裝、`npm audit signatures`、全域安裝 claude-code、codex、opencode）、Playwright 和 Electron 的下載、Ubuntu 的套件庫，以及測試裡 Expo CLI、opencode 自己連的。不連上游的 relay、Hub 和網站：測試用的 daemon 預設關 relay 或指到本機，Hub 的測試用本機的假伺服器，relay 的 e2e 用 `wrangler dev --local`。CLI 的 e2e 有兩支會打開 relay（`03-daemon`、`17-onboard`），連的是我們的 relay.woowtech.io。
 
@@ -776,7 +811,7 @@ secret 和外部服務：
   - 另有 flaky 的 `command-center-host.spec.ts:12`。
   - 分類完之前，勾了 Playwright 的手動執行會是紅的；每週的排程不受影響。
 
-第三次執行（[run 36163380457](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36163380457)，main `1f4b2b00f`，手動、不勾 Playwright）**成功**。實際 41 分 15 秒，各 job 工作時間合計約 131 分鐘。來源是本機 `plans/ci-run-1-findings.md` 的「CI 第三次執行」紀錄，本次文件更新沒有重新查詢 GitHub。
+第三次執行（[run 36163380457](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36163380457)，main `1f4b2b00f`，手動、不勾 Playwright）**成功**。實際 41 分 15 秒，各 job 工作時間合計約 131 分鐘。來源是本機 `/Users/elmolin/.local/share/woowtech-smart/plans/ci-run-1-findings.md` 的「CI 第三次執行」紀錄，本次文件更新沒有重新查詢 GitHub。
 
 | job                           | 時間                  | 結果                            |
 | ----------------------------- | --------------------- | ------------------------------- |
@@ -866,7 +901,7 @@ owner 的決定是「直接叫起 App」：配對連結和 QR Code 打開渥屋�
 - 深連結可先離線匯入，不為取名字另開 probe。後續正常連線的 `server_info` 有非空 hostname、serverId 相符時，才把仍是 serverId 或空白的 label 補成主機名稱並存檔；重連與已連線後的新 server_info 都走同一條路。
 - 已有名字不覆蓋，等待連線期間的手動 rename 優先；已移除主機不重建，舊連線或舊主機世代的 callback 不處理。registry 尚未載入不寫入，載入完成後再讀目前連線快取的 server_info，避免遺漏先到的名稱。
 - 沿用上游 label 判別慣例，沒有新增名稱來源欄位：使用者若刻意把名稱設成完全相同的 serverId，無法與自動 fallback 區分，仍會被 hostname 取代。可先取其他名字以保留手動名稱。
-- 政策與監聽在 `runtime/woowtech-host-label.ts`，上游只接 `runtime/host-runtime.ts` 的 controller 生命週期、registry 載入完成與 label 持久化。只改 label 時不呼叫會啟動 probe cycle 的 updateHost；沒有改連線探測、路由或網路 protocol。
+- 政策與監聽在 `runtime/woowtech-host-label.ts`，上游只接 `runtime/host-runtime.ts` 的 controller 生命週期、registry 載入完成與 label 持久化。只改 label 時不呼叫會啟動 probe cycle 的 updateHost；沒有改連線探測、路由或網路 protocol。`woowtech-host-label.test.ts` 只有第一個整合案例使用 15 秒上限，吸收冷啟動成本；其他案例與全域上限不變。
 
 預設值和遷移：
 
@@ -933,13 +968,297 @@ node --test woowtech/*.test.mjs
 - 上游讓掃描器或「貼上配對連結」改用 URL 類別讀 fragment：那兩個 App 測試會失敗，改回字串運算。上游改寫 `OfferLinkListener`（限定平台、改用 URL 類別、不再交給 `handlePairingLink`）：守門的 `OfferLinkListener` 那一項會失敗，照訊息改回交給 `handlePairingLink`。
 - 上游在新 home 的 CORS 預設或 `bootstrap.ts` 的固定清單加回網頁版：`cors-defaults.test.ts` 和守門會失敗。
 
-### 20. 暫停工作區自動命名
+### 20. 暫停工作區自動命名與 Git metadata 生成
 
 - 依 owner 的 D4 修正，daemon 暫時完全停用工作區的 LLM 自動命名，不做開關。上游會把第一則 Agent 提示與附件交給 metadata provider，可能與使用者操作的 provider 不同；先停止這條額外內容傳送與額度消耗路徑，之後再另做明確開啟、只用同一家 provider 的功能。
 - 政策在 `packages/server/src/server/woowtech-metadata-policy.ts`。`WorkspaceAutoName` 的 directory/worktree 入口都在排程前拒絕：沒有 timer、沒有 generator、provider snapshot 列舉、instructions 載入或 structured generation。新舊 home 一樣關閉，不讀任何命名設定，也不從既有 metadata provider 清單推定使用者同意。
-- 保留建立時的名稱、初始 prompt title 與分支；不回改以前的命名，不阻擋手動改名。commit 訊息／PR 草稿生成、正常 Agent 工作與 OpenCode 設定頁探測都維持現狀；這不是全域禁止 metadata 或 provider 網路使用。
+- 保留建立時的名稱、初始 prompt title 與分支；不回改以前的命名，不阻擋手動改名。正常 Agent 工作與 OpenCode 設定頁探測維持現狀；這不是全域禁止 provider 網路使用。
 - 上游接點只有 `workspace-auto-name.ts` 的排程 gate 與 typed policy/scheduler ports，以及 `worktree-branch-name-generator.ts` 的 instructions-builder 測試 port。production bootstrap 不傳 policy override；既有上游行為測試明確注入 enabled policy 以保留原斷言，另以真正預設 OFF 的 service 驗零呼叫，不能用測試開啟值當 production 預設。
-- 合併上游後跑 `workspace-auto-name.test.ts` 與 `node --test woowtech/workspace-auto-name.test.mjs`。守門鎖住 production OFF、兩個 daemon 入口、排程前 gate 與 bootstrap 接點；共享 commit/PR 生成不接這個 policy。
+- OFF 基線與 positive control 放 `woowtech-workspace-auto-name.test.ts`；上游 `workspace-auto-name.test.ts` 僅保留 ON policy 注入，原斷言不變。合併上游後跑這兩檔與 `node --test woowtech/workspace-auto-name.test.mjs`。守門鎖住 production OFF、兩個 daemon 入口、排程前 gate 與 bootstrap 接點，並以 AST 掃 server production sources：命名 generator 只能由 `workspace-auto-name.ts` 存取。守存取而非只找函式呼叫，才能攔住 import alias、間接引用、namespace、dynamic import 與 re-export；函式宣告本身和測試不當作新 caller。
+- D5 修正（F8-min）：commit 訊息與 PR 草稿的 AI 產生也先完全關閉，共用 `woowtech-metadata-policy.ts`，但使用獨立的 Git metadata policy。`git-metadata-generator.ts` 兩個入口在讀 diff、載入 metadata instructions、讀 provider 偏好、列舉 provider 或呼叫生成前直接返回既有固定文字：commit `Update files`；PR title `Update changes`、body 空字串（依 C-022 使用者決定，不再加自動產生或品牌文字）。AI 回應 schema 的 body 最小長度仍是 1；OFF 不經該 schema，真實 CheckoutSession 與本機 forge port 測試確認空 body 可以送到建立 PR 路徑。
+- 手填 commit 訊息與 PR 文字照舊使用（維持原有 trim）；PR 只有一欄空白時只補空欄。真正的 Git commit、push、建立 PR 流程不變。沒有 env/home 開關，不清除既有磁碟設定；未來明確 provider 選擇與手寫介面依 F8 計畫另做，這次不新增。
+- metadata 設定頁保留，用 fork copy 覆寫總說明與三段模型提示，明說目前停用、已存偏好不會啟用生成。比隱藏頁面更少改動，也讓使用者知道舊設定仍保留。專案設定的後設資料區塊也用 fork 說明保留指令但不會用於自動產生，表單與磁碟設定不變。繁中使用「後設資料」及「提交訊息」，英文與其他語系使用英文；不改上游語系檔或 OpenCode 探測流程。
+- Git metadata 測試放 `session/checkout/woowtech-git-metadata.test.ts`：預設 OFF 零呼叫、固定值、原 instructions builder 接點、明確 ON 的 positive control，以及真實 handler 的手填／部分手填行為。handler 測試只寫臨時 Git repo 與本機 bare remote，forge 用 typed fake，不發外部請求。原 `git-metadata-generator.test.ts` 僅注入 ON policy 保留原斷言；`session.test.ts` 在既有 mock 區塊以測試端 ON 覆寫保留 prompt 行為測試（C-022 明確核准的既有 mock 例外）。production `session.ts` 不傳 override，守門禁止測試用 policy 覆寫出現在 server production source：提供 policy 的物件成員（屬性、簡寫、方法、getter、有值的 class field）、對同名成員的 `=`、`??=`、`||=`、`&&=`、解構和參數的預設值（`const { name = … } = deps`、`{ name: local = … }`、`(name = …)`），以及用字串寫出 policy 名稱（`defineProperty`、`Reflect.set`、computed key）都算覆寫；唯一放行的是 `x.name = options.name ?? <fork policy>`，也就是 `WorkspaceAutoName` 建構子的接線。字串相加組出的名稱（`deps["isGeneration" + "Enabled"]`）和區域變數的初始值（`const name = deps.name ?? …`）不在範圍內；生成器入口那一行由第 2 項的 regex 釘住。合併上游後務必逐檔跑這兩檔與 fork OFF suite；不要只跑 generator 單元測試而漏掉 Session 接線。另跑 `node --test woowtech/git-metadata.test.mjs woowtech/workspace-auto-name.test.mjs` 鎖住兩個 gate、policy 預設與 production 接點；`woowtech-copy.test.ts` 守住限定語系政策、placeholder 與頁面文案接點。
+
+## 上游同步紀錄（2026-09-27，挑選式）
+
+### 第一批：上游 `836f1a9..d6861f81e`
+
+- 範圍：上游 `836f1a9`（v0.8.0）到本機 `upstream-main` 的 `d6861f81e`（上游 0.9.1），共 79 個 commit。沒有 fetch，`d6861f81e` 不一定是 GitHub 上最新的上游。
+- 分支 `woowtech/upstream-picks-0927`，從 `woowtech/integration-0926` 的 `ce3dffa70` 開出，含 T1 修正。沒有 push。
+- owner 的原則：只拿產品需要的。我們有出貨的功能，拿它的錯誤、安全、資料完整性、穩定性和效能修正；新功能、我們拿掉的功能（例如本地語音）、網站、Windows、發版、版本號和 lock 簽章／Nix hash 都不拿。
+- 做法：照上游的時間順序 `git cherry-pick -x`，每個 commit 保留上游作者，訊息最後有 `(cherry picked from commit …)`。「條件式」的只在程式碼我們有、又不需要不拿的 commit 時才拿。fork 自己的調整各自一個 commit。
+- 結果：拿 39 個（32 個原本就要拿、7 個條件式），1 個只拿一部分（`d8dd189b9`），不拿 39 個。9/27 的審查後補拿了其中的 `f9fb992dc`（見第二批的「審查後補拿」），現在不拿的是 38 個。
+
+拿進來的：
+
+| 上游 commit                  | 內容                                                                                           |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `77c5c8f17`（#4839）         | 模型目錄有重複的選項時，Agent 草稿不再當掉；讀舊的目錄時也先去重                               |
+| `13979e9c3`（#4862）         | 分支的 remote 寫成網址時，也找得到 fork 來的 PR                                                |
+| `0aca3b605`（#4675，條件式） | 外掛的 timeline 轉換拿到完整的項目，在工具分組和 Markdown 切段之前處理                         |
+| `c3bcad687`（#4844）         | 工作區版面的存檔壞掉時不再一直當掉，會自己復原；桌面版瀏覽器分頁 resize 後截圖不再卡住         |
+| `b21c004ff`（#4863）         | 開著的聊天在背景也保持最新，網頁版凍結隱藏的聊天；重新連線時顯示進度；建立回執不會在替換時被讀 |
+| `4be34f05e`（#4701）         | ACP 沒有 messageId 的片段接在同一個 timeline 項目                                              |
+| `5ae0c5b83`（#4895）         | 連到舊版主機時，建立工作區和 Agent 照樣可用                                                    |
+| `425157595`（#4925）         | 重新連線提示的轉場不中斷                                                                       |
+| `7557992df`（#4902，條件式） | composer 高度穩定，打字不再讓整個聊天重繪                                                      |
+| `0eac75be7`（#4912）         | application lease 到期不再永久斷掉外掛的連線                                                   |
+| `a78949d1d`（#4926）         | 恢復封存的工作區時保留已 commit 的變更（用原本的比較基準和分支 HEAD）                          |
+| `0e8a71a5f`（#4946，條件式） | 手機的 composer 編輯後尺寸穩定，長按刪除後回到原本的高度                                       |
+| `0f20e6dfe`（#4945，條件式） | 歷史搜尋照時間排序，標出每個欄位命中的地方；選單的進場動畫等位置確定後才開始                   |
+| `46529146a`（#4958）         | 上傳中的檔案先顯示載入中的附件，上傳不卡住輸入                                                 |
+| `a8a8da047`（#4970，條件式） | 外掛 provider 的巢狀子 Agent 保留直接上層和開它的工具呼叫                                      |
+| `6830c46e9`（#4973，條件式） | 聊天、工作區草稿和新增工作區共用 composer 的停靠和鍵盤處理；Android 閒置時捲動不被攔截         |
+| `92b92a81c`（#5007）         | 桌面版和 CLI 改從輕量的子入口載入 daemon 管理，不再載入整個 daemon，省記憶體                   |
+| `9696f4226`（#5040）         | 只訂閱這次開過的聊天；恢復的 Agent 不再改寫最後使用時間，也不清掉「待檢視」                    |
+| `ee7949ae2`（#4413）         | Pi 依每個模型的 thinking 設定篩選和夾限                                                        |
+| `83f9fba20`（#5168）         | 從草稿建立聊天時，交接一直保留到新的聊天成為目前的聊天                                         |
+| `4c051388e`（#5174）         | 「匯入工作階段」列得出所有 Codex 對話                                                          |
+| `c8a7667a0`（#5189）         | 依序補齊（sequenced catch-up）之後，側欄不會少掉對話                                           |
+| `aeb98f813`（#5200）         | 加入 Claude Opus 5.5，並依模型版本判斷能力                                                     |
+| `d22737c77`                  | heap snapshot 不進 git                                                                         |
+| `a3fc59e81`（#5205）         | 資料夾名稱結尾有空白的專案留在側欄                                                             |
+| `5db3bc82f`（#5079）         | 連線恢復時重新接上工作區標籤                                                                   |
+| `17c505021`（#5221）         | fork 的 checkout 也顯示它的 PR                                                                 |
+| `3a36cc33c`（#5227）         | 磁碟或網路分享沒掛上時保留工作區，不當成已刪除                                                 |
+| `290306fd1`（#5229）         | worktree 刪掉以後，封存的 Agent 記錄照樣讀得到                                                 |
+| `81ad00790`（#5235）         | Pi、OMP 的執行環境已經結束時，按停止能讓 Agent 結束                                            |
+| `530331363`（#5238）         | 重新匯入失敗後，封存的 worktree 仍然可以恢復                                                   |
+| `8269a0ea7`（#5239）         | Codex 除了 Auto-review，其他模式的核准都留給使用者                                             |
+| `3eaf0be0b`（#5240）         | Claude 的斜線指令放在最後一個內容區塊送出                                                      |
+| `90737e1de`（#5243）         | OMP 被停止的回合顯示為取消，不是失敗                                                           |
+| `d161b5987`（#5245）         | Android 按返回先關掉底部面板，不會離開畫面                                                     |
+| `94ab368e4`（#5248）         | daemon 替 ACP 開的終端機帶著該 Agent 的啟動環境                                                |
+| `6d37f7fd9`（#5253）         | 關機時先關 Agent 再停外掛，每個關閉最多等 5 秒                                                 |
+| `3054f8005`（#5258）         | MiniMax 帳號沒有 token 方案時，用量顯示無法取得                                                |
+| `d6861f81e`（#5255，條件式） | 多鍵快捷鍵在兩個按鍵之間重繪也不會中斷                                                         |
+
+`d8dd189b9`（#4868，CI 精簡與去 flaky）只拿一部分，做成 fork 的 `9c7006242`，訊息寫了拿了什麼、沒拿什麼：
+
+- 拿：`client/src/daemon-client.ts` 的修正，`attemptConnect` 清掉排好的重試，重連等待中又明確 `connect()` 時，舊的計時器不會把新連線拆掉（附上游的單元測試）；桌面版 `npm test` 先跑一次 `install-electron`，vitest 的 worker 才不會同時下載 Electron 44；只在 Windows 跑的 OpenCode npm shim 測試改用假的執行環境；Playwright 的 5 個去 flaky：「載入較舊的一頁時即時輸出繼續」改用 30 分鐘的串流並等要驗的那一頁（第 18 節待分類的 `agent-timeline-pagination.spec.ts:182` 就是這個案例）、字型放行後的新請求直接通過、重連回歸測試等 Agent 面板出現才斷線、外掛啟動失敗的指令用 rename 放上去、GitHub 附件 pill 用標題找。
+- 不拿：`.github/`（`ci.yml`、新的 `desktop-packages.yml`、`docker.yml`、`nix.yml`）和 `scripts/ci-workflow.test.mjs`；描述 CI 與打包搬家的 `docs/testing.md`；刪掉我們還在跑的測試（startup-wire-metrics、replica-cache-measurement 和它的 helper、user-message 的 ui-contract、command-center-host、檔案總管的透明度測試、pagination 刪掉的案例）；把多個測試併成一個旅程的改寫；Hub relationship 的測試工具從 CLI 子程序改成直接呼叫 client（連同 `hub-cli-contract`、`relationship-controller` 的期待值）：這是合併，不是去 flaky，而且會少掉我們改名後的 CLI 的覆蓋。
+
+不拿的，依原因：
+
+- 新功能：`0c5f472da`（外掛讀伺服器設定）、`174055a63`（Changes 總覽）、`4f710d993`（偵測到 PR 時自動開分頁）、`72e3d6957`、`6ce6f4c96`（外掛跨主機導覽與 SDK）、`c7db3c5a8`（外掛開外部連結和工作區瀏覽器；它也改寫通用的網址開啟器，我們的 mailto 維持第 10 節的做法）、`047f40e62`（npm 外掛安裝與更新審閱）。
+- Find（我們沒有這個功能）：`26e0273ac`、`326a37cc8`、`80b4387bc`（還會帶進 markdown-it）、`bb4763b38`、`2c8e8a826`、`135a3b4c9`、`b2ce2bcb8`。
+- 串流淡入：`6215e08ef`（之後被 `5d70ab2ab` 還原；0.8 本來就是逐字串流）、`0474c3e0a`（它的測試）、`5d70ab2ab`（還原淡入並加上原生捲動模組）。`5d70ab2ab` 也帶了反轉清單在 Android 上的文字選取修正，這次一起延後。
+- 本地語音（第 2 節已拿掉）：`64b1a62ed`。
+- 只有 Windows：原本列了 `f9fb992dc`，它其實全平台都改了外掛建置的環境，審查後補拿（見第二批）。
+- 外觀：`cb9080604`。
+- 網站：`1e4ba65c6`、`3dbbbb535`。
+- 發版與版本號：`7c1958f5b`、`e9d32a17d`、`7f7e60bcb`、`818658520`；更新紀錄：`ed9b51f94`、`0fd1db574`、`8b6e9447f`、`eb665a55a`；發佈 workflow（我們的 GitHub 停用）：`0e965bcd7`、`3cc4ae286`。
+- lock 簽章／Nix hash：`c5c0536b4`、`7d74916f8`、`dc682adb2`、`2f3272490`、`d636abd7a`、`91d9cf1db`、`bc5bc969c`。
+
+衝突與調整：
+
+- `c3bcad687`：`packages/desktop/e2e/browser-tabs.e2e.mjs` 衝突。上游拿掉 `callBrowserToolUntilReady`，截圖改成只呼叫一次。保留 fork 的兩個重試 helper（`callToolUntilReady` 回傳整個回應，圖留著）；上游新加的 resize 後截圖（含尺寸和 devicePixelRatio 斷言）和閒置分頁的截圖都改用 `callBrowserToolUntilReady`（第 18 節）。
+- `b21c004ff`：lock 只多 App 的 `"react-freeze": "1.0.4"` 一行。1.0.4 原本就在 lock 裡（react-native-screens 的相依），沒有新的套件。
+- `46529146a`：`composer-attachments.spec.ts` 衝突，因為 `d8dd189b9` 把這個檔併成旅程的改寫沒拿。保留我們的「Plus menu」測試，加上上游新的上傳中附件測試。
+- `6830c46e9`：上游在 `e2e/mobile/composer-keyboard/android.sh` 新加的 Agent 連結寫成 `paseo://`，App 只註冊 `woowtech-smart://`（第 5 節），改成我們的 scheme（fork 的 `47956d14b`，1 行）。
+- `92b92a81c`：
+  - `packages/server/src/server/config.ts`：留上游 re-export persisted config 的區塊，接著是我們的 `DEFAULT_PORT = 6770`。上游的 relay、app 網址常數不放回來：relay 讀 protocol 的 `DEFAULT_RELAY_ENDPOINT`，app 網址走 `appBaseUrlFromConfig`（第 11、19 節）。沒有重複宣告。
+  - `packages/cli/src/commands/daemon/lifecycle.e2e.test.ts`：三個符號都從 `@getpaseo/server/daemon-control` 匯入（`daemon-instance.ts` 現在也 re-export `resolvePaseoHome`），第 12 節的 home 斷言不變。
+  - `packages/server/package.json` 自動合併：多了 `daemon-control`、`configuration`、`process`、`auth`、`pairing`、`agent-activity`、`agent-response` 七個子入口。SDK 仍是 devDependency，`build:lib` 仍複製 `woowtech/skills`，版本號沒動。
+  - 打包：七個子入口和 protocol 新拆出的 `agent-profile`、`plugin-config`、`terminal-profile` 都在 `dist` 底下。用 electron-builder 自己的 minimatch 拿 `electron-builder.yml` 的 10 條排除規則比對，這 13 個目標都會進 app.asar，打包設定不用改。`plugin-config.ts` 跟我們 `messages.ts` 原本的定義相同，只有 directory 來源，沒有帶進 npm 外掛來源。
+- `83f9fba20`：`agent-message-submission.spec.ts` 的 import 衝突，留我們的，只加 `recordPanelToasts`。
+- `0eac75be7`：server 的 `test:integration` 多跑 `plugin-paseo-api.e2e.test.ts`，這是上游這個修正的回歸測試，用假 agent、不讀 key。第 18 節的整合測試數跟著改成 6 個。
+- 繁中：只有 `b21c004ff` 動到語系（`agentPanel.states.reconnecting` 改成「Reconnecting to host」，新增 `updating`「Updating messages」）。照第 7 節用產生器重新產生 zh-TW（fork 的 `10b72a731`）：「正在重新連線主機」「正在更新訊息」。其他挑進來的沒有新的介面文字，用到的 key 都是既有的。
+- 檢查過沒有帶回原版的東西：品牌和 CLI 名、home、port、官方版共存、技能路徑；推播（FCM、push.woowtech.io、`woowtechPush`、不帶內容的推播、Expo 登記停用）；配對 scheme、relay 預設與明確 false；LINE 仍拿掉，官網、客服信箱和通用開啟器的 mailto 不變；工作區自動命名、commit 訊息和 PR 的 AI 生成仍關閉，沒有新的入口；Claude Agent SDK 仍第一次用到才下載，出貨程式沒有 SDK 的值 import，沒開 `verbatimModuleSyntax`；沒有本地語音；更新來源不變；`.github/`、`website/` 和版本號都沒動；lock 只多一行。
+- cherry-pick 和 commit 都設 `LEFTHOOK=0`：共用 `.git` 的 hook 才不會被重裝成指向這個 worktree（第 18 節），每個 commit 也不用各跑一次全部 workspace 的 typecheck。format、lint 和 typecheck 最後另外跑，見下面。
+
+測試（這台 Mac，Node 22，`--maxWorkers=1 --no-file-parallelism`）：
+
+- 每一步之前確認記憶體至少 25% 空閒，沒有開機的模擬器、Android 模擬器、xcodebuild 或 Gradle。只開著、沒有開機裝置的 Simulator.app 不算。
+- 建置：依序 `build:client`（含 protocol）、`build:highlight`、`build:plugin`、`build:relay`、server、CLI 和 `expo-two-way-audio`。沒用 `build:server`，因為它用 `concurrently` 同時建三個套件。
+- typecheck：11 個 workspace 逐一跑 `npm run typecheck --workspace=…`，全過（挑選改到的 7 個，加上沒改到的 4 個，等於根目錄的 `npm run typecheck`）。
+- format、lint：`BASE..HEAD` 改到的 315 個檔 `format:check:files` 通過，297 個檔 `lint` 0 個 warning、0 個 error。
+- 守門 `node --test woowtech/*.test.mjs`：121/121，沒有改任何守門。
+- 挑進來的 commit 新增或改過的測試（Playwright、桌面版 e2e 和手機腳本除外）：
+  - protocol 4 檔 220/220（含 `woowtech-push`、`messages`）；client 2 檔 145/145（含 `d8dd189b9` 的重試計時器測試）；plugin 1 檔 31/31。
+  - server：Claude、Codex、Pi、OMP、ACP、OpenCode 和外掛 provider 等 17 檔，1150 過、1 略過（只在 Windows 跑的 OpenCode 測試）；session、checkout、封存、恢復、重新匯入、磁碟沒掛上和 worktree 等 22 檔，1044 過、6 略過（BASE 就有的 skip）；in-process 的 e2e 6 檔，35 過、1 失敗（見最後一項）。
+  - CLI：`lifecycle.e2e.test.ts` 和 pair、onboard、說明頁等 8 檔，30 過、1 略過（Windows 限定）；`tests/32-daemon-set-password` 3/3、`tests/25-daemon-restart-supervisor` 2/2，照 `run-all.ts` 的方式用暫存 HOME、不帶 `PASEO_*`。
+  - desktop 7 檔 89/89（含 `desktop-packaging`、`login-shell-env.daemon-target`）。
+  - App 24 檔 748/748。`use-agent-history.test.ts` 第一次跑時，beforeAll 冷載入超過 vitest 預設的 10 秒；照 CI 設 `PASEO_APP_TEST_HOOK_TIMEOUT_MS=120000` 後 18/18，之後的 App 測試都用這個設定。
+- T1：`missing-workspace-directory-demand` 25/25、`directory-sync/index` 23/23、`host-runtime` 72/72、`sidebar-workspace-list` 3/3、`use-projects` 2/2、`viewed-timeline-sync` 39/39，共 164/164。守門 `workspace-directory-demand.test.mjs` 在上面的 121 項裡。
+- fork 自己的：server 的推播、工作區自動命名和 Git metadata 關閉、config、relay、配對、CORS、daemon 指令訊息和 SDK 載入器 17 檔 190/190；App 的推播、配對、主機補名、通知標題、桌面通知權限和 zh-TW／品牌／fork 文案 18 檔 128/128；網址開啟器 App 2/2、桌面版 3/3。更正：`host-page-translations.test.tsx` 從 `8010f71b1` 起整個檔載入失敗、3 個都沒跑（這一批的 `425157595` 讓 toast 在模組載入時就用 `FadeIn`，測試的 mock 沒有），第二批的 fork `f5ae3f039` 補上 mock 才恢復 3/3。
+- 打包：7 個子入口和 protocol 的 3 個新檔 build 後都在 `dist`。從桌面版用 Node 解析並載入 7 個子入口都成功，經 `daemon-control` 拿到的 `resolvePaseoHome({})` 是 `.woowtech-smart`。
+- 沒過的 1 個：`session.create-agent-worktree-autoarchive.e2e.test.ts` 的「auto-archiving a created worktree keeps the directory when a sibling workspace references it」，錯誤是 `spawn git ENOENT`。假 agent 的第一回合馬上結束，自動封存先刪掉 worktree，測試才建立旁邊的工作區。BASE（`git archive ce3dffa70`，另外建 dist）同樣失敗，2/2。這個檔、`test-utils` 和相關程式跟 upstream-main 相同，不是這次挑選造成的。CI 的 `test:integration` 只跑這個檔的第一個案例，所以 CI 不會報它。
+
+留給 CI 和裝置驗證的：
+
+- push 之後手動跑一次 CI 並勾 Playwright（第 18 節）。這台 Mac 只跑了上面的定向測試，還要看：
+  - server 全部的單元測試和 `test:integration`（現在 6 個檔）；CLI 的 e2e 分片，包括改了期待值的 `tests/15-provider.test.ts`（Opus 5.5，會查真的 provider，本機沒跑）和改了 import 的 `tests/e2e/relay-host.test.ts`（`wrangler dev` 會轉到上游的 Fly，本機沒跑）。
+  - Playwright：挑進來的 commit 新增或改過的 spec，例如 model-search、plugin-timeline、chat-outline、explorer 的版面復原、viewed-agent-timelines、agent-message-submission、creation-old-daemon、composer-attachments、worktree-restore、sessions-search、keyboard-shortcut-sequence、sidebar-project-name-whitespace、streaming-markdown、command-center-agent-controls、composer-whitespace，以及 `d8dd189b9` 去 flaky 的 5 處。
+  - 桌面版：browser-tabs（新的 resize 後截圖和 devicePixelRatio 斷言，都經過 `…UntilReady`）、lifecycle、renderer，以及 Linux 打包和三個 smoke。只有打包後的 smoke 會在 app.asar 裡實際載入新的 server 子入口；打包 smoke 現在先按「Agent」再找輸入框。
+  - Windows 限定的測試（Windows 不在 v1）。
+- iOS、Android 正式版實機：
+  - composer（`7557992df`、`0e8a71a5f`、`6830c46e9`）：長草稿、長按刪除、收起再打開鍵盤、新增工作區的 composer、送出後閒置時捲動（Android 用 `e2e/mobile/composer-keyboard/android.sh`）、iOS 的點擊判定。
+  - Android 按返回關掉底部面板（`d161b5987`）。
+  - 開著的聊天和重新連線（`b21c004ff`、`425157595`、`9696f4226`、`83f9fba20`）：手機上保留的聊天不凍結、從背景回來後補齊、重新連線提示。T1 的通知導頁在這些改動之後照第 16 節重驗。
+  - 上傳中的附件（`46529146a`）。
+- 延後：`5d70ab2ab` 裡反轉清單在 Android 上的文字選取修正。
+- 這個分支沒有 push。`woowtech/integration-0926` 已經前進到 `30207e6a7`，合回去時再 rebase 或 merge，之後重跑守門和 T1 測試。
+
+### 第二批：上游 `d6861f81e..d7b7016cc`
+
+- 範圍：本機 `upstream-main` 的 `d6861f81e`（第一批的終點）到 9/27 抓的 `upstream/main` `d7b7016cc`，共 67 個 commit，含上游 0.9.2（9/24）。固定用 `d7b7016cc`，不用會移動的 ref，之後沒有再 fetch。
+- 接在第一批的 `8010f71b1` 後面，同一條分支。原則和做法照第一批：照上游的時間順序 `cherry-pick -x`，fork 的調整各自一個 commit。
+- 挑選清單標了 38 個「拿」、16 個「條件式」、11 個「不拿」、2 個「延後」。
+- 結果：拿 55 個：清單上的 38 個「拿」、15 個「條件式」，加上審查後改判要拿的 2 個「不拿」（`e68553f75`、`513f2a9ea`，見下面的「審查後補拿」）。不拿 10 個（清單上其他 9 個「不拿」，加上條件式的 `829cc5e17`），延後 2 個。
+
+拿進來的：
+
+| 上游 commit                      | 內容                                                                                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `9a3f3a0dc`（#5272，條件式）     | 多鍵快捷鍵的第二鍵按著修飾鍵時也能完成（第一批拿了 `d6861f81e`）                                                                            |
+| `34c9fd03c`（#5273）             | Codex 的 GPT-6 Sol、GPT-6 Luna 顯示 Fast                                                                                                    |
+| `ba4595d4e`（#5274，條件式）     | Cursor 在沒有 Fast 版本的模型上也能啟動 Agent                                                                                               |
+| `faee1cd95`（#5277）             | 重開機後舊 PID 被別的程序拿走時 daemon 照樣啟動：lock 的時間早於這次開機就當成棄置，也不會對那個 PID 發訊號                                 |
+| `c4771ca46`（#5285）             | Claude 對話可以回溯到沒有回應的回合之前                                                                                                     |
+| `897a0abb1`（#5286）             | Agent 重新整理時 timeline 只留一份                                                                                                          |
+| `ec43e9067`（#5287，條件式）     | 改綁的窗格焦點快捷鍵在打字時也能用                                                                                                          |
+| `89073d4c5`（#5289）             | Claude 回溯的錨點不落在子 Agent 的訊息上                                                                                                    |
+| `8768500fc`（#5290）             | 副本快取的儲存拒絕寫入時，讀取不再空轉                                                                                                      |
+| `9978988e3`                      | 對話關閉後 daemon 的 heap 不再持續增長                                                                                                      |
+| `c3e1e084a`                      | 晚出現的忽略目錄會更新 Git 排除規則，Linux 和原生監看的分類工作有上限（CI 的部分沒拿，見下面）                                              |
+| `222d45a2f`（#5298）             | 外掛 provider 的請求失敗不讓 daemon 當掉                                                                                                    |
+| `2c7b38bc7`（#5296）             | OpenCode Agent 照給定的權限規則執行                                                                                                         |
+| `48384cafd`（#5249）             | 新分支不設 upstream，第一次 push 不會推到預設分支                                                                                           |
+| `ae42b0afb`（#3258）             | OMP 送出自訂訊息後等終止事件                                                                                                                |
+| `e998e0a08`（#5170）             | 監看不到的 repo 不再讓 daemon 吃滿一顆 CPU                                                                                                  |
+| `fbe5005aa`（#5224，條件式）     | 自訂快捷鍵可以用 Backspace                                                                                                                  |
+| `d615d3d42`（#5190）             | 新增專案的目錄建議掃描變便宜，搜尋不再逾時                                                                                                  |
+| `b2bb512b3`（#5231）             | 外掛重新載入時子程序不會當掉                                                                                                                |
+| `c976e2e5a`（#5303）             | 測試：等 repo 觀察完成再斷言 ref 更新                                                                                                       |
+| `f4efdbded`（#5301）             | schedules 資料夾有不是排程的檔案時 daemon 照樣啟動，那個檔案只記錄一次                                                                      |
+| `7fa78244f`（#5305）             | CLI 的 `permit ls`、`allow`、`deny` 顯示完整的權限請求 ID                                                                                   |
+| `1bf531229`（#5306）             | 留下空的 `paseo.pid` 時 daemon 照樣啟動                                                                                                     |
+| `e6085c1e9`（#5310，條件式）     | CLI 認證失敗時提示設定 `PASEO_PASSWORD`，不再叫人啟動 daemon                                                                                |
+| `c356394bf`（#5315）             | 有 UTF-8 BOM 的 `config.json` 也讀得進來                                                                                                    |
+| `fbc83613c`（#5317）             | 對話上傳保留原始檔名，只換掉各平台檔名不能用的字元，長度限 255 bytes                                                                        |
+| `8e858f0e3`（#5320）             | 多選問題的勾選項和「其他」答案一起送出                                                                                                      |
+| `6016ed705`（#5322）             | Agent 建立本機工作區時拒絕不存在或不是資料夾的路徑                                                                                          |
+| `bbf8cce3f`（#5326）             | 列出 Claude `settings.json` 對應的 Fable 模型                                                                                               |
+| `27d6a7185`（#5332）             | 背景啟動在開 log 之前就失敗時說明原因，也寫進 `daemon.log`                                                                                  |
+| `e07da55f8`（#5335，條件式）     | 有密碼的桌面版 daemon 也顯示「在編輯器開啟」：`daemon status` 不用密碼也回報 server id                                                      |
+| `49f9cec6b`（#5337）             | CLI 解析失敗時指名 `config.json`                                                                                                            |
+| `e3c853df5`（條件式）            | Android 商店建置略過 lint，避免記憶體不足                                                                                                   |
+| `db4fd3340`（#5338）             | 舊的 OpenCode server 結束後，Agent 重連新的 server                                                                                          |
+| `28507224d`（#5341）             | 上週同一個星期幾的訊息顯示完整日期                                                                                                          |
+| `84304b553`（#5343）             | 沒指定模型的 Pi Agent 用 Pi 設定的預設模型                                                                                                  |
+| `5c9f767d5`（#5347，條件式）     | `send_agent_prompt` 等超過 30 秒時，結果改用完成通知告訴呼叫者                                                                              |
+| `bf4dc22c2`（#5358，條件式）     | `daemon set-password` 的輸入是管線時，說明需要終端機                                                                                        |
+| `315803688`（#5372，條件式）     | provider 檢查超過 1.5 秒的 daemon 也能從設定頁更新和重啟                                                                                    |
+| `a048094da`（#5374，條件式）     | 外掛主題太多時，主題清單可以捲動                                                                                                            |
+| `90d978ab6`（#3628）             | OMP 保留有說明的選項                                                                                                                        |
+| `43a2a7969`（#5383）             | Pi 回溯過一次後，仍能回溯到指定的訊息                                                                                                       |
+| `dc9799f6f`（#5388，條件式）     | 終端機的 OSC 8 連結和一般網址一樣開                                                                                                         |
+| `e68553f75`（#5392，審查後補拿） | `run --host`／`--home` 在帶著別台 daemon 的 `PASEO_AGENT_ID` 的 shell 裡跑時，照樣建立 Agent，不再報「Caller agent not found」              |
+| `04c3e003f`（#5404）             | 網頁版模型選擇列不再有巢狀按鈕                                                                                                              |
+| `8cd989529`（#5407，條件式）     | 提示還在執行的子 Agent 時，呼叫者只收到一次通知                                                                                             |
+| `513f2a9ea`（#5411，審查後補拿） | 一般 ACP Agent 的 / 選單列得出它的斜線指令（原本永遠是空的）；`mcp-server.test.ts` 先清空 AgentManager 和 AgentStorage 的寫入再刪暫存資料夾 |
+| `aa3ffaeb6`（#5415，條件式）     | checkout 切換分支後，/ 選單的專案技能重新整理                                                                                               |
+| `26f227bed`（#5432）             | daemon 重啟後 Pi 仍能回溯                                                                                                                   |
+| `a272a22d7`（#5434）             | 隱藏 OpenCode 標為合成的使用者訊息                                                                                                          |
+| `76a9781ba`（#5437）             | 從 provider 自己的設定目錄（`CLAUDE_CONFIG_DIR`）讀 Claude 歷史                                                                             |
+| `3dc17b7f3`（#5439）             | ACP Agent 起不來時 daemon 繼續運作                                                                                                          |
+| `cb9654a65`（#5445）             | `daemon.log` 寫不進去時 daemon 繼續運作，之後再重試                                                                                         |
+| `d2e2154a8`（#5394）             | 目錄重新整理時保留已還原的工作區（directory-sync，T1 的修正保留）                                                                           |
+| `fffd76e8f`（#5446，條件式）     | 「匯入工作階段」列出自訂 Codex provider 的對話                                                                                              |
+
+條件式的都先確認過功能我們有、也不需要不拿的 commit：多鍵快捷鍵（第一批拿了 `d6861f81e`）、自訂快捷鍵、Cursor provider、daemon 密碼（`daemon set-password`）、Android 的 EAS 設定、`send_agent_prompt`、設定頁的更新和重啟、外掛主題、終端機連結、/ 選單的專案技能、自訂 Codex provider。
+
+不拿的，依原因：
+
+- 新功能：
+  - `829cc5e17`（#5206，條件式）：providerOptions 新增 `extraArgs`，把任意 Claude Code CLI 旗標（例如 `--chrome`）原樣交給 SDK。這是新能力，不是我們出貨功能的修正；後面拿的 commit 都沒用到它，`d7b7016cc` 上 Claude 的 `extraArgs` 只出現在它自己改的 4 個檔。沒拿它，`providerOptions.extraArgs` 會被 strict 的 `ClaudeProviderOptionsSchema` 拒絕，錯誤指出這個路徑。
+  - `c081e0350`（#5309，Pi 擴充的轉接，48 檔、5773 行）。
+- 放寬 Hub 的權限：`067937bac`（#5302）讓只有 `hub.execute` 的連線也能用 `workspace.title.set` 改工作區標題（原本要 `workspace.manage`）。Hub 仍是上游經營的服務（第 12 節），我們不擴大它的權限。這跟第 20 節的 LLM 自動命名無關。
+- 本地語音（第 2 節已拿掉）：`05bfffad4`（#5281）。
+- 外觀：`d7b7016cc`（#5459，設定頁的導覽和控制項改版，36 檔）。
+- 網站：`373da7069`（#5297）。
+- 發版與版本號：`c67b7158b`（0.9.2）；更新紀錄：`91dc92733`。
+- lock 簽章／Nix hash：`ea7a74185`、`e2de6df2e`。
+
+延後，要 owner 決定：
+
+- `c906c2f4a`（#5198）：OpenCode v2，並自動選版本。45 檔、5199 行。
+- `e1c769c01`（#5393）：有密碼的 daemon 在本機和遠端連線都能用。77 檔、2800 行，動到連線和 relay（第 11 節）。
+
+審查後補拿（9/27 的獨立審查之後，接在上面的帳本 commit 後面）：
+
+- `513f2a9ea`（#5411）：清單把它當成新能力，其實是修正。一般 ACP Agent 在 `session/new` 之後才用 `available_commands_update` 送出斜線指令，新 Agent 的 / 選單一建立就問，所以永遠是空的（Closes #4759）；改成預設等第一批指令，沿用既有的逾時。我們出貨 ACP provider 目錄。同一個 commit 讓 `mcp-server.test.ts` 用到真實儲存的 3 個測試先 flush AgentManager 和 AgentStorage 再刪暫存資料夾，其中 2 個是我們拿的 `5c9f767d5`、`8cd989529` 加的；不 flush 的話，在 Linux CI（我們唯一的 CI）上會偶發 `ENOTEMPTY`。
+- `e68553f75`（#5392）：清單把它當成新能力，其實是 `run` 的錯誤修正（Closes #5313）。shell 帶著別台 daemon 的 `PASEO_AGENT_ID` 時，`run --host`／`--home` 會被拒絕（Caller agent not found）。在官方 Paseo 的 Agent 終端機裡跑 `woowtech-smart run` 就是這個情況（第 5 節）。只改 CLI 的 `run.ts`：先問目標 daemon 有沒有這個 Agent，沒有就當頂層 Agent 跑。環境變數照第 12 節不改名，沒有新的訊息文字。
+- `f9fb992dc`（#4776，第一批的範圍）：第一批當成只有 Windows。它讓外掛的建置指令改走 `spawnProcess`，而 `spawnProcess` 在每個平台都用 `createExternalCommandProcessEnv` 清掉 daemon 的控制變數。桌面版用 `ELECTRON_RUN_AS_NODE=1` 起 daemon，外掛編譯時也會暫設 `ESBUILD_BINARY_PATH`，以前這些都會傳進外掛的建置指令。在這台 Mac 實測同一個建置指令：拿之前 `ELECTRON_RUN_AS_NODE`、`ESBUILD_BINARY_PATH`、`PASEO_SUPERVISED`、`PASEO_NODE_ENV` 都傳進去，拿之後都沒有，一般的變數照樣在。
+- 三個都乾淨套上，跟上游一字不差：`78d8b7398`（`f9fb992dc`）、`477dcfd73`（`e68553f75`）、`5a128efb7`（`513f2a9ea`）。
+- fork 的測試修正：
+  - `cf4e4cfd4`：`explorer-pane-placement.spec.ts`（`c3bcad687`）和 `sidebar-project-name-whitespace.spec.ts`（`a3fc59e81`）用「Paseo ran into a problem.」出現 0 次確認沒有當掉，在 fork 永遠成立。改數我們的標題「woowtech smart ran into a problem.」，寫法跟 `root-error-recovery.spec.ts` 一樣。Playwright 沒在本機跑。
+  - `0cc3bc800`：`daemon-instance.test.ts` 和 `tests/40-daemon-stale-boot-lock.test.ts`（都來自 `faee1cd95`）的假 lock 位址從官方 Paseo 的 `127.0.0.1:6767` 改成沒人聽的 `127.0.0.1:1`。
+- 手機終端機的 webview bundle（fork 的 `301b4e894`）：手機的終端機跑的是 repo 裡預先建好的 `packages/app/src/terminal/webview/terminal-emulator-webview-html.ts`，上次重建是上游的 `863090e0d`（2026-08-19）。上游只在 EAS 的 `eas-build-post-install` 重建它，我們在本機建置，所以 `dc9799f6f` 原本到不了手機。用 `npm run build:terminal-webview --workspace=@getpaseo/app` 重建（esbuild 0.28.1，跟 `863090e0d` 同版），再用 `format:files` 排版：
+  - 內嵌的 HTML 從 1,212,910 字元變成 1,213,076 字元。跟舊的比，只差 `dc9799f6f` 那一段：OSC 8 連結經過 xterm 的 `linkHandler` 交給 `onOpenExternalUrl`，webview 再用 `openExternalUrl` 訊息交給原生端的 `openExternalUrl()`（只放行 http、https 和 mailto）。以前 xterm 會先問一次，再在 webview 裡 `window.open()`。
+  - bundle 的 19 個 esbuild 輸入裡，9 個原始碼（`packages/app` 的 7 個，加上 protocol 的 `terminal-input-mode`、`terminal-snapshot`）從 `863090e0d` 之後只有 `c93cb0053`（`dc9799f6f`）改過，`@xterm` 套件的版本也沒變。所以這次帶進手機的終端機改動只有 OSC 8 這一個。
+  - 本機建置前要先重建，寫在「Mac 開發環境」的注意事項。
+- 測試（跟下面第二批的測試同樣的環境，重的都經過 `heavy.sh`）：
+  - server 6 檔 151 過、2 略過：`generic-acp-agent.commands`（新）2/2、`generic-acp-agent` 2/2、`mcp-server` 121/121、`plugins/preparation`（新）5 過、2 略過（只在 Windows 跑的 `.cmd` 案例）、會跑建置指令的 `plugins/index.posix` 17/17、`daemon-instance` 4/4。
+  - CLI：`run.test.ts` 11/11；`tests/40-daemon-stale-boot-lock` 2/2。
+  - typecheck：server、cli、app 全過。lint：改到的 13 個檔（含重建的 bundle）0 個 warning、0 個 error。`format:check` 整個 repo 4671 檔通過。守門 121/121。
+  - 兩個 Playwright spec 只改了字串，沒在本機跑，留給 CI。
+
+衝突與調整：
+
+- `c3e1e084a`：沒拿 `.github/workflows/ci.yml` 新增的 macOS server 測試 job，和 `scripts/ci-workflow.test.mjs` 對應的一行（第 18 節：`.github/` 不動，CI 只跑 Ubuntu）。其他照上游，commit 訊息有寫。上游用這個 job 在 macOS 上測原生監看，所以這次在這台 Mac 跑了 file-observer 和 Git 觀察的測試（見下面）。
+- `3dc17b7f3`：上游把 `acp-agent.ts` 的 ACP 初始化併成一個 helper，搬動了寫著 `clientInfo` 的那兩行；兩處都留我們的 `woowtech smart`（第 17 節）。第二批的 55 個 pick 和補拿的 `f9fb992dc` 都逐一跟上游比對過增刪的行，除了這裡和上面 `c3e1e084a` 少拿的 CI 設定，其他都跟上游一字不差。
+- `bf4dc22c2`：新的 `PASSWORD_TTY_REQUIRED` 錯誤寫死 `paseo daemon set-password`。`set-password.ts` 在守門的 `printsHints` 清單裡，改用 `CLI_COMMAND`（fork 的 `20c50018f`，1 行）。說明裡的 `PASEO_PASSWORD` 照第 12 節不改。
+- fork 的 `f5ae3f039`：`host-page-translations.test.tsx` 的 reanimated mock 補上 `FadeIn`、`FadeOut`，頁面程式沒改。第一批的 `425157595`（#4925）讓 `toast-host.tsx` 在模組載入時就建立轉場，設定頁經過 `toast-context` 載入它。佐證：把 `8010f71b1` 版的這個測試放成暫存檔在 HEAD 跑，整個檔載入失敗、3 個都沒跑，錯誤是 mock 沒有 `FadeIn`，位置 `toast-host.tsx:56`；`host-page.tsx` 在 `8010f71b1..HEAD` 只改了 1.5 秒逾時，所以 `8010f71b1` 一樣失敗。
+- `e6085c1e9`（條件式）：新的提示只提 `PASEO_PASSWORD`，沒有指令名和產品名。同一個函式原本的「Start with: paseo daemon start …」照第 12 節由 `renderError` 換成 `woowtech-smart`。
+- `e3c853df5`（條件式）：`eas.json` 的 `production` 改成跟我們的 `preview`、`production-apk` 一樣略過 lint（第 1 節）。
+- `dc9799f6f`（條件式）：OSC 8 連結改交給 `onOpenExternalUrl`，也就是我們的 `openExternalUrl`：只放行 http、https 和 mailto，桌面版交給 Electron 的開啟器（第 10 節）。之前 xterm 會自己問一次再 `window.open()`。這個 pick 只改 `terminal-emulator-runtime.ts`，桌面版和網頁版直接用；手機的終端機要等重建 webview bundle 才有，見上面「審查後補拿」。
+- `315803688`（條件式）：只拿掉設定頁讀 daemon 狀態的 1.5 秒逾時。npm 自我更新仍停用（第 4 節）。
+- 繁中：這批沒有新的介面文字或翻譯 key，不用重新產生 zh-TW。
+- lock：`package-lock.json` 沒變。
+- 檢查過沒有帶回原版的東西：品牌和 CLI 名、home、port、官方版共存、技能路徑；推播（FCM、push.woowtech.io、`woowtechPush`、不帶內容的推播、Expo 登記停用）；配對 scheme（沒有新的 `paseo://`）、relay 預設與明確 false；LINE 仍拿掉，官網、客服信箱和通用開啟器的 mailto 不變；工作區自動命名、commit 訊息和 PR 的 AI 生成仍關閉；Claude Agent SDK 仍第一次用到才下載，出貨程式沒有 SDK 的值 import，沒開 `verbatimModuleSyntax`，SDK 仍是 devDependency；沒有本地語音；更新來源不變；`.github/`、`website/` 沒動，版本號都還是 0.8.0。
+- 逐檔比對第二批改到的 128 個檔：第一批之後 fork 自己加的行都還在（只有上面 ACP 那行換了縮排），fork 刪掉的上游行沒有回來。
+- cherry-pick 和 commit 都設 `LEFTHOOK=0`，理由同第一批。
+
+測試（這台 Mac，Node 22，`--maxWorkers=1 --no-file-parallelism`，每個重的指令都經過 `heavy.sh`，一次一個）：
+
+- 環境：`env -i`，PATH 只有 node@22 和系統資料夾（沒有 claude、codex、opencode、pi、gemini），HOME 和 TMPDIR 用暫存資料夾；除了 `tests/35`（見下面）都在 `sandbox-exec` 裡跑，只准連 loopback，擋 6767、6768、6770，也擋讀寫 `~/.woowtech-smart`、`~/.paseo`。
+- typecheck：改到的 4 個 workspace（server、app、cli、desktop）逐一 `npm run typecheck --workspace=…`，全過。
+- format、lint：`npm run format:check` 整個 repo 4669 檔通過；改到的 124 個 ts／tsx／js 檔 `lint` 0 個 warning、0 個 error。
+- 守門 `node --test woowtech/*.test.mjs`：121/121，沒有改任何守門。
+- 挑進來的 commit 新增或改過的測試（Playwright、桌面版 e2e、App 的 browser 模式和要真的 provider 的除外，見最後）：
+  - server 36 檔：Claude（含新的 rewind 錨點測試）、Codex、Cursor、OpenCode、Pi、OMP、ACP、外掛 provider、agent manager、MCP 和 in-process 的 agent-mcp e2e 16 檔 1102/1103；daemon 啟動（`pid-lock`、`daemon-instance`、supervisor 的 logging 和 readiness）、config、排程、上傳、目錄建議、file-observer（含 macOS 的 `native-recursive`）、Git 觀察（含 integration）、git-mutation、owned-subscriptions、外掛生命週期 e2e 和新的 `claude-provider-config-dir-history` e2e 20 檔 339/340。沒過的 2 個見下面。
+  - App 8 檔 242/242（快捷鍵 131、`directory-sync` 28、副本快取 28、時間 28、checkout 狀態 14、問題表單 6、指令查詢 4、`host-page-translations` 3）。
+  - CLI：`lifecycle.e2e.test.ts` 17 過、1 略過（Windows 限定；含這批新加的 2 個），`permit-output` 2/2；`tests/32-daemon-set-password` 4/4（含新的管線輸入）、`tests/40-daemon-stale-boot-lock` 2/2、`tests/41-daemon-auth-command-errors` 2/2，照 `run-all.ts` 的方式用暫存 HOME、不帶 `PASEO_*`。`tests/40` 的假 lock 原本寫官方 Paseo 的 `127.0.0.1:6767`，跑的時候 sandbox 擋了這個埠；審查後改成沒人聽的 `127.0.0.1:1`（見「審查後補拿」）。
+- T1：`missing-workspace-directory-demand` 25/25、`directory-sync/index` 28/28、`host-runtime` 72/72、`sidebar-workspace-list` 3/3、`use-projects` 2/2、`viewed-timeline-sync` 39/39，共 169/169。`directory-sync` 比第一批多 5 個，都是 `d2e2154a8` 新加的。
+- fork 自己的：
+  - server 30 檔 229/229：推播 4 檔、配對 4 檔、relay 5 檔（含 `config-relay`）、工作區自動命名和 Git metadata 關閉 4 檔、daemon 指令訊息、`paseo-home`、config 3 檔、CORS、daemon 設定、bootstrap、supervisor 的 lifecycle、自我更新停用 3 檔和 SDK 載入器。
+  - App 17 檔 105/105：推播（含兩個 Expo config plugin、FCM token、Expo 登記停用）、配對連結、relay 關閉時的配對畫面、主機補名、fork 文案、通知導頁和網址開啟器。
+  - CLI 7 檔 17/17：品牌和 Usage、`daemon pair` 的 App 連結與 relay、配對輸出、App 連結的 daemon 目標、下一步提示。
+- daemon 的啟動、停止和 supervisor（CLI 腳本，照 `run-all.ts` 的方式跑）：`tests/22`、`23`、`24`、`25`、`33`、`34-daemon-status-auth`、`34-daemon-stop-stale-reachable` 全過。`tests/35-daemon-worker-supervisor-disconnect` 用 `/bin/ps` 找 worker，macOS 的 sandbox 不准執行 setuid 的程式，所以在 sandbox 裡失敗；不包 sandbox、其他條件一樣（`env -i`、Node 22、暫存 HOME、系統分配的 port）重跑，2/2。server 端的 `pid-lock`、`daemon-instance` 和 supervisor 的測試在上面。
+- 上面 server 沒過的 2 個都要 PATH 上找得到 `claude` 執行檔，這裡照規定不放真的 claude，不是回歸：
+  - `claude/agent.test.ts` 的「resolves the installed Claude Code version」直接執行 `claude --version`（c9fb31f70 起就有，`resolveClaudeCodeVersion` 在這個範圍沒改）。
+  - 新的 `claude-provider-config-dir-history` e2e 的「an agent's timeline survives a daemon restart」：`extends: "claude"` 的 provider 要找得到 claude 執行檔才算可用（`checkProviderLaunchAvailable` 只找路徑，不執行），否則回 `Provider 'claude-secondary' is not available`。
+  - PATH 最前面放一個假的 `claude`（只回答 `--version`，其他呼叫一律失敗並記錄；跑完記錄是空的）重跑這兩個檔，85/85。
+  - 裝了真的 claude 以後：`claude/agent.test.ts` 在 CI 的 `test:unit` 裡跑，CI 會先 `npm install -g @anthropic-ai/claude-code`。`claude-provider-config-dir-history` 是 `*.e2e.test.ts`，`test:unit` 排除它，`test:integration` 也沒列，CI 不會跑，要手動跑（本機用假的 claude 是 2/2）。
+- 這一批沒有找到回歸，沒有另外的修正 commit。跑過的檔案在 HEAD 沒有剩下的失敗；`8010f71b1` 就壞的只有上面 `f5ae3f039` 修掉的那一個。
+
+留給 CI 和裝置驗證的：
+
+- push 之後手動跑一次 CI 並勾 Playwright（第 18 節）。這台 Mac 只跑了上面的定向測試，還要看：
+  - server 全部的單元測試（包括上面要真的 claude 的 `claude/agent.test.ts`）和 `test:integration`；CLI 的 e2e 分片。
+  - Playwright：`agent-profiles-picker`、`daemon-lifecycle`、`keyboard-chord-modifier-step`、`plugin-theme`、`sidebar-workspace`；桌面版 e2e 的 `keyboard-shortcut-unassign`。
+  - App 的 browser 模式單元測試 `question-form-card.browser.test.tsx`、`terminal-emulator-runtime.browser.test.ts`：要 Playwright 的 Chromium，這台 Mac 沒裝，沒跑。
+- CI 不跑、要手動跑的：`claude-provider-config-dir-history.e2e.test.ts`，在 PATH 上有 claude 的機器上跑（見上面）。
+- 要真的 provider 才能跑、CI 也不跑的：`codex-custom-provider-import.local.e2e`（codex）、`opencode-bridge.local.e2e`（OpenCode）、`pi-rewind.real.e2e`（Pi）。照規定不在這台 Mac 執行真的 provider，沒跑。
+- iOS、Android 正式版實機：多選問題的「其他」答案（`8e858f0e3`）、上傳的檔名（`fbc83613c`）、終端機的 OSC 8 連結（`dc9799f6f`，手機用重建的 webview bundle `301b4e894`；點 http、https、mailto 的連結會開，其他 scheme 不會）、訊息日期（`28507224d`）。Android 的 `production` 建置改了 gradle 指令（`e3c853df5`），下一次 EAS 正式建置時確認。
+- 桌面版：有密碼的 daemon 顯示「在編輯器開啟」（`e07da55f8`）；多鍵、改綁和 Backspace 的快捷鍵（`9a3f3a0dc`、`ec43e9067`、`fbe5005aa`）；主題清單捲動（`a048094da`）；網頁版模型選擇列（`04c3e003f`）；從設定頁更新和重啟 daemon（`315803688`）。
+- daemon：重開機後 PID 被占用（`faee1cd95`）要實際重開機才驗得到；`daemon.log` 寫不進去（`cb9654a65`）；大型 repo 的監看 CPU 和記憶體（`c3e1e084a`、`e998e0a08`、`9978988e3`）。
+- 審查後補拿的：用一般 ACP Agent 開新 Agent，/ 選單要列出它的斜線指令（`513f2a9ea`）；在官方 Paseo 的 Agent 終端機裡跑 `woowtech-smart run`，要建立頂層 Agent，不報「Caller agent not found」（`e68553f75`）；桌面版載入有建置指令的目錄外掛，建置照常成功（`f9fb992dc`）。
+- 延後的 `c906c2f4a`、`e1c769c01` 要 owner 決定。
+- 這個分支沒有 push。`woowtech/integration-0926` 已經前進到 `2a706980b`，從 `ce3dffa70` 起兩邊都改到的只有這個 README；合回去之後重跑守門和 T1 測試。
 
 ## Mac 開發環境
 
@@ -962,6 +1281,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 注意事項：
 
 - 這台 Mac 記憶體只有 8GB。跑重的建置之前，先確認沒有其他 `xcodebuild` 或 Gradle 在跑：`pgrep -x xcodebuild`。
+- 在本機建 iOS 或 Android 之前，先跑 `npm run build:terminal-webview --workspace=@getpaseo/app`，有變動就 commit。手機的終端機跑的是 repo 裡預先建好的 `packages/app/src/terminal/webview/terminal-emulator-webview-html.ts`，上游只在 EAS 的 `eas-build-post-install` 重建它；本機的 prebuild、`xcodebuild` 和 `build-android.sh` 都不會重建，`src/terminal/` 的改動就不會進手機。
 - Android 建置需要 JDK 17（Homebrew `openjdk@17`）。少了它，Gradle 會改從 GitHub 下載 JDK，而且會卡住但不報錯。
 - 內部磁碟不夠時，把 Gradle home 放到外接碟 WOOW-BUILD。冷建置光 transforms 就要約 3.7 GB，2026-09-25 驗收時就這樣把內部磁碟寫滿，建置中途停掉。`env.sh` 固定把 `GRADLE_USER_HOME` 指到內部磁碟的共用 gradle-home，所以要用 `WOOW_GRADLE_USER_HOME` 覆寫：
 
@@ -990,6 +1310,56 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- 合併輪驗收（2026-09-27～28，整合分支 `woowtech/integration-0927` 的 `b103338e7`，第 16、20 節與「上游同步紀錄」）：main `a6d169ee3` 之後 126 個 commit，三條線一起驗。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0927-*`（`integ0927-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0927-*`。
+  - 三條線：T1 通知路由（第 16 節），含 directory-sync 的 race 修正、三輪審查和 S3 open-intent 修正 `885ee8790`；metadata 政策（第 20 節），commit 與 PR 的 AI 產生關閉，守門另外抓複合、反射、解構和參數預設值的覆寫；挑選式上游同步 `836f1a9..d7b7016cc`，95 個 `cherry-pick -x`、`d8dd189b9` 的部分移植和 11 個 fork commit。合併 `24d70ea89` 沒有衝突，`b103338e7` 刪掉 #5079 合進來後照預期變紅的 T1 標籤見證。跟 main 比 464 檔、+24550／−4822，沒有二進位檔，`.github/` 沒動，金鑰掃描 0 筆。
+  - 本機（`integ0927-merge.md`，`env -i`、只准連 loopback 的 sandbox）：守門 122/122；typecheck app、server、cli、desktop 各一次，commit hook 的 11 個 workspace 也過；App 38 檔 445/445（T1 203、路由 119、fork 推播／配對／relay／metadata 123）；server 33 檔 537/537；protocol 180/180；CLI 15/15；`format:check` 4675 檔、lint 401 檔 0 個 warning、0 個 error。
+  - CI（`integ0927-ci.md`）：[run 36313608117](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36313608117) 是第 5 次，手動、不勾 Playwright，commit `b103338e7`，成功，總時長 37 分 57 秒。有執行的 12 個 job 都過，最久的是 desktop-tests（ubuntu）37 分 32 秒和 server-tests（ubuntu）15 分 11 秒。Windows 兩個（沒開 `vars.WOOWTECH_CI_WINDOWS`）和 Playwright 四片照設計略過，不算通過。12 則 annotation 都是 Node.js 20 淘汰警告。
+  - 平台矩陣（逐項結果表在各步驟紀錄的最後，「未測」都寫了原因）：
+    - Android 模擬器（`integ0927-android.md`）：原生沒變，沿用 main `1f4b2b00f` 的 Debug APK，JS 從這個分支的 Metro 載入。通過：官網連結、繁中用語、配對連結的主機名稱、確認框的「取消」、commit「Update files」與命名關閉；T1 的 S1 三次、S2、S3 兩次加側欄切換、S4、S5（S1 仍閃 0.61–0.78 秒「工作區不可用」）；推播經 push.woowtech.io 和 FCM 真的送到模擬器，換成 English 後只收到 1 則英文通知；Claude 授權推播（1 個 Haiku 回合），通知只有「需要你的授權／點一下查看要求。」；release 建置（`assembleRelease`、debug 簽章）冷啟動點通知開到被推的 agent，沒有 dev launcher；daemon 啟動韌性 3 項（空 pid、非排程檔、BOM）。不通過：OSC 8 連結。未測：PR（要 GitHub 與 gh）、多選問題的「其他」、舊 PID 與 `daemon.log` 寫不進去（桌面版、iOS 驗了）。
+    - iOS 模擬器（`integ0927-ios.md`）：Debug 重建，xcodebuild 16 分 02 秒。通過：官網連結、繁中用語、Expo 登記停用（4 次啟動都沒有「Failed to turn off Expo push registration」，exp.host 0 次）、配對連結的主機名稱、確認框的「取消」、commit「Update files」、daemon 啟動韌性 5 項；T1 的背景新工作區兩次（閃 0.33、0.32 秒「工作區不可用」）、同一連線的第二個新工作區、已知工作區、重裝後、S3 加側欄切換、冷啟動；英文主畫面名稱：標籤取 CFBundleDisplayName，正式版的「woowtech smart」完整顯示，Debug 的「woowtechsmart…」是截斷時拿掉空格。不通過：OSC 8 連結。未測：真的推播（模擬器拿不到 APNs／FCM token，T1 用 `simctl push` 只驗點擊導頁）、PR、多選問題的「其他」、上週日期（模擬器時鐘跟 Mac 走）。
+    - Mac 桌面版（`integ0927-desktop.md`）：從這個分支重新打包，未簽章、`--dir`、arm64。通過：靜態檢查（沒有 relay.paseo.sh、名稱、bundle id、URL scheme、SDK 不在 app.asar）、新 home 的 relay 開啟、官網連結、繁中用語、確認框的「取消」、通知標題（繁中與 English）、命名不呼叫 provider、commit「Update files」、配對 QR、快捷鍵 3/3、daemon 啟動韌性 5/5（含舊 PID、`daemon.log` 寫不進去）、ACP 的 / 選單（`513f2a9ea`）、`e68553f75`。不通過：OSC 8 連結。測試通知只出現「通知顯示失敗」那一態：未簽章的版本 macOS 不詢問就拒絕通知授權。未測：PR、上週日期、封存與恢復、多選問題的「其他」。
+    - 上傳的原檔名（`fbc83613c`）三個平台都通過；訊息日期（`28507224d`）只在 Android 驗過。
+  - 審查與合併前守門（`integ0927-review.md`、`integ0927-gate.md`）：blocker 0，結論 go。不通過的只有 OSC 8（`dc9799f6f`，三個平台都點不開，純文字網址正常）。app.asar 沒有 undici 是測試預期不符：代理下載的修正在 pi 的分支，還沒合進來。
+  - 發現、還沒修：Android 的檔案挑選器開超過約 50 秒再選檔，附件上傳失敗後無聲消失；本機 `assembleRelease` 不略過 lint 會失敗，因為 prebuild 把 iOS 的 CFBundleDisplayName、CFBundleName 寫進 Android 的中文資源（eas.json 都略過 lint）；繁中畫面還有英文：主機狀態「Online」、「工作區不可用」畫面的內文、「just now」、桌面版的「計畫」頁。
+  - 要實機或正式簽章才驗得到的：iOS 真的 APNs／FCM token 登記、推播送達、第二次啟動重新登記、TestFlight 的 production APNs；iOS 正式版冷啟動（Debug 點通知冷啟動，啟動畫面之後約 3.5 秒全白）；Android 正式簽章版（EAS `production`，`e3c853df5` 改過 gradle 指令）在實機上的推播與點擊，這輪的 release 建置用 debug 簽章；兩個平台用相機掃配對 QR Code；桌面版 Developer ID 簽章與公證後的通知授權、橫幅、點擊（另外兩種測試通知結果和「需要你的注意」）與自動更新。不綁實機、還沒做的：CI 手動勾 Playwright 完整跑一次；真的重開機後的舊 PID（這輪是模擬的）。
+  - 「接下來」的 T1 S3 Android 重驗就是上面 Android 的 S2、S3、側欄切換、S1、S5，已從清單拿掉。
+
+- T1 S3 修正（2026-09-27，整合分支 `woowtech/integration-0926`，第 16 節 T1 S3）：
+  - 紅：新測試的路由先照上游的讀法（合併的 params），7 個裡 3 紅、原因跟裝置一樣：S3 的工作區收到通知的 agent 之後又收到 S2 的 agent（pin 在後，等於聚焦它）；換到別的工作區收到 S2 的 agent，回到 S2 的工作區又收到一次；從 Open Project 點的 terminal 換工作區時跟過去。S2 和見證綠，見證的主機路由 params 跟 `logs/ultra-device-s3b.txt` 的 navstate 一樣。守門對上游的 `index.tsx` 紅在「must not read useGlobalSearchParams」。
+  - 綠：`index.tsx` 改讀自己的 params、路由讀法跟著改之後，新測試 7/7、守門 1/1。
+  - 突變（都照備份還原，`shasum` 相同）：只把 `index.tsx` 改回上游，守門紅、新測試 7/7（它不讀 `index.tsx`）；`index.tsx` 和測試的路由讀法一起改回合併的 params，守門紅、新測試 3 紅（同紅燈）；reader 丟掉所有意圖，新測試 4 紅（reader、S1、S2、terminal）。
+  - 逐檔跑：新測試 7/7；既有的 11 個檔 239/239（`workspace-route-navigation`、`host-runtime-bootstrap`、`workspace-deck-retention`、`host-routes`、`notification-routing`、`notification-routing.woowtech-push`、導覽 store 的 `navigation`、`navigate-to-agent/resolve`、T1 的 `missing-workspace-directory-demand`、`directory-sync`、`host-runtime`）；`node --test woowtech/*.test.mjs` 122/122；App 的 typecheck、format（含 `format:check`）、lint 通過。沒跑 build、全套測試、裝置或模擬器，也沒有 fetch 上游。紀錄在 `/Users/elmolin/.local/share/woowtech-smart/logs/t1-s3-open-intent.md`。
+
+- T1 審查修正第 3 輪（2026-09-27，整合分支 `woowtech/integration-0926`，第 14、16、20 節）：
+  - 非 race 路徑：審查的突變「`releaseSubscriptions()` 不清已滿足記號」（上游的行）讓原本的 T1 25/25 照綠。新增三個案例：owner 在自己的 refresh 結束後才釋放、同一個連線再開第二個缺工作區路由（標籤關、開各一），以及已刪除或封存的工作區離開再回來。HEAD 綠；這個突變只紅這三個（工作區請求停在 1 次），其餘 27 綠。
+  - 上游缺口的見證：假主機加上延後 agent 清單；agents、workspaces 的回覆改成只有帶 subscribe 的請求才開訂閱，跟真的 daemon 一樣（原本 plain fetch 也配訂閱 ID，「沒有 demand 就不訂閱」的修法會被算成剩 2 條，孤兒見證抓不到）。兩個見證都斷言現況，沒用 `it.fails`，因為它遇到任何失敗都算通過。套上 #5079 那一行（`connectionChanged` 裡的 `connectWorkspaceLabels()`）只紅標籤見證；讓 `fetchAgents`、`fetchWorkspaceSnapshot` 沒有 demand 時不訂閱，只紅孤兒見證（剩 0 條）。拿掉 fork 修法（main 的 `index.ts`）時 30 個裡 9 紅：原本 8 個加標籤見證。
+  - 合併上游：merge-base `836f1a9c2`，`index.ts` 跟 upstream/main `d7b7016cc`（含 #5394）用 `git merge-file` 合併 0 衝突，fork 的 5 個 `woowtech smart:` 註解都在。用審查建好的 `d7b7016cc` 合併樹（跟 HEAD 不同、沒有衝突的 App 檔 254 個，T1 載入其中 47 個）跑新的 T1：29/30，只有標籤見證紅，符合設計。
+  - `git-metadata.test.mjs`：用守門自己的 `policyOverrides()` 探測，兩種解構預設值、改名的解構、參數預設值都沒被標出。先加進應標出的清單（紅），再補解構和參數預設值的規則；另加兩個不應標出的寫法（沒有預設值的解構和參數）。5 個突變（拿掉規則、不看預設值、只看 name、只看 propertyName、不含參數）都紅在第 4 項，identity 綠，production 掃描仍是 []。
+  - 不改的：archive／detach 只刪 `cancelLabel` 那一行時，上游的 `archive-subagent.test.ts` 4 紅、`detach-subagent.test.ts` 2 紅，理由寫進第 14 節。
+  - 逐檔跑 T1 30/30（連跑 3 次，shuffle seed 11、4242 各一次）、`node --test woowtech/*.test.mjs` 121/121，format（含 `format:check`）、lint 通過。沒跑 build、commit hook 以外的 typecheck、全套測試、裝置或模擬器，也沒有 fetch 上游。紀錄在 `/Users/elmolin/.local/share/woowtech-smart/logs/ultra-fix-round-3.md`。
+
+- T1 審查修正第 2 輪（2026-09-27，整合分支 `woowtech/integration-0926`，第 16 節 T1、第 20 節）：
+  - 合併上游的模擬範圍：用 `git merge-tree` 把 HEAD 分別和 upstream-main（`d6861f81e`）、upstream/main（當時是 `bbf8cce3f`；2026-09-27 11:43 fetch 後前進到 `d7b7016cc`，見第 3 輪）合併，`packages/app/src` 底下跟 HEAD 不同、沒有衝突的檔（192／202 個）在 scratch 用 vitest 的 resolve 蓋上去，T1 實際載入其中 38 個。原本的 agent tab 案例在兩棵合併樹都是 23/24，卡在等訂閱歸零（上游 #5040）。改用 `timeline.dispose()` 後，HEAD 和兩棵合併樹都 24/24；三棵拿掉 fork 修法的樹（HEAD 和兩棵合併樹）都是同樣 7 紅，這個案例紅在 race 斷言。「遞增搬到 `setDemand`」突變在 HEAD 和合併樹各紅這一個案例。
+  - 失敗後有 owner 加入就重試：新案例「hook 持有時 refresh 失敗，開側欄會重試」先紅（工作區請求停在 1 次），`setDemand` 加上 else 分支後 25/25。拿掉分支、改成釋放時才 refresh 兩個突變都紅這個案例；不看連線狀態的寫法 25/25（在線時等價）。兩棵合併樹 25/25；拿掉 fork 修法的 HEAD 和兩棵合併樹都是 8 紅（原本 7 個加這個）。用 `git merge-file` 合出的 `index.ts` 跑上游版 directory-sync 23/23、host runtime 72/72；HEAD 的 directory-sync 18/18、host runtime 72/72、側欄清單 3/3、`use-projects` 2/2。審查的 fuzz（真實 HostRuntimeStore 上的隨機交錯）1000 個 seed，以及加上失敗注入和專案清單的 1000 個 seed 都綠，單一序列最多 6 次工作區請求（改前 5 次，上限 22 次）。守門第 4 項：拿掉分支、改成只讀 cache、條件不看 `demanded` 三個突變都紅；寫成獨立的 if、不看連線狀態兩種等價寫法照綠；「釋放時才 refresh」守門抓不到，由 vitest 抓。
+  - 接線：畫面傳給 hook 的 descriptor-presence 從 `workspaceDescriptor !== null` 改成 `Boolean(workspaceDescriptor)`。改之前，把 `selectWorkspace` 缺工作區時的回傳改成 `undefined` 的突變讓 `selectors.test.ts` 19/19、T1 25/25 都綠，hook 卻永遠不會 acquire；看真值之後就不再依賴 `null`。守門先改期待值（紅），再改畫面（綠）；改回 `!== null`、改成 `!== undefined`、`!!`（等價但字面不同）、固定 `false` 四個突變都紅在第 1 項。hook 自己的 `useEffect` 前加 early return，第 1 輪的守門 3/3 綠；第 2 項補上後，early return、包進 if 區塊、`&&`、try、callback 五個突變都紅，effect 之後的 return 照綠。這個守門的突變連同第 4 項共 20 個，全部符合預期。
+  - `git-metadata.test.mjs`：用守門自己的 `policyOverrides()` 探測，`??=`、`||=`、`&&=`、別的物件的 `x.name ?? <fork policy>`、`defineProperty`、`Reflect.set`、computed key、class field、getter 12 種寫法原本都不會被標出。先把其中 9 種，連同本來就會標出、用來守去重的字串鍵，加進應標出的清單（紅），再補規則：複合賦值一律標出、例外只限 `=` 且來源是 `options.<同名>`、字串寫出的 policy 名稱也算（`x["name"]` 的讀取不算）、getter 和有值的 class field 也算，另加 4 個不應標出的寫法（interface 成員、沒有值的 class field、呼叫、用中括號讀）。production 掃描仍是 []，探測的 17 種寫法全部符合預期。守門自身的 9 個突變（只看 `=`、例外不限運算子、例外不限 `options`、拿掉 getter、拿掉 class field、沒有值的 field 也標、拿掉字串規則、中括號讀取也標、拿掉去重）都紅在第 4 項，identity 綠。
+  - 上游既有的兩個缺口（第 16 節 T1 新增的兩點）用審查的 race 測試在現行 HEAD 重跑確認：descriptor 先到時，開側欄後標籤請求 0 次、狀態 none，pull-to-refresh 後才 online，agent 清單先到的順序正常；同一個 tick 內 acquire 再 release 三輪，每輪都剩 agents、workspaces 訂閱各一條、events 0，下一個 demand 會換掉，全部釋放後歸 0。只記在 README，不改程式。
+  - 逐檔跑 T1 25/25（連跑 3 次，另用兩個 shuffle seed）、directory-sync 18/18、host runtime 72/72、側欄清單 3/3、`use-projects` 2/2，`node --test woowtech/*.test.mjs` 121/121，format（含 `format:check`）、lint 通過。全 glob 有一次在 `coexistence.test.mjs` 出現 node test runner 的「Unable to deserialize cloned data」，單跑 7/7，重跑全 glob 121/121。沒跑 build、commit hook 以外的 typecheck、全套測試、裝置或模擬器。紀錄在 `/Users/elmolin/.local/share/woowtech-smart/logs/ultra-fix-round-2.md`。
+
+- T1 審查修正第 1 輪（2026-09-27，整合分支 `woowtech/integration-0926`，第 16、17、18、20 節）：
+  - 合併上游後的同步點：把 HEAD 和 upstream-main 合併出的 `directory-sync/index.ts`、`agent-replica.ts`、`workspace-labels/index.ts` 在 scratch 用 vitest 的 resolve 蓋上去，原測試 19/22，3 個紅都在「標籤請求數到 1」之後（#5079 讓連線時先要一次標籤）。同步點改成 `heldLabelRequests()` 後，現行 HEAD 和這個三檔合併版都 24/24；兩邊拿掉 fork 修法都是同樣 7 紅。這只模擬了三個檔，沒有包含上游 #5040；整個 App 的合併結果是 23/24，更正見第 2 輪。
+  - 新增兩個案例：從缺工作區 A 切到 B、A 的釋放讓 refresh 失敗；agent tab 是最後離開的 demand。「只在成功時再 refresh」和「遞增搬到 `setDemand`」兩個突變原本 22/22，現在各紅對應的一個。審查的 13 個 directory-sync 突變全部被抓，identity 對照 24/24。
+  - 守門：`workspace-directory-demand.test.mjs` 加 directory-sync 修法的原始碼守門，21 個變體都符合預期：14 個應紅的都紅在新項目、訊息對得上；合併上游版、`++`、條件寫成一行等 5 個應綠；「多一個檢查前的清除」和「只在成功時再 refresh」刻意交給 vitest。`git-metadata.test.mjs` 補簡寫屬性和成員賦值；照字面加成員賦值會把 production `workspace-auto-name.ts` 的建構子接線當成違規，所以只放行 `x.name = options.name ?? <fork policy>`，6 個突變都紅。這一輪的例外其實只比對成員名稱（任何物件的同名成員都放行），也沒檢查 `??=` 這類複合賦值，第 2 輪修正。
+  - 逐檔跑 T1 24/24（連跑 3 次）、directory-sync 18/18、`node --test woowtech/*.test.mjs` 120/120，format、lint 通過。`index.ts` 只改註解，沒重跑 host runtime 和側欄。沒跑 build、commit hook 以外的 typecheck、全套測試、裝置或模擬器。紀錄在 `/Users/elmolin/.local/share/woowtech-smart/logs/ultra-fix-round-1.md`。
+
+- T1 race 修正（2026-09-27，整合分支 `woowtech/integration-0926`，第 16 節 T1）：`missing-workspace-directory-demand.test.ts` 新增 8 個案例。先紅的五個：唯一 demand 在 refresh 等標籤時離開後，側欄、第二則通知路由和上游的側欄重開都停在 1 次請求、拿不到新工作區；tab 的 route demand 加入那次 refresh 後剩 0 條訂閱、沒有再 refresh；pull-to-refresh 失敗後 route demand 不 refresh。改 `directory-sync/index.ts` 後 22/22。首次失敗不自己重試、已刪除工作區每個連線一次、訂閱逾時（fake timers 推 60 秒，client 斷線）重連一次，這三個到場就綠，用突變確認會失敗；假主機超過 10 次工作區請求就不回，refresh 迴圈會變成斷言失敗而不是卡住（原本 60 秒被強殺）。offline 案例改成直接斷言請求數：require-online 突變原本 5 秒 timeout，改後 1.1 秒「expected +0 to be 1」。接線守門：舊版放過 if 區塊和 early return，新版對拔掉、if 區塊、單行 if、&&、?:、early return 六種都紅。revert 整個修法或其中任一段、cleanup 不釋放、effect 不回 cleanup、有 descriptor 仍持有、取得後立刻釋放、失敗也記滿足、兩種迴圈，全部 exit 1，每次用 sha256 確認改回原檔。逐檔跑 directory-sync（18、10、5、7）、host runtime 72、timeline replica 14、sidebar（3、3、40）、route（7、10、8）、notification routing（10、4）和 `node --test woowtech/*.test.mjs` 119/119 都綠，format、lint 通過。沒跑 build、commit hook 以外的 typecheck、全套測試、裝置或模擬器；Android 修後驗收仍待排。紀錄與原始 log 在 `/Users/elmolin/.local/share/woowtech-smart/logs/ultra-t1fix.md`。
+
+- C-022 修正與盤點 checkpoint（2026-09-26）：Session 的 ON prompt 測試與通知回饋舊期待先紅後綠；PR 空 body 先以精確期待驗紅，再由真實 CheckoutSession／本機 bare remote／typed forge port 驗綠，手填與部分手填不變。專案設定停用文案與台灣用詞同步守門。已逐檔、單 worker 驗過 15 個 server 檔（509 passed、4 個既有 skip）及 3 個 App 檔（39 passed）；7 個突變均被攔截並還原。較廣的 import／process 可達候選不代表實際走 gate；隔離 loopback／臨時 daemon 與外部 forge／真 provider／Playwright 分開列未執行，不宣稱候選全部綠。清單、原始 log 與限制見 `/Users/elmolin/.local/share/woowtech-smart/coord/reports/C22-test-inventory.md`、`C22-implementation.md`。未跑 build/typecheck、整 workspace suite、外部 API、裝置或程序管理；測試沒有新增 auth skip。
+
+- C-017 review a–g（2026-09-26）：移除 sibling src 型別引用、去除通知描述重複首句、只提高 host-label 首例上限、搬移 F5 OFF/positive-control 到 fork 測試、補 production caller AST 守門、用最新翻譯 ref 維持通知 callback 身分、補子 Agent Cancel 與通用 Confirm 預設。a/b/c/d/f/g 先有預期紅燈；e 注入異地 alias caller 驗紅後刪除，另驗 namespace／間接引用等案例。20 個定向突變均 exit 1 且已還原；還原後 App 定向 51/51、server 3/3、相關 node 守門 14/14，format/lint 通過。上游命名測試相對 `836f1a9` 只多一行 ON 注入。c 的紅燈是 timeout 契約守門，不以 sleep 模擬負載；f 的訂閱穩定性由 source guard 檢查，語言內容另有行為測試。未跑 build/typecheck、完整套件、GUI、裝置或外部服務；h 的 probe wrapper 搬移未做，不影響 a–g。完整命令與原始證據在 `/Users/elmolin/.local/share/woowtech-smart/coord/reports/C17-review-implementation.md`。
+
+- F8-min 停用 commit／PR AI 產生（2026-09-26）：server 先紅，確認預設路徑仍讀 diff、列舉 provider；接 gate 後 fork 行為 11/11、上游 ON 行為 6/6。App copy 先紅後綠 8/8；相關 node 守門 6/6。分別移除 commit gate、移除 PR gate、policy 改 ON、factory 繞過預設 policy，行為測試與守門均 exit 1；production 注入 ON 的突變由接點守門抓到。還原後同組測試全綠。`npm run format:files`、定向 `npm run lint` 與 `git diff --check` 通過；依 C-017 資源限制未跑 build/typecheck、全套測試、裝置／模擬器、真實 provider 或外部 forge。原始紀錄與限制見 `/Users/elmolin/.local/share/woowtech-smart/coord/reports/F8-min-implementation.md`；本切片不含 C-017 第 2 項或 T1。
 
 - F5-min 停用工作區自動命名（2026-09-26）：先紅確認 directory/worktree 仍排程，接入預設 OFF policy 後真實 service 測試 3/3；OFF 的 scheduler、generator、snapshot、instructions、structured generation、設定讀取與命名寫入全部零呼叫，另用明確 enabled 的測試 policy 驗證觀測 ports 能收到呼叫。上游 session 定向 7/7、MCP 定向 5/5，保留原斷言與手動 title 行為；fork 守門 3/3。拿掉 gate、policy 預設開啟、constructor 繞過預設 policy 三個突變都讓 service 與守門 exit 1，還原後 3/3、3/3。實作階段未跑完整套件、build、真實 provider 或網路測試；提交另由既有 hook 執行完整 typecheck。
 

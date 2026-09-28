@@ -1393,14 +1393,17 @@ async function setOpenChangesPresentation(
   }
 }
 
+/** Holds every font load in the document until released; later loads pass through. */
 async function holdBrowserFontLoads(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const fontSet = document.fonts;
     const originalLoad = fontSet.load.bind(fontSet);
     const pending: Array<() => void> = [];
+    let released = false;
     Object.defineProperty(fontSet, "load", {
       configurable: true,
       value(font: string, text?: string) {
+        if (released) return originalLoad(font, text);
         return new Promise<FontFace[]>((resolve, reject) => {
           pending.push(() => {
             originalLoad(font, text).then(resolve, reject);
@@ -1410,6 +1413,7 @@ async function holdBrowserFontLoads(page: Page): Promise<void> {
     });
     Object.assign(window, {
       __releasePaseoDiffFontLoads() {
+        released = true;
         for (const release of pending.splice(0)) release();
       },
     });

@@ -1,6 +1,7 @@
 import { useRef, ReactNode, useCallback, useEffect } from "react";
 import { Buffer } from "buffer";
 import { AppState } from "react-native";
+import { observeOpenWorkspaceAgentIds } from "@/stores/workspace-layout-store";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useClientActivity } from "@/hooks/use-client-activity";
@@ -50,7 +51,6 @@ import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
 import { applyCheckoutStatusUpdateFromEvent } from "@/git/checkout-status-cache";
 import { useProviderSubagentStore } from "@/subagents/provider-store";
-import { revalidateSessionAfterResume } from "@/contexts/session-resume-revalidation";
 
 // Re-export types from session-store and draft-store for backward compatibility
 export type { DraftInput } from "@/stores/draft-store";
@@ -208,6 +208,8 @@ export function SessionProvider(props: SessionProviderProps) {
 
 function SessionProviderInternal({ children, serverId, client }: SessionProviderClientProps) {
   const { t } = useTranslation();
+  const notificationTranslationRef = useRef(t);
+  notificationTranslationRef.current = t;
   const voiceRuntime = useVoiceRuntimeOptional();
   const voiceAudioEngine = useVoiceAudioEngineOptional();
   const queryClient = useQueryClient();
@@ -220,7 +222,6 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
   const setAgentStreamHead = useSessionStore((state) => state.setAgentStreamHead);
   const clearAgentStreamHead = useSessionStore((state) => state.clearAgentStreamHead);
   const setInitializingAgents = useSessionStore((state) => state.setInitializingAgents);
-  const bumpHistorySyncGeneration = useSessionStore((state) => state.bumpHistorySyncGeneration);
   const setAgents = useSessionStore((state) => state.setAgents);
   const flushAgentLastActivity = useSessionStore((state) => state.flushAgentLastActivity);
   const setPendingPermissions = useSessionStore((state) => state.setPendingPermissions);
@@ -257,23 +258,11 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     viewedTimelineSyncRef.current?.setActive(isAppVisible);
   }, [isAppVisible]);
 
-  const handleAppResumed = useCallback(
-    (awayMs: number) => {
-      void revalidateSessionAfterResume({
-        awayMs,
-        serverId,
-        bumpHistorySyncGeneration,
-      });
-    },
-    [bumpHistorySyncGeneration, serverId],
-  );
-
   // Client activity tracking (heartbeat, push token registration)
   useClientActivity({
     client,
     focusedAgentId,
     focusedTerminalId,
-    onAppResumed: handleAppResumed,
   });
   useEffect(() => startPushNotifications({ client, serverId }), [client, serverId]);
 
@@ -324,10 +313,14 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       }
 
       void sendOsNotification(
-        localizeAgentNotification({ notification, reason: params.reason, t }),
+        localizeAgentNotification({
+          notification,
+          reason: params.reason,
+          t: notificationTranslationRef.current,
+        }),
       );
     },
-    [serverId, t],
+    [serverId],
   );
 
   useEffect(() => {
@@ -509,8 +502,12 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
     viewedTimelineSyncRef.current = sync;
     setViewedTimelineSync(serverId, sync);
     sync.setActive(getIsAppVisible(appStateRef.current));
+    const stopObservingOpenChats = observeOpenWorkspaceAgentIds(serverId, (agentIds) =>
+      sync.replaceOpenTabAgentIds(agentIds),
+    );
 
     return () => {
+      stopObservingOpenChats();
       if (viewedTimelineSyncRef.current === sync) {
         viewedTimelineSyncRef.current = null;
       }

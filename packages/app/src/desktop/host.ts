@@ -1,5 +1,4 @@
 import { Platform } from "react-native";
-import type { NotificationDeliveryResult } from "../../../desktop/src/features/woowtech-notification-delivery";
 import { getElectronHost } from "@/desktop/electron/host";
 import type { BrowserKeyboardPolicy } from "@/desktop/browser/shortcuts";
 import type { SessionInboundMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
@@ -13,7 +12,7 @@ type BrowserAutomationExecuteResponse = Extract<
   { type: "browser.automation.execute.response" }
 >;
 
-export type { NotificationDeliveryResult };
+export type NotificationDeliveryResult = "shown" | "failed" | "unconfirmed";
 
 export type DesktopNotificationPermission = "granted" | "denied" | "default";
 export type DesktopWindowChromeMode = "native-mac" | "custom-windows" | "custom-linux";

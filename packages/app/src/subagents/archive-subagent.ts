@@ -1,3 +1,4 @@
+import { i18n } from "@/i18n/i18next";
 import type { Agent } from "@/stores/session-store";
 import type { ConfirmDialogInput } from "@/utils/confirm-dialog";
 
@@ -32,7 +33,7 @@ export function resolveArchiveSubagentDialog(
       ? `${subagentLabel} is still running. Archiving it will stop the subagent and remove it from the track.`
       : `Remove ${subagentLabel} from the track. The subagent will be archived.`,
     confirmLabel: "Archive",
-    cancelLabel: "Cancel",
+    cancelLabel: i18n.t("common.actions.cancel"),
     destructive: true,
   };
 }

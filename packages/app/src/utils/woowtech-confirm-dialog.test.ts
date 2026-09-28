@@ -34,20 +34,23 @@ afterEach(async () => {
   await i18n.changeLanguage("en");
 });
 
-describe("woowtech confirm dialog Cancel default", () => {
-  it("preserves caller overrides including an explicitly empty Cancel label", async () => {
+describe("woowtech confirm dialog button defaults", () => {
+  it("preserves both caller overrides including explicitly empty labels", async () => {
     await i18n.changeLanguage("zh-TW");
     const fake = dialogPort(false);
     for (const cancelLabel of ["Keep my custom label", ""]) {
-      expect(await confirmDialog({ ...input, cancelLabel }, fake.ports)).toBe(false);
+      expect(
+        await confirmDialog({ ...input, confirmLabel: cancelLabel, cancelLabel }, fake.ports),
+      ).toBe(false);
     }
+    expect(fake.calls.map((call) => call.options?.okLabel)).toEqual(["Keep my custom label", ""]);
     expect(fake.calls.map((call) => call.options?.cancelLabel)).toEqual([
       "Keep my custom label",
       "",
     ]);
   });
 
-  it("resolves Cancel at call time after changing language without changing Confirm", async () => {
+  it("resolves both defaults at call time after changing language", async () => {
     const fake = dialogPort(true);
     const untranslatedInput = { title: "User title", message: "User message" };
     await i18n.changeLanguage("zh-TW");
@@ -57,7 +60,7 @@ describe("woowtech confirm dialog Cancel default", () => {
     expect(fake.calls).toEqual([
       {
         message: "User message",
-        options: { title: "User title", okLabel: "Confirm", cancelLabel: "取消", kind: "info" },
+        options: { title: "User title", okLabel: "確認", cancelLabel: "取消", kind: "info" },
       },
       {
         message: "User message",

@@ -163,7 +163,7 @@ test("Host UI terminology is 主機 while Agent and technical strings are preser
   }
 });
 
-test("confirm dialog keeps the shared localized Cancel default and caller override", () => {
+test("confirm dialog and subagent actions keep localized defaults and caller overrides", () => {
   const source = readFileSync(
     new URL("../packages/app/src/utils/confirm-dialog.ts", import.meta.url),
     "utf8",
@@ -171,5 +171,16 @@ test("confirm dialog keeps the shared localized Cancel default and caller overri
   assert.match(source, /cancelLabel: input.cancelLabel \?\? i18n.t\("common.actions.cancel"\)/);
   assert.equal((source.match(/resolveButtonLabels\(input\)/g) ?? []).length, 2);
   assert.match(source, /ports: ConfirmDialogPorts = \{ getDesktopHost \}/);
+  assert.match(
+    source,
+    /confirmLabel: input.confirmLabel \?\? i18n.t\("woowtech.confirmDialog.confirm"\)/,
+  );
+  for (const file of ["archive-subagent", "detach-subagent"]) {
+    const subagent = readFileSync(
+      new URL(`../packages/app/src/subagents/${file}.ts`, import.meta.url),
+      "utf8",
+    );
+    assert.match(subagent, /cancelLabel: i18n.t\("common.actions.cancel"\)/);
+  }
   assert.equal(committedTraditional().get("common.actions.cancel"), "取消");
 });

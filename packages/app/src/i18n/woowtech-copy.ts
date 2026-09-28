@@ -628,9 +628,9 @@ const DESKTOP_NOTIFICATIONS_ENGLISH = {
   failedTitle: "Notification failed",
   unconfirmedTitle: "Unable to confirm notification display",
   unconfirmed:
-    "Notification display could not be confirmed. Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+    "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
   failed:
-    "Notification display failed. Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+    "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
 };
 
 const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
@@ -642,9 +642,8 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
   successDescription: "系統已回報顯示通知，但不代表你一定看到了通知橫幅。",
   failedTitle: "通知顯示失敗",
   unconfirmedTitle: "無法確認通知是否顯示",
-  unconfirmed:
-    "無法確認通知是否顯示。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
-  failed: "通知顯示失敗。請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+  unconfirmed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+  failed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
 };
 
 const AGENT_NOTIFICATION_TITLES_ENGLISH = {
@@ -659,10 +658,33 @@ const AGENT_NOTIFICATION_TITLES_ZH_TW: typeof AGENT_NOTIFICATION_TITLES_ENGLISH 
   attention: "需要你的注意",
 };
 
+const METADATA_GENERATION_ENGLISH = {
+  projectInfo:
+    "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
+  description:
+    "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
+  automaticHint: "Automatic model selection is inactive while generation is disabled.",
+  preferredHint: "Saved model preferences are inactive while generation is disabled.",
+  fallbackHint: "This preference is retained; no model is called for metadata generation.",
+};
+
+const METADATA_GENERATION_ZH_TW: typeof METADATA_GENERATION_ENGLISH = {
+  projectInfo:
+    "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。",
+  description:
+    "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
+  automaticHint: "自動產生已停用，目前不會自動選擇模型。",
+  preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
+  fallbackHint: "此偏好會保留；不會呼叫任何模型來產生後設資料。",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
     ...(WOOWTECH_COPY[language] ?? ENGLISH),
+    confirmDialog: { confirm: language === "zh-TW" ? "確認" : "Confirm" },
+    metadataGeneration:
+      language === "zh-TW" ? METADATA_GENERATION_ZH_TW : METADATA_GENERATION_ENGLISH,
     addProject: ADD_PROJECT_COPY[language] ?? ADD_PROJECT_ENGLISH,
     hostPicker: HOST_PICKER_COPY[language] ?? HOST_PICKER_ENGLISH,
     desktopNotifications:

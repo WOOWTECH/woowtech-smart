@@ -265,3 +265,15 @@ test("host labels use normal server_info with hydration and generation guards", 
   assert.match(fill, /this.hosts = next;\s*this.emitHostList\(\);\s*void this.persistHosts\(\)/);
   assert.doesNotMatch(fill, /(?:connectToDaemon|setHostsAndSync|updateHost)\(/);
 });
+
+test("host label cold-start budget stays local to the first integration case", () => {
+  const testSource = readFileSync(
+    new URL("../packages/app/src/runtime/woowtech-host-label.test.ts", import.meta.url),
+    "utf8",
+  );
+  const start = testSource.indexOf('"fills a pairing fallback label');
+  assert.notEqual(start, -1);
+  const firstCase = testSource.slice(start, testSource.indexOf('"does not replace', start));
+  assert.match(firstCase, /\},\s*15_000,?\s*\)/);
+  assert.equal((testSource.match(/15_000/g) ?? []).length, 1);
+});

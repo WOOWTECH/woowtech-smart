@@ -15,6 +15,8 @@ export { holdDaemonHydration };
 
 interface LongTimelineAgentOptions {
   turns: number;
+  /** Live turns stream for ten seconds unless a test needs one that outlasts it. */
+  liveTurns?: "ten-second-stream" | "thirty-minute-stream";
 }
 
 export interface LongTimelineAgent extends MockAgentWorkspace {
@@ -23,6 +25,8 @@ export interface LongTimelineAgent extends MockAgentWorkspace {
   firstOlderPagePrompt: string;
   initialTailAnchorPrompt: string;
   initialTailOldestPrompt: string;
+  /** The newest prompt on the first older page, adjacent to the initial tail. */
+  newestOlderPagePrompt: string;
   oldestPrompt: string;
   newestPrompt: string;
 }
@@ -82,7 +86,7 @@ export async function seedLongMockAgentTimeline(
   const agent = await seedMockAgentWorkspace({
     repoPrefix: "timeline-pagination-",
     title: "Timeline pagination regression",
-    model: "ten-second-stream",
+    model: options.liveTurns ?? "ten-second-stream",
   });
 
   for (let index = 0; index < options.turns; index += 1) {
@@ -96,6 +100,7 @@ export async function seedLongMockAgentTimeline(
     firstOlderPagePrompt: promptForTurn(Math.max(0, options.turns - 40)),
     initialTailAnchorPrompt: promptForTurn(Math.max(0, options.turns - 5)),
     initialTailOldestPrompt: promptForTurn(Math.max(0, options.turns - 20)),
+    newestOlderPagePrompt: promptForTurn(Math.max(0, options.turns - 21)),
     oldestPrompt: promptForTurn(0),
     newestPrompt: promptForTurn(options.turns - 1),
   };
@@ -402,8 +407,15 @@ export async function expectStableHistoryStartGutter(page: Page): Promise<void> 
 export async function scrollTimelinePromptIntoView(page: Page, prompt: string): Promise<void> {
   const timeline = page.locator('[data-testid="agent-chat-scroll"]:visible').first();
   const row = timeline.getByTestId("user-message").filter({ hasText: prompt });
-  await row.scrollIntoViewIfNeeded();
-  await expect(row).toBeVisible();
+  const [viewport, target] = await Promise.all([timeline.boundingBox(), row.boundingBox()]);
+  if (!viewport || !target) {
+    throw new Error(`Expected a rendered timeline prompt for ${prompt}`);
+  }
+  // Programmatic scrolling does not express the user's intent to stop following output.
+  await timeline.hover();
+  await page.mouse.wheel(0, target.y - viewport.y - (viewport.height - target.height) / 2);
+  await expect(row).toBeInViewport({ ratio: 1 });
+  await waitForTimelineGeometryToSettle(page);
   await expect
     .poll(async () => (await readTimelineViewport(page)).scrollTop)
     .toBeGreaterThan(HISTORY_START_THRESHOLD_PX);

@@ -81,6 +81,21 @@ describe("woowtech agent notification titles", () => {
       await i18n.changeLanguage("en");
     }
   });
+  it("accepts the latest fixed translator rather than a translator captured before a language change", () => {
+    const english = i18n.getFixedT("en");
+    const traditionalChinese = i18n.getFixedT("zh-TW");
+    expect(english("woowtech.agentNotificationTitles.finished")).toBe("Agent finished");
+    expect(
+      localizeAgentNotification({ notification, reason: "finished", t: traditionalChinese }),
+    ).toEqual({
+      ...notification,
+      title: "工作完成了",
+    });
+    expect(localizeAgentNotification({ notification, reason: "finished", t: english })).toEqual(
+      notification,
+    );
+  });
+
   it("translates the reason title without changing daemon preview or routing data", () => {
     const result = localizeAgentNotification({
       notification,
