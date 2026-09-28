@@ -61,6 +61,16 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - `claudeQuery()` 必須立刻回傳 Query，所以 SDK 還沒載入時，它會先回傳 `DeferredQuery`（`deferred-query.ts`）。
   Query 的每個方法都寫明轉發，SDK 升版改了介面時會直接編譯失敗，不會默默漏掉某個呼叫。
 - Claude 本身一律使用使用者自己安裝的 `claude`，這是上游原本的設計，SDK 內附的執行檔用不到。
+- 找 `claude` 的順序：
+  1. 使用者在 `agents.providers.claude.command` 手動指定的指令一律優先，解析方式跟上游一樣，不看下面兩步：找不到就顯示不可用，不會改用別的 `claude`。指令寫的是 `claude` 這個名字時也只找 PATH；要在 Dock 啟動的桌面版加自訂參數，請寫絕對路徑。
+  2. daemon 的 PATH：`which -a claude`，每個候選各跑一次 `--version`（2 秒逾時），跟上游一樣。
+  3. PATH 沒有可用的 `claude`，才依序試 `~/.local/bin/claude`、`~/.claude/local/claude`、`/opt/homebrew/bin/claude`、`/usr/local/bin/claude`。`~` 是 daemon 環境的 home（`os.homedir()`）。
+  - 原因：桌面版從 Dock 啟動時用的是登入 shell 的 PATH，裡面不一定有 `~/.local/bin`，而 Claude Code 的原生安裝程式把 `claude` 放在那裡。
+  - 備援位置只算存在、可執行、不是資料夾的檔案，也要通過同樣的 `--version`。符號連結指向的檔案也算：原生安裝程式的 `~/.local/bin/claude` 就是指向版本資料夾的連結。回傳連結本身的路徑，Claude Code 更新換版後照樣有效。
+  - PATH 查詢本身出錯（不是找不到）時照上游拋出錯誤，不改試備援位置。Windows 不套用備援位置（不在 v1）。
+  - 寫在 fork 檔 `packages/server/src/executable-resolution/woowtech-claude-fallback.ts`。接點只有上游 `provider-launch-config.ts` 的 `checkProviderLaunchAvailable`（+4／-2 行）：呼叫端沒給 launch default、指令是預設的 `claude` 時補上備援。Claude 的可用狀態、診斷、版本和啟動都經過這裡；其他 provider 和熱檔 `agent.ts` 都沒動。
+  - 測試：`woowtech-claude-fallback.test.ts` 在暫存目錄模擬 home、PATH 和 `/opt/homebrew`、`/usr/local`，不碰真的 home，也不執行真的 `claude`：四個位置各自、前面的位置優先、PATH 優先、手動指令優先（也不會改用備援）、不可執行／資料夾／`--version` 失敗的檔案跳過、原生安裝程式的連結、都沒有時找不到、Windows 不套用。守門 `woowtech/claude-executable.test.mjs` 把 HOME、PATH 指到暫存目錄，從原始碼確認 Claude provider 真的找得到 `~/.local/bin/claude`、版本由那個檔案回報，手動指令照舊；上游改寫 `checkProviderLaunchAvailable` 或 Claude provider 改傳自己的 launch default 時會失敗。
+  - 上游測試 `provider-availability.test.ts` 的「Claude reports unavailable when the default command cannot be resolved」原本只把 PATH 指到空資料夾，現在也把 HOME 指過去（+8 行）。`/opt/homebrew/bin`、`/usr/local/bin` 沒辦法用環境變數隔開：在那裡裝了 `claude` 的機器上，這個上游測試會找到它、執行它的 `--version` 而失敗。
 - 升級 SDK 時，這三個地方要一起改：
   - `CLAUDE_AGENT_SDK_VERSION`
   - `CLAUDE_AGENT_SDK_INTEGRITY`，用 `npm view @anthropic-ai/claude-agent-sdk@<版本> dist.integrity` 取得
@@ -1587,4 +1597,5 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - T1 S3（第 16 節）的 Android 重驗：重裝後在 Open Project 做 S2，同一個 App 行程接著做 S3、S3b，再用側欄切到別的工作區又切回來，已知工作區的通知要開到自己的 agent，也不能多出別的工作區的 agent tab；S1、S5 各跑一次確認延後開啟照舊。主機路由的 navstate 仍會看到 `open`，那是預期的。
 - CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
+- Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
 - 商標（TIPO）與 D-U-N-S。

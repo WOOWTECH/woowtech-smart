@@ -13,6 +13,7 @@ import { CodexAppServerAgentClient, findDefaultCodexBinary } from "./codex-app-s
 import { OpenCodeAgentClient } from "./opencode-agent.js";
 
 const originalEnv = {
+  HOME: process.env.HOME,
   LOCALAPPDATA: process.env.LOCALAPPDATA,
   PATH: process.env.PATH,
   PATHEXT: process.env.PATHEXT,
@@ -44,6 +45,11 @@ afterEach(() => {
     delete process.env.LOCALAPPDATA;
   } else {
     process.env.LOCALAPPDATA = originalEnv.LOCALAPPDATA;
+  }
+  if (originalEnv.HOME === undefined) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = originalEnv.HOME;
   }
   process.env.PATH = originalEnv.PATH;
   process.env.PATHEXT = originalEnv.PATHEXT;
@@ -103,6 +109,8 @@ describe("default provider availability", () => {
   test("Claude reports unavailable when the default command cannot be resolved", async () => {
     const binDir = makeTempDir("provider-availability-claude-");
     isolatePathTo(binDir);
+    // woowtech smart: the default claude also looks under HOME (woowtech/README.md §3).
+    process.env.HOME = binDir;
     const client = new ClaudeAgentClient({ logger: createTestLogger() });
 
     await expect(client.isAvailable()).resolves.toBe(false);

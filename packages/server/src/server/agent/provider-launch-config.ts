@@ -3,6 +3,7 @@ import {
   executableExists,
   findExecutable,
 } from "../../executable-resolution/executable-resolution.js";
+import { builtinLaunchDefault } from "../../executable-resolution/woowtech-claude-fallback.js";
 import { createExternalProcessEnv, type ProcessEnvRecord } from "../paseo-env.js";
 import { PARENT_CLAUDE_SESSION_ENV_VARS } from "./parent-claude-session-env.js";
 export {
@@ -114,9 +115,11 @@ export async function checkProviderLaunchAvailable(
   launch: ResolvedProviderLaunch,
   defaultBinary?: ProviderLaunchDefault,
 ): Promise<ProviderLaunchAvailability> {
+  // woowtech smart: a default `claude` also tries its install locations (woowtech/README.md §3).
+  const launchDefault = defaultBinary ?? builtinLaunchDefault(launch.command);
   const resolvedPath =
-    defaultBinary && launch.source !== "override"
-      ? await resolveDefaultLaunchPath(defaultBinary)
+    launchDefault && launch.source !== "override"
+      ? await resolveDefaultLaunchPath(launchDefault)
       : await resolveLaunchPath(launch.command);
   return {
     available: resolvedPath !== null,
