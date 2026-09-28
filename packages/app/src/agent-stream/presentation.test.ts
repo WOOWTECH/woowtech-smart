@@ -208,6 +208,17 @@ describe("stream presentation through installed plugins", () => {
     expect(result.head).toMatchObject([{ text: "```ts\nconst a = 1;\n\nconst b = 2;" }]);
   });
 
+  // Codex streams a line break and the next line's indent as their own chunks.
+  it("keeps a line break when a chunk ends in the next line's indent", () => {
+    const harness = streamHarness();
+    harness.send(assistant("```mermaid\nflowchart TD\n    A[Start] --> B[Review]\n"));
+    harness.send(assistant("   "));
+    const result = harness.send(assistant(" B --> C[Finish]\n```"));
+    expect(result.head).toMatchObject([
+      { text: "```mermaid\nflowchart TD\n    A[Start] --> B[Review]\n    B --> C[Finish]\n```" },
+    ]);
+  });
+
   it("leaves fetched native Markdown intact, including cross-paragraph references", () => {
     const source = hydrateStreamState([
       {
