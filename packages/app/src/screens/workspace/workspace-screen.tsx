@@ -1,5 +1,9 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useMissingWorkspaceDirectoryDemand } from "./use-missing-workspace-directory-demand";
+import {
+  hasSettledWorkspaceDirectory,
+  useDirectoryRefreshSettled,
+} from "./woowtech-workspace-directory-settled";
 import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { getOpenAgentTabLabel } from "@getpaseo/protocol/agent-labels";
 import {
@@ -1664,11 +1668,17 @@ function WorkspaceScreenContent({
   const hasHydratedWorkspaces = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.hasHydratedWorkspaces ?? false,
   );
+  // woowtech smart: judge a missing workspace after this connection's directory refresh.
+  const directoryRefreshSettled = useDirectoryRefreshSettled(normalizedServerId);
+  const hasSettledWorkspaces = hasSettledWorkspaceDirectory({
+    hasHydratedWorkspaces,
+    directoryRefreshSettled,
+  });
   const workspaceRecovery = useWorkspaceRecovery({
     serverId: normalizedServerId,
     workspaceId: normalizedWorkspaceId,
     enabled: shouldInspectWorkspaceRecovery(
-      hasHydratedWorkspaces,
+      hasSettledWorkspaces,
       workspaceDescriptor,
       recoveryRequested,
     ),
@@ -1748,7 +1758,7 @@ function WorkspaceScreenContent({
   const workspaceRouteState = useResolvedWorkspaceRouteState({
     serverId: normalizedServerId,
     workspace: workspaceDescriptor,
-    hasHydratedWorkspaces,
+    hasHydratedWorkspaces: hasSettledWorkspaces,
     recovery: workspaceRecovery.state,
   });
   const workspaceHeaderCheckoutState = buildWorkspaceHeaderCheckoutState({
