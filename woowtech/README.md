@@ -1000,6 +1000,27 @@ node --test woowtech/*.test.mjs
 - metadata 設定頁保留，用 fork copy 覆寫總說明與三段模型提示，明說目前停用、已存偏好不會啟用生成。比隱藏頁面更少改動，也讓使用者知道舊設定仍保留。專案設定的後設資料區塊也用 fork 說明保留指令但不會用於自動產生，表單與磁碟設定不變。繁中使用「後設資料」及「提交訊息」，英文與其他語系使用英文；不改上游語系檔或 OpenCode 探測流程。
 - Git metadata 測試放 `session/checkout/woowtech-git-metadata.test.ts`：預設 OFF 零呼叫、固定值、原 instructions builder 接點、明確 ON 的 positive control，以及真實 handler 的手填／部分手填行為。handler 測試只寫臨時 Git repo 與本機 bare remote，forge 用 typed fake，不發外部請求。原 `git-metadata-generator.test.ts` 僅注入 ON policy 保留原斷言；`session.test.ts` 在既有 mock 區塊以測試端 ON 覆寫保留 prompt 行為測試（C-022 明確核准的既有 mock 例外）。production `session.ts` 不傳 override，守門禁止測試用 policy 覆寫出現在 server production source：提供 policy 的物件成員（屬性、簡寫、方法、getter、有值的 class field）、對同名成員的 `=`、`??=`、`||=`、`&&=`、解構和參數的預設值（`const { name = … } = deps`、`{ name: local = … }`、`(name = …)`），以及用字串寫出 policy 名稱（`defineProperty`、`Reflect.set`、computed key）都算覆寫；唯一放行的是 `x.name = options.name ?? <fork policy>`，也就是 `WorkspaceAutoName` 建構子的接線。字串相加組出的名稱（`deps["isGeneration" + "Enabled"]`）和區域變數的初始值（`const name = deps.name ?? …`）不在範圍內；生成器入口那一行由第 2 項的 regex 釘住。合併上游後務必逐檔跑這兩檔與 fork OFF suite；不要只跑 generator 單元測試而漏掉 Session 接線。另跑 `node --test woowtech/git-metadata.test.mjs woowtech/workspace-auto-name.test.mjs` 鎖住兩個 gate、policy 預設與 production 接點；`woowtech-copy.test.ts` 守住限定語系政策、placeholder 與頁面文案接點。
 
+### 21. Claude 改用文字徽章（品牌合規）
+
+- 原因：Anthropic 的條款允許產品用純文字寫「Claude Code」，但使用它的標誌要書面許可。owner 在 2026-09-27 決定把 App 和桌面版裡的 Claude 標誌換成文字。
+- 做法：每個 Claude 圖示都改成中性的文字徽章：圓角方框裡一個字母 C，線條用呼叫端傳進來的顏色（主題的前景色或次要前景色）。沒有 Anthropic 的放射狀標誌，也沒有 Claude 的橘色（#D97757 這類）。
+  - 字母用路徑畫，不用 `<text>`：iOS、Android 和網頁不必靠字型，畫出來都一樣。
+  - 「Claude」這個名稱照舊用文字顯示在原本的地方。
+- 徽章只寫在 fork 檔 `packages/app/src/components/icons/claude-badge.ts`：方框和字母的幾何、SVG 字串、哪些 provider id 算 Claude（`claude`、`claude-acp`）。用到它的上游檔：
+  - `components/icons/claude-icon.tsx`：`ClaudeIcon` 改畫徽章，名稱和 props（size、color）不變，`provider-icons.ts` 不用改。
+  - `components/provider-icon-name.ts`：`claude-acp` 跟 `claude` 一樣回傳內建的徽章，而且先於主機快照的 SVG（+5 行）：主機（例如外掛 provider）替 `claude-acp` 送來的 SVG 不會顯示。
+  - `assets/acp-provider-icons.ts`：`claude-acp` 那一筆改成 `CLAUDE_BADGE_SVG`（+4／-2 行）。這個檔不是產生的：repo 裡沒有產生器，上游每次都手改它和旁邊的 `.svg`。
+  - `assets/acp-provider-icons/claude-acp.svg`、`assets/icons/claude.svg`：內容換成同一份徽章 SVG。後者沒有程式在用，留著是為了合併上游時不衝突。
+- 範圍：App（iOS、Android、網頁）和桌面版（載入同一份網頁）。桌面版自己的 `src`、`assets` 沒有 Claude 標誌。server 和 CLI 沒有自己的 Claude SVG：provider 的 SVG 只從外掛讀。上游官網 `packages/website` 還有 Claude 標誌，我們不部署它（第 18 節）。
+- 刻意沒改的：
+  - 其他廠商的標誌（OpenAI／Codex、Copilot、Cursor、Gemini、OpenCode、Pi、OMP、MiniMax 等）照舊，等 owner 決定。
+  - 深色主題「Claude」（`styles/theme.ts`：強調色 #d97757、代表色 #D97757）。它是主題不是標誌，但名稱和顏色都來自 Claude，要不要改名換色等 owner 決定。
+  - 外掛自己帶的圖示：外掛用 `claude`、`claude-acp` 以外的 id 帶 Claude 標誌時照樣顯示。那是外掛的內容，不是我們出貨的檔案。
+- 測試：
+  - `components/woowtech-claude-badge.test.ts`：內建 `claude` 在四種圖示尺寸（12、14、16、20）、每個主題的前景色和次要前景色下都畫徽章，線條就是傳進來的顏色；`claude-acp` 不論主機有沒有送 SVG 都是同一個徽章；ACP 那一筆就是徽章；徽章 SVG 只用 currentColor。
+  - 守門 `woowtech/claude-badge.test.mjs`：掃 App（`src`、`assets`、`public`、`plugins`）、桌面版（`src`、`assets`）、server 和 CLI 出貨的檔案，不准出現上游那兩份 Claude 標誌的路徑資料（去掉空白和逗號後比對開頭）；檔名有 claude 或 anthropic 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`）；兩個 `.svg` 和 ACP 那一筆都要等於徽章。上游換回標誌、新增一份複製的標誌，或把 Claude 圖示改成橘色時會失敗。
+  - 小尺寸和深淺色主題上看不看得清楚，要在實機上看，單元測試證明不了。
+
 ## 上游同步紀錄（2026-09-27，挑選式）
 
 ### 第一批：上游 `836f1a9..d6861f81e`
@@ -1598,4 +1619,6 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
+- Claude 的文字徽章（第 21 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表、側欄的 Agent 列、模型選單、匯入工作階段和排程這些 12～20 px 的地方都讀得出是 C。
+- 待 owner 決定（第 21 節）：其他廠商的標誌要不要也換成文字；深色主題「Claude」要不要改名換色。
 - 商標（TIPO）與 D-U-N-S。

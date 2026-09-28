@@ -3,6 +3,7 @@ import {
   KNOWN_PROVIDER_ICON_NAMES,
 } from "@getpaseo/protocol/provider-icon-names";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
+import { isClaudeProviderId } from "./icons/claude-badge";
 
 export type ProviderIconName =
   | { kind: "builtin"; id: string }
@@ -31,6 +32,10 @@ export function resolveProviderIconName(
   provider: string,
   serverId?: string | null,
 ): ProviderIconName {
+  // woowtech smart: Claude ids show the text badge, never a host's SVG (woowtech/README.md §21).
+  if (isClaudeProviderId(provider)) {
+    return { kind: "builtin", id: "claude" };
+  }
   if (BUILTIN_PROVIDER_IDS.has(provider)) {
     return { kind: "builtin", id: provider };
   }
