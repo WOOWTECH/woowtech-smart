@@ -7,6 +7,7 @@ import type {
 import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { FormPreferences } from "@/create-agent-preferences/preferences";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
+import { i18n } from "@/i18n/i18next";
 import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
@@ -298,7 +299,7 @@ function resolveModeDisplay(input: {
 }): ScheduleFormDisplay {
   const modeId = input.modeId.trim();
   if (!modeId) {
-    return { label: "Default mode" };
+    return { label: i18n.t("woowtech.schedules.form.defaultMode") };
   }
   return { label: input.modeOptions.find((mode) => mode.id === modeId)?.label ?? modeId };
 }
@@ -415,7 +416,7 @@ function buildInitialModelDisplay(modelId: string): ScheduleFormDisplay | null {
 
 function buildInitialModeDisplay(modeId: string): ScheduleFormDisplay {
   if (!modeId) {
-    return { label: "Default mode" };
+    return { label: i18n.t("woowtech.schedules.form.defaultMode") };
   }
   return { label: modeId };
 }
@@ -908,7 +909,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       modeOptions: [],
       availableThinkingOptions: [],
       selectedModelDisplay: null,
-      selectedModeDisplay: { label: "Default mode" },
+      selectedModeDisplay: { label: i18n.t("woowtech.schedules.form.defaultMode") },
       selectedThinkingDisplay: null,
       providerSnapshotRequest: null,
     };

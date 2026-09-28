@@ -1,3 +1,5 @@
+import { i18n } from "@/i18n/i18next";
+
 /**
  * How long ago something was, before it's worded. The two formatters below share this so
  * their thresholds can't drift apart; they differ only in how much room they have to say it.
@@ -6,7 +8,7 @@
  */
 type Elapsed =
   | { kind: "now" }
-  | { kind: "elapsed"; value: string }
+  | { kind: "elapsed"; unit: "seconds" | "minutes" | "hours" | "days"; value: number }
   | { kind: "date"; value: string };
 
 function describeElapsed(date: Date, now: Date): Elapsed {
@@ -17,14 +19,23 @@ function describeElapsed(date: Date, now: Date): Elapsed {
   const diffDay = Math.floor(diffHour / 24);
 
   if (diffSec < 10) return { kind: "now" };
-  if (diffMin < 1) return { kind: "elapsed", value: `${diffSec}s` };
-  if (diffHour < 1) return { kind: "elapsed", value: `${diffMin}m` };
-  if (diffDay < 1) return { kind: "elapsed", value: `${diffHour}h` };
-  if (diffDay < 7) return { kind: "elapsed", value: `${diffDay}d` };
+  if (diffMin < 1) return { kind: "elapsed", unit: "seconds", value: diffSec };
+  if (diffHour < 1) return { kind: "elapsed", unit: "minutes", value: diffMin };
+  if (diffDay < 1) return { kind: "elapsed", unit: "hours", value: diffHour };
+  if (diffDay < 7) return { kind: "elapsed", unit: "days", value: diffDay };
 
-  // For older dates, show abbreviated month and day
-  const month = date.toLocaleDateString("en-US", { month: "short" });
-  return { kind: "date", value: `${month} ${date.getDate()}` };
+  return { kind: "date", value: formatMonthDay(date) };
+}
+
+/**
+ * woowtech smart: abbreviated month and day in the app language, "Jan 15" or "1月15日".
+ * The relative labels read their units from the woowtech.time translations.
+ */
+function formatMonthDay(date: Date): string {
+  return date.toLocaleDateString(i18n.t("woowtech.time.dateLocale"), {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 /**
@@ -33,8 +44,10 @@ function describeElapsed(date: Date, now: Date): Elapsed {
  */
 export function formatTimeAgo(date: Date, now: Date = new Date()): string {
   const elapsed = describeElapsed(date, now);
-  if (elapsed.kind === "now") return "just now";
-  if (elapsed.kind === "elapsed") return `${elapsed.value} ago`;
+  if (elapsed.kind === "now") return i18n.t("woowtech.time.justNow");
+  if (elapsed.kind === "elapsed") {
+    return i18n.t(`woowtech.time.ago.${elapsed.unit}`, { value: elapsed.value });
+  }
   return elapsed.value;
 }
 
@@ -71,20 +84,28 @@ export function describeCompactTimeAgo(date: Date, now: Date = new Date()): Comp
   const elapsedMs = now.getTime() - date.getTime();
 
   if (elapsedMs < MINUTE_MS) {
-    return { label: "now", resolution: "minute" };
+    return { label: i18n.t("woowtech.time.compact.now"), resolution: "minute" };
   }
   if (elapsedMs < HOUR_MS) {
-    return { label: `${Math.floor(elapsedMs / MINUTE_MS)}m`, resolution: "minute" };
+    return {
+      label: i18n.t("woowtech.time.compact.minutes", { value: Math.floor(elapsedMs / MINUTE_MS) }),
+      resolution: "minute",
+    };
   }
   if (elapsedMs < DAY_MS) {
-    return { label: `${Math.floor(elapsedMs / HOUR_MS)}h`, resolution: "hour" };
+    return {
+      label: i18n.t("woowtech.time.compact.hours", { value: Math.floor(elapsedMs / HOUR_MS) }),
+      resolution: "hour",
+    };
   }
   if (elapsedMs < ABSOLUTE_AFTER_MS) {
-    return { label: `${Math.floor(elapsedMs / DAY_MS)}d`, resolution: "day" };
+    return {
+      label: i18n.t("woowtech.time.compact.days", { value: Math.floor(elapsedMs / DAY_MS) }),
+      resolution: "day",
+    };
   }
 
-  const month = date.toLocaleDateString("en-US", { month: "short" });
-  return { label: `${month} ${date.getDate()}`, resolution: "static" };
+  return { label: formatMonthDay(date), resolution: "static" };
 }
 
 export function formatCompactTimeAgo(date: Date, now: Date = new Date()): string {
@@ -153,19 +174,23 @@ export function formatMessageTimestamp(date: Date, now: Date = new Date()): stri
  */
 export function formatDuration(durationMs: number): string {
   if (!Number.isFinite(durationMs) || durationMs < 0) {
-    return "0s";
+    return i18n.t("woowtech.time.duration.seconds", { seconds: 0 });
   }
   const totalSeconds = durationMs / 1000;
 
   if (totalSeconds < 60) {
-    return `${Math.floor(totalSeconds)}s`;
+    return i18n.t("woowtech.time.duration.seconds", { seconds: Math.floor(totalSeconds) });
   }
   const totalMinutes = Math.floor(totalSeconds / 60);
   if (totalMinutes < 60) {
     const seconds = Math.floor(totalSeconds) % 60;
-    return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m ${seconds}s`;
+    return seconds === 0
+      ? i18n.t("woowtech.time.duration.minutes", { minutes: totalMinutes })
+      : i18n.t("woowtech.time.duration.minutesSeconds", { minutes: totalMinutes, seconds });
   }
   const hours = Math.floor(totalMinutes / 60);
   const remMinutes = totalMinutes % 60;
-  return remMinutes === 0 ? `${hours}h` : `${hours}h ${remMinutes}m`;
+  return remMinutes === 0
+    ? i18n.t("woowtech.time.duration.hours", { hours })
+    : i18n.t("woowtech.time.duration.hoursMinutes", { hours, minutes: remMinutes });
 }

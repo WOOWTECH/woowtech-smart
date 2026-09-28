@@ -6803,3 +6803,80 @@ test("uploadFile stops sending chunks when the connection closes between sends",
       .some((frame) => frame.opcode === FileTransferOpcode.FileEnd),
   ).toBe(false);
 });
+
+// woowtech smart: the app suppresses send errors. An upload started while reconnecting queued its
+// request but dropped FileBegin, so the daemon answered "Upload chunks arrived before file begin."
+test("uploadFile started while connecting sends the whole file once connected", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "upload-while-connecting",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    suppressSendErrors: true,
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connection = client.connect();
+  const upload = client.uploadFile({
+    fileName: "notes.txt",
+    mimeType: "text/plain",
+    bytes: new TextEncoder().encode("hello"),
+    modifiedAt: "2026-09-27T00:00:00.000Z",
+    requestId: "req-connecting",
+  });
+  mock.triggerOpen();
+  await connection;
+  const fileFrames = () =>
+    mock.sent
+      .filter((frame) => typeof frame !== "string")
+      .map(assertUint8Array)
+      .map(decodeFileTransferFrame);
+  await vi.waitFor(() => {
+    expect(fileFrames().at(-1)?.opcode).toBe(FileTransferOpcode.FileEnd);
+  });
+
+  expect(JSON.parse(assertStr(mock.sent[0])).message.type).toBe("file.upload.request");
+  expect(fileFrames().map((frame) => frame.opcode)).toEqual([
+    FileTransferOpcode.FileBegin,
+    FileTransferOpcode.FileChunk,
+    FileTransferOpcode.FileEnd,
+  ]);
+  const file = {
+    type: "uploaded_file" as const,
+    id: "upload_req-connecting",
+    fileName: "notes.txt",
+    mimeType: "text/plain",
+    size: 5,
+    path: "/tmp/uploads/notes.txt",
+  };
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "file.upload.response",
+      payload: { requestId: "req-connecting", file, error: null },
+    }),
+  );
+  await expect(upload).resolves.toEqual({ requestId: "req-connecting", file, error: null });
+});
+
+test("uploadFile sends nothing and reports a lost connection when the client is disconnected", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "upload-while-disconnected",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    suppressSendErrors: true,
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  await expect(
+    client.uploadFile({
+      fileName: "notes.txt",
+      mimeType: "text/plain",
+      bytes: new TextEncoder().encode("hello"),
+    }),
+  ).rejects.toMatchObject({ name: "DaemonConnectionError", code: "DAEMON_CONNECTION_LOST" });
+  expect(mock.sent).toEqual([]);
+});

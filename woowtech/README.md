@@ -135,7 +135,9 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 安裝檔改名為 `woowtech-smart-<版本>-<架構>.dmg` 等，App 的 Apple Silicon 下載連結跟著改。Linux 套件的維護者欄位改成 WoowTech。
 - agent 透過 ACP 看到的 `clientInfo.name` 改成 `woowtech smart`。
 - 手機 App 的名稱和 bundle id 直接寫在 `app.config.js`：正式版 `io.woowtech.smart`，Debug 版 `io.woowtech.smart.debug`。
-  - 中文手機桌面顯示「渥屋智能」（Debug 版是「渥屋智能 Debug」）。iOS 用 Expo 的 `locales`；Expo 只把 `locales` 套到 iOS，Android 由 `plugins/with-localized-app-name.js` 讀同一份設定寫進 Android 資源。
+  - 中文手機桌面顯示「渥屋智能」（Debug 版是「渥屋智能 Debug」），兩個平台都由 Expo 的 `locales` 寫入：`ios` 底下的 `CFBundleDisplayName`、`CFBundleName` 進 iOS 的 `InfoPlist.strings`，`android` 底下的 `app_name` 進 `values-b+zh+Hans`、`values-b+zh+Hant` 的 `strings.xml`（fixes-0928）。
+    - Expo 54 的 prebuild 會把 `ios`、`android` 以外的鍵同時寫進兩個平台。原本 `CFBundle*` 放在共用層，Android 多出兩筆預設語系沒有的字串，本機 `assembleRelease` 的 `lintVitalRelease` 報 4 個 ExtraTranslation（2026-09-27 Android 輪次），只能略過 lint 才建得起來。
+    - `plugins/with-localized-app-name.js` 當初是為了替 Android 補上 `app_name`：共用層只有 iOS 的鍵，Expo 寫到 Android 的只是用不到的 `CFBundle*`。現在 `android` 底下直接給 `app_name`，由 Expo 寫入，已從 `app.config.js` 拿掉註冊。檔案和它的單元測試還在，等擁有者確認後刪除。
   - `apply-identity.mjs` 現在只處理 Expo 帳號相關的 owner、slug、project id。
 - iOS 的主畫面顯示名稱欄位是 `CFBundleDisplayName`，`CFBundleName` 是 bundle 的短名稱（[Apple 欄位說明](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html)）。沒有證據能保證名稱太長時會切換到短名稱，也不能僅憑截圖判斷改讀了 `PRODUCT_NAME`。
   - `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 設「渥屋智能」。這次只更正說明，不改顯示名稱、Xcode 的 `PRODUCT_NAME`、執行檔或 `.app` 名稱。
@@ -144,7 +146,8 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`，而且只有英文，見「接下來」。
 - App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
 - `woowtech/names.test.mjs` 檢查安裝檔名稱與下載連結一致、App 裡寫死的文字、agent 看到的名稱，並用 `expo config` 檢查手機 App 的實際設定。
-  - iOS 短名稱查兩處，也查不超過 15 字：`expo config --type prebuild` 裡 `app.config.js` 自己設的 `ios.infoPlist.CFBundleName`；`expo config --type introspect`（`woowtech/expo-config.mjs` 的 `expoIntrospectedConfig`）算出的 Info.plist，和 zh-Hans／zh-Hant 的 `CFBundleName`。
+  - iOS 短名稱查兩處，也查不超過 15 字：`expo config --type prebuild` 裡 `app.config.js` 自己設的 `ios.infoPlist.CFBundleName`；`expo config --type introspect`（`woowtech/expo-config.mjs` 的 `expoIntrospectedConfig`）算出的 Info.plist，和 zh-Hans／zh-Hant 的 `ios.CFBundleName`。
+  - Android 的中文資源交給 Expo 自己的產生器（`expo/config-plugins` 的 `AndroidConfig.Locales.setLocalesAsync`）用實際設定寫一次，`values-b+zh+Hans`、`values-b+zh+Hant` 只能有 `app_name`：多出預設語系沒有的名字，正式版 lint 就會報 ExtraTranslation。
   - 只看 introspect 不夠：它會先讀既有的 `packages/app/ios/*/Info.plist` 再蓋上設定。prebuild 過的 `ios/` 裡已經有這個值時，`app.config.js` 的設定被拿掉，檢查照樣通過。
 - CLI 的說明文字跟 CLI 改名一起處理，見第 12 節。
 - 刻意沒改的：
@@ -169,6 +172,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 上游簡中句子裡留下的英文名詞改成台灣用語：project 專案、workspace 工作區、provider 供應商、server 伺服器、terminal 終端機、model 模型、script 腳本、client 用戶端、relay 中繼、repository 儲存庫、branch 分支、remote 遠端、mode 模式、feature 功能、thinking 思考、runtime 執行環境、prompt 提示詞（system prompt 系統提示詞）、subagent 子 Agent、review 審查、draft 草稿、skill 技能、tools 工具、commands 指令、setup 初始化、teardown 清理、realtime voice 即時語音、turn 回合、desktop app 桌面版 App；「System Settings > Notifications」改成「系統設定」>「通知」。
   - 維持英文：Agent、Daemon、worktree（Agent、App 一律大寫單數）、Git 指令（commit、push、pull、merge、stash、rebase、squash、auto-merge）、PR、MR、issue、pull request、diff、hooks、token、縮寫、產品和品牌名稱。
 - Host 統一譯為「主機」；Agent 保留英文。localhost、hostname、`--host`、網址、路徑、插值與使用者主機名稱不翻譯。
+- Schedules 譯為「排程」。上游簡中把側欄的 Schedules 譯成「计划」，轉出來是「計畫」，跟 Plan 模式的「計畫」撞在一起，測試員也把那一頁當成 Plan。修正表只在英文原文有 schedule 時把「計畫」改成「排程」，Plan 相關的「計畫模式」「建議計畫」不動。
 - 連線一律用「連線」，「連接」只用在「連接埠」。桌面版連上既有的 daemon 時，顯示「已連線到現有的 daemon」。
 - 上游簡中留下的英文，產生器分兩種處理：
   - 句子裡的英文名詞（「新建 project」「设置 providers」）和只有一個英文名詞的標籤（「Workspaces」）：`zh-tw-terms.mjs` 的 `inChinese()` 和 `label()`，詞表見上面。
@@ -438,8 +442,20 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - `browser-tools-config.ts` 回傳的卡片狀態仍帶上游英文，上游的單元測試會檢查它；畫面上的文字由 `browser-tools-card.tsx` 翻譯。
 - 新增專案整個流程與主機選擇器的本地文案已接到 `woowtech.addProject`、`woowtech.hostPicker`。繁中「Clone from GitHub」用「從 GitHub 複製專案」，進行中用「正在複製專案…」。原始 daemon 錯誤、儲存庫說明、網址、路徑與使用者名稱不翻譯。
 - 主機選擇器顯示與搜尋共用同一份選項文字；包含 `host-filter.tsx` 的觸發器在內，文字快取依賴翻譯函式，切語言時更新。其他設定頁外的硬編碼仍需逐頁盤點。
-- Renderer 共用 `utils/confirm-dialog.ts` 的 Cancel 預設使用既有 `common.actions.cancel`；Confirm 沒有通用既有 key，使用 fork 的 `woowtech.confirmDialog.confirm`（繁中「確認」，其他語系沿用英文）。兩者依呼叫當下 App 語言取值，caller 的 label（含空字串）優先。子 Agent 的 archive／detach 確認也使用同一個 Cancel key，其餘文字不在這次範圍。這兩個檔把上游寫死的 `cancelLabel: "Cancel"` 改成 `i18n.t("common.actions.cancel")`，沒有直接刪掉那一行交給 `confirm-dialog.ts` 的預設：上游的 `archive-subagent.test.ts`、`detach-subagent.test.ts` 共 6 處斷言解析出的 `cancelLabel: "Cancel"`，刪掉就要再改這兩個上游測試檔。Electron main 選單／原生對話框 fallback、瀏覽器系統按鈕及 html lang 不改。`utils/woowtech-confirm-dialog.test.ts` 與 `subagents/woowtech-subagent-dialogs.test.ts` 透過 public ports 檢查 label、布林及錯誤行為，不新增 module mock；`woowtech/zh-tw.test.mjs` 守住接點。
+- Renderer 共用 `utils/confirm-dialog.ts` 的 Cancel 預設使用既有 `common.actions.cancel`；Confirm 沒有通用既有 key，使用 fork 的 `woowtech.confirmDialog.confirm`（繁中「確認」，其他語系沿用英文）。兩者依呼叫當下 App 語言取值，caller 的 label（含空字串）優先。子 Agent 的 archive／detach 確認也使用同一個 Cancel key，其餘文字不在這次範圍。這兩個檔把上游寫死的 `cancelLabel: "Cancel"` 改成 `i18n.t("common.actions.cancel")`，沒有直接刪掉那一行交給 `confirm-dialog.ts` 的預設：上游的 `archive-subagent.test.ts`、`detach-subagent.test.ts` 共 6 處斷言解析出的 `cancelLabel: "Cancel"`，刪掉就要再改這兩個上游測試檔。Electron main 選單／原生對話框 fallback、瀏覽器系統按鈕不改（html lang 後來改了，見下面 fixes-0928）。`utils/woowtech-confirm-dialog.test.ts` 與 `subagents/woowtech-subagent-dialogs.test.ts` 透過 public ports 檢查 label、布林及錯誤行為，不新增 module mock；`woowtech/zh-tw.test.mjs` 守住接點。
 - 合併上游後要注意：T5 在 `components/add-project-flow.tsx` 約 171 行差異，另接到 `add-project-flow/options.ts`、`components/hosts/host-picker.tsx`、`host-picker-constants.ts`、`host-filter.tsx`；上游重整這些流程時，保留 fork 翻譯接點與 `t` 的快取依賴，並重跑下列定向測試。
+- 2026-09-27 Android 與桌面輪次在繁中介面看到的英文（fixes-0928），原因都是上游寫死或沒用翻譯，不是產生器漏掉；`zh-tw-untranslated.mjs` 和 `KEEP_ENGLISH` 都沒有這些 key。文字只給繁中和英文（`woowtechCopyFor` 用 `language === "zh-TW"` 選），其他語言沿用英文：
+  - 「排程」頁（`woowtech.schedules`）：上游整個功能沒有翻譯 key。接點是 `screens/schedules-screen.tsx`、`components/schedules/` 的 row、table、cadence editor、form sheet，以及純函式 `utils/schedule-format.ts`（頻率說明、cron 錯誤、下次執行）、`schedules/schedule-cadence-options.ts`（預設頻率）、`schedule-derivation.ts`、`schedule-form-model.ts`。純函式讀全域 `i18n.t`，英文與上游逐字相同，上游的英文單元測試照樣過；元件用 `t`，切語言時跟著更新。共用的 cron 驗證（protocol）只有一組固定的英文訊息，`validateCron` 依格式換成翻譯。「Schedule／Heartbeat」這兩種產品名的文字改用 `scheduleCopy()`；`scheduleProductName()` 沒改（上游的單元測試還在用），介面不再用它組字。daemon 回的錯誤（例如排程不存在）照原文顯示。
+  - 相對時間與時間長度（`woowtech.time`）：`utils/time.ts` 的 `formatTimeAgo`（剛剛、N 分鐘前，提交清單、排程、Agent 清單都用）、`describeCompactTimeAgo`（側欄和分頁）、`formatDuration`（「工作了 25 秒」和進行中的計時）。一週以上的日期用 `woowtech.time.dateLocale` 指定的語系排版（en-US 的「Sep 27」、zh-TW 的「9月27日」）。
+  - 主機狀態徽章「Online」：`utils/daemons.ts` 改用上游本來就有、卻沒人用的 `common.connectionStatus.*`（線上／正在連線／離線）。
+  - 「工作區不可用」的內文：daemon 的 recovery inspect 回應有 `reason` 代碼，`workspace-recovery/woowtech-recovery-copy.ts` 依代碼顯示繁中翻譯（`woowtech.workspaceRecovery`）；其他語言和不認得的代碼照舊顯示 daemon 原文。
+  - 「Transport not connected (status: disconnected)」：client 連線中斷時的英文錯誤。`utils/error-messages.ts` 的 `toErrorMessage` 遇到它、socket 已關但 client 還沒發現時的「WebSocket not open」，或 `DaemonConnectionError` 的 `DAEMON_CONNECTION_LOST`，改顯示上游的「主機未連線」；檔案總管的清單和預覽錯誤改經 `toErrorMessage`。
+  - 「Worked for 15s」：`components/message.tsx` 的 `AssistantTurnFooter`（`woowtech.message`）。
+  - `<html lang>`：Expo 的網頁模板固定寫 `en`，中文字會用英文頁面的預設 CJK 字型、報讀也當英文。`i18n/woowtech-document-language.web.ts` 讓它跟著 App 語言變，手機版是空函式；接點是 `i18n/i18next.ts` 的一行呼叫。
+- 守門：
+  - `woowtech/zh-tw.test.mjs`「the translated schedule screens have no hardcoded English」掃描排程頁的五個元件檔：JSX 文字、使用者看得到或聽得到的屬性、選項物件的 label、英文片語字串、以英文開頭或在插值後接英文的 template literal。上游合併帶進新的英文就會紅，要改成 `t()`。
+  - `i18n/woowtech-copy.test.ts` 的 `REPLACED_ENGLISH` 加了純函式和其他接點已經換掉的字面值。
+  - `i18n/woowtech-zh-tw-screens.test.ts` 把整個 i18n 切到 zh-TW，檢查上面每一處實際產生的文字，以及 `<html lang>` 跟著語言變。
 - 測試：
   - `i18n/woowtech-copy.test.ts`：既有文案與新文案各按上述語言政策驗證，檢查 key、插值一致及英文 fallback；已遷移的硬編碼不能回到原始碼裡。新增專案選項與主機選擇器的純 helper 測試也驗證切語言及使用者資料原樣保留，不以元件 mock 代替 UI 驗收。
   - `screens/settings/host-page-translations.test.tsx`：用 zh-TW 實際 render「終端機」「工作區」設定頁和瀏覽器工具卡，也檢查「終端機設定檔」和空狀態的文字。
@@ -661,7 +677,10 @@ node --test woowtech/*.test.mjs
   - 孤兒訂閱：demand 在 refresh 送出訂閱之前就離開（例如同一個 tick 內 acquire 再 release），`fetchAgents` 和 `fetchWorkspaceSnapshot` 照樣訂閱，留下沒有 demand 的 agents、workspaces 訂閱各一條。不會累積，下一個 demand 的 refresh 會換掉，全部釋放後歸 0。T1 主流程碰不到：descriptor 到了才釋放，那時訂閱已經建立。回報上游時可以建議這兩個函式在 generation 已變或沒有 demand 時不再訂閱。「witness: a demand that leaves before its refresh subscribes…」斷言現況：同一個 tick 內 acquire 再 release，剩 2 條訂閱。上游改成不訂閱時它會紅，確認後連同這一點刪掉。
 - 維護接點：`workspace-screen.tsx` 的 import 和 cache prepare effect 旁的一次 hook 呼叫，以及 `directory-sync/index.ts` 的 `subscriptionGeneration` 和 `setDemand` 的加入重試。合併上游時保留 hook 的 host／workspace／focus／descriptor-presence 四個依賴與 effect cleanup 回傳；上游改寫 `requestDemandRefresh`、`releaseSubscriptions` 或 `setDemand` 時，保留四件事：refresh 開始時清掉已滿足記號、期間丟過訂閱就不算滿足、期間丟過訂閱而結束時又有 demand 就再 refresh 一次、已有 demand 時新加入的 owner 也要求 refresh。上游自己的 `releaseSubscriptions()` 也必須清掉已滿足記號：refresh 結束後才釋放的非 race 路徑（沒有標籤的主機，或標籤比 React cleanup 早到）靠它，同一個連線的第二則通知、離開再回來才會再 refresh。這一行由 vitest 的「directory demand that leaves after its own refresh finished」和「leaving a deleted or archived workspace and coming back…」守，原始碼守門不看。純 acquisition seam 的測試使用真實 HostRuntimeStore、DirectorySync、DaemonClient 和 typed memory ports（假主機可以支援工作區標籤並延後標籤回覆、延後 agent 清單，或對工作區請求回錯誤；跟真的 daemon 一樣，只有帶 subscribe 的請求才開訂閱），斷言序列化 RPC、訂閱釋放、首次 hydration、新 epoch、agent target，以及上面的 race、非 race、失敗、逾時和不迴圈。race 案例等到「有一個被扣住的標籤請求」（`heldLabelRequests()`）才讓 demand 離開，不數標籤請求總數：合併上游 #5079 後，連線時就會先要一次標籤，那次照常回覆。agent tab 最後離開的案例用 `timeline.dispose()` 結束 route demand：上游 #5040 讓隱藏的 chat 在 tab 關掉前仍保留訂閱，合併後只把可見清單設成空的，route demand 不會歸零，案例會卡在等訂閱歸零，量不到 race。`woowtech/workspace-directory-demand.test.mjs` 只守原始碼：hook 呼叫必須是 `WorkspaceScreenContent` 本體的直接陳述式（不在 if、?:、&&、區塊或 callback 裡），前面沒有 early return，descriptor-presence 傳 `Boolean(workspaceDescriptor)`（跟 cache prepare effect 一樣看真值，查不到時不管回 `null` 還是 `undefined` 都算缺）；hook 自己的 `useEffect` 也必須是 hook 本體的直接陳述式，前面沒有 early return；`index.ts` 的 generation 遞增和上面四件事都在，每個把連線記成已滿足的寫入都在 generation 比對之下。它不能當成 hook runtime 或 GUI 證據。上游如果用別的寫法修好這個 race，這個守門會紅：先確認拿掉 fork 的修法後 T1 vitest 仍全綠，再改守門。
 - 首次修法（`ff410974f`）的紅綠：兩個現況見證先綠；cache-only 基線對「owner 應發 request」斷言得到 0 而非 1，補 demand 後 14/14 綠、接線守門 2/2 綠。八個定向突變都 exit 1（cache-only、少 focus、少 missing、丟 cleanup、等 hydration、拔 hook、漏 descriptor dependency、effect 不回 cleanup），還原後再驗。測試 adapter 的 metadata／wire 欄位錯誤與測試期待值修正不算修法紅燈。修後 Android 三情境仍由 Claude 排程；沒有新增裝置驗收結論。
-- recovery inspect 可能比目錄刷新早回，短暫出現 unavailable；本切片不改。若另排，需由 runtime 提供目前 epoch 的目錄刷新完成狀態，再讓 recovery inspect 等待，另 commit 並測離線、失敗與重連，不能用全域 hydrated 代替本 epoch 完成。
+- S1 的「工作區不可用」閃爍（fixes-0928）：通知指向 App 在背景時建立的工作區，App 回前景時重連，工作區清單在新連線的目錄刷新裡才到；在那之前 `hasHydratedWorkspaces` 早就是 true（背景前載過），畫面照舊判定工作區不見了，recovery inspect 也照送，daemon 回 `workspace_not_archived`（工作區在，只是沒封存），「工作區不可用」閃 0.6–0.9 秒後才變成 Agent（`logs/integ0927-android-s1-*.txt`）。
+  - 修法：`DirectorySync` 在一次 demand refresh 結束、而且這條連線不會再有下一次時（成功或失敗都算），經新的 callback `markDemandRefreshSettled` 通知 controller；snapshot 多一個選填欄位 `demandRefreshSettledFor`（這次結束的是哪一條連線）。`screens/workspace/woowtech-workspace-directory-settled.ts` 只在它跟目前連線（`clientGeneration`、`connectionEpoch`）相同時算「已結束」。`workspace-screen.tsx` 用「已 hydrate 而且這條連線的刷新已結束」取代原本只看 hydrate 的兩處：要不要做 recovery inspect，以及路由狀態。之前的連線結束的不算，所以重連後要等新連線的刷新；刷新失敗也算結束，畫面不會一直轉圈；離線時照舊是「無法連線到主機」。
+  - 上游檔：`runtime/directory-sync/index.ts`（callback 型別和 `finally` 裡的一個 else-if）、`runtime/host-runtime.ts`（snapshot 欄位、controller 方法、兩處建立 `DirectorySync` 的 callback）、`workspace-screen.tsx`（一次 hook 呼叫和兩個參數），註解以 `woowtech smart:` 開頭。上面守門要求的單一 `finally` 和 generation 重試判斷不變。
+  - 測試：`screens/workspace/woowtech-workspace-directory-settled.test.ts` 用 T1 的記憶體主機（真的 HostRuntimeStore、DirectorySync、DaemonClient）：S1（重連的刷新還在等時是「載入中」，資料到了變 ready；原本只看 hydrate 會是「工作區不可用」）、主機真的沒有這個工作區時最後仍是「工作區不可用」、刷新失敗後照樣判定、離線是無法連線，新連線要等它自己的刷新。裝置上的 S1 要在下一輪重驗。
 
 定向檢查就是本節「合併上游之後」的 `node --test woowtech/*.test.mjs` 和 T1 那行 vitest；依賴與 dist 已備妥時不需 build。
 
@@ -980,6 +999,18 @@ node --test woowtech/*.test.mjs
 - metadata 設定頁保留，用 fork copy 覆寫總說明與三段模型提示，明說目前停用、已存偏好不會啟用生成。比隱藏頁面更少改動，也讓使用者知道舊設定仍保留。專案設定的後設資料區塊也用 fork 說明保留指令但不會用於自動產生，表單與磁碟設定不變。繁中使用「後設資料」及「提交訊息」，英文與其他語系使用英文；不改上游語系檔或 OpenCode 探測流程。
 - Git metadata 測試放 `session/checkout/woowtech-git-metadata.test.ts`：預設 OFF 零呼叫、固定值、原 instructions builder 接點、明確 ON 的 positive control，以及真實 handler 的手填／部分手填行為。handler 測試只寫臨時 Git repo 與本機 bare remote，forge 用 typed fake，不發外部請求。原 `git-metadata-generator.test.ts` 僅注入 ON policy 保留原斷言；`session.test.ts` 在既有 mock 區塊以測試端 ON 覆寫保留 prompt 行為測試（C-022 明確核准的既有 mock 例外）。production `session.ts` 不傳 override，守門禁止測試用 policy 覆寫出現在 server production source：提供 policy 的物件成員（屬性、簡寫、方法、getter、有值的 class field）、對同名成員的 `=`、`??=`、`||=`、`&&=`、解構和參數的預設值（`const { name = … } = deps`、`{ name: local = … }`、`(name = …)`），以及用字串寫出 policy 名稱（`defineProperty`、`Reflect.set`、computed key）都算覆寫；唯一放行的是 `x.name = options.name ?? <fork policy>`，也就是 `WorkspaceAutoName` 建構子的接線。字串相加組出的名稱（`deps["isGeneration" + "Enabled"]`）和區域變數的初始值（`const name = deps.name ?? …`）不在範圍內；生成器入口那一行由第 2 項的 regex 釘住。合併上游後務必逐檔跑這兩檔與 fork OFF suite；不要只跑 generator 單元測試而漏掉 Session 接線。另跑 `node --test woowtech/git-metadata.test.mjs woowtech/workspace-auto-name.test.mjs` 鎖住兩個 gate、policy 預設與 production 接點；`woowtech-copy.test.ts` 守住限定語系政策、placeholder 與頁面文案接點。
 
+### 21. 附件上傳撐過重連
+
+- 現象（2026-09-27 Android 輪次，`logs/integ0927-android-u-attach.txt`）：檔案挑選器開超過 daemon 的 socket lease，daemon 斷線；選好檔案時 App 正在重連，上傳中的附件轉一下就消失，沒有錯誤，daemon 也沒收到檔案。logcat 是 daemon 回的「Upload chunks arrived before file begin.」。挑選器只開 20 秒時正常。
+- 原因在上游的 client（`packages/client/src/daemon-client.ts` 的 `uploadFile`）：連線中（`connecting`）時，`file.upload.request` 這則 JSON 會排進送出佇列，但 FileBegin 等二進位框不排隊。App 的 client 設了 `suppressSendErrors`，所以 FileBegin 被默默丟掉；第一個 chunk 前連線剛好完成，佇列補送 request，chunk 照送，daemon 就回那個錯誤。App 收到失敗只在 catch 裡跳 toast，並把上傳中的附件拿掉；裝置輪次沒看到任何錯誤訊息。上游 main（`30178c4f5`）這兩處都沒改。
+- 修法：
+  - client：`uploadFile` 先等連線完成（`waitUntilConnected`，只在 `connecting` 時等，逾時跟送出佇列一樣），整個檔案都走同一條連線；沒連線、連線失敗或逾時就回 `DaemonConnectionError`，什麼都不送。上游檔 +40 行，註解 `woowtech smart:`。
+  - App：`composer/woowtech-upload-reconnect.ts`。上傳因為連線中斷（`DAEMON_CONNECTION_LOST`、「Transport not connected」或 socket 已關的「WebSocket not open」）失敗時，附件留在上傳中，等這台主機的 client 重新連上（同一個 client 自己重連，或 host runtime 換成新的 client，最多等 60 秒）再重送，一個檔案最多送 3 次。其他錯誤、逾時和等不到主機照舊失敗。接點是 `composer/actions.ts` 的 `uploadFileAttachments`（多一個 `reconnect` 參數）和 `composer/index.tsx` 的 `uploadSelectedFiles`。
+  - 最後還是失敗時，連線中斷的錯誤改顯示「與主機的連線中斷，檔案沒有上傳。主機連回來後請再加入一次。」（`woowtech.composer.uploadConnectionLost`，只有繁中和英文）。
+  - 順手修上游的 key：composer 在 client 不在時 toast `composer.errors.daemonClientDisconnected`，但這個 key 不存在，畫面會顯示 key 本身；改用 `common.errors.daemonClientDisconnected`。
+- 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
+- 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送要在下一輪驗。
+
 ## 上游同步紀錄（2026-09-27，挑選式）
 
 ### 第一批：上游 `836f1a9..d6861f81e`
@@ -1215,6 +1246,11 @@ node --test woowtech/*.test.mjs
 - `e6085c1e9`（條件式）：新的提示只提 `PASEO_PASSWORD`，沒有指令名和產品名。同一個函式原本的「Start with: paseo daemon start …」照第 12 節由 `renderError` 換成 `woowtech-smart`。
 - `e3c853df5`（條件式）：`eas.json` 的 `production` 改成跟我們的 `preview`、`production-apk` 一樣略過 lint（第 1 節）。
 - `dc9799f6f`（條件式）：OSC 8 連結改交給 `onOpenExternalUrl`，也就是我們的 `openExternalUrl`：只放行 http、https 和 mailto，桌面版交給 Electron 的開啟器（第 10 節）。之前 xterm 會自己問一次再 `window.open()`。這個 pick 只改 `terminal-emulator-runtime.ts`，桌面版和網頁版直接用；手機的終端機要等重建 webview bundle 才有，見上面「審查後補拿」。
+  - fixes-0928 查證（2026-09-28）：pick 本身沒問題。上游的 `terminal-emulator-runtime.browser.test.ts` 在這台 Mac 改用已安裝的 Chrome 跑，25/25 過；提交的 webview bundle 在 headless Chrome 裡，滑鼠移到 OSC 8 連結上變 pointer，點下去交給 `onOpenExternalUrl`（桌面的滑鼠路徑、DOM 渲染器、⌘-點、分段寫入都一樣）。2026-09-27 裝置上點不開，是下面幾個上游缺口，要改 protocol 或 xterm，fork 不修，開啟器的放行清單也不動：
+    - 終端機重新訂閱後就沒有連結。daemon 的畫面快照不帶超連結（`TerminalCellSchema` 只有 `underline`，`renderTerminalSnapshotToAnsi` 只發 SGR 4），重新訂閱（`visible-snapshot` restore）、重連、輸出過量改送快照時，OSC 8 連結都變成一般的底線文字；headless 終端機的公開 API 也讀不到連結。桌面輪次剛印出來時是虛線（`shots/integ0927-desktop-20b-osc8.png`，xterm 的 OSC 8 樣式），點擊之後的 `-20c` 變實線；daemon 在那 30 秒收到 4 次 `subscribe_terminal_request`。純文字網址由 WebLinksAddon 從文字裡找，所以照樣能點。
+    - xterm 6.1.0-beta.213 的 Linkifier 按列快取連結結果，那一列的內容變了也不重算：滑鼠先停在某一列，那一列之後才印出 OSC 8 連結，在同一列移動都認不出來，要移到別列再回來（headless Chrome 重現）。
+    - 觸控：舊版 WebView 渲染器裡，xterm 的手勢處理（`browser/scrollable/touch.ts`）在 touchstart、touchend 呼叫 `preventDefault`，瀏覽器不產生相容的滑鼠事件，Linkifier 收不到移入和點擊，OSC 8 和純文字網址都點不開（headless Chrome 用觸控 tap 重現）。Android 預設的 native-grid 渲染器本來就沒有連結功能。
+    - xterm 只把 http、https 的 OSC 8 目標當成連結（`linkHandler` 沒開 `allowNonHttpProtocols`），OSC 8 的 mailto、file:、javascript: 都不是連結，不會送到開啟器。
 - `315803688`（條件式）：只拿掉設定頁讀 daemon 狀態的 1.5 秒逾時。npm 自我更新仍停用（第 4 節）。
 - 繁中：這批沒有新的介面文字或翻譯 key，不用重新產生 zh-TW。
 - lock：`package-lock.json` 沒變。
@@ -1253,7 +1289,7 @@ node --test woowtech/*.test.mjs
   - App 的 browser 模式單元測試 `question-form-card.browser.test.tsx`、`terminal-emulator-runtime.browser.test.ts`：要 Playwright 的 Chromium，這台 Mac 沒裝，沒跑。
 - CI 不跑、要手動跑的：`claude-provider-config-dir-history.e2e.test.ts`，在 PATH 上有 claude 的機器上跑（見上面）。
 - 要真的 provider 才能跑、CI 也不跑的：`codex-custom-provider-import.local.e2e`（codex）、`opencode-bridge.local.e2e`（OpenCode）、`pi-rewind.real.e2e`（Pi）。照規定不在這台 Mac 執行真的 provider，沒跑。
-- iOS、Android 正式版實機：多選問題的「其他」答案（`8e858f0e3`）、上傳的檔名（`fbc83613c`）、終端機的 OSC 8 連結（`dc9799f6f`，手機用重建的 webview bundle `301b4e894`；點 http、https、mailto 的連結會開，其他 scheme 不會）、訊息日期（`28507224d`）。Android 的 `production` 建置改了 gradle 指令（`e3c853df5`），下一次 EAS 正式建置時確認。
+- iOS、Android 正式版實機：多選問題的「其他」答案（`8e858f0e3`）、上傳的檔名（`fbc83613c`）、終端機的 OSC 8 連結（`dc9799f6f`：桌面版在終端機重新訂閱之前，點 http、https 的 OSC 8 連結會交給開啟器；手機點不開，mailto 也不算連結，見上面的 fixes-0928 查證）、訊息日期（`28507224d`）。Android 的 `production` 建置改了 gradle 指令（`e3c853df5`），下一次 EAS 正式建置時確認。
 - 桌面版：有密碼的 daemon 顯示「在編輯器開啟」（`e07da55f8`）；多鍵、改綁和 Backspace 的快捷鍵（`9a3f3a0dc`、`ec43e9067`、`fbe5005aa`）；主題清單捲動（`a048094da`）；網頁版模型選擇列（`04c3e003f`）；從設定頁更新和重啟 daemon（`315803688`）。
 - daemon：重開機後 PID 被占用（`faee1cd95`）要實際重開機才驗得到；`daemon.log` 寫不進去（`cb9654a65`）；大型 repo 的監看 CPU 和記憶體（`c3e1e084a`、`e998e0a08`、`9978988e3`）。
 - 審查後補拿的：用一般 ACP Agent 開新 Agent，/ 選單要列出它的斜線指令（`513f2a9ea`）；在官方 Paseo 的 Agent 終端機裡跑 `woowtech-smart run`，要建立頂層 Agent，不報「Caller agent not found」（`e68553f75`）；桌面版載入有建置指令的目錄外掛，建置照常成功（`f9fb992dc`）。

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { CalendarClock, Plus } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
@@ -46,11 +47,6 @@ type FormState =
   | { mode: "create" }
   | { mode: "edit"; serverId: string; schedule: ScheduleSummary };
 
-const STATUS_FILTER_OPTIONS: { value: ScheduleBucket; label: string; testID: string }[] = [
-  { value: "runnable", label: "Active", testID: "schedules-filter-active" },
-  { value: "ended", label: "Ended", testID: "schedules-filter-ended" },
-];
-
 const EMPTY_SCHEDULES: AggregatedSchedule[] = [];
 
 export function SchedulesScreen(): ReactElement {
@@ -64,6 +60,7 @@ export function SchedulesScreen(): ReactElement {
 }
 
 function SchedulesScreenContent(): ReactElement {
+  const { t } = useTranslation();
   const { loadState, hostErrors, isError, refetch } = useSchedules();
   const schedules = loadState.status === "loaded" ? loadState.data : EMPTY_SCHEDULES;
   const { agents } = useAggregatedAgents({ includeArchived: true });
@@ -166,7 +163,7 @@ function SchedulesScreenContent(): ReactElement {
 
   return (
     <View style={styles.container}>
-      <MenuHeader title="Schedules" />
+      <MenuHeader title={t("sidebar.sections.schedules")} />
       <SchedulesScreenBody
         rows={visibleRows}
         loadState={loadState}
@@ -222,6 +219,22 @@ function SchedulesScreenBody({
   onCreate: () => void;
   onEdit: (schedule: AggregatedSchedule) => void;
 }): ReactElement {
+  const { t } = useTranslation();
+  const statusFilterOptions = useMemo<{ value: ScheduleBucket; label: string; testID: string }[]>(
+    () => [
+      {
+        value: "runnable",
+        label: t("woowtech.schedules.filters.active"),
+        testID: "schedules-filter-active",
+      },
+      {
+        value: "ended",
+        label: t("woowtech.schedules.filters.ended"),
+        testID: "schedules-filter-ended",
+      },
+    ],
+    [t],
+  );
   const bodyState = resolveSchedulesScreenBodyState({ loadState, showLoadError });
 
   if (bodyState.kind === "loading") {
@@ -235,9 +248,9 @@ function SchedulesScreenBody({
   if (bodyState.kind === "load-error") {
     return (
       <View style={styles.centered}>
-        <Text style={styles.message}>Unable to load schedules</Text>
+        <Text style={styles.message}>{t("woowtech.schedules.loadFailed")}</Text>
         <Button variant="ghost" onPress={onRetry} testID="schedules-retry">
-          Try again
+          {t("woowtech.schedules.retry")}
         </Button>
       </View>
     );
@@ -281,7 +294,7 @@ function SchedulesScreenBody({
             size="sm"
             value={statusFilter}
             onValueChange={onStatusFilterChange}
-            options={STATUS_FILTER_OPTIONS}
+            options={statusFilterOptions}
             testID="schedules-status-filter"
           />
         </View>
@@ -292,7 +305,7 @@ function SchedulesScreenBody({
           size="sm"
           testID="schedules-new"
         >
-          New schedule
+          {t("woowtech.schedules.newSchedule")}
         </Button>
       </View>
       <ScrollView
@@ -316,39 +329,45 @@ function SchedulesEmptyState({
   onCreate: () => void;
   testID?: string;
 }): ReactElement {
+  const { t } = useTranslation();
   return (
     <View style={styles.emptyState} testID={testID}>
       <CalendarClock size={styles.emptyIcon.width} color={styles.emptyIcon.color} />
       <View style={styles.emptyTextStack}>
-        <Text style={styles.emptyTitle}>No active schedules</Text>
-        <Text style={styles.emptyDescription}>Schedules run agents on a cadence.</Text>
-        <ExternalLink href={BRAND_LINKS.docs.schedules} label="See docs" />
+        <Text style={styles.emptyTitle}>{t("woowtech.schedules.empty.title")}</Text>
+        <Text style={styles.emptyDescription}>{t("woowtech.schedules.empty.description")}</Text>
+        <ExternalLink
+          href={BRAND_LINKS.docs.schedules}
+          label={t("woowtech.schedules.empty.docs")}
+        />
       </View>
       <Button variant="outline" leftIcon={Plus} onPress={onCreate} testID="schedules-empty-new">
-        New schedule
+        {t("woowtech.schedules.newSchedule")}
       </Button>
     </View>
   );
 }
 
 function SchedulesEndedEmptyState(): ReactElement {
+  const { t } = useTranslation();
   return (
     <View style={styles.filterEmpty}>
       <View style={styles.endedEmptyState}>
         <CalendarClock size={styles.emptyIcon.width} color={styles.emptyIcon.color} />
-        <Text style={styles.emptyTitle}>No ended schedules</Text>
+        <Text style={styles.emptyTitle}>{t("woowtech.schedules.endedEmpty")}</Text>
       </View>
     </View>
   );
 }
 
 function ScheduleHostErrorsBanner({ errors }: { errors: ScheduleHostError[] }): ReactElement {
+  const { t } = useTranslation();
   return (
     <View style={styles.errorsBannerWrap}>
       <View style={styles.errorsBanner} testID="schedules-host-errors">
         {errors.map((error) => (
           <Text key={error.serverId} style={styles.errorsBannerText}>
-            {`${error.serverName}: Could not load schedules`}
+            {t("woowtech.schedules.hostLoadFailed", { host: error.serverName })}
           </Text>
         ))}
       </View>
