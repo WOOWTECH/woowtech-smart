@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -8,6 +7,17 @@ import type * as ClaudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
 
 import { execCommand } from "../../../../utils/spawn.js";
 import { resolvePaseoHome } from "../../../paseo-home.js";
+import {
+  ClaudeAgentSdkRuntimeError,
+  loadManagedClaudeSdk,
+} from "./claude-agent-sdk-installation.js";
+import {
+  claudeAgentSdkRegistry,
+  fetchFromRegistry,
+  ClaudeAgentSdkDownloadError,
+} from "./claude-agent-sdk-download.js";
+
+export { ClaudeAgentSdkDownloadError } from "./claude-agent-sdk-download.js";
 
 export type ClaudeAgentSdkModule = typeof ClaudeAgentSdk;
 
@@ -22,23 +32,13 @@ export const CLAUDE_AGENT_SDK_VERSION = "0.3.246";
 export const CLAUDE_AGENT_SDK_INTEGRITY =
   "sha512-FtR0HoHHNqeqJWjZN8qLUAzZVFUI9ztXYNPPwv98Ecmv9qq2QTauI8IzkY26CC0mleWAqb9RQEW2C0OtiUliug==";
 
-export class ClaudeAgentSdkDownloadError extends Error {
-  constructor(
-    public readonly url: string,
-    public readonly status: number,
-  ) {
-    super(`Claude Agent SDK download from ${url} failed with HTTP ${status}`);
-    this.name = "ClaudeAgentSdkDownloadError";
-  }
-}
-
 export class ClaudeAgentSdkIntegrityError extends Error {
   constructor(
     public readonly expected: string,
     public readonly actual: string,
   ) {
     super(
-      `Claude Agent SDK download failed its integrity check (expected ${expected}, got ${actual}); refusing to install it`,
+      "[woowtech:claude-sdk:integrity] Claude Agent SDK download failed its integrity check; refusing to install it. Send your next message to retry.",
     );
     this.name = "ClaudeAgentSdkIntegrityError";
   }
@@ -52,55 +52,56 @@ export interface LoadClaudeAgentSdkOptions {
   /** Fetches the SDK tarball from the npm registry. */
   fetchTarball: (url: string) => Promise<Uint8Array>;
   version?: string;
+  /** Registry base URL, including an optional repository subpath. */
+  registry?: string;
   /** Subresource-integrity string of the tarball, e.g. `sha512-…`. */
   integrity?: string;
 }
 
-let loadedSdk: ClaudeAgentSdkModule | null = null;
-let loadingSdk: Promise<ClaudeAgentSdkModule> | null = null;
-
-/** The SDK if this daemon has already loaded it; never triggers a download. */
-export function peekClaudeAgentSdk(): ClaudeAgentSdkModule | null {
-  return loadedSdk;
+export interface ClaudeAgentSdkSource {
+  peek(): ClaudeAgentSdkModule | null;
+  ensure(): Promise<ClaudeAgentSdkModule>;
 }
 
-/**
- * Loads the Claude Agent SDK once per daemon.
- *
- * woowtech smart does not ship the SDK: it is Anthropic's proprietary code
- * ("All rights reserved"), so the daemon fetches the pinned version from the npm
- * registry on first use, verifies it, and keeps it under $PASEO_HOME. Development
- * checkouts still resolve it from node_modules (it is a devDependency). A failed
- * attempt is not cached, so the next Claude session retries.
- */
-export function ensureClaudeAgentSdk(): Promise<ClaudeAgentSdkModule> {
-  if (loadedSdk) {
-    return Promise.resolve(loadedSdk);
-  }
-  loadingSdk ??= loadClaudeAgentSdk({
+/** One owner per daemon; a rejected attempt is never cached. */
+export function createClaudeAgentSdkSource(
+  load: () => Promise<ClaudeAgentSdkModule>,
+): ClaudeAgentSdkSource {
+  let loaded: ClaudeAgentSdkModule | null = null;
+  let loading: Promise<ClaudeAgentSdkModule> | null = null;
+  return {
+    peek: () => loaded,
+    ensure: () => {
+      if (loaded) return Promise.resolve(loaded);
+      loading ??= Promise.resolve()
+        .then(load)
+        .then(
+          (sdk) => {
+            loaded = sdk;
+            return sdk;
+          },
+          (error: unknown) => {
+            loading = null;
+            throw error;
+          },
+        );
+      return loading;
+    },
+  };
+}
+
+const sdkSource = createClaudeAgentSdkSource(() =>
+  loadClaudeAgentSdk({
     runtimeDir: path.join(resolvePaseoHome(), "runtime-deps"),
     importLocal: () => import("@anthropic-ai/claude-agent-sdk"),
     fetchTarball: fetchFromRegistry,
-  }).then(
-    (sdk) => {
-      loadedSdk = sdk;
-      return sdk;
-    },
-    (error: unknown) => {
-      loadingSdk = null;
-      throw error;
-    },
-  );
-  return loadingSdk;
-}
+    registry: claudeAgentSdkRegistry(process.env),
+  }),
+);
 
-async function fetchFromRegistry(url: string): Promise<Uint8Array> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
-  if (!response.ok) {
-    throw new ClaudeAgentSdkDownloadError(url, response.status);
-  }
-  return new Uint8Array(await response.arrayBuffer());
-}
+/** Reads the daemon's already loaded SDK without starting a download. */
+export const peekClaudeAgentSdk = sdkSource.peek;
+export const ensureClaudeAgentSdk = sdkSource.ensure;
 
 export async function loadClaudeAgentSdk(
   options: LoadClaudeAgentSdkOptions,
@@ -114,19 +115,47 @@ export async function loadClaudeAgentSdk(
   }
 
   const version = options.version ?? CLAUDE_AGENT_SDK_VERSION;
-  const installDir = path.join(options.runtimeDir, `claude-agent-sdk-${version}`);
-  if (existsSync(installedEntry(installDir))) {
-    return importInstalledSdk(installDir);
+  try {
+    return await loadManagedClaudeSdk({
+      runtimeDir: options.runtimeDir,
+      version,
+      importInstalled: importInstalledSdk,
+      install: async (directory) => {
+        const bytes = await options.fetchTarball(tarballUrl(version, options.registry));
+        verifyIntegrity(bytes, options.integrity ?? CLAUDE_AGENT_SDK_INTEGRITY);
+        await extractTarball(bytes, directory);
+      },
+    });
+  } catch (error) {
+    if (
+      error instanceof ClaudeAgentSdkDownloadError ||
+      error instanceof ClaudeAgentSdkIntegrityError
+    )
+      throw error;
+    throw new ClaudeAgentSdkRuntimeError();
   }
-
-  const bytes = await options.fetchTarball(tarballUrl(version));
-  verifyIntegrity(bytes, options.integrity ?? CLAUDE_AGENT_SDK_INTEGRITY);
-  await extractTarball(bytes, installDir);
-  return importInstalledSdk(installDir);
 }
 
-function tarballUrl(version: string): string {
-  return `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-${version}.tgz`;
+function tarballUrl(version: string, registry = "https://registry.npmjs.org/"): string {
+  let base: URL;
+  try {
+    base = new URL(registry);
+  } catch {
+    throw new Error("Claude Agent SDK registry URL is invalid");
+  }
+  if (
+    !["http:", "https:"].includes(base.protocol) ||
+    base.username ||
+    base.password ||
+    base.href.includes("?") ||
+    base.href.includes("#")
+  ) {
+    throw new Error(
+      "Claude Agent SDK registry must be HTTP(S) without credentials, query or fragment",
+    );
+  }
+  base.pathname = `${base.pathname.replace(/\/+$/, "")}/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-${version}.tgz`;
+  return base.href;
 }
 
 function isModuleNotFound(error: unknown): boolean {

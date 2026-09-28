@@ -29,7 +29,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
 - 改動原則：新程式放新檔案，接點只改上游很少動的檔案。上游每週大約有 100 個 commit，下面這幾個是熱檔，盡量別碰：
   `packages/server/src/server/agent/providers/claude/agent.ts`、`packages/server/package.json`、`packages/server/src/server/bootstrap.ts`。
-- GitHub Actions 只開 CI、只跑 Ubuntu 上的測試，其他 10 個上游 workflow 在 GitHub 停用。Playwright 只在手動觸發並勾選時跑。理由、打開的步驟、前兩次執行的結果和修正見第 18 節。
+- GitHub Actions 只開 CI、只跑 Ubuntu 上的測試，其他 10 個上游 workflow 在 GitHub 停用。Playwright 只在手動觸發並勾選時跑。typecheck job 也跑 `woowtech/*.test.mjs` 守門。理由、打開的步驟、前兩次執行的結果和修正見第 18 節。
 
 ## 跟上游的差異
 
@@ -54,17 +54,70 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 原因：SDK 是 Anthropic 的專有授權（All rights reserved），不隨產品散佈。
 - 載入順序（`packages/server/src/server/agent/providers/claude/claude-agent-sdk-runtime.ts`）：
   1. node_modules 裡有就直接用。開發機會有，因為它是 devDependency。
-  2. 否則用 `$PASEO_HOME/runtime-deps/claude-agent-sdk-<版本>/`。
-  3. 都沒有才從 npm registry 下載，sha512 對不上就拒絕，什麼都不裝。實測檔案 4.6MB，第一個 Claude 對話會多等約 3 秒。
+  2. 否則讀 `$PASEO_HOME/runtime-deps/claude-agent-sdk-<版本>.json` 指向的同版本 generation；沒有 pointer 時仍相容舊的 `claude-agent-sdk-<版本>/` 目錄。
+  3. 沒有可載入副本，才從 npm registry 或鏡像下載；sha512 對不上就拒絕。下載約 1.33 MB，解壓後約 4.6 MB；首次等待時間取決於網路。
+- 受管理副本缺檔、語法錯誤或初始化失敗時，只把選中的副本移到同層 quarantine，重新下載一次。新副本用獨立實體 generation 目錄，完整性驗證與真正 import 成功後才原子更新 pointer，避免 Node 把舊 entry／相對依賴的失敗快取帶回來。local/dev SDK 的其他載入錯誤不自動修復。
+- pointer 只接受同版本、合法 UUID 的 basename；格式錯誤、越界或含符號連結的路徑安全拒絕。失敗時清自己的 partial／未發布副本，不刪其他 generation 或整個 runtime-deps；舊副本與 quarantine 不自動回收。這是路徑檢查，不是防同權限惡意程序競態的檔案系統沙箱。
 - `claudeQuery()` 必須立刻回傳 Query，所以 SDK 還沒載入時，它會先回傳 `DeferredQuery`（`deferred-query.ts`）。
   Query 的每個方法都寫明轉發，SDK 升版改了介面時會直接編譯失敗，不會默默漏掉某個呼叫。
 - Claude 本身一律使用使用者自己安裝的 `claude`，這是上游原本的設計，SDK 內附的執行檔用不到。
+- 找 `claude` 的順序：
+  1. 使用者在 `agents.providers.claude.command` 手動指定的指令一律優先，解析方式跟上游一樣，不看下面兩步：找不到就顯示不可用，不會改用別的 `claude`。指令寫的是 `claude` 這個名字時也只找 PATH；要在 Dock 啟動的桌面版加自訂參數，請寫絕對路徑。
+  2. daemon 的 PATH：`which -a claude`，每個候選各跑一次 `--version`（2 秒逾時），跟上游一樣。
+  3. PATH 沒有可用的 `claude`，才依序試 `~/.local/bin/claude`、`~/.claude/local/claude`、`/opt/homebrew/bin/claude`、`/usr/local/bin/claude`。`~` 是 daemon 環境的 home（`os.homedir()`）。
+  - 原因：桌面版從 Dock 啟動時用的是登入 shell 的 PATH，裡面不一定有 `~/.local/bin`，而 Claude Code 的原生安裝程式把 `claude` 放在那裡。
+  - 備援位置只算存在、可執行、不是資料夾的檔案，也要通過同樣的 `--version`。符號連結指向的檔案也算：原生安裝程式的 `~/.local/bin/claude` 就是指向版本資料夾的連結。回傳連結本身的路徑，Claude Code 更新換版後照樣有效。
+  - PATH 查詢本身出錯（不是找不到）時照上游拋出錯誤，不改試備援位置。Windows 不套用備援位置（不在 v1）。
+  - 寫在 fork 檔 `packages/server/src/executable-resolution/woowtech-claude-fallback.ts`。接點只有上游 `provider-launch-config.ts` 的 `checkProviderLaunchAvailable`（+4／-2 行）：呼叫端沒給 launch default、指令是預設的 `claude` 時補上備援。Claude 的可用狀態、診斷、版本和啟動都經過這裡；其他 provider 和熱檔 `agent.ts` 都沒動。
+  - 測試：`woowtech-claude-fallback.test.ts` 在暫存目錄模擬 home、PATH 和 `/opt/homebrew`、`/usr/local`，不碰真的 home，也不執行真的 `claude`：四個位置各自、前面的位置優先、PATH 優先、手動指令優先（也不會改用備援）、不可執行／資料夾／`--version` 失敗的檔案跳過、原生安裝程式的連結、都沒有時找不到、Windows 不套用。守門 `woowtech/claude-executable.test.mjs` 把 HOME、PATH 指到暫存目錄，從原始碼確認 Claude provider 真的找得到 `~/.local/bin/claude`、版本由那個檔案回報，手動指令照舊；上游改寫 `checkProviderLaunchAvailable` 或 Claude provider 改傳自己的 launch default 時會失敗。
+  - 上游測試 `provider-availability.test.ts` 的「Claude reports unavailable when the default command cannot be resolved」原本只把 PATH 指到空資料夾，現在也把 HOME 指過去（+8 行）。`/opt/homebrew/bin`、`/usr/local/bin` 沒辦法用環境變數隔開：在那裡裝了 `claude` 的機器上，這個上游測試會找到它、執行它的 `--version` 而失敗。
+- 登入狀態：設定頁的供應商列表（App、桌面版）和 Claude 的診斷會顯示 Claude 的登入狀態。**只顯示，不擋**：可用狀態（ready）、`isAvailable` 和建立 Agent 都不看它。有些 API 設定偵測不到，擋下來反而錯。
+  - 判斷順序照 Claude Code 的認證優先序（code.claude.com/docs/en/authentication）。先看 provider 的有效環境：daemon 的環境加上 provider 設定的 `env`，值是空字串等於沒設。環境決定不了，才執行 `claude auth status`（5 秒逾時）：
+
+    | 偵測到的                                                       | 狀態                      | 設定頁（zh-TW／英文）                                                                                                                              |
+    | -------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `CLAUDE_CODE_USE_BEDROCK`／`VERTEX`／`FOUNDRY` 為真            | unknown                   | 可用 · 無法確認登入狀態／Login status unknown                                                                                                      |
+    | `ANTHROPIC_AUTH_TOKEN`                                         | configured                | 可用 · 已設定 ANTHROPIC_AUTH_TOKEN／ANTHROPIC_AUTH_TOKEN is set                                                                                    |
+    | `ANTHROPIC_API_KEY`                                            | configured（api_key）     | 可用 · 使用 API key（按用量計費），不是 Claude 訂閱／Uses an API key (billed per use), not a Claude subscription                                   |
+    | `CLAUDE_CODE_OAUTH_TOKEN`                                      | configured                | 可用 · 已設定 CLAUDE_CODE_OAUTH_TOKEN／CLAUDE_CODE_OAUTH_TOKEN is set                                                                              |
+    | `ANTHROPIC_PROFILE`，或聯邦的兩個變數都有                      | unknown                   | 可用 · 無法確認登入狀態                                                                                                                            |
+    | 登入狀態 `loggedIn:false`                                      | needs_login               | **需要登入**（警告色）· 請在主機上執行 claude auth login，或設定 API key。／Login required · Run claude auth login on the host, or set an API key. |
+    | claude.ai 登入、有方案、沒有 API key                           | signed_in（subscription） | 可用 · 已使用 Claude 訂閱登入／Signed in with a Claude subscription                                                                                |
+    | Claude 設定檔裡的 API key（`apiKeySource: ANTHROPIC_API_KEY`） | configured（api_key）     | 同上面的 API key                                                                                                                                   |
+    | apiKeyHelper、雲端供應商（`third_party`、非 firstParty）       | unknown                   | 可用 · 無法確認登入狀態                                                                                                                            |
+    | Claude 設定檔裡的 token（`oauth_token`）                       | configured                | 可用 · 已設定認證資訊／Credentials are set                                                                                                         |
+    | 其他已登入（例如 Console 的 API key、沒有方案資訊）            | signed_in                 | 可用 · 已登入／Signed in                                                                                                                           |
+    | 找不到 `claude`、逾時、被中止、輸出不是 JSON                   | unknown                   | 可用 · 無法確認登入狀態                                                                                                                            |
+
+  - 先看環境變數的原因：Agent 用的非互動模式只要有 `ANTHROPIC_API_KEY` 就一定用它，即使同時登入了訂閱；這時 `claude auth status` 仍回報 claude.ai 登入。
+  - 不外洩：`claude auth status` 的輸出含帳號 email 和組織。程式只把固定欄位分類成上表的狀態，診斷、snapshot、log 和錯誤訊息都不帶原始輸出、email、key 或 token；變數只寫名稱。
+  - 更新時機：跟著供應商重新整理（daemon 啟動、在供應商視窗按重新整理或重新跑診斷）。在主機上登入後要按一次重新整理；不另外監看登入檔。
+  - 偵測不到、會顯示成別的：同時設了 `CLAUDE_CODE_OAUTH_TOKEN` 和 apiKeyHelper 時，Claude 用 apiKeyHelper，這裡顯示「已設定 CLAUDE_CODE_OAUTH_TOKEN」；Anthropic 的 active profile（`~/.config/anthropic`）和企業的 Claude apps gateway 不讀，gateway 使用者設了 `ANTHROPIC_API_KEY` 時會看到 API key 那一行。都只影響說明文字，不影響能不能用。
+  - protocol：provider snapshot 的 entry 多一個選填欄位 `auth: { state, method? }`（fork 檔 `packages/protocol/src/woowtech-provider-auth.ts`，接到 `messages.ts`、`agent-types.ts` 各 +3 行）。兩個值在線上都是字串：App 遇到之後才加的值，顯示成「無法確認登入狀態」，不會整份 snapshot 解析失敗。舊 App 收到新 daemon 的 entry 會略過這欄；新 App 連舊 daemon 沒有這欄，照舊顯示「可用」。
+  - 其他接點：
+    - server：`AgentClient` 多一個選填的 `getAuthStatus`（`agent-sdk-types.ts`）；`provider-snapshot-manager.ts` 在 provider 可用後跟 `fetchCatalog` 同時讀（fork 檔 `server/agent/woowtech-provider-auth.ts`，失敗一律當沒有，只抄 `state`、`method` 兩欄）；`provider-registry.ts` 的包裝 client 轉接它（+2 行），所以繼承 Claude 的自訂 provider 讀自己的 `env`。
+    - Claude：分類寫在 fork 檔 `providers/claude/woowtech-auth.ts`，機器 I/O 走 `woowtech-auth-io.ts`（測試換成假的）。熱檔 `agent.ts` 改了三處：`getDiagnostic` 的 Auth 行改用 fork 檔、刪掉上游把 `auth status` 原始輸出串進診斷的 `resolveClaudeAuth`、多一個 `getAuthStatus`。合併上游時如果上游又改回原始輸出，保留 fork 的版本。
+    - App：`screens/settings/providers-section.tsx` 只在 provider 啟用且 ready 時套用（+10／-3 行）；文字與判斷在 fork 檔 `woowtech-provider-auth.ts`、`woowtech-provider-auth-detail.tsx`，文案在 `i18n/woowtech-copy.ts` 的 `claudeAuth`（只譯繁中，其他語言用英文）。說明那一行手機也顯示；手機的列本來就不顯示狀態文字，需要登入時看的是警告色的點和說明。CLI 的 `provider ls` 沒改。
+  - 測試（都不執行真的 `claude`、不讀真的 `~/.claude`，也不看跑測試那台機器的環境變數）：
+    - `providers/claude/agent.woowtech-auth.test.ts`：假的 `claude auth status` 含 email、org 和像 key 的字串，逐一驗證上表每個狀態的診斷行和 `getAuthStatus`、環境變數的優先序（含 API key 優先於訂閱）、空字串覆蓋、旗標為 0，以及診斷和結果都不含那些字串（斷言只印布林值）。
+    - `server/agent/woowtech-provider-auth.test.ts`：snapshot 帶 `auth` 且仍是 ready、需要登入時 `validateAgentConfiguration`／`resolveCreateConfig` 照常通過、讀取失敗時仍 ready 且沒有這欄、不可用的 provider 不讀、重新整理後更新、繼承 Claude 的自訂 provider 與加了模型的 Claude 都讀得到。
+    - `protocol/src/woowtech-provider-auth.test.ts`：新 App 保留、舊 daemon 沒有、舊 App 略過、之後才加的值、compact 編解碼、App 實際用的 generated validator。
+    - App：`woowtech-provider-auth.test.ts` 用真的翻譯檢查 zh-TW、英文每個狀態的標籤、顏色和說明；`woowtech-provider-auth-row.test.tsx` 實際 render 供應商列表（zh-TW、英文），確認需要登入、token、API key、訂閱、未知和舊 daemon 的列。
+
 - 升級 SDK 時，這三個地方要一起改：
   - `CLAUDE_AGENT_SDK_VERSION`
   - `CLAUDE_AGENT_SDK_INTEGRITY`，用 `npm view @anthropic-ai/claude-agent-sdk@<版本> dist.integrity` 取得
   - `packages/server/package.json` 的 devDependency
 - 不要開 TypeScript 的 `verbatimModuleSyntax`。一開，`agent.ts` 的 `import { type … } from "@anthropic-ai/claude-agent-sdk"` 會被編譯成 `import {} from …`，SDK 又變回啟動必要的相依套件，沒裝的話 daemon 會起不來。
-- 使用者第一次用 Claude 時，電腦要連得到 registry.npmjs.org。連不到時，對話裡會顯示錯誤，下次開對話會自動重試。
+- 第一次使用需要連到 npm registry 或設定的鏡像站。失敗不快取，同一個 daemon 的下一則訊息會再試，不必重開對話，也不會自動重送失敗的訊息。下載連同讀取 body 的總逾時是 120 秒。
+- App 對 loader 自己的完整錯誤格式提供繁中提示，說明首次需要下載、來源無法連線，以及下一則訊息會重試；完整性與安裝失敗各有自己的提示。只作用於 error notification，不翻一般 Agent 輸出或未知錯誤，也不把原始 URL、代理認證或 cause 帶進新提示。
+- 公司網路設定（只影響 SDK 下載，不更換 daemon 的全域 dispatcher）：
+  - `https_proxy`／`HTTPS_PROXY`、`http_proxy`／`HTTP_PROXY`：小寫優先；HTTPS 沒有專用代理（或設為空字串）時使用 HTTP 代理。代理 URL 可含認證，錯誤不回傳 URL、headers 或原始網路錯誤。
+  - `no_proxy`／`NO_PROXY`：小寫優先（含空字串），支援主機、主機加 port、子網域 suffix、逗號或空白分隔清單，以及 `*` 全部直連。
+  - `NODE_EXTRA_CA_CERTS=/absolute/path/company-ca.pem`：在啟動 daemon **之前**設定；使用 Node 預設的額外 CA 機制，不關閉 TLS 驗證。已用測試 CA 在 Node 22.23.2、24.11.0 與 Electron 44.2.0 的 Node 24.20.0 驗證 direct／CONNECT；沒有 CA 時拒絕，有 CA 時成功。這不是實際公司代理的驗收。
+  - `npm_config_registry`／`NPM_CONFIG_REGISTRY`：小寫優先，預設 `https://registry.npmjs.org/`。HTTP(S) URL 可含子路徑，尾端有無 `/` 都可以；不支援帶帳密、query 或 fragment 的 registry URL，會明確拒絕。不讀 `.npmrc` 認證，也不讀 registry metadata 的 integrity；版本與 sha512 仍然釘死。
+  - 桌面版從 Dock 啟動會繼承登入 shell 的環境變數；請把 registry、代理或 CA 設定寫進 shell 設定檔，再重新啟動桌面版。不要為此設定 `NODE_USE_ENV_PROXY`，它會影響其他連線。
+- `woowtech/claude-sdk.test.mjs` 用 TypeScript AST 守住純型別 import 與 loader 唯一的 literal dynamic import；`query.ts`／`rewind.ts` 只能透過 ensure 載入。另檢查 SDK 是 devDependency、undici 是 server 的直接 production dependency，並用 electron-builder 純依賴收集確認包含 undici、排除 SDK。這不是實際 asar 驗證。CI 的 typecheck job 會跑所有 woowtech 守門（第 18 節）。
 - 關閉對話時會出現「close query interrupt … ProcessTransport is not ready for writing」的警告，這是上游原本就有的（先 close 再 interrupt），跟這項改動無關。
 
 ### 4. 更新來源改成我們自己的
@@ -763,6 +816,19 @@ node --test woowtech/*.test.mjs
 - Windows：兩個 Windows job 的 `if` 最前面加上 `vars.WOOWTECH_CI_WINDOWS == 'true' &&`。repo 沒設這個變數，兩個 job 顯示為略過，不佔 runner。沒有刪掉，因為上游的 `ci-workflow.test.mjs` 要求它們存在。要跑 Windows 時，在 Settings → Secrets and variables → Actions → Variables 新增 `WOOWTECH_CI_WINDOWS`，值是 `true`，並把下面 2 核心、7 GB 的設定也加到兩個 Windows job（私有 repo 的 Windows runner 也是 2 核心）。
 - Ubuntu 的 job 都固定用 `ubuntu-24.04`（上游只有桌面版 job 固定，其他 15 個用 `ubuntu-latest`）。GitHub 從 2026-10-19 起把 `ubuntu-latest` 改指 Ubuntu 26；固定之後，什麼時候換 Ubuntu 由我們決定，不會發生在沒人看的排程執行裡。要換時一起改 16 個 `runs-on`，先在分支上手動跑一次。job 名稱 `server-tests (ubuntu-latest)`、`desktop-tests (ubuntu-latest)` 照上游不改：那是 status check 的名稱，上游的 `ci-workflow.test.mjs` 檢查它們。
 - 桌面版的 RPM smoke 先用 `dpkg --remove` 移除前一步裝的 deb。我們的 deb 叫 `io.woowtech.smart.desktop`（electron-builder 取 `extraMetadata.name`，第 5 節），上游的叫 `paseo`。用上游的名字時 dpkg 只會警告、不會移除，deb 留下的檔案會補上 RPM 沒裝到的東西，smoke 就看不出 RPM 的問題。
+- typecheck job 在「Build server stack」之後多一步「Check woowtech fork guards」（2026-09-29），跑：
+
+  ```bash
+  node --test --test-concurrency=1 --test-skip-pattern="^Traditional Chinese is regenerated from upstream's current Simplified Chinese$" woowtech/*.test.mjs
+  ```
+
+  - 放在 typecheck job：這個 job 已經跑過 `npm ci` 和 `npm run build:server`，守門跨套件的匯入讀各套件的 dist。沒有新增 job；觸發、排程、Playwright 的手動 gate、Windows 開關、runner、逾時和 concurrency 都沒動。
+  - 只跳過一項：zh-TW 重新產生（`zh-tw.test.mjs` 第一項）。它要 OpenCC，OpenCC 裝在 `woowtech/tools`（自己的 package.json），`npm ci` 不裝。用完整名稱跳過，同一個檔的其他 5 項照跑；本機照第 7 節裝好 tools 就會跑到它。`cli-name.test.mjs` 的 Install CLI 那一項照原本的規則只在 macOS 跑。Node 22 會把名稱被跳過的測試整個濾掉，報告裡不會列成 skipped。
+  - `--test-concurrency=1`：一次跑一個檔。2 核 runner 的預設本來就是 1（核心數減一），寫出來讓本機的結果跟 CI 一樣。
+  - typecheck 看 `quality` 這組路徑（`.github/ci-paths.yml`）：PR 只改到 `.md`、`.svg` 這類檔案時它不跑，守門也跟著不跑；每週的排程和手動執行都會跑。
+  - 守門：上游的 `scripts/ci-workflow.test.mjs` 多一項（在 `changes` job 的 Validate CI contracts 跑，不需要安裝）：typecheck 有這一步、指令完全一樣、在 build 之後、沒有 `if` 和 `continue-on-error`。拿掉這一步、加條件、改跳過的條件、縮小 glob 都會失敗。`woowtech/workflows.test.mjs` 另外檢查跳過的條件只對到 zh-TW 重新產生那一項。
+  - 本機模擬（2026-09-29，這台 Mac，不是 Ubuntu）：Node 22.23.2、`CI=true`、全新的 HOME、PATH 沒有 `~/.local/bin`，`woowtech/tools/node_modules` 暫時移開（沒有 OpenCC）。先 `npm run build:server`，再跑 `changes` job 的三個契約檔（28 項全過）和這一步（132 項全過，36 秒）；被跳過的那一項單獨跑，因為沒有 OpenCC 而失敗，證明它不能在 CI 跑。macOS 會多跑 Install CLI 那一項；Ubuntu 的結果和這一步在 2 核 runner 上的時間，看下一次 CI。
+
 - 2 核心、7 GB 的設定，前兩次執行後加的（見下面）。上游的 CI 在公開 repo 的 4 核心、16 GB runner 上跑，這些上限在那裡夠用；變數沒設時照上游：
   - Playwright 的 4 個分片和桌面版 job 設 `E2E_METRO_WARMUP_TIMEOUT_MS=600000`，網頁版冷打包最多等 10 分鐘。讀它的是 Playwright 的 globalSetup（`packages/app/e2e/support/global-setup.ts`，上游 120 秒，桌面版的 renderer E2E 也用它）、桌面版 lifecycle E2E 第一次開視窗（`packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs`，上游 90 秒），以及桌面版 browser E2E 第一次點 Settings 之前等 Settings 按鈕出現（`packages/desktop/e2e/browser-tabs.e2e.mjs`，上游只有點擊本身的 Playwright 預設 30 秒；變數沒設時不多等）。
   - 桌面版 job 的上限從 30 分鐘改成 60 分鐘。
@@ -901,7 +967,7 @@ secret 和外部服務：
   - 這次 push 不會觸發它（只有手動、tag 或 PR）：照常 push，再到 Actions 停用它。
   - 這次 push 會觸發它：先在 Settings → Actions → General 選「Disable actions」，push 完選回原本的設定（確認允許清單還在），再停用它。
   - 然後把檔名和原因加進守門的 `DISABLED_IN_UI`；CI 需要它的話，改加進 `ENABLED`。
-- 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；`runs-on` 和 matrix 都沒有 `ubuntu-latest`；開著的 workflow 只用那三把 key、不要求寫入權限；lefthook 的 format、lint glob 有 `mjs`；RPM smoke 移除的是 electron-builder 算出的 deb 名稱；上面 2 核心的時間設定都在，程式碼（不算註解）也還在讀那些變數；app 的 hook 上限請 vitest 自己解析設定：設了變數時每個 project 都是 2 分鐘，沒設時照 vitest 的預設；Playwright 的 4 個分片只在手動勾 `run_playwright` 時跑（輸入是預設不勾的 boolean，只有它們的 `if` 看事件和輸入）；Playwright 那一步的 heap 是 4 GB，`global-setup.ts` 用這一步的環境起 Metro；app-tests 在 `--` 後面帶的參數請 vitest 解析，每個 project 的 test 上限都是 1 分鐘；桌面版 browser E2E 的每個 `browser_screenshot` 呼叫都經過 `…UntilReady`。上游改到這些時會失敗，照訊息改回來。
+- 同一個守門也檢查：`ci.yml` 沒有 push 觸發、排程每週一次，排程時不跑 `dorny/paths-filter`；每個 job 都在 Ubuntu 上，Windows job 要先過變數的條件；`runs-on` 和 matrix 都沒有 `ubuntu-latest`；開著的 workflow 只用那三把 key、不要求寫入權限；lefthook 的 format、lint glob 有 `mjs`；RPM smoke 移除的是 electron-builder 算出的 deb 名稱；上面 2 核心的時間設定都在，程式碼（不算註解）也還在讀那些變數；app 的 hook 上限請 vitest 自己解析設定：設了變數時每個 project 都是 2 分鐘，沒設時照 vitest 的預設；Playwright 的 4 個分片只在手動勾 `run_playwright` 時跑（輸入是預設不勾的 boolean，只有它們的 `if` 看事件和輸入）；Playwright 那一步的 heap 是 4 GB，`global-setup.ts` 用這一步的環境起 Metro；app-tests 在 `--` 後面帶的參數請 vitest 解析，每個 project 的 test 上限都是 1 分鐘；桌面版 browser E2E 的每個 `browser_screenshot` 呼叫都經過 `…UntilReady`；typecheck 跑 fork 守門的那一步只跳過 zh-TW 重新產生（上游的 `scripts/ci-workflow.test.mjs` 另外檢查這一步還在）。上游改到這些時會失敗，照訊息改回來。
 
 ### 19. 配對連結直接叫起 App
 
@@ -1010,6 +1076,27 @@ node --test woowtech/*.test.mjs
   - 順手修上游的 key：composer 在 client 不在時 toast `composer.errors.daemonClientDisconnected`，但這個 key 不存在，畫面會顯示 key 本身；改用 `common.errors.daemonClientDisconnected`。
 - 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
 - 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送在定向輪（integration-0928）驗過，見「驗證紀錄」。
+
+### 21. Claude 改用文字徽章（品牌合規）
+
+- 原因：Anthropic 的條款允許產品用純文字寫「Claude Code」，但使用它的標誌要書面許可。owner 在 2026-09-27 決定把 App 和桌面版裡的 Claude 標誌換成文字。
+- 做法：每個 Claude 圖示都改成中性的文字徽章：圓角方框裡一個字母 C，線條用呼叫端傳進來的顏色（主題的前景色或次要前景色）。沒有 Anthropic 的放射狀標誌，也沒有 Claude 的橘色（#D97757 這類）。
+  - 字母用路徑畫，不用 `<text>`：iOS、Android 和網頁不必靠字型，畫出來都一樣。
+  - 「Claude」這個名稱照舊用文字顯示在原本的地方。
+- 徽章只寫在 fork 檔 `packages/app/src/components/icons/claude-badge.ts`：方框和字母的幾何、SVG 字串、哪些 provider id 算 Claude（`claude`、`claude-acp`）。用到它的上游檔：
+  - `components/icons/claude-icon.tsx`：`ClaudeIcon` 改畫徽章，名稱和 props（size、color）不變，`provider-icons.ts` 不用改。
+  - `components/provider-icon-name.ts`：`claude-acp` 跟 `claude` 一樣回傳內建的徽章，而且先於主機快照的 SVG（+5 行）：主機（例如外掛 provider）替 `claude-acp` 送來的 SVG 不會顯示。
+  - `assets/acp-provider-icons.ts`：`claude-acp` 那一筆改成 `CLAUDE_BADGE_SVG`（+4／-2 行）。這個檔不是產生的：repo 裡沒有產生器，上游每次都手改它和旁邊的 `.svg`。
+  - `assets/acp-provider-icons/claude-acp.svg`、`assets/icons/claude.svg`：內容換成同一份徽章 SVG。後者沒有程式在用，留著是為了合併上游時不衝突。
+- 範圍：App（iOS、Android、網頁）和桌面版（載入同一份網頁）。桌面版自己的 `src`、`assets` 沒有 Claude 標誌。server 和 CLI 沒有自己的 Claude SVG：provider 的 SVG 只從外掛讀。上游官網 `packages/website` 還有 Claude 標誌，我們不部署它（第 18 節）。
+- 刻意沒改的：
+  - 其他廠商的標誌（OpenAI／Codex、Copilot、Cursor、Gemini、OpenCode、Pi、OMP、MiniMax 等）照舊，等 owner 決定。
+  - 深色主題「Claude」（`styles/theme.ts`：強調色 #d97757、代表色 #D97757）。它是主題不是標誌，但名稱和顏色都來自 Claude，要不要改名換色等 owner 決定。
+  - 外掛自己帶的圖示：外掛用 `claude`、`claude-acp` 以外的 id 帶 Claude 標誌時照樣顯示。那是外掛的內容，不是我們出貨的檔案。
+- 測試：
+  - `components/woowtech-claude-badge.test.ts`：內建 `claude` 在四種圖示尺寸（12、14、16、20）、每個主題的前景色和次要前景色下都畫徽章，線條就是傳進來的顏色；`claude-acp` 不論主機有沒有送 SVG 都是同一個徽章；ACP 那一筆就是徽章；徽章 SVG 只用 currentColor。
+  - 守門 `woowtech/claude-badge.test.mjs`：掃 App（`src`、`assets`、`public`、`plugins`）、桌面版（`src`、`assets`）、server 和 CLI 出貨的檔案，不准出現上游那兩份 Claude 標誌的路徑資料（去掉空白和逗號後比對開頭）；檔名有 claude 或 anthropic 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`）；兩個 `.svg` 和 ACP 那一筆都要等於徽章。上游換回標誌、新增一份複製的標誌，或把 Claude 圖示改成橘色時會失敗。
+  - 小尺寸和深淺色主題上看不看得清楚，要在實機上看，單元測試證明不了。
 
 ## 上游同步紀錄（2026-09-27，挑選式）
 
@@ -1372,6 +1459,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 要實機或正式簽章才驗得到的：iOS 真的 APNs／FCM token 登記、推播送達、第二次啟動重新登記、TestFlight 的 production APNs；iOS 正式版冷啟動（Debug 點通知冷啟動，啟動畫面之後約 3.5 秒全白）；Android 正式簽章版（EAS `production`，`e3c853df5` 改過 gradle 指令）在實機上的推播與點擊，這輪的 release 建置用 debug 簽章；兩個平台用相機掃配對 QR Code；桌面版 Developer ID 簽章與公證後的通知授權、橫幅、點擊（另外兩種測試通知結果和「需要你的注意」）與自動更新。不綁實機、還沒做的：CI 手動勾 Playwright 完整跑一次；真的重開機後的舊 PID（這輪是模擬的）。
   - 「接下來」的 T1 S3 Android 重驗就是上面 Android 的 S2、S3、側欄切換、S1、S5，已從清單拿掉。
 
+- F11 SDK repair／retry：在 `b103338e7` 新基準重建 server 後，transport、runtime、managed repair、同 session retry、query、rewind、runtime-exit、error mapper、copy 九個定向檔合計 88/88，SDK 守門 5/5。測試使用隔離 HOME／CLAUDE_CONFIG_DIR／PASEO_HOME 與本機 synthetic SDK，沒有執行真 Claude 或外部下載；既有與新 generation 的相對依賴失敗快取、一次修復上限、pointer／symlink 邊界、失敗後下一則訊息和不重送舊提示均有定向案例。完整 typecheck 由提交 hook 另驗；GUI、公司代理與實際 asar 留待整合驗收。
+
 - T1 S3 修正（2026-09-27，整合分支 `woowtech/integration-0926`，第 16 節 T1 S3）：
   - 紅：新測試的路由先照上游的讀法（合併的 params），7 個裡 3 紅、原因跟裝置一樣：S3 的工作區收到通知的 agent 之後又收到 S2 的 agent（pin 在後，等於聚焦它）；換到別的工作區收到 S2 的 agent，回到 S2 的工作區又收到一次；從 Open Project 點的 terminal 換工作區時跟過去。S2 和見證綠，見證的主機路由 params 跟 `logs/ultra-device-s3b.txt` 的 navstate 一樣。守門對上游的 `index.tsx` 紅在「must not read useGlobalSearchParams」。
   - 綠：`index.tsx` 改讀自己的 params、路由讀法跟著改之後，新測試 7/7、守門 1/1。
@@ -1635,4 +1724,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
 - CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
+- Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
+- Claude 的文字徽章（第 21 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表、側欄的 Agent 列、模型選單、匯入工作階段和排程這些 12～20 px 的地方都讀得出是 C。
+- 待 owner 決定（第 21 節）：其他廠商的標誌要不要也換成文字；深色主題「Claude」要不要改名換色。
+- CI 的 fork 守門步驟（第 18 節）：下一次 CI 確認 typecheck 的「Check woowtech fork guards」在 Ubuntu 上全過，記下它的時間；`changes` job 的 Validate CI contracts 也要過。
 - 商標（TIPO）與 D-U-N-S。

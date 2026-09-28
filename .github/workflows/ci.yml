@@ -130,6 +130,12 @@ jobs:
       - name: Build server stack
         run: npm run build:server
 
+      # woowtech smart: the fork's guards (woowtech/README.md section 18). They read the server
+      # stack's dist, so they run after the build. The one skipped test regenerates zh-TW with
+      # OpenCC, which woowtech/tools installs on its own and npm ci does not.
+      - name: Check woowtech fork guards
+        run: node --test --test-concurrency=1 --test-skip-pattern="^Traditional Chinese is regenerated from upstream's current Simplified Chinese$" woowtech/*.test.mjs
+
       - name: Typecheck all packages
         run: npm run typecheck
 

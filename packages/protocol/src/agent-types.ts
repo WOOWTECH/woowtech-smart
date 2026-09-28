@@ -1,4 +1,5 @@
 import type { AgentAttachment } from "./messages.js";
+import type { ProviderAuthStatus } from "./woowtech-provider-auth.js";
 
 export type AgentProvider = string;
 
@@ -126,6 +127,8 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  /** woowtech smart: display-only login state (woowtech/README.md §3). */
+  auth?: ProviderAuthStatus;
 }
 
 export interface AgentFeatureToggle {

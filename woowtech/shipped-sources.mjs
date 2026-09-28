@@ -27,7 +27,7 @@ const NOT_SHIPPED_DIRS = new Set([
 
 const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*|\{\/\*|<!--)/;
 
-function* shippedSourceFiles(dir, fileTypes) {
+export function* shippedSourceFiles(dir, fileTypes) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
       if (!NOT_SHIPPED_DIRS.has(entry.name)) {
