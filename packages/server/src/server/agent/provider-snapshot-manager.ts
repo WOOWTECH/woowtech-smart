@@ -51,6 +51,7 @@ import {
 } from "./agent-configuration-validator.js";
 import type { ProviderRegistration } from "@getpaseo/plugin/server/provider";
 import { PluginAgentClientRegistry } from "./plugin-provider.js";
+import { readProviderAuthStatus } from "./woowtech-provider-auth.js";
 
 const DEFAULT_REFRESH_TIMEOUT_MS = 120_000;
 const MAX_REFRESH_TIMEOUT_MS = 2_147_483_647;
@@ -1000,6 +1001,8 @@ export class ProviderSnapshotManager {
     } = options;
 
     try {
+      // woowtech smart: display-only login state (woowtech/README.md §3).
+      let auth = undefined as ProviderSnapshotEntry["auth"];
       const catalog = await runProviderRefreshWithDeadline({
         label: definition.label,
         timeoutMs: this.refreshTimeoutMs,
@@ -1014,7 +1017,11 @@ export class ProviderSnapshotManager {
             return null;
           }
 
-          return await definition.fetchCatalog(catalogOptions, client, context);
+          // woowtech smart: read beside the catalogue; it never rejects.
+          const reading = readProviderAuthStatus(client, context);
+          const result = await definition.fetchCatalog(catalogOptions, client, context);
+          auth = await reading;
+          return result;
         },
       });
       if (!catalog) {
@@ -1038,6 +1045,7 @@ export class ProviderSnapshotManager {
         models,
         modes: catalog.modes,
         fetchedAt: new Date().toISOString(),
+        ...(auth ? { auth } : {}),
       });
     } catch (error) {
       const emitted = setEntry({

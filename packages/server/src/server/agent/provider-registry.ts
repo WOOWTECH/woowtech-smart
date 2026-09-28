@@ -578,6 +578,8 @@ function wrapClientProvider(
     getCatalogCacheKey: inner.getCatalogCacheKey?.bind(inner),
     isAvailable: (signal, options) => inner.isAvailable(signal, options),
     getDiagnostic: inner.getDiagnostic?.bind(inner),
+    // woowtech smart: the wrapped client's login state (woowtech/README.md §3).
+    getAuthStatus: inner.getAuthStatus?.bind(inner),
   };
 }
 
