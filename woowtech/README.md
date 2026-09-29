@@ -1585,6 +1585,16 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 帳號用量關掉（2026-09-29，分支 `woowtech/usage-off-0929` 的 `8dfa03bd2`，第 23 節）：步驟紀錄在 `~/.local/share/woowtech-smart/logs/usage-off.md`，log 在同目錄的 `usage-off-*`。
+  - 先紅後綠：實作前，server 的 fork 測試 2 紅 4 綠（OFF 基線的 service 和 RPC 都拿到 stub 與 Claude 的用量，fetcher、鑰匙圈 stub 和 fetch stub 都被叫到）；App 的 meter 測試 tooltip 多出「ClaudeMax 20xSession42%」，visibility 測試還沒有模組；兩個守門 13 個紅 5 個。實作後 server 32 檔 421/422、App 4 檔 47/47、守門 13/13；`format:check`、改到的檔的 lint、server 和 App 的 typecheck 都通過。
+  - server 唯一的紅是 `omp/agent.diagnostic.test.ts`：它斷言診斷輸出不含 `.pi/agent`，這台 Mac 的 PATH 有 `~/.pi/agent/bin`。9/25 的 main 一樣紅，跟這次改動無關；PATH 拿掉那一段後 5/5。
+  - 突變（`usage-off-mutation.sh`，每個之後從 HEAD 還原，最後樹是乾淨的）：
+    - 政策改回 true：daemon 守門紅，fork 測試 5 紅（OFF 基線 3 個，Pi、OMP 的計數測試也斷言政策是關的）。
+    - service 的預設改成打開：守門紅，fork 測試 OFF 基線的 service 和 RPC 紅。
+    - meter 換回上游：App 守門紅，meter 測試紅（tooltip 又出現方案卡）。
+    - 設定清單和路由換回上游：App 守門紅。
+  - 最終驗證（`8dfa03bd2`）：`build:server` 通過；全部 `woowtech/*.test.mjs`（比照 CI 略過 zh-TW 重新產生那一個）150/150；server 32 檔 421/422（同上，只有 OMP 診斷那一個）；App 4 檔 47/47。
+  - 沒跑：Playwright（`woowtech-provider-usage-hidden.spec.ts`、`settings-host-page.spec.ts`）和實機，見「接下來」的第 23 節那一項。
 - F11 驗證輪（2026-09-29，整合分支 `woowtech/integration-0929` 的 `b8c8f4954`，第 3、16、18、22 節與「上游同步紀錄」第三批）：main `ea9f49e49` 加上 F11 Claude 補強（`woowtech/f11-b` 的 10 個 commit，含 pi 在 `woowtech/pi-fixes-4` 的 2 個）、上游第三批（`woowtech/upstream-picks-0929` 的 15 個）和整合分支自己的 6 個（兩次合併、徽章那節改成第 22 節、合併 F11 驗收發現的 D1～D3 修正、首次點通知修正 `7ccdd372e`、CI 的 heap 設定 `b8c8f4954`），共 31 個 commit、115 檔（+7021／−420）。沒有刪檔和二進位檔，依賴只多 server 的 undici，版本都是 0.8.0，金鑰掃描沒有真的金鑰。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0929-*`（`integ0929-<步驟>.md`）、`fix-first-tap*` 和 `first-tap-real*`，截圖在 `~/.local/share/woowtech-smart/shots/` 底下同樣的前綴。
   - 本機（`env -i`、只准連 loopback 的 sandbox）：
     - 合併（`integ0929-merge.md`，`06bf83240`）：守門 134/134，照 CI 拿掉 OpenCC 那一項後 133/133；CI 契約 28/28；typecheck app、server、client、cli、desktop 各一次，三次 commit hook 的 11 個 workspace 也過；App 117 檔 1453/1453；server 非 Claude 的 67 檔 1541/1542、1 略過；Claude provider 36 檔 506/506（假 claude 只回 `--version`）；protocol 218/218；CLI 15/15；`format:check` 4718 檔、lint 100 檔 0 個 warning、0 個 error。沒過的 1 個是 `provider-availability` 的「Codex Microsoft Store」：Homebrew 的 node@22 複製到別的資料夾後載不到 libnode，給 dyld 路徑就 6/6，受測程式沒改，CI 用官方的 Node，不受影響。main 和 f11-b 都新增了第 21 節，`06bf83240` 把徽章那節改成第 22 節。
