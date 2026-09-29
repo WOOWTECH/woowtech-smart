@@ -1158,6 +1158,17 @@ node --test woowtech/*.test.mjs
     7. 只有白名單的地方可以渲染 SVG 文件（`SvgXml`、`SvgCss`、`SvgIcon` 等）：provider 圖示、ACP 目錄、檔案類型圖示、使用者自己的專案圖示、配對 QR Code。上游 main 的 `usage/source-icon.tsx`（用量來源的 SVG）這類新地方合併進來就會失敗，要先決定怎麼換成徽章。
     8. 主機替已知 provider 送 SVG 時解析結果不是那份 SVG，`provider-icons.ts` 在主機 SVG 的位置畫徽章。
     9. 每種語言的主題名稱都不含 Claude（含音譯），繁中「陶土」、英文 Terracotta，`theme.ts` 的 id 和 unistyles 名稱不變。
+  - 變異測試（2026-09-30，在 `c057fae60` 上）：每次只改一處，跑 `claude-badge.test.mjs` 和 `icons.test.mjs`（共 18 項），看它變紅，再還原，每次還原後樹都是乾淨的：
+    - 放回上游的 Codex 元件：2 項失敗（標誌路徑、圖示檔跟資料不符）。
+    - `acp-provider-icons.ts` 的 Cursor 那一筆放回上游的 SVG：3 項（標誌路徑、圖示檔、畫圖白名單）。
+    - 放回桌面版的 `cursor.png`：1 項（圖示檔）。
+    - `provider-icons.ts` 改回畫主機的 SVG：1 項。
+    - 繁中的主題名稱改回 Claude：1 項。
+    - 放回上游的 Claude 元件：2 項（Claude 標誌、圖示檔）。
+    - 網頁版啟動畫面放回 Paseo 的蝴蝶：2 項（畫圖白名單、Paseo 標誌）。
+    - 新增一個用 `SvgXml` 的檔案：1 項（渲染 SVG 的地方）。
+    - ACP 圖示資料夾多一個資料沒列的 SVG（上游的 Cursor 圖）：2 項（標誌路徑、資料沒列）。
+  - 改回上游標誌的演練（同一天）：把 `cursor` 改成 `"upstream"` 再跑工具。工具改了 3 個檔（`acp-provider-icons/cursor.svg`、`editor-targets/cursor.png`、`acp-provider-icons.ts` 的 cursor 項目），內容跟 `130705c02^` 逐位元組相同。守門 18/18、App 的 5 個廠商相關測試檔 37/37、桌面版 3 檔 14/14、App 的 typecheck 都通過，程式和測試都不用改。改回 `"badge"` 再跑一次工具，樹回到乾淨。
   - 小尺寸和深淺色主題上看不看得清楚，要在實機上看，單元測試證明不了。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
