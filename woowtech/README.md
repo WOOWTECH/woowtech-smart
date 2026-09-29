@@ -717,7 +717,7 @@ node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/woowtech-push.test.ts src/messages.test.ts --bail=1)
 (cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts --bail=1)
 (cd packages/app && npx vitest run plugins/woowtech-ios-firebase.test.ts plugins/with-woowtech-push.test.ts plugins/woowtech-metro-resolver.test.ts src/push-notifications src/utils/notification-routing.woowtech-push.test.ts --bail=1)
-(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1 和 T1 S3 小節
+(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts src/navigation/woowtech-welcome-host-online.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1、T1 S3 和「配對後第一次點通知」小節
 ```
 
 - 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛和 `expo-build-properties` 的 `ios`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
@@ -761,6 +761,23 @@ node --test woowtech/*.test.mjs
   - `navigation/woowtech-workspace-open-intent.test-support.ts`：用真的 App 通知與導覽程式（`resolveNotificationTarget`、`resolveNavigateToAgent`、`navigateToWorkspace`、`navigateToHostWorkspaceRoute`、`buildNotificationRoute`、`prepareWorkspaceTab`）、React Navigation 的 `StackRouter`，以及 expo-router 從 `src/app` 檔名建出的路由樹。expo-router 的路由模組會載入 react-native，unit project 載不起來（`vitest.setup.ts` 也 mock 了 `expo-router`），所以 `router.navigate`、`router.dismissTo` 的 action（`findDivergentState`、`getPayloadFromStateRoute`）和 `useGlobalSearchParams` 的合併照 6.0.23 的原始碼轉寫。另外模型化兩段：巢狀 navigator 依父路由的 `screen`／`params` 啟動，以及工作區路由的 open-intent effect。升級 expo-router 時，對照 `build/global-state/routing.js` 和 `routeInfo.js` 更新轉寫。
   - 守門 `woowtech/workspace-open-intent.test.mjs` 只看原始碼：工作區路由沒有 `useGlobalSearchParams`，`openValue` 是 `readWorkspaceRouteOpenParam` 讀 `useLocalSearchParams` 的結果。vitest 裡的路由讀法照這一行寫，所以把 `index.tsx` 改回上游時，紅的是守門。
 - 合併上游：上游改成讀自己的 params，或用別的方式修好時，先確認新測試仍綠，再拿掉 fork 的讀法和守門。
+
+#### 配對後第一次點通知：底下的歡迎頁把工作區換掉
+
+- Android（2026-09-29，`logs/integ0929-real-android.md` 的 run 1 和 mock 對照 M1）：全新 App 用 relay 配對連結加第一台主機、允許通知後進背景。daemon 約 50 秒後關掉連線，約 190 秒後新工作區的 agent 要授權。點「需要你的授權」後 App 重連，卻停在主機首頁（新增專案／匯入工作階段），75 秒內沒有授權卡：lastSelection 是新工作區但 layout 沒有 agent 分頁，router 在 `/open-project`，root stack 是 `[welcome, open-project, *open-project]`。冷啟動後 stack 沒有歡迎頁，同樣的點擊 8.6 秒開出 agent、12.7 秒出現授權卡。
+- 原因在上游，跟 fork 的推播無關：
+  - `components/welcome-screen.tsx` 的 effect 在 `anyOnlineServerId` 由 null 變成某台主機時 `router.replace(buildOpenProjectRoute())`。expo-router 6.0.23 的 `replace` 不帶 `source`，React Navigation 7.5.3 的 `StackRouter` 換掉的是 stack 最上面那一頁，不是呼叫的那一頁；native stack 不卸載被蓋住的頁，歡迎頁在底下時照樣換。
+  - 歡迎頁會被埋在底下：配對連結（第 19 節）進來時，expo-router 的 linking 先把 index 推到歡迎頁上面，`OfferLinkListener` 的 `openProject` 換掉的是那一頁；上游 App 內的「掃描 QR」（歡迎頁的主要按鈕）也是 push `/pair-scan` 再換成主機。兩條路都留下 `[welcome, open-project]`。只有歡迎頁自己的「直接連線」「貼上配對連結」視窗換掉的是歡迎頁本身。
+  - 點通知時主機還離線：工作區未知，`navigateToWorkspace` 記住新工作區、把 agent 延後成 `?open=agent:X`，`dismissTo` 把工作區路由放到最上面。主機一上線，底下的歡迎頁就把它換成 `/open-project`，T1 的目錄還沒到，意圖沒被消費。不只通知：歡迎頁在底下時，每次背景回前景重連，使用者正在看的那頁都會被換掉。裝置上多的那層 `open-project`，是 run 1 之前從設定返回時 `returnFromSettings` 換上的。
+  - 上游 `68df30486`（2026-03-26）加入這個 effect；`d8243bfb7`（04-01）加過只看 `window.location` 的 `/welcome` 判斷，`5c3cc99d8`（04-18）拿掉；`a49c658d1`（06-26）目標改成 `/open-project`。main `ea9f49e49`、upstream/main `4965af219` 都一樣，不是回歸。9/27 第 5 步沒遇到，是因為那個 App 的第一台主機是在歡迎頁用「直接連線」加的，歡迎頁已經被換掉。
+- 修法：歡迎頁只在自己是 focused 畫面時轉頁。fork 的 `navigation/woowtech-welcome-host-online.ts`（`shouldWelcomeMoveOnToHost`）判斷「有主機上線而且 focused」；`welcome-screen.tsx` 加 `useIsFocused`，effect 先問它，依賴加 `isFocused`（+4／−2 行，註解 `woowtech smart:`）。被蓋住時主機上線不動；之後返回露出歡迎頁、主機還在線，就照舊轉到 `/open-project`，例如從歡迎頁的設定加主機再返回（上游是在設定頁裡直接被換走）。
+  - 沒採用：只讓配對連結把歡迎頁移出 stack，上游的 QR 掃描一樣會留下；只在有待開的通知時不轉，重連時換掉使用者畫面的問題還在。
+- 測試：
+  - `navigation/woowtech-welcome-host-online.test.ts`（4 個）：run 1 的路徑（全新 App、配對連結、背景斷線、點權限通知、主機重新上線、目錄到）開出 agent；見證：換成上游的 effect、照 run 1 的步驟（含設定來回），得到裝置記下的 stack `[welcome, open-project, *open-project]`（`logs/integ0929-real-android-tap-probe.txt`），記住的是通知的工作區，沒有 agent 分頁；歡迎頁在最上面時主機上線照樣轉頁；從歡迎頁開設定時主機上線，設定頁不被換掉，返回後轉頁。
+  - 共用 T1 S3 的 `woowtech-workspace-open-intent.test-support.ts`：加了 `/`、`/welcome`、`/settings`，`router.push`／`replace` 的 action（沒有 `source`）、返回，以及歡迎頁 effect 的模型，每個掛著的歡迎頁在依賴改變時重跑。
+  - 守門 `woowtech/welcome-host-online.test.mjs` 只看原始碼：`isFocused` 來自 `useIsFocused`，`WelcomeScreen` 裡唯一會轉頁的 effect 第一行問 `shouldWelcomeMoveOnToHost({ anyOnlineServerId, isFocused })`，依賴有這兩個。vitest 的歡迎頁 effect 照這幾行寫，所以把 `welcome-screen.tsx` 改回上游時，紅的是守門。
+  - 紅綠與突變：修之前主案例的焦點是 `open-project`、設定那個案例也紅，修後 4/4；拿掉修法時 vitest 2 個紅、守門紅，依賴拿掉 `isFocused` 時守門紅。Android 模擬器複驗見 `logs/fix-first-tap.md`。
+- 合併上游：上游改成只在 focused 時轉頁，或拿掉這個 effect 時，先確認新測試仍綠，再拿掉 fork 的判斷和守門。
 
 #### 桌面通知的回饋
 

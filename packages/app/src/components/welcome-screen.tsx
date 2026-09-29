@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   QrCode,
@@ -22,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { resolveAppVersion } from "@/utils/app-version";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { buildOpenProjectRoute } from "@/utils/host-routes";
+import { shouldWelcomeMoveOnToHost } from "@/navigation/woowtech-welcome-host-online";
 import { PaseoLogo } from "@/components/icons/paseo-logo";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { isFdroidBuild } from "@/constants/build-profile";
@@ -179,11 +181,13 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
   const [isPasteLinkOpen, setIsPasteLinkOpen] = useState(false);
   const hosts = useHosts();
   const anyOnlineServerId = useAnyHostOnline(hosts.map((h) => h.serverId));
+  // woowtech smart: only the focused welcome screen moves on (woowtech-welcome-host-online.ts).
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (!anyOnlineServerId) return;
+    if (!shouldWelcomeMoveOnToHost({ anyOnlineServerId, isFocused })) return;
     router.replace(buildOpenProjectRoute());
-  }, [anyOnlineServerId, router]);
+  }, [anyOnlineServerId, isFocused, router]);
 
   const finishOnboarding = useCallback(() => {
     router.replace(buildOpenProjectRoute());
