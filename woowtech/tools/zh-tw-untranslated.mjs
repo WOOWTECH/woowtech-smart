@@ -277,9 +277,11 @@ export const KEEP_ENGLISH = new Set([
   "workspace.git.pr.accessibility.pullRequest",
   "panels.diff.diffLabel",
   "contextWindow.tokens",
-  // Replaced as the translations load: the product name, and the help channel.
+  // Replaced as the translations load: the product name, the help channel, and the name of
+  // the theme whose id is claude (packages/app/src/i18n/theme-copy.ts).
   "sidebar.help.appName",
   "sidebar.help.discord",
+  "settings.appearance.theme.options.claude",
   // Each language's own name.
   "settings.general.language.options.en",
   "settings.general.language.options.es",
@@ -288,7 +290,6 @@ export const KEEP_ENGLISH = new Set([
   // Theme names.
   "settings.appearance.theme.options.zinc",
   "settings.appearance.theme.options.midnight",
-  "settings.appearance.theme.options.claude",
   "settings.appearance.theme.options.ghostty",
   // Examples of what to type.
   "settings.host.appearance.preview.workspaceName",

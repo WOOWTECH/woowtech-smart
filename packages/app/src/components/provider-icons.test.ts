@@ -1,6 +1,7 @@
 import { Bot } from "lucide-react-native";
 import { SvgXml } from "react-native-svg";
 import { describe, expect, it } from "vitest";
+import { vendorBadgeSvg } from "./icons/vendor-badge";
 import { replaceProviderSnapshotIcons } from "./provider-icon-name";
 import { getProviderIcon, type ProviderIconComponent } from "./provider-icons";
 
@@ -19,9 +20,10 @@ describe("getProviderIcon", () => {
 
     const rendered = renderIcon(getProviderIcon("rendered-provider", "server-1"));
 
+    // woowtech smart: the host's SVG shows as a text badge (woowtech/README.md §22).
     expect(rendered).toMatchObject({
       type: SvgXml,
-      props: { xml: svg, width: 18, height: 18, color: "#123456" },
+      props: { xml: vendorBadgeSvg("rendered-provider"), width: 18, height: 18, color: "#123456" },
     });
   });
 

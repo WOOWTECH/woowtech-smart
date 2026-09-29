@@ -24,6 +24,12 @@ const SYMBOL_STROKES = [
   "M 105.129 83.345 L 99.785 83.345 L 99.785 41.683 L 105.129 41.683 Z",
 ];
 
+/** The symbol as an SVG document in black, for the web splash's CSS mask. */
+export function woowSymbolMaskSvg(size: number): string {
+  const strokes = SYMBOL_STROKES.map((stroke) => `<path fill='black' d='${stroke}'/>`).join("");
+  return `<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='0 0 105.2 83.4'>${strokes}</svg>`;
+}
+
 export function PaseoLogo({ size = 64 }: PaseoLogoProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 105.2 83.4" fill="none">

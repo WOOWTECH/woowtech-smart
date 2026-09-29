@@ -1,12 +1,12 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { spawn as nodeSpawn } from "node:child_process";
 import { existsSync as nodeExistsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path, { posix, win32 } from "node:path";
 import { app, shell } from "electron";
 
 import type { EditorTargetIcon, EditorTargetRuntime } from "./target.js";
+import { loadEditorTargetIcon } from "./woowtech-editor-icons.js";
 
 interface SpawnedProcess {
   once(event: "error", handler: (error: Error) => void): SpawnedProcess;
@@ -119,8 +119,8 @@ function iconPath(fileName: string): string {
 }
 
 async function loadBundledIcon(fileName: string): Promise<EditorTargetIcon> {
-  const bytes = await readFile(iconPath(fileName));
-  return { kind: "image", dataUrl: `data:image/png;base64,${bytes.toString("base64")}` };
+  // woowtech smart: an editor whose logo does not ship shows its text badge (woowtech/README.md §22).
+  return loadEditorTargetIcon(fileName, iconPath(fileName));
 }
 
 export function createEditorTargetRuntime(

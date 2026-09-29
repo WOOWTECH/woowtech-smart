@@ -4,7 +4,9 @@ import { getDesktopHost, type DesktopEditorBridge } from "@/desktop/host";
 export type DesktopOpenTargetKind = "editor" | "file-manager";
 export type DesktopOpenTargetIcon =
   | { kind: "image"; dataUrl: string }
-  | { kind: "symbol"; name: "folder" | "terminal" };
+  | { kind: "symbol"; name: "folder" | "terminal" }
+  // woowtech smart: a vendor's text badge instead of its logo (woowtech/README.md §22).
+  | { kind: "badge"; vendor: string };
 
 export interface DesktopOpenTarget {
   id: string;
