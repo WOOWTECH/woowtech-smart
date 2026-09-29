@@ -76,7 +76,12 @@ import {
   type ClaudeProviderOptions,
 } from "./options.js";
 import { renderPromptAttachmentAsText } from "../../prompt-attachments.js";
-import { claudeQuery, type ClaudeOptions, type ClaudeQueryFactory } from "./query.js";
+import {
+  claudeQuery,
+  claudeQueryLoadFailed,
+  type ClaudeOptions,
+  type ClaudeQueryFactory,
+} from "./query.js";
 import {
   realClaudeRewindSdk,
   revertClaudeConversation,
@@ -3091,6 +3096,10 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private async ensureQuery(): Promise<Query> {
+    // woowtech smart: never reuse a query whose SDK load failed (woowtech/README.md §3).
+    if (this.query && claudeQueryLoadFailed(this.query)) {
+      this.queryRestartNeeded = true;
+    }
     if (this.query && !this.queryRestartNeeded) {
       return this.query;
     }

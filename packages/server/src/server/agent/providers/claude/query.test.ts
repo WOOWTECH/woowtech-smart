@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import * as spawnUtils from "../../../../utils/spawn.js";
 import type { ClaudeAgentSdkModule } from "./claude-agent-sdk-runtime.js";
-import { type ClaudeAgentSdkSource, claudeQuery } from "./query.js";
+import { type ClaudeAgentSdkSource, claudeQuery, claudeQueryLoadFailed } from "./query.js";
 
 function fakeQuery(messages: SDKMessage[]): Query {
   const generator = (async function* () {
@@ -73,6 +73,23 @@ describe("claudeQuery", () => {
     fail(new Error("Claude Agent SDK download failed: HTTP 503"));
 
     await expect(received).rejects.toThrow("Claude Agent SDK download failed: HTTP 503");
+  });
+
+  // woowtech smart: a session replaces such a query, so the next message loads the SDK again.
+  test("reports a query whose SDK load failed, and no other query", async () => {
+    const failing = sdkLoadedLater();
+    const failed = claudeQuery({ prompt: "hi", options: {} }, { sdk: failing.source });
+    expect(claudeQueryLoadFailed(failed)).toBe(false);
+    failing.fail(new Error("fixture load failure"));
+    await expect(collect(failed)).rejects.toThrow("fixture load failure");
+    expect(claudeQueryLoadFailed(failed)).toBe(true);
+
+    const loading = sdkLoadedLater();
+    const loaded = claudeQuery({ prompt: "hi", options: {} }, { sdk: loading.source });
+    loading.finish({ query: () => fakeQuery([message("a")]) } as unknown as ClaudeAgentSdkModule);
+    expect(await collect(loaded)).toEqual([message("a")]);
+    expect(claudeQueryLoadFailed(loaded)).toBe(false);
+    expect(claudeQueryLoadFailed(fakeQuery([]))).toBe(false);
   });
 
   test("never starts Claude when the session closes before the SDK finished loading", async () => {
