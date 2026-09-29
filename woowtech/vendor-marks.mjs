@@ -117,7 +117,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12"],
   },
   agoragentic: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/agoragentic-acp.svg`],
     acpIcons: ["agoragentic-acp"],
     logoPaths: [],
@@ -135,7 +135,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["M9.972 13.193h2.577q.187 0 .277-.09t.091-.294V10.47q0-.324.133-.59"],
   },
   autohand: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/autohand.svg`],
     acpIcons: ["autohand"],
     logoPaths: ["M7.23002 9.59292C7.23002 9.40231 7.07148 9.24779 6.87591 9.24779"],
@@ -159,7 +159,7 @@ export const VENDOR_MARKS = {
     logoPaths: [],
   },
   "cortex-code": {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/cortex-code.svg`],
     acpIcons: ["cortex-code"],
     logoPaths: ["M1562.63,107.07h-4.18v5.15h4.18c1.94,0,3.21-.87,3.21-2.53"],
@@ -171,7 +171,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["m 2476.7,5111.6 c -64.95,-6.2305 -71.077,-28.66 -73.528,-325.23"],
   },
   crow: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/crow-cli.svg`],
     acpIcons: ["crow-cli"],
     logoPaths: ["m 26,275.93574 c 0.65,-9.32 8.46,-15.43 15,-20.96 15.43,-13.04"],
@@ -189,13 +189,13 @@ export const VENDOR_MARKS = {
     logoPaths: ["M99.4385 87.698C91.9239 80.1832 81.7121 75.9531 71.0844 75.9531"],
   },
   dimcode: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/dimcode.svg`],
     acpIcons: ["dimcode"],
     logoPaths: ["M3.12109 11.0078H1.99902V5.49316H3.12109V11.0078Z"],
   },
   dirac: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/dirac.svg`],
     acpIcons: ["dirac"],
     logoPaths: [],
@@ -207,7 +207,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["M622.037 192.524a10.58 10.58 0 0 1-4.056-2.001 10.573 10.573 0 0 1-3.9"],
   },
   "fast-agent": {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/fast-agent.svg`],
     acpIcons: ["fast-agent"],
     logoPaths: [],
@@ -219,7 +219,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81"],
   },
   "gajae-code": {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/gjc.svg`],
     acpIcons: ["gjc"],
     logoPaths: ["M365.5 654H450.5A15.5 15.5 0 0 1 466 669.5A15.5 15.5 0 0 1 450.5 685"],
@@ -273,7 +273,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["M22.6419 5.35803H19.1851V8.46914H22.6419V5.35803Z"],
   },
   nova: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/nova.svg`],
     acpIcons: ["nova"],
     logoPaths: [],
@@ -285,7 +285,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["M2.63653 5.50522L2.18735 5.28559C2.09852 5.46726 2.12787 5.68456"],
   },
   qoder: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/qoder.svg`],
     acpIcons: ["qoder"],
     logoPaths: [],
@@ -297,7 +297,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["m140.93 85-16.35-28.33-1.93-3.34 8.66-15a3.323 3.323 0 0 0 0-3.34"],
   },
   sigit: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/sigit.svg`],
     acpIcons: ["sigit"],
     logoPaths: [
@@ -306,7 +306,7 @@ export const VENDOR_MARKS = {
     ],
   },
   stakpak: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/stakpak.svg`],
     acpIcons: ["stakpak"],
     logoPaths: ["M6.53 4.412h5.883v3.587H9.471v3.588H3.588V7.999H6.53Z"],
@@ -318,7 +318,7 @@ export const VENDOR_MARKS = {
     logoPaths: ["M2.4 4.8H21.6V19.2H2.4Z M5.92 7.52H19.2V15.36H5.92Z"],
   },
   vtcode: {
-    show: "badge",
+    show: "upstream",
     files: [`${acp}/vtcode.svg`],
     acpIcons: ["vtcode"],
     logoPaths: [],

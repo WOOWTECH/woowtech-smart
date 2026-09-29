@@ -1132,6 +1132,20 @@ node --test woowtech/*.test.mjs
   3. `node --test woowtech/*.test.mjs`，再照驗證流程跑 App、桌面版的測試與 typecheck。守門會照資料自動放行這一家的檔案，同時繼續擋其他廠商。Claude 也一樣：改 `claude` 那一筆，守門裡 Claude 專用的三項會自動略過。
   - 改回徽章：把 `show` 改回 `"badge"` 再跑一次工具。
   - 解析和繪製的程式不用改：內建 provider 看圖示元件檔，ACP 看 `acp-provider-icons.ts`，桌面版看 PNG 在不在；主機送來的 SVG 不論哪一家都畫徽章。
+- 顯示上游標誌的廠商（2026-09-30，逐家研究的第一部分）：
+  - 依據：協調資料夾的 `coord/reports/logo-usage-research.md`（不在 repo 裡）§2.0、§2.2、§3.1 (a)。這 13 家都判 A：圖示是廠商或專案作者自己送進官方 ACP registry 的（作者本人加的 Gajae Code 例外，它不在 registry，是作者在上游 PR #3471 加的），而且找不到相反的規則。registry 要求圖示用 `currentColor`，就是設計來讓 ACP 客戶端照主題色顯示，跟我們的畫法相同。上游的檔案就是 registry 的檔案，工具從 `130705c02^` 原樣還原，沒有下載任何檔案。
+  - 13 家與判定：
+    - agoragentic（Agoragentic 本人送）、autohand（創辦人送）、crow（作者本人）、dirac（dirac-run）、fast-agent（作者本人）、nova（主要貢獻者）、sigit（第二大貢獻者）、stakpak（Stakpak 工程師重送）、vtcode（作者本人）：A（registry）。
+    - cortex-code（Snowflake 員工送）：A（registry，弱）；另外不能把 Snowflake、Cortex 放進自家產品名。
+    - dimcode（ArcShips）：A（registry）；條款只禁止會造成混淆的用法。
+    - qoder（Qoder 開發者送）：A（registry）。
+    - gajae-code（`gjc`）：A（作者本人），作者的 README 把 Paseo 列為支援的客戶端。
+  - 條件（研究 §2.2 的 R 條件）：用 registry 原檔；照主題色顯示；旁邊有 agent 名稱，不暗示背書或合作；registry 更新時跟著更新；廠商要求撤下時改回徽章。
+  - 「旁邊有 agent 名稱」的現況（只讀程式，沒有改）：
+    - 有名稱：設定頁的供應商列表、新增 ACP 供應商的目錄（圖示＋名稱＋版本＋說明）、模型選單的供應商列和供應商頁的標題（混合清單的模型列寫「供應商 · 說明」）、匯入工作階段的供應商篩選、用量卡、指令選單的模型路徑。
+    - 圖示旁是標題，不是 agent 名稱：側欄的 Agent 列（對話標題）、工作區的 Agent 分頁（對話標題；供應商名稱只在副標題「{供應商} agent」和 tooltip）、子 Agent 列和分頁（子 Agent 名稱；分頁副標題有供應商）、排程列（排程標題）、匯入工作階段的列（工作階段標題）、composer 的模型按鈕（模型名稱）。終端機設定檔顯示的是使用者自己取的設定檔名稱。
+  - 哪一家要求撤下，就把它在 `woowtech/vendor-marks.mjs` 的 `show` 改回 `"badge"`（一行）再跑工具。
+  - 其他廠商繼續顯示徽章，等 owner 決定條件怎麼做：junie、zed、webstorm、android-studio 要先加商標歸屬聲明或改標籤；研究 §3.1 (b) 的 opencode、cursor、cline、kilo 要先核對跟官方素材一致；(c) 的 codex、vscode、gemini、antigravity、grok、mistral-vibe 要換官方檔或改色（工具只能還原上游檔）；B、C 兩類照研究維持徽章。
 - 主題：內部名稱 `claude` 的深色主題改叫「陶土」，英文 Terracotta。
   - 名稱寫在 fork 檔 `i18n/theme-copy.ts`，跟 `support-copy.ts` 一樣由 `brand.ts` 在載入翻譯時套用，不改上游的語系檔：繁中和簡中「陶土」、英文 Terracotta、日文テラコッタ、韓文테라코타、西班牙文和葡萄牙文 Terracota、法文 Terre cuite、俄文 Терракота、阿拉伯文 تيراكوتا。上游之後新增的語言顯示英文。
   - `zh-TW.ts` 不用重新產生：產生器照舊留英文（`zh-tw-untranslated.mjs` 的 `KEEP_ENGLISH` 把這個 key 從「主題名稱」移到「載入時替換」那組），顯示時換成「陶土」。
