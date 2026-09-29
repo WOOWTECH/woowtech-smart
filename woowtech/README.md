@@ -861,6 +861,7 @@ node --test woowtech/*.test.mjs
   - app-tests 設 `PASEO_APP_TEST_HOOK_TIMEOUT_MS=120000`，`packages/app/vitest.config.ts` 讀它，unit 和 browser 兩個 project 的 hook 上限（vitest 預設 10 秒和 30 秒）都改成 2 分鐘。沒設時設定檔不給值，照 vitest 的預設；給 10 秒當預設值會把 browser 的 30 秒一起降成 10 秒。在命令列加 `--hookTimeout` 沒用：vitest 4.1.7 只把固定幾個命令列選項傳給 projects，`hookTimeout` 不在裡面。
   - app-tests 的指令加 `-- --testTimeout=60000`，兩個 project 每個 test 的上限（vitest 預設 5 秒和 15 秒）都改成 1 分鐘。`testTimeout` 在 vitest 傳給 projects 的那幾個選項裡，所以不用改上游的檔。旗標要放在 `--` 後面，放在前面會被 npm 自己拿走。
   - Playwright 的測試那一步設 `NODE_OPTIONS=--max-old-space-size=4096`。Node 預設的 heap 上限跟著機器的記憶體走：7 GB 的 runner 約 1.8 GB，上游 16 GB 的 runner 是 4 GB。這是上限不是預留，同一步的 Metro、Playwright 和兩個 daemon 各自用多少還是看需要；Metro、兩個 Chromium、兩個 daemon 連同系統估計 5～6 GB，在 7 GB 內。`global-setup.ts` 用這一步的環境起 Metro，所以 Metro 拿得到。桌面版 job 沒加：它的三個 E2E 各自起的 Metro 都只打包 App 一個入口，run 2 都撐過去了。
+  - 桌面版 job 的「Build Linux desktop artifacts」這一步也設 `NODE_OPTIONS=--max-old-space-size=4096`（2026-09-29 起）。它跑 `npm run build:desktop`，裡面的 `expo export` 會打包整個網頁版 App；CI #8 在打包到 81% 時用完 Node 預設的 heap（約 1.8 GB）失敗。F11 和第三批上游讓 App 變大，#7 那時其實已經接近上限。本機打包一直都要 4096 MB，這次把 CI 對齊。守門 `woowtech/workflows.test.mjs` 會檢查這一步的設定。
   - cli-tests 設 `PASEO_CLI_TEST_CONCURRENCY=2`，CLI 的 e2e 一次跑 2 個檔（上游預設 4 個）。分片維持 3 個，job 名稱和上游的 `ci-workflow.test.mjs` 都不用改。
   - Metro 的快取不跨次保存：GitHub 會刪掉 7 天沒用到的快取，每週一次的排程幾乎都拿不到。
 

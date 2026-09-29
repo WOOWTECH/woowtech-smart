@@ -282,6 +282,10 @@ jobs:
         env:
           EP_GH_IGNORE_TIME: true
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
+          # woowtech smart: build:desktop runs expo export of the whole web bundle, which reached
+          # Node's default heap (about 1.8 GB on the 7 GB runner) in CI run 8. Same limit as the
+          # Playwright shards and local builds; a limit, not a reservation.
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Smoke installed artifacts with restricted user namespaces
         if: ${{ runner.os == 'Linux' }}

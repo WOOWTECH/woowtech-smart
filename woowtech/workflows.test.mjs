@@ -313,6 +313,18 @@ test("CI gives Metro in the Playwright shards a 4 GB heap", () => {
   ]);
 });
 
+test("CI gives the Linux desktop build's Metro export a 4 GB heap", () => {
+  // CI run 8 (2026-09-29): "Build Linux desktop artifacts" runs npm run build:desktop, whose
+  // expo export of the web bundle reached Node's default heap limit, about 1.8 GB on the 7 GB
+  // runner, at 81% of the bundle. The app had grown with F11 and the third upstream batch; run 7
+  // had passed near that limit. Local builds have always needed 4096 MB for expo export.
+  const heapLimits = ubuntuSteps(/\bnpm run build:desktop\b/).map(({ job, env }) => [
+    job,
+    /--max-old-space-size=(\d+)/.exec(env.NODE_OPTIONS ?? "")?.[1],
+  ]);
+  assert.deepEqual(heapLimits, [["desktop-tests-ubuntu", "4096"]]);
+});
+
 /**
  * The hook and test timeouts of each packages/app vitest project, as vitest itself resolves
  * them for the app's test script followed by `args`, with PASEO_APP_TEST_HOOK_TIMEOUT_MS set
