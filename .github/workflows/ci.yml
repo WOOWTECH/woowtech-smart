@@ -118,6 +118,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          # woowtech smart: the full history. The fork guards' vendor check reads icon files
+          # at UPSTREAM_REF from git (woowtech/README.md section 22).
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
