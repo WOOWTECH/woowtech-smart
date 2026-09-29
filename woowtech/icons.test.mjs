@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import { expoPrebuildConfig } from "./expo-config.mjs";
 import { readPng } from "./png.mjs";
+import { repoRoot, shippedSourceFiles } from "./shipped-sources.mjs";
 
 function repoPath(relative) {
   return fileURLToPath(new URL(`../${relative}`, import.meta.url));
@@ -140,4 +141,29 @@ test("the app's logo component draws the WOOW symbol from woowtech/brand", () =>
   for (const stroke of strokes) {
     assert.ok(component.includes(stroke), "the logo is missing a stroke of the symbol");
   }
+});
+
+test("nothing that ships draws upstream Paseo's butterfly mark", () => {
+  // Upstream's logo component, favicons and web splash mask all drew this path. The web splash
+  // kept it after the logo component changed, until the 2026-09-29 fix (README section 8).
+  // Compared with whitespace and commas removed, so reformatting a copy does not hide it.
+  const squeeze = (text) => text.replace(/[\s,]+/g, "");
+  const paseoMark = squeeze("M291.495 91.399C333.897 104.892 379.155 135.075 416.229 173.191");
+  const shippedDirs = [
+    "packages/app/src",
+    "packages/app/assets",
+    "packages/app/public",
+    "packages/app/plugins",
+    "packages/desktop/src",
+    "packages/desktop/assets",
+    "packages/server/src",
+    "packages/cli/src",
+  ];
+  const drawing = shippedDirs
+    .flatMap((dir) =>
+      Array.from(shippedSourceFiles(repoPath(dir), /\.(?:[cm]?[jt]sx?|json|svg|html|css|xml)$/)),
+    )
+    .filter((file) => squeeze(readFileSync(file, "utf8")).includes(paseoMark))
+    .map((file) => file.slice(repoRoot.length));
+  assert.deepEqual(drawing, [], "Draw the WOOW symbol from paseo-logo.tsx instead.");
 });

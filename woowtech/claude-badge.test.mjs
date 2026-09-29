@@ -68,21 +68,7 @@ const ALLOWED_DRAWINGS = {
     "the generated Mermaid runtime's diagram shapes",
   "packages/app/src/terminal/native-renderer/terminal-custom-glyph.ts": "terminal box glyphs",
   "packages/app/src/terminal/webview/terminal-emulator-webview-html.ts": "the terminal bundle",
-  "packages/app/src/screens/startup-splash-screen.tsx":
-    "the web splash's logo mask, still upstream Paseo's shape; a branding issue",
 };
-
-// Upstream Paseo's own marks, kept in the tree but not referenced by anything that ships.
-const UNREFERENCED_DRAWINGS = [
-  "packages/app/assets/images/butterfly-green.svg",
-  "packages/app/assets/images/butterfly-white.svg",
-  "packages/app/assets/images/favicon-dark-attention.svg",
-  "packages/app/assets/images/favicon-dark-running.svg",
-  "packages/app/assets/images/favicon-dark.svg",
-  "packages/app/assets/images/favicon-light-attention.svg",
-  "packages/app/assets/images/favicon-light-running.svg",
-  "packages/app/assets/images/favicon-light.svg",
-];
 
 // The bitmap images of woowtech smart's own that ship (woowtech/tools/generate-icons.mjs).
 const OUR_IMAGES = new Set([
@@ -300,7 +286,6 @@ test("only the allowlisted files draw with SVG path data", () => {
   const acpDraws = showingUpstream.some(([, mark]) => mark.acpIcons.length > 0);
   const allowed = new Set([
     ...Object.keys(ALLOWED_DRAWINGS),
-    ...UNREFERENCED_DRAWINGS,
     ...upstreamFiles,
     ...(acpDraws ? [ACP_ICONS_FILE] : []),
   ]);
@@ -319,9 +304,7 @@ test("only the allowlisted files draw with SVG path data", () => {
 });
 
 test("only woowtech smart's own images ship, and the vendor logos cleared for use", () => {
-  const images = [...shippedFiles(IMAGE_FILES)]
-    .map(relative)
-    .filter((file) => !isVendorFile(file) && !UNREFERENCED_DRAWINGS.includes(file));
+  const images = [...shippedFiles(IMAGE_FILES)].map(relative).filter((file) => !isVendorFile(file));
   const unexpected = images.filter(
     (file) => !OUR_IMAGES.has(file) && !file.startsWith(UNREFERENCED_IMAGES_DIR),
   );
@@ -331,15 +314,14 @@ test("only woowtech smart's own images ship, and the vendor logos cleared for us
     "A new image ships. If it is a vendor's logo, list it in woowtech/vendor-marks.mjs.",
   );
 
-  const unreferenced = [...UNREFERENCED_DRAWINGS.map((file) => path.basename(file)), "editor-apps"];
   const references = [
     ...shippedFiles(/\.(?:[cm]?[jt]sx?|json|html|css)$/),
     path.join(repoRoot, "packages/app/app.config.js"),
   ]
     .map((file) => [relative(file), readFileSync(file, "utf8")])
-    .filter(([, text]) => unreferenced.some((name) => text.includes(name)))
+    .filter(([, text]) => text.includes("editor-apps"))
     .map(([file]) => file);
-  assert.deepEqual(references, [], "An unreferenced upstream image is now used; badge it.");
+  assert.deepEqual(references, [], "The unreferenced editor logos are now used; badge them.");
 });
 
 test("only the allowlisted places render an SVG document", () => {

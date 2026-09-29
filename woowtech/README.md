@@ -260,11 +260,13 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - favicon：字形放大，16px 也看得出輪廓。狀態點沿用上游的顏色，執行中是 #3b82f6、需要注意是 #22c55e。
   - macOS：照 824/1024 的格線畫，含陰影。
 - App 裡的 logo 元件（`paseo-logo.tsx`，有 5 個地方在用）改畫 WOOW 標誌，顏色見第 9 節。
+- 網頁版和桌面版的啟動畫面用 CSS 遮罩畫標誌，沒有經過 logo 元件，到 2026-09-29 都還是上游 Paseo 的蝴蝶（手機版一直是 WOOW 標誌）。現在遮罩用 `paseo-logo.tsx` 的 `woowSymbolMaskSvg()`，跟元件同樣的 10 筆筆畫。上游留下的 `assets/images/butterfly-*.svg`、`favicon-*.svg` 在整個 repo（含官網）都沒有引用，已刪；App 用的 favicon 是 `generate-icons.mjs` 產生的 PNG。
 - `woowtech/icons.test.mjs` 檢查以下幾件事，合併上游時如果被換回 Paseo 的圖示就會失敗：
   - 圖示內容：有品牌藍、沒有上游的黑色方塊。
   - 尺寸和格式。
   - Android 的底色和通知的強調色。
   - logo 元件跟品牌檔一致。
+  - 出貨的檔案裡沒有上游 Paseo 蝴蝶的路徑資料（App、網頁、桌面版、server、CLI）。
 - 換 logo 的步驟：
   1. 更新 `woowtech/brand` 裡的來源檔。
   2. 跑 `flatten-symbol.py`。
@@ -1138,7 +1140,6 @@ node --test woowtech/*.test.mjs
   - git 平台的圖示（owner 決定保留）。
   - 檔案總管的檔案類型圖示（`components/material-file-icons.ts`，material-icon-theme 的程式語言和工具圖形）：等 owner 決定，守門的白名單理由寫「file-type icons, pending owner decision」。
   - `packages/app/assets/images/editor-apps/*.png`：上游放在 App 套件裡的編輯器標誌，App 沒有任何地方引用，不會打包；上游官網引用其中的 `finder.png`。
-  - 網頁版和桌面版啟動畫面的標誌遮罩（`screens/startup-splash-screen.tsx` 的 `WebLogoShimmer`）還是上游 Paseo 的蝴蝶形狀，手機版用的是 WOOW 標誌。這是第 8 節漏掉的品牌識別，不是廠商標誌，另外處理。`assets/images` 的 `butterfly-*.svg`、`favicon-*.svg` 也是上游 Paseo 的圖，沒有地方引用。
   - 上游官網 `packages/website`（我們不部署，第 18 節）。
 - 測試（App 和桌面版的測試不看哪一家顯示什麼，改回上游標誌時不用改測試；照資料檢查的都在守門）：
   - `components/woowtech-vendor-badge.test.ts`：縮寫表和沒列在表上的 id；每一種大寫、大寫加小寫都放得進方框並留邊，字高和線寬不低於上面的下限，而且置中；SVG 只用 currentColor；徽章元件在四種圖示尺寸（12、14、16、20）和淺色、深色主題的前景色下畫出正確的縮寫；ACP 目錄的每一家就算主機送了 SVG 也畫目錄自己的圖示；其他 provider 的主機 SVG 畫成徽章；每個 ACP 圖示 id 都有縮寫。
@@ -1152,8 +1153,8 @@ node --test woowtech/*.test.mjs
     2. Claude 顯示徽章時，Claude 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`），兩個 `.svg` 和 ACP 那一筆等於 Claude 的徽章。
     3. 每個廠商圖示檔都跟資料一致：顯示徽章的是徽章（元件、`.svg`、ACP 項目），PNG 不在；顯示上游標誌的跟 `UPSTREAM_REF` 逐位元組相同。徽章檔不准寫死顏色。
     4. 上游出貨的每個廠商圖示（vendored `.svg`、桌面版 PNG、ACP 項目）都要在資料裡，而且只屬於一家。
-    5. 只有白名單的檔案可以有 SVG 路徑資料：徽章的字形、5 個 git 平台圖示、WOOW 標誌、齒輪、勾和叉、檔案類型圖示、Mermaid、終端機字形、啟動畫面的遮罩，每一項寫了理由；顯示上游標誌的廠商的檔案自動放行。白名單的檔案不再畫圖時也會失敗。
-    6. 出貨的點陣圖只能是我們自己的圖示（App、favicon、PWA、桌面版）和資料放行的廠商標誌；`editor-apps`、上游 Paseo 的 SVG 不准被引用。
+    5. 只有白名單的檔案可以有 SVG 路徑資料：徽章的字形、5 個 git 平台圖示、WOOW 標誌、齒輪、勾和叉、檔案類型圖示、Mermaid、終端機字形，每一項寫了理由；顯示上游標誌的廠商的檔案自動放行。白名單的檔案不再畫圖時也會失敗。
+    6. 出貨的點陣圖只能是我們自己的圖示（App、favicon、PWA、桌面版）和資料放行的廠商標誌；`editor-apps` 的編輯器標誌不准被引用。
     7. 只有白名單的地方可以渲染 SVG 文件（`SvgXml`、`SvgCss`、`SvgIcon` 等）：provider 圖示、ACP 目錄、檔案類型圖示、使用者自己的專案圖示、配對 QR Code。上游 main 的 `usage/source-icon.tsx`（用量來源的 SVG）這類新地方合併進來就會失敗，要先決定怎麼換成徽章。
     8. 主機替已知 provider 送 SVG 時解析結果不是那份 SVG，`provider-icons.ts` 在主機 SVG 的位置畫徽章。
     9. 每種語言的主題名稱都不含 Claude（含音譯），繁中「陶土」、英文 Terracotta，`theme.ts` 的 id 和 unistyles 名稱不變。
@@ -1926,5 +1927,6 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
 - 廠商的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表和新增 ACP 供應商的目錄、側欄的 Agent 列、模型選單、匯入工作階段、排程、終端機設定檔這些 12～24 px 的地方都讀得出縮寫（C、Cx、Gh、Oc、Pi、Om、Mm 等），桌面版「在…中開啟」選單的 VS Code、Cursor 等是徽章、Finder 是資料夾；外觀設定的主題選單顯示「陶土」／Terracotta，原本選了這個主題的裝置更新後仍是同一個主題。
-- 待 owner 決定（第 22 節）：檔案總管的檔案類型圖示（程式語言和工具的圖形）要不要也換。網頁版和桌面版啟動畫面的遮罩還是上游 Paseo 的蝴蝶，要換成 WOOW 標誌（第 8 節）。
+- 待 owner 決定（第 22 節）：檔案總管的檔案類型圖示（程式語言和工具的圖形）要不要也換。
+- 網頁版和桌面版的啟動畫面（第 8 節）要在實機上看：淺色和深色主題都是 WOOW 標誌在閃，不是蝴蝶。
 - 商標（TIPO）與 D-U-N-S。
