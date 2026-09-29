@@ -853,7 +853,7 @@ node --test woowtech/*.test.mjs
   - `--test-concurrency=1`：一次跑一個檔。2 核 runner 的預設本來就是 1（核心數減一），寫出來讓本機的結果跟 CI 一樣。
   - typecheck 看 `quality` 這組路徑（`.github/ci-paths.yml`）：PR 只改到 `.md`、`.svg` 這類檔案時它不跑，守門也跟著不跑；每週的排程和手動執行都會跑。
   - 守門：上游的 `scripts/ci-workflow.test.mjs` 多一項（在 `changes` job 的 Validate CI contracts 跑，不需要安裝）：typecheck 有這一步、指令完全一樣、在 build 之後、沒有 `if` 和 `continue-on-error`。拿掉這一步、加條件、改跳過的條件、縮小 glob 都會失敗。`woowtech/workflows.test.mjs` 另外檢查跳過的條件只對到 zh-TW 重新產生那一項。
-  - 本機模擬（2026-09-29，這台 Mac，不是 Ubuntu）：Node 22.23.2、`CI=true`、全新的 HOME、PATH 沒有 `~/.local/bin`，`woowtech/tools/node_modules` 暫時移開（沒有 OpenCC）。先 `npm run build:server`，再跑 `changes` job 的三個契約檔（28 項全過）和這一步（132 項全過，36 秒）；被跳過的那一項單獨跑，因為沒有 OpenCC 而失敗，證明它不能在 CI 跑。macOS 會多跑 Install CLI 那一項；Ubuntu 的結果和這一步在 2 核 runner 上的時間，看下一次 CI。
+  - 本機模擬（2026-09-29，這台 Mac，不是 Ubuntu）：Node 22.23.2、`CI=true`、全新的 HOME、PATH 沒有 `~/.local/bin`，`woowtech/tools/node_modules` 暫時移開（沒有 OpenCC）。先 `npm run build:server`，再跑 `changes` job 的三個契約檔（28 項全過）和這一步（132 項全過，36 秒）；被跳過的那一項單獨跑，因為沒有 OpenCC 而失敗，證明它不能在 CI 跑。macOS 會多跑 Install CLI 那一項。Ubuntu 2 核 runner 上的結果和時間見「驗證紀錄」的 F11 驗證輪（CI #9）。
 
 - 2 核心、7 GB 的設定，前兩次執行後加的（見下面）。上游的 CI 在公開 repo 的 4 核心、16 GB runner 上跑，這些上限在那裡夠用；變數沒設時照上游：
   - Playwright 的 4 個分片和桌面版 job 設 `E2E_METRO_WARMUP_TIMEOUT_MS=600000`，網頁版冷打包最多等 10 分鐘。讀它的是 Playwright 的 globalSetup（`packages/app/e2e/support/global-setup.ts`，上游 120 秒，桌面版的 renderer E2E 也用它）、桌面版 lifecycle E2E 第一次開視窗（`packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs`，上游 90 秒），以及桌面版 browser E2E 第一次點 Settings 之前等 Settings 按鈕出現（`packages/desktop/e2e/browser-tabs.e2e.mjs`，上游只有點擊本身的 Playwright 預設 30 秒；變數沒設時不多等）。
@@ -1562,6 +1562,44 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- F11 驗證輪（2026-09-29，整合分支 `woowtech/integration-0929` 的 `b8c8f4954`，第 3、16、18、22 節與「上游同步紀錄」第三批）：main `ea9f49e49` 加上 F11 Claude 補強（`woowtech/f11-b` 的 10 個 commit，含 pi 在 `woowtech/pi-fixes-4` 的 2 個）、上游第三批（`woowtech/upstream-picks-0929` 的 15 個）和整合分支自己的 6 個（兩次合併、徽章那節改成第 22 節、合併 F11 驗收發現的 D1～D3 修正、首次點通知修正 `7ccdd372e`、CI 的 heap 設定 `b8c8f4954`），共 31 個 commit、115 檔（+7021／−420）。沒有刪檔和二進位檔，依賴只多 server 的 undici，版本都是 0.8.0，金鑰掃描沒有真的金鑰。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0929-*`（`integ0929-<步驟>.md`）、`fix-first-tap*` 和 `first-tap-real*`，截圖在 `~/.local/share/woowtech-smart/shots/` 底下同樣的前綴。
+  - 本機（`env -i`、只准連 loopback 的 sandbox）：
+    - 合併（`integ0929-merge.md`，`06bf83240`）：守門 134/134，照 CI 拿掉 OpenCC 那一項後 133/133；CI 契約 28/28；typecheck app、server、client、cli、desktop 各一次，三次 commit hook 的 11 個 workspace 也過；App 117 檔 1453/1453；server 非 Claude 的 67 檔 1541/1542、1 略過；Claude provider 36 檔 506/506（假 claude 只回 `--version`）；protocol 218/218；CLI 15/15；`format:check` 4718 檔、lint 100 檔 0 個 warning、0 個 error。沒過的 1 個是 `provider-availability` 的「Codex Microsoft Store」：Homebrew 的 node@22 複製到別的資料夾後載不到 libnode，給 dyld 路徑就 6/6，受測程式沒改，CI 用官方的 Node，不受影響。main 和 f11-b 都新增了第 21 節，`06bf83240` 把徽章那節改成第 22 節。
+    - 合併 D1～D3 的修正（`integ0929-fixmerge.md`，`b828b79c5`）：守門 136/136；server 的 F11 8 檔 95/95、`agent.test.ts` 84/84；App 7 檔 65/65；typecheck server、app，`format:check`、lint 通過。
+    - 最終 head `b8c8f4954` 的守門 138/138（`integ0929-repair-guards.log`、`integ0929-review-r3-guards.log`）。
+  - CI（`integ0929-ci3.md`、`integ0929-ci3-final.txt`、`integ0929-gate.md`）：[run 36542041624](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36542041624) 是第 9 次，手動、不勾 Playwright，commit `b8c8f4954`，成功。
+    - 第 1 次 attempt 從建立（08:19:56Z）到最後一個 job 結束（08:58:39Z）約 38 分 43 秒，只有 cli-tests（shard 3/3）失敗：1 個失敗、314 個通過。`lifecycle.e2e.test.ts:368` 一看到 `paseo.pid` 就 `JSON.parse`，上游的 `writeNewPidLock` 先建空檔再寫入，讀到空檔就是「Unexpected end of JSON input」。這是上游測試的 race，這個分支沒改那個測試和 pid lock。attempt 2 只重跑這個 job，09:49:44Z～10:01:22Z（11 分 38 秒）通過。
+    - 最後 18 個 job：12 個成功；Windows 兩個（沒開 `vars.WOOWTECH_CI_WINDOWS`）和 Playwright 四片照設計略過，不算通過；沒有失敗。最久的是 desktop-tests（ubuntu）38 分 14 秒、server-tests（ubuntu）14 分 41 秒、cli-tests（shard 1/3）14 分 37 秒。
+    - typecheck 的「Check woowtech fork guards」成功，59 秒（08:23:14Z～08:24:13Z）。這一輪只准下載失敗 job 的 log，所以沒有取得 CI 上的測試數。`changes` job 的 Validate CI contracts 也成功。
+    - desktop-tests 的「Build Linux desktop artifacts」13 分 26 秒成功。CI #8（run 36533790263，`7ccdd372e`）在這一步用完 heap，其他 11 個 job 通過；owner 同意加 4 GB（第 18 節）後再跑一次完整 CI，就是這一次。同一個 job 的「Run desktop browser E2E」2 分 33 秒成功。
+  - 真的 Claude（owner 在 2026-09-29 授權）：Claude Code 2.1.284、訂閱登入。daemon 用 `env -i`、真的 HOME（claude 要讀登入）、暫存的 PASEO_HOME 和 scratch repo，不設 API key，claude 的指令加 `--strict-mcp-config`（R2 例外）。共 6 個回合，Claude Code 工作階段檔裡的 `mcp__` 呼叫都是 0：
+    - `integ0929-real-desktop.md`（打包 `b828b79c5`）：R3 用 Sonnet 5.5（`claude-sonnet-5-5`）1 個，回「ok」，SDK 估算 0.0619596 USD。R2 用 Haiku 4.5（`claude-haiku-4-5`）1 個：daemon 用 Dock 式的最小 PATH，從 `~/.local/bin/claude` 備援找到 claude，經本機代理第一次下載 SDK 0.3.246，回「ok」，0.0215864 USD。R1 只跑 `--version` 和 `auth status`。
+    - `integ0929-real-android.md`（`b828b79c5`）：Haiku 4.5 2 個，背景約 199 秒後的權限推播，接受後執行 Bash 的 `touch`，0.0251732、0.018481 USD。
+    - `first-tap-real.md`（`b8c8f4954`）：Haiku 4.5 2 個，複驗首次點通知修正。這一步沒記 SDK 的費用，token 是 in 18／out 554 和 in 18／out 322。
+    - 有記的 4 個回合 SDK 估算共約 0.127 USD。訂閱登入時這是 SDK 算的估計值，不是帳單。
+    - 偏離（owner 已知悉）：`integ0929-desktop` 的 GUI 第一次啟動時，daemon 的探測執行了真的 claude 的 `--version`、`auth status`（0 回合，HOME 是暫存的），之後改成 `env -i` 加上明確的假 claude 重做。R2 為了走備援不設 command，不能加 `--strict-mcp-config`，owner 的 user-scope MCP 被載入，home-assistant 經代理找 pypi.org 被擋，沒有 `mcp__` 呼叫。
+  - 首次點通知修正（`7ccdd372e`，第 16 節「配對後第一次點通知」）：`integ0929-real-android` 的 run 1 發現（高）：配對第一台主機後，第一次點權限通知停在主機首頁，root stack 是 `[welcome, open-project, *open-project]`；mock 也重現，App 冷啟動後正常。原因是上游歡迎頁「主機上線就轉頁」的 effect，不是回歸。
+    - 測試（`fix-first-tap.md`）：修之前 11 個 2 紅（`fix-first-tap-red.json`），修之後 11/11（`-green.json`）；拿掉修法時 vitest 2 紅、守門紅，依賴拿掉 `isFocused` 時守門紅，還原後跟開始時相同（`-mutation.log`）。App 17 檔 271/271、protocol 152/152、App typecheck、`format:check` 4722 檔、守門 137/137。
+    - Android 模擬器：mock（`fix-first-tap.md` 的 run 1）背景 201.6 秒後點通知，15.9 秒出現 agent 分頁、27.3 秒出現計畫卡，stack 是 `[welcome, *h/[serverId] → workspace]`。真的 Haiku（`first-tap-real.md` 的 R1、R2，每次都 `pm clear` 後重新配對）背景 201.4、208.7 秒，點後 2.8、5.5 秒 router 已在工作區、之後沒被換掉，agent 分頁 53.8、51.8 秒，授權卡 87.5～115.5、85.6 秒，接受後檔案建立。S1（mock）錄影 1233 格，沒有「工作區不可用」。
+    - 慢的原因是這台 Mac 當時的記憶體壓力（swap 6.6～7.2 GB、load average 約 9）：daemon 都在毫秒內回，慢在 App 的 JS。正常負載下要再量一次。`fix-first-tap` 的 run 2 和 S1 沒做完（WOOW-BUILD 在 16:15 卸載），由 `first-tap-real` 補上；它留下的 adb server 和暫存由協調者清掉（`integ0929-coordinator-cleanup.txt`）。
+  - 平台矩陣（逐項結果表在各步驟紀錄的最後，「未測」都寫了原因）：
+    - Mac 桌面版（`integ0929-desktop.md` 打包 `06bf83240`、用假 claude；`integ0929-real-desktop.md` 打包 `b828b79c5`）：未簽章、`--dir`、arm64。通過：app.asar 有 undici、沒有 SDK，SDK 的載入、下載和修復模組都在；Claude 標誌的路徑資料 0，沒有 `wrangler*.toml`、relay.paseo.sh；Dock 式的最小 PATH 從 `~/.local/bin` 找到 claude，PATH 和手動指令優先，裸名不備援，不可執行的檔跳過；登入狀態在 CLI 的 11 種情況和 GUI 的淺色、深色、英文都對，也不外洩；未登入時建立 agent 不被擋；代理走 `CONNECT registry.npmjs.org:443`，`NO_PROXY` 直連；壞的 SDK 副本移到 quarantine 後重新下載；徽章在挑選器、設定和 agent 分頁的淺色、深色；R1 顯示「已使用 Claude 訂閱登入」，email、組織名稱和 id 在診斷、snapshot、daemon.log、PASEO_HOME 和頁面裡都是 0；第三批的 Sonnet 5.5、相對時間、串流縮排、分頁提示框的整句繁中。第一次不通過、已修：D1 SDK 下載錯誤在時間軸顯示英文原文（`7a18b6005`）；D2 Opus 5.5 這類支援 fast mode 的模型，下一則不重試、第三則才重新下載（`68dd77afb`）。`b828b79c5` 的包複驗 D1（繁中、英文）和 D2（Opus 5.5 的 GUI 和 CLI、Sonnet 5.5 的 CLI）都通過。部分通過：重啟後的主機版本（版本號改變只在 iOS 驗）。未測：分割窗格的子 Agent、自訂 Codex、OpenCode thinking、背景 `send_agent_prompt`、外掛重載（要真的 provider 或子 Agent）；R1 的全螢幕截圖（TCC 不讓這個工作階段錄製螢幕）。最終 head 沒有重新打包：`b828b79c5` 之後出貨的程式只有歡迎頁的修正，守門重掃了 `b828b79c5` 的包（`integ0929-gate-pkg2.txt`）。
+    - Android 模擬器（`integ0929-android.md` 在 `06bf83240`，`integ0929-real-android.md` 在 `b828b79c5`）：沿用 Debug APK，JS 從這個分支的 Metro 載入。通過：徽章的淺色、深色；登入狀態的繁中、英文和重新整理；未登入時建立 agent 不被擋；上一輪未測的斷線檔案總管「主機未連線」；第三批的 Sonnet 5.5、相對時間、串流，T1 的 S1、S3；背景約 199 秒後的權限推播「需要你的授權」送到模擬器，推播和 relay 不帶 prompt 或指令，App 冷啟動後點通知 8.6 秒開出 agent、12.7 秒出現授權卡，接受後檔案建立。第一次不通過、已修：D3 手機的 Claude 列沒有「需要登入」、圓點沒有無障礙文字（`676ef9f93`），`b828b79c5` 複驗繁中、英文通過；配對後第一次點通知（見上）。部分通過：重啟後的主機版本。未測：提交清單的相對時間（沒有領先 base 的提交，iOS 補了）；D1、D2（dev daemon 從 node_modules 載入 SDK，不會下載）。
+    - iOS 模擬器（`integ0929-ios.md`，`06bf83240`）：沿用 Debug 建置，不重建，通知用 `simctl push`。通過：徽章的淺色、深色；登入狀態、重新整理、診斷的 Auth 行；未登入時建立 agent；第三批的 Sonnet 5.5、相對時間（含提交清單）、串流、daemon 重啟和升級後的主機版本（v0.8.0 換成 v0.9.1，不用重開 App）、T1 的 S1（點擊到分頁約 1.1 秒）和 S3。不通過：D3，同 Android，修正沒在 iOS 複驗。未測：首次點通知修正、真的 Claude、D1、D2。
+  - 審查與合併前守門（`integ0929-review.md`、`integ0929-repair.md`、`integ0929-gate.md`）：審查的 blocker 1 個：merge 步驟的 4 個 log 有 owner 的 email（git 提交身分，9 處），`integ0929-repair` 遮掉後，重新審查 blocker 0。守門第一次 no-go：內建碟在 20:47 低於 3 GB；`fix-first-tap` 留下 adb server 和含 token 的暫存；`first-tap-real` 的真 Claude 要 owner 本人確認；ship 的規則沒寫 NODE_OPTIONS。殘留清掉、owner 確認之後，第二次只因磁碟 no-go（21:20～21:33 別的工作階段的模擬器讓 swap 長到 12 GB，最低剩 2.28 GB），第三次 go。
+  - 發現、還沒修：
+    - 上游 `lifecycle.e2e.test.ts:368` 的 race（見上面的 CI）：改成輪詢到 JSON 能解析，再回報上游。
+    - 上游的用量頁和 composer 的 context 圓環 tooltip 會讀 macOS 鑰匙圈的「Claude Code-credentials」、不看 HOME，拿到就呼叫 api.anthropic.com。這台 Mac 上任何測試 daemon 都可能用到 owner 的 Claude 帳號，這一輪刻意不開。
+    - `config.json` 的 claude 只能整個取代 command（會關掉備援），不能只加參數；dev 限定的 mock、mock-slow 在 config 裡關不掉。
+    - 切換 App 語言後，設定頁的主機跳回第一台；在外觀換主題後，設定頁又跳出「新增連線」sheet。
+    - 兩台主機時「從主機匯入」的搜尋框寫死英文「Search hosts...」，兩台同名時副標題顯示完整 server id；zh-TW 有兩處把 Agent 譯成「代理」；VoiceOver 念英文的「Filter: 全部」和側欄工作區的狀態；iPhone 17 的排程列第三行被截斷。
+  - 要實機、正式簽章或公司網路才驗得到的：
+    - 手機實機：iOS 的 APNs／FCM token 登記和推播送達、Android 實機的推播和點擊（這一輪都是模擬器）；首次點通知修正在實機上的點擊和正常負載下的時間（iOS 連模擬器都還沒驗）；徽章在 12～20 px 讀不讀得出來；VoiceOver、TalkBack 念不念得出「需要登入」。
+    - 正式簽章：桌面版 Developer ID 簽章與公證（這一輪都是未簽章的 `--dir`）後的通知授權和自動更新，從 Dock 實際開正式版時的 claude 備援和 SDK 第一次下載；Android 正式簽章版（EAS `production`）；TestFlight 的 production APNs。
+    - 公司網路：真的公司代理、SDK 鏡像站和 `NODE_EXTRA_CA_CERTS`，這一輪只有單元測試和本機代理。
+  - 待 owner 決定：深色主題「Claude」（#D97757）要不要改名換色、其他廠商的標誌（第 22 節）；用量頁要不要改成看 `CLAUDE_CONFIG_DIR` 或 HOME，或改成選用；config 要不要能只加參數（例如 `strictMcpConfig`）；「上游同步紀錄」第二、三批延後和不拿的 commit。Playwright 這一輪照 owner 的決定沒跑，仍在「接下來」。
+  - 「接下來」的 CI fork 守門步驟就是上面的 CI，已從清單拿掉。
+
 - 定向輪驗收（2026-09-28～29，整合分支 `woowtech/integration-0928` 的 `8985ff2a7`，第 6、7、14、16、21 節與「上游同步紀錄」的 OSC 8 查證）：main `f272fc8b6` 加上 `woowtech/fixes-0928`（`b7bd33075`，7 個 fork commit）和刪掉 `with-localized-app-name` 外掛的 `8985ff2a7`，共 9 個 commit、41 檔（+2008／−344）。只驗 fixes-0928 改到的五項：F1 繁中、F2 App 名稱的 locales 分平台、F3 附件撐過重連、F4 OSC 8、F5 S1 的「工作區不可用」閃爍；pi 的 F11 不在這一輪。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0928-*`（`integ0928-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0928-*`。
   - 本機（`integ0928-merge.md`，`env -i`、只准連 loopback 的 sandbox）：守門 123/123；typecheck app、server、client、cli、desktop 各一次，commit hook 的 11 個 workspace 也過；App 57 檔 672/672，含 T1 203、路由 119、fixes-0928 改到的 4 檔 34；client 的 `daemon-client` 138/138；server 33 檔 537/537；protocol 180/180；CLI 15/15；`format:check` 4681 檔、lint 38 檔 0 個 warning、0 個 error。`.github/` 沒動，版本都是 0.8.0，金鑰掃描 0 筆，沒有二進位檔。
   - CI（`integ0928-ci.md`）：[run 36374983426](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36374983426) 是第 7 次，手動、不勾 Playwright，commit `8985ff2a7`，成功，總時長 37 分 23 秒。有執行的 12 個 job 都過，最久的是 desktop-tests（ubuntu）36 分 58 秒和 server-tests（ubuntu）14 分 50 秒；測試報告裡 server 5929 個、desktop 401 個、App 5586 個通過，沒有失敗。Windows 兩個（沒開 `vars.WOOWTECH_CI_WINDOWS`）和 Playwright 四片照設計略過，不算通過。12 則 annotation 都是 Node.js 20 淘汰警告。
@@ -1855,5 +1893,4 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
 - Claude 的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表、側欄的 Agent 列、模型選單、匯入工作階段和排程這些 12～20 px 的地方都讀得出是 C。
 - 待 owner 決定（第 22 節）：其他廠商的標誌要不要也換成文字；深色主題「Claude」要不要改名換色。
-- CI 的 fork 守門步驟（第 18 節）：下一次 CI 確認 typecheck 的「Check woowtech fork guards」在 Ubuntu 上全過，記下它的時間；`changes` job 的 Validate CI contracts 也要過。
 - 商標（TIPO）與 D-U-N-S。
