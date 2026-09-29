@@ -97,12 +97,14 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 其他接點：
     - server：`AgentClient` 多一個選填的 `getAuthStatus`（`agent-sdk-types.ts`）；`provider-snapshot-manager.ts` 在 provider 可用後跟 `fetchCatalog` 同時讀（fork 檔 `server/agent/woowtech-provider-auth.ts`，失敗一律當沒有，只抄 `state`、`method` 兩欄）；`provider-registry.ts` 的包裝 client 轉接它（+2 行），所以繼承 Claude 的自訂 provider 讀自己的 `env`。
     - Claude：分類寫在 fork 檔 `providers/claude/woowtech-auth.ts`，機器 I/O 走 `woowtech-auth-io.ts`（測試換成假的）。熱檔 `agent.ts` 改了三處：`getDiagnostic` 的 Auth 行改用 fork 檔、刪掉上游把 `auth status` 原始輸出串進診斷的 `resolveClaudeAuth`、多一個 `getAuthStatus`。合併上游時如果上游又改回原始輸出，保留 fork 的版本。
-    - App：`screens/settings/providers-section.tsx` 只在 provider 啟用且 ready 時套用（+10／-3 行）；文字與判斷在 fork 檔 `woowtech-provider-auth.ts`、`woowtech-provider-auth-detail.tsx`，文案在 `i18n/woowtech-copy.ts` 的 `claudeAuth`（只譯繁中，其他語言用英文）。說明那一行手機也顯示；手機的列本來就不顯示狀態文字，需要登入時看的是警告色的點和說明。CLI 的 `provider ls` 沒改。
+    - App：`screens/settings/providers-section.tsx` 只在 provider 啟用且 ready 時套用（+34／-7 行）；文字與判斷在 fork 檔 `woowtech-provider-auth.ts`、`woowtech-provider-auth-detail.tsx`，文案在 `i18n/woowtech-copy.ts` 的 `claudeAuth`（只譯繁中，其他語言用英文）。CLI 的 `provider ls` 沒改。
+      - 手機（compact）的列不畫狀態文字，只有圓點，所以名稱下一行在需要登入時以狀態開頭（「需要登入：請在主機上執行 claude auth login，或設定 API key。」／「Login required: …」）；圓點有無障礙文字（需要登入時是「需要登入」，其他狀態是下一行那句，例如「已使用 Claude 訂閱登入」）；整列的無障礙名稱也接上下一行（「Claude 供應商詳情，需要登入：…」）。
+      - 原因（integ0929 iOS、Android 驗收）：手機畫面和無障礙樹都看不到「需要登入」。VoiceOver 把整列當成一個按鈕，只念它的名稱，裡面的圓點和說明都不在無障礙樹裡，所以狀態也要放進列的名稱。桌面寬的列不變。
   - 測試（都不執行真的 `claude`、不讀真的 `~/.claude`，也不看跑測試那台機器的環境變數）：
     - `providers/claude/agent.woowtech-auth.test.ts`：假的 `claude auth status` 含 email、org 和像 key 的字串，逐一驗證上表每個狀態的診斷行和 `getAuthStatus`、環境變數的優先序（含 API key 優先於訂閱）、空字串覆蓋、旗標為 0，以及診斷和結果都不含那些字串（斷言只印布林值）。
     - `server/agent/woowtech-provider-auth.test.ts`：snapshot 帶 `auth` 且仍是 ready、需要登入時 `validateAgentConfiguration`／`resolveCreateConfig` 照常通過、讀取失敗時仍 ready 且沒有這欄、不可用的 provider 不讀、重新整理後更新、繼承 Claude 的自訂 provider 與加了模型的 Claude 都讀得到。
     - `protocol/src/woowtech-provider-auth.test.ts`：新 App 保留、舊 daemon 沒有、舊 App 略過、之後才加的值、compact 編解碼、App 實際用的 generated validator。
-    - App：`woowtech-provider-auth.test.ts` 用真的翻譯檢查 zh-TW、英文每個狀態的標籤、顏色和說明；`woowtech-provider-auth-row.test.tsx` 實際 render 供應商列表（zh-TW、英文），確認需要登入、token、API key、訂閱、未知和舊 daemon 的列。
+    - App：`woowtech-provider-auth.test.ts` 用真的翻譯檢查 zh-TW、英文每個狀態的標籤、顏色和說明；`woowtech-provider-auth-row.test.tsx` 實際 render 供應商列表（zh-TW、英文），確認需要登入、token、API key、訂閱、未知和舊 daemon 的列；手機的列另外確認下一行、圓點的無障礙文字和整列的無障礙名稱，寬的列圓點沒有無障礙文字。
 
 - 升級 SDK 時，這三個地方要一起改：
   - `CLAUDE_AGENT_SDK_VERSION`

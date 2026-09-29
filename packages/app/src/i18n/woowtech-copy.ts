@@ -704,6 +704,10 @@ const CLAUDE_AUTH_ENGLISH = {
   oauthToken: "CLAUDE_CODE_OAUTH_TOKEN is set",
   configured: "Credentials are set",
   unknown: "Login status unknown",
+  // Phones hide the status label, so the line under the name and the row's screen reader name
+  // carry it.
+  hintWithStatus: "{{status}}: {{hint}}",
+  rowWithStatus: "{{row}}, {{status}}",
 };
 const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
   needsLogin: "需要登入",
@@ -715,6 +719,8 @@ const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
   oauthToken: "已設定 CLAUDE_CODE_OAUTH_TOKEN",
   configured: "已設定認證資訊",
   unknown: "無法確認登入狀態",
+  hintWithStatus: "{{status}}：{{hint}}",
+  rowWithStatus: "{{row}}，{{status}}",
 };
 
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
