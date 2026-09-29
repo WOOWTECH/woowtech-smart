@@ -10,6 +10,7 @@ import { OmpIcon } from "@/components/icons/omp-icon";
 import { PiIcon } from "@/components/icons/pi-icon";
 import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
 import { resolveProviderIconName } from "@/components/provider-icon-name";
+import { vendorBadgeSvg } from "@/components/icons/vendor-badge";
 
 export interface ProviderIconProps {
   size: number;
@@ -79,7 +80,9 @@ export function getProviderIcon(provider: string, serverId?: string | null): Pro
     return getCatalogProviderIcon(name.id);
   }
   if (name.kind === "svg") {
-    return getSnapshotProviderIcon(`${serverId}:${provider}`, name.svg);
+    // woowtech smart: a host's SVG can be any vendor's logo, so it draws as a text badge instead:
+    // the vendor's monogram, or the id's first letter (woowtech/README.md §22).
+    return getSnapshotProviderIcon(`${serverId}:${provider}`, vendorBadgeSvg(provider));
   }
   return Bot;
 }

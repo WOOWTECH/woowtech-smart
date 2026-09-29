@@ -39,14 +39,16 @@ export function resolveProviderIconName(
   if (BUILTIN_PROVIDER_IDS.has(provider)) {
     return { kind: "builtin", id: provider };
   }
+  // woowtech smart: a known id keeps its own icon even when a host sends an SVG for it
+  // (woowtech/README.md §22).
+  if (KNOWN_PROVIDER_IDS.has(provider)) {
+    return { kind: "catalog", id: provider };
+  }
   const iconSvg = serverId
     ? providerSnapshotIconSvgsByServer.get(serverId)?.get(provider)
     : undefined;
   if (iconSvg) {
     return { kind: "svg", svg: iconSvg };
-  }
-  if (KNOWN_PROVIDER_IDS.has(provider)) {
-    return { kind: "catalog", id: provider };
   }
   return { kind: "bot" };
 }

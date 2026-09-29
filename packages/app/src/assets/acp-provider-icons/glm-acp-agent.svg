@@ -1,1 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" fill-rule="evenodd"><title>Z.ai</title><path d="M8.07 1.333L6.618 3.302H.435L1.887 1.333h6.184zM15.503 12.699L14.052 14.667h-6.161l1.449-1.968h6.163zM16 1.333L6.176 14.667H0L9.824 1.333H16z"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="2" y="2" width="20" height="20" rx="5.5" stroke-width="1.5"/>
+  <path d="M12.21 8.74A3.57 4.25 0 1 0 13.48 12H10.59M16.38 7.75V14.98A1.27 1.27 0 0 0 17.66 16.25" stroke-width="1.85"/>
+</svg>

@@ -1,4 +1,4 @@
-<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0.5 5.5L2.5 8 0.5 10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="3.2" y="11.5" font-family="'SF Mono', 'Fira Code', 'Consolas', monospace" font-size="10" font-weight="600" letter-spacing="-0.5" fill="currentColor">VT</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="2" y="2" width="20" height="20" rx="5.5" stroke-width="1.5"/>
+  <path d="M5.96 7.75L8.94 16.25L11.91 7.75M15.83 8.43V14.98A1.27 1.27 0 0 0 17.1 16.25H18.04M14.81 10.56H17.87" stroke-width="1.85"/>
 </svg>
