@@ -116,6 +116,7 @@ import {
 } from "@/screens/settings/host-page";
 import { resolvePluginIcon } from "@/plugins/icons";
 import { PluginSettingsContent } from "@/plugins/settings";
+import { visibleHostSections } from "@/provider-usage/woowtech-usage-visibility";
 import { useInstalledPlugins } from "@/plugins/registry";
 import { HostPluginsPage } from "@/screens/settings/plugins-page";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
@@ -188,7 +189,8 @@ interface HostSectionItem {
   icon: ComponentType<{ size: number; color: string }>;
 }
 
-const HOST_SECTION_ITEMS: HostSectionItem[] = [
+// woowtech smart: no usage row while account usage is hidden (woowtech/README.md section 23).
+const HOST_SECTION_ITEMS: HostSectionItem[] = visibleHostSections([
   { id: "host", labelKey: "settings.hostSections.host", icon: Server },
   { id: "projects", labelKey: "settings.hostSections.projects", icon: FolderGit2 },
   { id: "connections", labelKey: "settings.hostSections.connections", icon: Network },
@@ -200,7 +202,7 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "usage", labelKey: "settings.hostSections.usage", icon: Gauge },
   { id: "terminals", labelKey: "settings.hostSections.terminals", icon: SquareTerminal },
   { id: "plugins", labelKey: "settings.hostSections.plugins", icon: Blocks },
-];
+]);
 
 function renderHostSettingsContent(
   view: Extract<SettingsView, { kind: "host" }>,

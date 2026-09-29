@@ -18,7 +18,9 @@ async function openMockAgent(page: Page) {
   return session;
 }
 
-test.describe("provider usage tooltip", () => {
+// woowtech smart: account usage is hidden (woowtech/README.md section 23);
+// woowtech-provider-usage-hidden.spec.ts checks the tooltip without it instead.
+test.describe.skip("provider usage tooltip", () => {
   test("fetches usage when the context tooltip opens and renders the active provider", async ({
     page,
   }) => {
