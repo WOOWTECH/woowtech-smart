@@ -1,16 +1,19 @@
 // Drives the app's notification and workspace navigation without rendering. Real: the app's
 // navigation code, React Navigation's StackRouter, and expo-router's route tree built from the
 // src/app file names. Transcribed from expo-router 6.0.23, because its routing modules import
-// react-native and cannot load in the unit project: the action router.navigate and
-// router.dismissTo dispatch, and the merged params useGlobalSearchParams returns. Modeled: React
-// Navigation starting a nested navigator from its parent's `screen`/`params`, and the workspace
-// route's open-intent effect. The witness in the test checks the transcription against the
-// navigation state the Android run recorded (woowtech-smart logs/ultra-device-s3b.txt).
+// react-native and cannot load in the unit project: the action router.navigate,
+// router.dismissTo and router.replace dispatch, and the merged params useGlobalSearchParams
+// returns. Modeled: React Navigation starting a nested navigator from its parent's
+// `screen`/`params`, the workspace route's open-intent effect, and the welcome screen's
+// host-online effect. The witnesses in the tests check the transcription against the navigation
+// state the Android runs recorded (woowtech-smart logs/ultra-device-s3b.txt,
+// logs/integ0929-real-android-tap-probe.txt).
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { NavigationContainerRefWithCurrent } from "@react-navigation/native";
 import {
   CommonActions,
+  StackActions,
   StackRouter,
   type NavigationAction,
   type NavigationState,
@@ -21,6 +24,7 @@ import {
 import { getRoutes } from "expo-router/build/getRoutes";
 import type { RouteNode } from "expo-router/build/Route";
 import type { RequireContext } from "expo-router/build/types";
+import { shouldWelcomeMoveOnToHost } from "@/navigation/woowtech-welcome-host-online";
 import {
   readWorkspaceRouteOpenParam,
   type WorkspaceRouteOpenParams,
@@ -57,7 +61,16 @@ interface ActionRoute {
 
 const ROOT_SLOT_NAME = "__root";
 const HOST_ROUTE_NAME = "h/[serverId]";
+const WELCOME_ROUTE_NAME = "welcome";
 export const WORKSPACE_ROUTE_NAME = "workspace/[workspaceId]/index";
+
+// The root-level screens the scenarios visit, by path.
+const ROOT_LEAF_ROUTE_NAMES: Readonly<Record<string, string>> = {
+  "/": "index",
+  "/welcome": WELCOME_ROUTE_NAME,
+  "/open-project": "open-project",
+  "/settings": "settings/index",
+};
 
 function listRouteFiles(directory: string, prefix: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -140,10 +153,11 @@ function actionStateFor(href: string): ActionRoute {
   const [pathname, search = ""] = href.split("?");
   const selection = parseHostWorkspaceRouteFromPathname(pathname);
   if (!selection) {
-    if (pathname !== "/open-project") {
+    const leafName = ROOT_LEAF_ROUTE_NAMES[pathname];
+    if (!leafName) {
       throw new Error(`the scenarios do not visit ${href}`);
     }
-    return { name: ROOT_SLOT_NAME, state: { routes: [{ name: "open-project" }] } };
+    return { name: ROOT_SLOT_NAME, state: { routes: [{ name: leafName }] } };
   }
   const open = new URLSearchParams(search).get("open");
   const workspace: ActionRoute = {
@@ -364,6 +378,38 @@ function openIntentTarget(intent: WorkspaceOpenIntent): WorkspaceTabTarget {
   throw new Error(`the scenarios do not open ${intent.kind} intents`);
 }
 
+/** What the welcome screen's host-online effect sees on a render. */
+export interface WelcomeEffectInput {
+  /** useAnyHostOnline: the first host that is online, or null. */
+  anyOnlineServerId: string | null;
+  /** Whether this welcome screen is the focused route of the root stack. */
+  isFocused: boolean;
+}
+
+/** The welcome screen's host-online effect: its dependency list and its body. */
+export interface WelcomeEffectModel {
+  deps(input: WelcomeEffectInput): readonly unknown[];
+  /** Whether the body calls router.replace(buildOpenProjectRoute()). */
+  movesOn(input: WelcomeEffectInput): boolean;
+}
+
+/** Upstream's components/welcome-screen.tsx (getpaseo/paseo 4965af219): `useEffect(() => {
+ * if (!anyOnlineServerId) return; router.replace(buildOpenProjectRoute()); },
+ * [anyOnlineServerId, router])`. */
+export const welcomeEffectLikeUpstream: WelcomeEffectModel = {
+  deps: ({ anyOnlineServerId }) => [anyOnlineServerId],
+  movesOn: ({ anyOnlineServerId }) => Boolean(anyOnlineServerId),
+};
+
+/** The app's components/welcome-screen.tsx: `useEffect(() => { if
+ * (!shouldWelcomeMoveOnToHost({ anyOnlineServerId, isFocused })) return;
+ * router.replace(buildOpenProjectRoute()); }, [anyOnlineServerId, isFocused, router])`, with
+ * isFocused from useIsFocused. woowtech/welcome-host-online.test.mjs pins those lines. */
+export const welcomeEffectLikeWelcomeScreen: WelcomeEffectModel = {
+  deps: ({ anyOnlineServerId, isFocused }) => [anyOnlineServerId, isFocused],
+  movesOn: shouldWelcomeMoveOnToHost,
+};
+
 export interface NavigationScenario {
   readonly openedTabs: readonly OpenedTab[];
   /** A tapped push notification, as _layout.tsx's PushNotificationRouter handles it. */
@@ -372,8 +418,22 @@ export interface NavigationScenario {
   directoryArrives(workspaceIds: string[]): void;
   /** A workspace row in the sidebar. */
   openWorkspaceFromSidebar(workspaceId: string): void;
+  /** A link the app is opened with while it runs: expo-router's linking navigates to its path. */
+  openLink(pathname: string): void;
+  /** router.push(href) from anywhere in the app. */
+  push(href: string): void;
+  /** router.replace(href) from anywhere in the app. */
+  replace(href: string): void;
+  /** Android Back on a root-level screen. */
+  back(): void;
+  /** The first online host changes: it connects (a server ID) or its connection drops (null). */
+  setAnyOnlineHost(serverId: string | null): void;
   focusedRoute(): FocusedRoute;
+  /** The route names of the root stack, bottom first, with the focused one marked with `*`. */
+  rootStack(): string[];
   hostRouteParams(): object | undefined;
+  /** The workspace navigateToWorkspace remembered last (paseo:last-workspace-route-selection). */
+  lastWorkspaceId(): string | null;
   dispose(): void;
 }
 
@@ -382,16 +442,23 @@ export function createNavigationScenario(input: {
   /** The route the app shows first, such as /open-project after the welcome screen's Connect. */
   startAt: string;
   readOpenParam: OpenParamReader;
+  /** The welcome screen's host-online effect. Defaults to the app's. */
+  welcomeEffect?: WelcomeEffectModel;
 }): NavigationScenario {
   const { serverId, readOpenParam } = input;
+  const welcomeEffect = input.welcomeEffect ?? welcomeEffectLikeWelcomeScreen;
   let container = settle({
     routes: [actionStateFor(input.startAt)],
   } as unknown as PartialState<NavigationState>);
   const knownWorkspaceIds = new Set<string>();
   let workspacesHydrated = false;
   const openedTabs: OpenedTab[] = [];
+  let lastWorkspaceId: string | null = null;
+  let anyOnlineServerId: string | null = null;
   // HostWorkspaceRouteContent's consumedIntentRef, one per mounted workspace route.
   const consumedIntentByRouteKey = new Map<string, string>();
+  // The dependency list each mounted welcome screen's effect last ran with.
+  const welcomeEffectDepsByRouteKey = new Map<string, readonly unknown[]>();
 
   function dispatch(action: NavigationAction): void {
     const next = applyAction(container, action);
@@ -401,8 +468,9 @@ export function createNavigationScenario(input: {
     container = settle(next);
   }
 
-  // expo-router's linkTo -> getNavigateAction for a stack, without anchors or previews.
-  function linkTo(type: "NAVIGATE" | "POP_TO", href: string): void {
+  // expo-router's linkTo -> getNavigateAction for a stack, without anchors or previews. The action
+  // has no `source`, so StackRouter's REPLACE replaces the stack's focused route.
+  function linkTo(type: "NAVIGATE" | "POP_TO" | "PUSH" | "REPLACE", href: string): void {
     const { navigator, route } = findDivergentNavigator(actionStateFor(href), container);
     const payload = payloadFromActionRoute(route);
     dispatch({
@@ -432,10 +500,61 @@ export function createNavigationScenario(input: {
       openedTabs.push({ workspaceKey, target, pin });
       return null;
     },
-    rememberLastWorkspace: () => undefined,
+    rememberLastWorkspace: (selection) => {
+      lastWorkspaceId = selection.workspaceId;
+    },
     navigateToRoute: (route) =>
       navigateToHostWorkspaceRoute(route, { dismissTo: (href) => linkTo("POP_TO", href) }),
   };
+
+  function rootStackState(): StackState {
+    const rootStack = container.routes[container.index].state as StackState | undefined;
+    if (!rootStack) {
+      throw new Error("the root stack is not mounted");
+    }
+    return rootStack;
+  }
+
+  function sameDeps(previous: readonly unknown[] | undefined, next: readonly unknown[]): boolean {
+    return (
+      previous !== undefined &&
+      previous.length === next.length &&
+      previous.every((value, index) => Object.is(value, next[index]))
+    );
+  }
+
+  // WelcomeScreen's host-online effect, for every welcome screen the root stack keeps mounted:
+  // it runs on mount and when its dependencies change. Returns whether it navigated.
+  function runWelcomeEffects(): boolean {
+    const rootStack = rootStackState();
+    const focusedKey = rootStack.routes[rootStack.index].key;
+    const mountedKeys = new Set<string>();
+    for (const route of rootStack.routes) {
+      if (route.name !== WELCOME_ROUTE_NAME) {
+        continue;
+      }
+      mountedKeys.add(route.key);
+      const effectInput: WelcomeEffectInput = {
+        anyOnlineServerId,
+        isFocused: route.key === focusedKey,
+      };
+      const deps = welcomeEffect.deps(effectInput);
+      if (sameDeps(welcomeEffectDepsByRouteKey.get(route.key), deps)) {
+        continue;
+      }
+      welcomeEffectDepsByRouteKey.set(route.key, deps);
+      if (welcomeEffect.movesOn(effectInput)) {
+        linkTo("REPLACE", "/open-project");
+        return true;
+      }
+    }
+    for (const key of welcomeEffectDepsByRouteKey.keys()) {
+      if (!mountedKeys.has(key)) {
+        welcomeEffectDepsByRouteKey.delete(key);
+      }
+    }
+    return false;
+  }
 
   // HostWorkspaceRouteContent's open-intent effect. Returns whether it changed the route params,
   // which runs the effect again.
@@ -480,12 +599,14 @@ export function createNavigationScenario(input: {
 
   function render(): void {
     for (let pass = 0; pass < 5; pass += 1) {
-      if (!runWorkspaceRouteEffect()) {
+      if (!runWelcomeEffects() && !runWorkspaceRouteEffect()) {
         return;
       }
     }
-    throw new Error("the workspace route's open-intent effect did not settle");
+    throw new Error("the screens' effects did not settle");
   }
+
+  render();
 
   return {
     openedTabs,
@@ -521,11 +642,38 @@ export function createNavigationScenario(input: {
       navigateToWorkspace({ serverId, workspaceId }, workspaceDeps);
       render();
     },
+    openLink(pathname) {
+      linkTo("NAVIGATE", pathname);
+      render();
+    },
+    push(href) {
+      linkTo("PUSH", href);
+      render();
+    },
+    replace(href) {
+      linkTo("REPLACE", href);
+      render();
+    },
+    back() {
+      dispatch({ ...StackActions.pop(1), target: rootStackState().key });
+      render();
+    },
+    setAnyOnlineHost(onlineServerId) {
+      anyOnlineServerId = onlineServerId;
+      render();
+    },
     focusedRoute: () => focusedRouteIn(container),
+    rootStack() {
+      const rootStack = rootStackState();
+      return rootStack.routes.map((route, index) =>
+        index === rootStack.index ? `*${route.name}` : route.name,
+      );
+    },
     hostRouteParams() {
       const rootStack = container.routes[container.index].state as StackState | undefined;
       return rootStack?.routes.find((route) => route.name === HOST_ROUTE_NAME)?.params;
     },
+    lastWorkspaceId: () => lastWorkspaceId,
     dispose: unregister,
   };
 }

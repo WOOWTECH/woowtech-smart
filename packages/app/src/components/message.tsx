@@ -1,3 +1,4 @@
+import { claudeSdkErrorTranslationKey } from "@/utils/claude-sdk-error";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TaskListRow } from "@/components/task-list-row";
 import {
@@ -2123,6 +2124,8 @@ export const Notification = memo(function Notification({
   message,
   disableOuterSpacing,
 }: NotificationProps) {
+  const { t } = useTranslation();
+  const errorKey = claudeSdkErrorTranslationKey(level, message);
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
 
   const typeConfig = {
@@ -2163,7 +2166,7 @@ export const Notification = memo(function Notification({
           </View>
           <View style={notificationStylesheet.textContainer}>
             <Text style={notificationStylesheet.messageText} selectable>
-              {message}
+              {errorKey ? t(errorKey) : message}
             </Text>
           </View>
         </View>

@@ -61,12 +61,14 @@ import {
 } from "./subagents/workflow-replay-source.js";
 import { readClaudeWorkflowResultFile } from "./subagents/workflow-output.js";
 import { buildClaudeFeatures, claudeModelSupportsFastMode } from "./feature-definitions.js";
+import { formatProviderDiagnostic, formatProviderDiagnosticError } from "../diagnostic-utils.js";
+// woowtech smart: Claude's login state (woowtech/README.md §3).
+import { realClaudeDiagnosticIo, type ClaudeDiagnosticIo } from "./woowtech-auth-io.js";
 import {
-  buildBinaryDiagnosticRows,
-  buildCommandResolutionDiagnosticRows,
-  formatProviderDiagnostic,
-  formatProviderDiagnosticError,
-} from "../diagnostic-utils.js";
+  formatClaudeAuthDiagnostic,
+  resolveClaudeAuthStatus,
+  type ClaudeAuthStatus,
+} from "./woowtech-auth.js";
 import { appendOrReplaceGrowingAssistantMessage, runProviderTurn } from "../provider-runner.js";
 import {
   applyClaudeToolPolicy,
@@ -74,7 +76,12 @@ import {
   type ClaudeProviderOptions,
 } from "./options.js";
 import { renderPromptAttachmentAsText } from "../../prompt-attachments.js";
-import { claudeQuery, type ClaudeOptions, type ClaudeQueryFactory } from "./query.js";
+import {
+  claudeQuery,
+  claudeQueryLoadFailed,
+  type ClaudeOptions,
+  type ClaudeQueryFactory,
+} from "./query.js";
 import {
   realClaudeRewindSdk,
   revertClaudeConversation,
@@ -138,7 +145,6 @@ import {
   createProviderEnvSpec,
   resolveProviderLaunch,
   type ProviderRuntimeSettings,
-  type ResolvedProviderLaunch,
 } from "../../provider-launch-config.js";
 import { withTimeout } from "../../../../utils/promise-timeout.js";
 import { terminateWithTreeKill } from "../../../../utils/tree-kill.js";
@@ -409,6 +415,8 @@ interface ClaudeAgentClientOptions {
   resolveBinary?: () => Promise<string>;
   resolveVersion?: (signal?: AbortSignal) => Promise<string>;
   rewindSdk?: ClaudeRewindSdk;
+  /** woowtech smart: what the diagnostic and login state read from the machine. */
+  diagnosticIo?: ClaudeDiagnosticIo;
 }
 
 interface ClaudeAgentSessionOptions {
@@ -1505,6 +1513,7 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly resolveBinary: () => Promise<string>;
   private readonly resolveVersion: (signal?: AbortSignal) => Promise<string>;
   private readonly rewindSdk: ClaudeRewindSdk;
+  private readonly diagnosticIo: ClaudeDiagnosticIo;
 
   constructor(options: ClaudeAgentClientOptions) {
     this.defaults = options.defaults;
@@ -1516,6 +1525,7 @@ export class ClaudeAgentClient implements AgentClient {
       options.resolveVersion ??
       ((signal) => resolveClaudeCodeVersion(this.runtimeSettings, signal));
     this.rewindSdk = options.rewindSdk ?? realClaudeRewindSdk;
+    this.diagnosticIo = options.diagnosticIo ?? realClaudeDiagnosticIo;
   }
 
   resolveConfiguredModel(model: AgentModelDefinition): AgentModelDefinition {
@@ -1660,24 +1670,38 @@ export class ClaudeAgentClient implements AgentClient {
     return availability.available;
   }
 
+  // woowtech smart: display-only login state for the provider list (woowtech/README.md §3).
+  async getAuthStatus(signal?: AbortSignal): Promise<ClaudeAuthStatus> {
+    return await resolveClaudeAuthStatus({
+      io: this.diagnosticIo,
+      runtimeSettings: this.runtimeSettings,
+      signal,
+    });
+  }
+
   async getDiagnostic(): Promise<{ diagnostic: string }> {
     try {
-      const launch = await resolveProviderLaunch({
+      const launch = await this.diagnosticIo.resolveLaunch({
         commandConfig: this.runtimeSettings?.command,
         defaultBinary: "claude",
       });
-      const availability = await checkProviderLaunchAvailable(launch);
+      const availability = await this.diagnosticIo.checkAvailability(launch);
+      // woowtech smart: a fixed login state, never `claude auth status` output (it holds the email).
       const auth = availability.available
-        ? await resolveClaudeAuth(launch, availability, this.runtimeSettings)
+        ? await resolveClaudeAuthStatus({
+            io: this.diagnosticIo,
+            runtimeSettings: this.runtimeSettings,
+            resolved: { launch, availability },
+          })
         : null;
 
       return {
         diagnostic: formatProviderDiagnostic("Claude Code", [
-          ...(await buildCommandResolutionDiagnosticRows(launch, {
+          ...(await this.diagnosticIo.commandRows(launch, {
             knownBinaryNames: ["claude"],
           })),
-          ...(await buildBinaryDiagnosticRows(launch, availability)),
-          ...(auth ? [{ label: "Auth", value: auth }] : []),
+          ...(await this.diagnosticIo.binaryRows(launch, availability)),
+          ...(auth ? [{ label: "Auth", value: formatClaudeAuthDiagnostic(auth) }] : []),
         ]),
       };
     } catch (error) {
@@ -1739,43 +1763,6 @@ export async function resolveClaudeCodeVersion(
     throw new Error("Unable to parse Claude Code version from --version output");
   }
   return version.join(".");
-}
-
-async function resolveClaudeAuth(
-  launch: ResolvedProviderLaunch,
-  availability: { resolvedPath: string | null },
-  runtimeSettings?: ProviderRuntimeSettings,
-): Promise<string | null> {
-  const run = async (
-    executable: string,
-    args: string[],
-  ): Promise<{ stdout: string; stderr: string }> => {
-    try {
-      return await execCommand(executable, args, {
-        ...createProviderEnvSpec({ runtimeSettings }),
-        timeout: 5_000,
-      });
-    } catch (error) {
-      const err = toObjectRecord(error);
-      const stdout = typeof err?.stdout === "string" ? err.stdout : "";
-      const stderr = typeof err?.stderr === "string" ? err.stderr : "";
-      const fallbackMessage = typeof err?.message === "string" ? err.message : "";
-      return { stdout, stderr: stderr || fallbackMessage };
-    }
-  };
-
-  try {
-    const executable = availability.resolvedPath ?? launch.command;
-    const result = await run(executable, [...launch.args, "auth", "status"]);
-
-    const combined = [result.stdout, result.stderr]
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .join("\n");
-    return combined || null;
-  } catch {
-    return null;
-  }
 }
 
 function extractContextWindowSize(modelUsage: unknown): number | undefined {
@@ -3109,6 +3096,10 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private async ensureQuery(): Promise<Query> {
+    // woowtech smart: never reuse a query whose SDK load failed (woowtech/README.md §3).
+    if (this.query && claudeQueryLoadFailed(this.query)) {
+      this.queryRestartNeeded = true;
+    }
     if (this.query && !this.queryRestartNeeded) {
       return this.query;
     }

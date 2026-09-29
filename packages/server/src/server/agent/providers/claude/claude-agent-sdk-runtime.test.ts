@@ -1,19 +1,29 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import { createServer } from "node:http";
+import type { Socket } from "node:net";
+
+import { claudeAgentSdkRegistry, fetchFromRegistry } from "./claude-agent-sdk-download.js";
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { type ClaudeAgentSdkModule, loadClaudeAgentSdk } from "./claude-agent-sdk-runtime.js";
+import {
+  type ClaudeAgentSdkModule,
+  loadClaudeAgentSdk,
+  CLAUDE_AGENT_SDK_INTEGRITY,
+} from "./claude-agent-sdk-runtime.js";
 
 let runtimeDir: string;
 let scratchDir: string;
 
 beforeEach(async () => {
-  runtimeDir = await mkdtemp(path.join(tmpdir(), "claude-agent-sdk-runtime-"));
-  scratchDir = await mkdtemp(path.join(tmpdir(), "claude-agent-sdk-tarball-"));
+  const tempRoot = path.resolve(".dev/f11-repair/fixtures");
+  await mkdir(tempRoot, { recursive: true });
+  runtimeDir = await mkdtemp(path.join(tempRoot, "claude-agent-sdk-runtime-"));
+  scratchDir = await mkdtemp(path.join(tempRoot, "claude-agent-sdk-tarball-"));
 });
 
 afterEach(async () => {
@@ -43,6 +53,26 @@ async function makeSdkTarball(
 }
 
 describe("loadClaudeAgentSdk", () => {
+  test.each(["https://mirror.invalid/npm", "https://mirror.invalid/npm/"])(
+    "uses registry subpath %s without consulting metadata",
+    async (registry) => {
+      const tarball = await makeSdkTarball('export const source = "mirror";');
+      const urls: string[] = [];
+      await loadClaudeAgentSdk({
+        runtimeDir,
+        importLocal: missingLocalSdk,
+        registry,
+        fetchTarball: async (url) => {
+          urls.push(url);
+          return tarball.bytes;
+        },
+        integrity: tarball.integrity,
+      });
+      expect(urls).toEqual([
+        "https://mirror.invalid/npm/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.246.tgz",
+      ]);
+    },
+  );
   test("uses the locally installed SDK without downloading", async () => {
     const localSdk = { source: "local" } as unknown as ClaudeAgentSdkModule;
     const fetchTarball = vi.fn(async () => new Uint8Array());
@@ -115,3 +145,130 @@ describe("loadClaudeAgentSdk", () => {
     expect(offlineFetch).not.toHaveBeenCalled();
   });
 });
+
+test("registry environment uses lowercase first and the uppercase fallback", () => {
+  expect(claudeAgentSdkRegistry({})).toBeUndefined();
+  expect(claudeAgentSdkRegistry({ NPM_CONFIG_REGISTRY: "upper" })).toBe("upper");
+  expect(
+    claudeAgentSdkRegistry({ npm_config_registry: "lower", NPM_CONFIG_REGISTRY: "upper" }),
+  ).toBe("lower");
+});
+
+test.each([
+  "https://mirror.invalid/?",
+  "https://mirror.invalid/#",
+  "file:///fixture",
+  "not a URL",
+  "https://fixture-user:fixture-password@mirror.invalid/",
+  "https://mirror.invalid/?fixture-query",
+  "https://mirror.invalid/#fixture-fragment",
+])("refuses unsafe registry configuration without leaking it: %s", async (registry) => {
+  let calls = 0;
+  const error = await loadClaudeAgentSdk({
+    runtimeDir,
+    registry,
+    importLocal: missingLocalSdk,
+    fetchTarball: async () => {
+      calls++;
+      return new Uint8Array();
+    },
+  }).catch((failure: unknown) => failure);
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).not.toMatch(/fixture|mirror.invalid/);
+  expect(calls).toBe(0);
+});
+
+test("a mirror cannot replace the pinned integrity with its own bytes", async () => {
+  const tarball = await makeSdkTarball('export const source = "not-the-pinned-sdk";');
+  const urls: string[] = [];
+  await expect(
+    loadClaudeAgentSdk({
+      runtimeDir,
+      registry: "https://mirror.invalid/repository",
+      importLocal: missingLocalSdk,
+      fetchTarball: async (url) => {
+        urls.push(url);
+        return tarball.bytes;
+      },
+    }),
+  ).rejects.toMatchObject({
+    name: "ClaudeAgentSdkIntegrityError",
+    expected: CLAUDE_AGENT_SDK_INTEGRITY,
+  });
+  expect(urls).toEqual([
+    "https://mirror.invalid/repository/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.246.tgz",
+  ]);
+});
+
+test.each(["non-2xx", "disconnect", "slow-body", "wrong-sha512"])(
+  "loopback mirror %s failure installs nothing; next attempt loads verified synthetic SDK",
+  async (failure) => {
+    const tarball = await makeSdkTarball('export const source = "loopback mirror";');
+    const paths: string[] = [];
+    const sockets = new Set<Socket>();
+    const server = createServer((req, res) => {
+      paths.push(req.url ?? "");
+      if (paths.length === 1) {
+        switch (failure) {
+          case "non-2xx":
+            res.writeHead(502);
+            res.end();
+            return;
+          case "disconnect":
+            res.socket?.destroy();
+            return;
+          case "slow-body":
+            res.writeHead(200);
+            res.write("partial");
+            return;
+          case "wrong-sha512":
+            res.end("untrusted mirror bytes");
+            return;
+        }
+      }
+      res.end(tarball.bytes);
+    });
+    server.on("connection", (socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Missing fixture port");
+    try {
+      const options = {
+        runtimeDir,
+        registry: `http://127.0.0.1:${address.port}/mirror/`,
+        importLocal: missingLocalSdk,
+        integrity: tarball.integrity,
+        fetchTarball: (url: string) => fetchFromRegistry(url, { env: {}, timeoutMs: 150 }),
+      };
+      await expect(loadClaudeAgentSdk(options)).rejects.toThrow(
+        failure === "wrong-sha512" ? "integrity check" : "download failed",
+      );
+      expect(await readdir(runtimeDir)).toEqual([]);
+      const sdk = await loadClaudeAgentSdk(options);
+      expect((sdk as unknown as { source: string }).source).toBe("loopback mirror");
+      expect(paths).toEqual(
+        Array(2).fill("/mirror/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.246.tgz"),
+      );
+      const pointerName = "claude-agent-sdk-0.3.246.json";
+      const generation: unknown = JSON.parse(
+        await readFile(path.join(runtimeDir, pointerName), "utf8"),
+      );
+      expect(generation).toMatch(/^claude-agent-sdk-0\.3\.246\.generation-[0-9a-f-]{36}$/);
+      expect(await readdir(runtimeDir)).toEqual([generation, pointerName]);
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        }),
+      );
+    }
+  },
+);

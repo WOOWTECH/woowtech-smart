@@ -68,7 +68,8 @@ import type { Theme } from "@/styles/theme";
 import { RenderProfile } from "@/utils/render-profiler";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
-import { useCompactTimeAgo } from "@/hooks/use-compact-time-ago";
+// woowtech smart: the agent tooltip's activity line comes translated as a whole.
+import { useAgentTabTooltipActivity } from "@/screens/workspace/woowtech-agent-tab-tooltip";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
@@ -148,12 +149,6 @@ function formatAgentTooltipTitle(singleLineTitle: string): string {
   return `${singleLineTitle.slice(0, AGENT_TOOLTIP_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
-function formatAgentTooltipActivity(compactActivity: string): string {
-  if (compactActivity === "now") return "just now";
-  if (/^\d/.test(compactActivity)) return `${compactActivity} ago`;
-  return compactActivity;
-}
-
 function AgentTabTooltipBody({
   serverId,
   agentId,
@@ -168,8 +163,9 @@ function AgentTabTooltipBody({
     const agent = session?.agents.get(agentId) ?? session?.agentDetails.get(agentId) ?? null;
     return state.agentLastActivity.get(agentId) ?? agent?.lastActivityAt ?? null;
   });
-  const compactActivity = useCompactTimeAgo(lastActivityAt);
-  const activity = formatAgentTooltipActivity(compactActivity);
+  // woowtech smart: upstream appends an English " ago" to the compact label, which the fork
+  // translates ("5 分 ago" in zh-TW). See woowtech-agent-tab-tooltip.ts.
+  const activity = useAgentTabTooltipActivity(lastActivityAt);
 
   return (
     <View style={styles.tooltipAgentContent}>

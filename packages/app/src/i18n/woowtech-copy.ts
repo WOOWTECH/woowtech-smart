@@ -980,7 +980,6 @@ const TIME_ENGLISH = {
   dateLocale: "en-US",
   justNow: "just now",
   ago: {
-    seconds: "{{value}}s ago",
     minutes: "{{value}}m ago",
     hours: "{{value}}h ago",
     days: "{{value}}d ago",
@@ -1004,7 +1003,6 @@ const TIME_ZH_TW: typeof TIME_ENGLISH = {
   dateLocale: "zh-TW",
   justNow: "剛剛",
   ago: {
-    seconds: "{{value}} 秒前",
     minutes: "{{value}} 分鐘前",
     hours: "{{value}} 小時前",
     days: "{{value}} 天前",
@@ -1068,10 +1066,57 @@ const COMPOSER_ZH_TW: typeof COMPOSER_ENGLISH = {
   uploadConnectionLost: "與主機的連線中斷，檔案沒有上傳。主機連回來後請再加入一次。",
 };
 
+const CLAUDE_SDK_ENGLISH = {
+  download:
+    "First use of Claude requires downloading a component, but the registry or mirror could not be reached. Send your next message to retry.",
+  integrity:
+    "The downloaded Claude component failed its integrity check and was not installed. Send your next message to retry.",
+  runtime: "Claude component could not be installed or loaded. Send your next message to retry.",
+};
+const CLAUDE_SDK_ZH_TW: typeof CLAUDE_SDK_ENGLISH = {
+  download:
+    "首次使用 Claude 需要下載元件，但目前無法連線到 registry 或鏡像站。傳送下一則訊息時會自動重試。",
+  integrity: "下載的 Claude 元件未通過完整性檢查，因此沒有安裝。傳送下一則訊息時會自動重試。",
+  runtime: "無法安裝或載入 Claude 元件。傳送下一則訊息時會自動重試。",
+};
+
+// Claude's login state in the provider list (woowtech/README.md §3). The variable names and the
+// command stay as they are typed.
+const CLAUDE_AUTH_ENGLISH = {
+  needsLogin: "Login required",
+  needsLoginHint: "Run claude auth login on the host, or set an API key.",
+  subscription: "Signed in with a Claude subscription",
+  signedIn: "Signed in",
+  apiKey: "Uses an API key (billed per use), not a Claude subscription",
+  authToken: "ANTHROPIC_AUTH_TOKEN is set",
+  oauthToken: "CLAUDE_CODE_OAUTH_TOKEN is set",
+  configured: "Credentials are set",
+  unknown: "Login status unknown",
+  // Phones hide the status label, so the line under the name and the row's screen reader name
+  // carry it.
+  hintWithStatus: "{{status}}: {{hint}}",
+  rowWithStatus: "{{row}}, {{status}}",
+};
+const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
+  needsLogin: "需要登入",
+  needsLoginHint: "請在主機上執行 claude auth login，或設定 API key。",
+  subscription: "已使用 Claude 訂閱登入",
+  signedIn: "已登入",
+  apiKey: "使用 API key（按用量計費），不是 Claude 訂閱",
+  authToken: "已設定 ANTHROPIC_AUTH_TOKEN",
+  oauthToken: "已設定 CLAUDE_CODE_OAUTH_TOKEN",
+  configured: "已設定認證資訊",
+  unknown: "無法確認登入狀態",
+  hintWithStatus: "{{status}}：{{hint}}",
+  rowWithStatus: "{{row}}，{{status}}",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
     ...(WOOWTECH_COPY[language] ?? ENGLISH),
+    claudeSdk: language === "zh-TW" ? CLAUDE_SDK_ZH_TW : CLAUDE_SDK_ENGLISH,
+    claudeAuth: language === "zh-TW" ? CLAUDE_AUTH_ZH_TW : CLAUDE_AUTH_ENGLISH,
     confirmDialog: { confirm: language === "zh-TW" ? "確認" : "Confirm" },
     metadataGeneration:
       language === "zh-TW" ? METADATA_GENERATION_ZH_TW : METADATA_GENERATION_ENGLISH,

@@ -36,6 +36,12 @@ import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
 import { ChevronRight, MoreHorizontal, Trash2 } from "lucide-react-native";
+import {
+  describeCompactProviderAuth,
+  describeProviderAuth,
+  type ProviderAuthDisplay,
+} from "./woowtech-provider-auth";
+import { ProviderAuthDetail, ProviderStatusDot } from "./woowtech-provider-auth-detail";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
 type ProviderEntry = NonNullable<ReturnType<typeof useProvidersSnapshot>["entries"]>[number];
@@ -53,6 +59,8 @@ function getProviderStatus(
   enabled: boolean,
   modelCount: number,
   t: TFunction,
+  // woowtech smart: a ready provider's login state (woowtech/README.md §3).
+  auth: ProviderAuthDisplay | null = null,
 ): ProviderStatus {
   if (!enabled)
     return { tone: "muted", label: t("settings.providers.statuses.disabled"), modelCount: null };
@@ -64,8 +72,8 @@ function getProviderStatus(
   }
   if (status === "ready") {
     return {
-      tone: "success",
-      label: t("settings.providers.statuses.available"),
+      tone: auth?.tone ?? "success",
+      label: auth?.label ?? t("settings.providers.statuses.available"),
       modelCount: modelCount > 0 ? modelCount : null,
     };
   }
@@ -192,7 +200,12 @@ function ProviderRow({
       ? entry.error.trim()
       : null;
   const modelCount = filterSelectableModels(entry.models ?? null)?.length ?? 0;
-  const providerStatus = getProviderStatus(entry.status, enabled, modelCount, t);
+  // woowtech smart: Claude's login state (woowtech/README.md §3).
+  const auth = describeProviderAuth({ status: entry.status, enabled, auth: entry.auth }, t);
+  const providerStatus = getProviderStatus(entry.status, enabled, modelCount, t, auth);
+  const detailsLabel = t("settings.providers.providerDetails", { name: def.label });
+  // Phones hide the status label: the line, the dot and the row's name say it instead.
+  const compactAuth = isCompact && auth ? describeCompactProviderAuth(auth, detailsLabel, t) : null;
 
   const handlePress = useCallback(() => {
     onPress(def.id);
@@ -219,7 +232,7 @@ function ProviderRow({
       style={rowStyle}
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={t("settings.providers.providerDetails", { name: def.label })}
+      accessibilityLabel={compactAuth?.row ?? detailsLabel}
     >
       {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => (
         <>
@@ -235,8 +248,13 @@ function ProviderRow({
                   {def.label}
                 </Text>
                 {!isCompact ? <Text style={styles.separator}>·</Text> : null}
-                <StatusIndicator status={providerStatus} compact={isCompact} />
+                <StatusIndicator
+                  status={providerStatus}
+                  compact={isCompact}
+                  dotLabel={compactAuth?.dot}
+                />
               </View>
+              {auth ? <ProviderAuthDetail detail={compactAuth?.detail ?? auth.detail} /> : null}
               {providerError && !isCompact ? (
                 <Text style={styles.errorText} numberOfLines={3}>
                   {providerError}
@@ -285,7 +303,16 @@ function getDotColor(tone: StatusTone, theme: ReturnType<typeof useUnistyles>["t
   }
 }
 
-function StatusIndicator({ status, compact }: { status: ProviderStatus; compact: boolean }) {
+function StatusIndicator({
+  status,
+  compact,
+  dotLabel,
+}: {
+  status: ProviderStatus;
+  compact: boolean;
+  // woowtech smart: the login state a phone's dot says to a screen reader (woowtech/README.md §3).
+  dotLabel?: string;
+}) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
   const dotStyle = useMemo(
@@ -298,7 +325,7 @@ function StatusIndicator({ status, compact }: { status: ProviderStatus; compact:
       {status.tone === "loading" ? (
         <LoadingSpinner size={10} color={theme.colors.foregroundMuted} />
       ) : (
-        <View style={dotStyle} />
+        <ProviderStatusDot style={dotStyle} label={dotLabel} />
       )}
       {!compact ? (
         <>

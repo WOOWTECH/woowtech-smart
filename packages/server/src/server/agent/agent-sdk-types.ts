@@ -6,6 +6,7 @@ import type {
   ToolPolicy,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
+import type { ProviderAuthStatus } from "@getpaseo/protocol/woowtech-provider-auth";
 import type { PaseoToolCatalog } from "./tools/types.js";
 
 export type { AgentProviderNotice, AgentTaskItem };
@@ -127,6 +128,8 @@ export interface ProviderSnapshotEntry {
   description?: string;
   iconSvg?: string;
   defaultModeId?: string | null;
+  /** woowtech smart: display-only login state (woowtech/README.md §3). */
+  auth?: ProviderAuthStatus;
 }
 
 export interface AgentCreateConfigParent {
@@ -787,6 +790,11 @@ export interface AgentClient {
    */
   isAvailable(signal?: AbortSignal, options?: FetchCatalogOptions): Promise<boolean>;
   getDiagnostic?(): Promise<{ diagnostic: string }>;
+  /**
+   * woowtech smart: the login state shown next to a ready provider (woowtech/README.md §3).
+   * Display only; availability and agent creation never depend on it.
+   */
+  getAuthStatus?(signal?: AbortSignal): Promise<ProviderAuthStatus>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().
    * Called when Paseo archives an agent so the provider's own UI reflects the same state.

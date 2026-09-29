@@ -10,6 +10,7 @@ import { buildSelfNodeCommand } from "../../../paseo-env.js";
 import { spawnProcess } from "../../../../utils/spawn.js";
 import {
   type ClaudeAgentSdkModule,
+  type ClaudeAgentSdkSource,
   ensureClaudeAgentSdk,
   peekClaudeAgentSdk,
 } from "./claude-agent-sdk-runtime.js";
@@ -25,13 +26,7 @@ export type ClaudeQueryInput = Parameters<ClaudeAgentSdkModule["query"]>[0] & {
 };
 export type ClaudeQueryFactory = (input: ClaudeQueryInput) => Query;
 
-/** Where claudeQuery() gets the Claude Agent SDK from; see claude-agent-sdk-runtime.ts. */
-export interface ClaudeAgentSdkSource {
-  /** The SDK if it is already loaded. */
-  peek(): ClaudeAgentSdkModule | null;
-  /** Loads the SDK, downloading it on first use. */
-  ensure(): Promise<ClaudeAgentSdkModule>;
-}
+export type { ClaudeAgentSdkSource } from "./claude-agent-sdk-runtime.js";
 
 const defaultSdkSource: ClaudeAgentSdkSource = {
   peek: peekClaudeAgentSdk,
@@ -132,6 +127,14 @@ function applyRuntimeSettingsToClaudeOptions(
       return child;
     },
   };
+}
+
+/**
+ * A query whose SDK load failed. It only repeats that failure, so a session builds a new one,
+ * which loads the SDK again (woowtech/README.md §3).
+ */
+export function claudeQueryLoadFailed(query: Query): boolean {
+  return query instanceof DeferredQuery && query.failed;
 }
 
 export function claudeQuery(input: ClaudeQueryInput, context: ClaudeQueryContext = {}): Query {
