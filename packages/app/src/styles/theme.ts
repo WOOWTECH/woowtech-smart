@@ -792,6 +792,8 @@ export const THEME_OPTIONS = [
     swatch: "#4A6BA8",
   },
   {
+    // woowtech smart: shown as 陶土 (Terracotta, i18n/theme-copy.ts); the id, unistyles name and
+    // colors stay so saved preferences keep working (woowtech/README.md §22).
     name: "claude",
     group: "variant",
     unistylesName: "darkClaude",

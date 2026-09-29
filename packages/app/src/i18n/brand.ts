@@ -1,6 +1,7 @@
 import { withCliCommand } from "@getpaseo/protocol/brand-cli";
 import type { Resource, ResourceKey, ResourceLanguage } from "i18next";
 import { supportCopyFor } from "./support-copy";
+import { themeCopyFor } from "./theme-copy";
 import { woowtechCopyFor } from "./woowtech-copy";
 
 /** The product name wherever the UI is not in Chinese. */
@@ -100,7 +101,7 @@ function withSupportCopy(translation: ResourceKey, language: string): ResourceKe
   if (!isRecord(translation)) {
     return translation;
   }
-  return Object.entries(supportCopyFor(language)).reduce(
+  return Object.entries({ ...supportCopyFor(language), ...themeCopyFor(language) }).reduce(
     (tree, [key, text]) => withText(tree, key.split("."), text),
     translation,
   );
@@ -115,8 +116,8 @@ function withWoowtechCopy(translation: ResourceKey, language: string): ResourceK
 
 /**
  * The translations with woowtech smart's name and command in place of upstream
- * Paseo's, WoowTech's help channels in place of Paseo's Discord and GitHub, and
- * woowtech smart's own text under `woowtech`.
+ * Paseo's, WoowTech's help channels in place of Paseo's Discord and GitHub, the
+ * Claude theme called 陶土 (Terracotta), and woowtech smart's own text under `woowtech`.
  * Applied to the resources as they load, so strings upstream adds later are
  * covered without editing its locale files, and interpolated values (a project
  * that happens to be called Paseo) are never touched.
