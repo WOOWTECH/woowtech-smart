@@ -54,3 +54,29 @@ export function describeProviderAuth(
     detail: describeDetail(auth, t),
   };
 }
+
+/** A phone's row hides the status label and draws only the dot. */
+export interface CompactProviderAuthDisplay {
+  /** The line under the provider's name; it starts with the status label when a login is needed. */
+  detail: string;
+  /** What the status dot says to a screen reader: the login state. */
+  dot: string;
+  /** The row's name for a screen reader. VoiceOver reads the row as one button, not what's in it. */
+  row: string;
+}
+
+export function describeCompactProviderAuth(
+  auth: ProviderAuthDisplay,
+  rowLabel: string,
+  t: TFunction,
+): CompactProviderAuthDisplay {
+  const needsLogin = auth.tone === "warning";
+  const detail = needsLogin
+    ? t("woowtech.claudeAuth.hintWithStatus", { status: auth.label, hint: auth.detail })
+    : auth.detail;
+  return {
+    detail,
+    dot: needsLogin ? auth.label : auth.detail,
+    row: t("woowtech.claudeAuth.rowWithStatus", { row: rowLabel, status: detail }),
+  };
+}

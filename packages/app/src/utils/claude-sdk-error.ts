@@ -26,3 +26,17 @@ export function claudeSdkErrorTranslationKey(
     return "woowtech.claudeSdk.runtime";
   return null;
 }
+
+/** agent-manager writes a failed turn into the timeline as this prefix plus the error. */
+const FAILED_TURN_PREFIX = "[System Error] ";
+
+/**
+ * The fork's own SDK error inside the daemon's failed-turn row, `[System Error] <error>`, or null.
+ * Only a row that is exactly the prefix and a complete fork error qualifies, so agent text, other
+ * failures and rows with extra detail stay as they are.
+ */
+export function claudeSdkSystemErrorMessage(text: string): string | null {
+  if (!text.startsWith(FAILED_TURN_PREFIX)) return null;
+  const message = text.slice(FAILED_TURN_PREFIX.length);
+  return claudeSdkErrorTranslationKey("error", message) ? message : null;
+}

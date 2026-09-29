@@ -129,6 +129,14 @@ function applyRuntimeSettingsToClaudeOptions(
   };
 }
 
+/**
+ * A query whose SDK load failed. It only repeats that failure, so a session builds a new one,
+ * which loads the SDK again (woowtech/README.md §3).
+ */
+export function claudeQueryLoadFailed(query: Query): boolean {
+  return query instanceof DeferredQuery && query.failed;
+}
+
 export function claudeQuery(input: ClaudeQueryInput, context: ClaudeQueryContext = {}): Query {
   const request: ClaudeQueryInput = {
     ...input,

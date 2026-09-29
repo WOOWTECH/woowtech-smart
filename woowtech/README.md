@@ -97,20 +97,28 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 其他接點：
     - server：`AgentClient` 多一個選填的 `getAuthStatus`（`agent-sdk-types.ts`）；`provider-snapshot-manager.ts` 在 provider 可用後跟 `fetchCatalog` 同時讀（fork 檔 `server/agent/woowtech-provider-auth.ts`，失敗一律當沒有，只抄 `state`、`method` 兩欄）；`provider-registry.ts` 的包裝 client 轉接它（+2 行），所以繼承 Claude 的自訂 provider 讀自己的 `env`。
     - Claude：分類寫在 fork 檔 `providers/claude/woowtech-auth.ts`，機器 I/O 走 `woowtech-auth-io.ts`（測試換成假的）。熱檔 `agent.ts` 改了三處：`getDiagnostic` 的 Auth 行改用 fork 檔、刪掉上游把 `auth status` 原始輸出串進診斷的 `resolveClaudeAuth`、多一個 `getAuthStatus`。合併上游時如果上游又改回原始輸出，保留 fork 的版本。
-    - App：`screens/settings/providers-section.tsx` 只在 provider 啟用且 ready 時套用（+10／-3 行）；文字與判斷在 fork 檔 `woowtech-provider-auth.ts`、`woowtech-provider-auth-detail.tsx`，文案在 `i18n/woowtech-copy.ts` 的 `claudeAuth`（只譯繁中，其他語言用英文）。說明那一行手機也顯示；手機的列本來就不顯示狀態文字，需要登入時看的是警告色的點和說明。CLI 的 `provider ls` 沒改。
+    - App：`screens/settings/providers-section.tsx` 只在 provider 啟用且 ready 時套用（+34／-7 行）；文字與判斷在 fork 檔 `woowtech-provider-auth.ts`、`woowtech-provider-auth-detail.tsx`，文案在 `i18n/woowtech-copy.ts` 的 `claudeAuth`（只譯繁中，其他語言用英文）。CLI 的 `provider ls` 沒改。
+      - 手機（compact）的列不畫狀態文字，只有圓點，所以名稱下一行在需要登入時以狀態開頭（「需要登入：請在主機上執行 claude auth login，或設定 API key。」／「Login required: …」）；圓點有無障礙文字（需要登入時是「需要登入」，其他狀態是下一行那句，例如「已使用 Claude 訂閱登入」）；整列的無障礙名稱也接上下一行（「Claude 供應商詳情，需要登入：…」）。
+      - 原因（integ0929 iOS、Android 驗收）：手機畫面和無障礙樹都看不到「需要登入」。VoiceOver 把整列當成一個按鈕，只念它的名稱，裡面的圓點和說明都不在無障礙樹裡，所以狀態也要放進列的名稱。桌面寬的列不變。
   - 測試（都不執行真的 `claude`、不讀真的 `~/.claude`，也不看跑測試那台機器的環境變數）：
     - `providers/claude/agent.woowtech-auth.test.ts`：假的 `claude auth status` 含 email、org 和像 key 的字串，逐一驗證上表每個狀態的診斷行和 `getAuthStatus`、環境變數的優先序（含 API key 優先於訂閱）、空字串覆蓋、旗標為 0，以及診斷和結果都不含那些字串（斷言只印布林值）。
     - `server/agent/woowtech-provider-auth.test.ts`：snapshot 帶 `auth` 且仍是 ready、需要登入時 `validateAgentConfiguration`／`resolveCreateConfig` 照常通過、讀取失敗時仍 ready 且沒有這欄、不可用的 provider 不讀、重新整理後更新、繼承 Claude 的自訂 provider 與加了模型的 Claude 都讀得到。
     - `protocol/src/woowtech-provider-auth.test.ts`：新 App 保留、舊 daemon 沒有、舊 App 略過、之後才加的值、compact 編解碼、App 實際用的 generated validator。
-    - App：`woowtech-provider-auth.test.ts` 用真的翻譯檢查 zh-TW、英文每個狀態的標籤、顏色和說明；`woowtech-provider-auth-row.test.tsx` 實際 render 供應商列表（zh-TW、英文），確認需要登入、token、API key、訂閱、未知和舊 daemon 的列。
+    - App：`woowtech-provider-auth.test.ts` 用真的翻譯檢查 zh-TW、英文每個狀態的標籤、顏色和說明；`woowtech-provider-auth-row.test.tsx` 實際 render 供應商列表（zh-TW、英文），確認需要登入、token、API key、訂閱、未知和舊 daemon 的列；手機的列另外確認下一行、圓點的無障礙文字和整列的無障礙名稱，寬的列圓點沒有無障礙文字。
 
 - 升級 SDK 時，這三個地方要一起改：
   - `CLAUDE_AGENT_SDK_VERSION`
   - `CLAUDE_AGENT_SDK_INTEGRITY`，用 `npm view @anthropic-ai/claude-agent-sdk@<版本> dist.integrity` 取得
   - `packages/server/package.json` 的 devDependency
 - 不要開 TypeScript 的 `verbatimModuleSyntax`。一開，`agent.ts` 的 `import { type … } from "@anthropic-ai/claude-agent-sdk"` 會被編譯成 `import {} from …`，SDK 又變回啟動必要的相依套件，沒裝的話 daemon 會起不來。
-- 第一次使用需要連到 npm registry 或設定的鏡像站。失敗不快取，同一個 daemon 的下一則訊息會再試，不必重開對話，也不會自動重送失敗的訊息。下載連同讀取 body 的總逾時是 120 秒。
-- App 對 loader 自己的完整錯誤格式提供繁中提示，說明首次需要下載、來源無法連線，以及下一則訊息會重試；完整性與安裝失敗各有自己的提示。只作用於 error notification，不翻一般 Agent 輸出或未知錯誤，也不把原始 URL、代理認證或 cause 帶進新提示。
+- 第一次使用需要連到 npm registry 或設定的鏡像站。失敗不快取：不論用哪個模型，同一段對話的下一則訊息就會重新下載，不必重開對話，也不會自動重送失敗的訊息。下載連同讀取 body 的總逾時是 120 秒。
+  - SDK 還沒載入時，對話的 Query 是 `DeferredQuery`；載入失敗後，它的每個呼叫都只會重複同一個失敗。熱檔 `agent.ts` 的 `ensureQuery()` 遇到這種 Query（`query.ts` 的 `claudeQueryLoadFailed()`）就換一個新的，新的會再向 daemon 的 SDK 來源要一次（+4 行，import 多一個名稱）。
+  - 原因（integ0929 桌面驗收）：支援 fast mode 的模型，包括預設的 Opus 5.5（fast mode 關著也一樣），建 Query 時要先等 `applyFlagSettings`，載入失敗就在那裡浮現，失敗的 Query 卻留在對話上：下一則訊息沒有任何網路請求就以同一個錯誤失敗，第三則才重新下載。App 在第一則訊息前查 slash 指令或改權限模式時，也會先碰到失敗，情況相同。
+  - 測試 `woowtech-claude-sdk-retry.test.ts`：假的 SDK 來源第一次載入失敗、之後成功。沒有指定模型、Sonnet 5、Opus 5.5（fast mode 關／開）、先查指令或改模式，以及經過 AgentManager 的 Opus 5.5，都要第二則訊息就成功、只載入兩次、不重送第一則。
+- App 對 loader 自己的完整錯誤格式提供繁中提示（其他語言顯示英文），說明首次需要下載、來源無法連線，以及下一則訊息會重試；完整性與安裝失敗各有自己的提示。不翻一般 Agent 輸出或未知錯誤，也不把原始 URL、代理認證或 cause 帶進新提示。
+  - daemon 把失敗的 turn 寫進時間軸時是一則 Agent 訊息：`[System Error] <錯誤>`（上游 `agent-manager.ts`）。時間軸（熱檔 `agent-stream/view.tsx` 的 `renderAssistantMessageItem`，+4 行）遇到整則剛好是 `[System Error] ` 加上完整自有格式時，改用錯誤通知顯示翻譯後的提示；error notification 本身也照舊翻譯（`utils/claude-sdk-error.ts`）。其他 `[System Error]`、多帶 code 或診斷的訊息照原文顯示。複製按鈕仍複製原文，回報問題時看得到錯誤代碼。
+  - 原因（integ0929 桌面驗收）：原本只接在錯誤通知，失敗的 turn 不走那裡，桌面版時間軸一直顯示英文原文。
+  - 測試：`utils/claude-sdk-error.test.ts` 用 App 的 reducer 和 i18n 確認 daemon 那一則在 zh-TW、英文顯示的文字，以及不該翻的訊息；`woowtech-claude-sdk-retry.test.ts` 釘住 daemon 經 AgentManager 寫出的那一則；守門 `woowtech/claude-sdk-error-display.test.mjs` 檢查 `view.tsx`、`message.tsx` 的接點，合併上游時接點被拿掉就會失敗。
 - 公司網路設定（只影響 SDK 下載，不更換 daemon 的全域 dispatcher）：
   - `https_proxy`／`HTTPS_PROXY`、`http_proxy`／`HTTP_PROXY`：小寫優先；HTTPS 沒有專用代理（或設為空字串）時使用 HTTP 代理。代理 URL 可含認證，錯誤不回傳 URL、headers 或原始網路錯誤。
   - `no_proxy`／`NO_PROXY`：小寫優先（含空字串），支援主機、主機加 port、子網域 suffix、逗號或空白分隔清單，以及 `*` 全部直連。

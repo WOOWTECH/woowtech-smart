@@ -46,6 +46,12 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuTrigger: () => null,
 }));
 vi.mock("@/utils/confirm-dialog", () => ({ confirmDialog: async () => false }));
+// A phone's compact rows or a desktop's wide ones.
+const layout = vi.hoisted(() => ({ compact: false }));
+vi.mock("@/constants/layout", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/constants/layout")>()),
+  useIsCompactFormFactor: () => layout.compact,
+}));
 
 function claude(provider: string, label: string, auth?: ProviderAuthStatus): ProviderSnapshotEntry {
   return {
@@ -75,6 +81,7 @@ beforeEach(() => {
 afterEach(async () => {
   cleanup();
   vi.unstubAllGlobals();
+  layout.compact = false;
   await i18n.changeLanguage("en");
 });
 
@@ -100,6 +107,8 @@ describe("the provider list in Traditional Chinese", () => {
     expect(signedOut.getByText("需要登入")).toBeTruthy();
     expect(signedOut.getByText("請在主機上執行 claude auth login，或設定 API key。")).toBeTruthy();
     expect(signedOut.queryByText("可用")).toBeNull();
+    // The wide row shows the label itself; its dot stays a plain dot.
+    expect(signedOut.queryByRole("img")).toBeNull();
 
     const token = within(row("Z.AI 供應商詳情"));
     expect(token.getByText("可用")).toBeTruthy();
@@ -131,5 +140,56 @@ describe("the provider list in English", () => {
     const cloud = within(row("Bedrock provider details"));
     expect(cloud.getByText("Available")).toBeTruthy();
     expect(cloud.getByText("Login status unknown")).toBeTruthy();
+  });
+});
+
+// A phone's row hides the status label and draws only the dot. The line under the name starts
+// with the label when a login is needed, the dot says the login state, and so does the row's
+// name: VoiceOver reads the whole row as one button, not the dot or the line inside it.
+describe("the provider list on a phone", () => {
+  beforeEach(() => {
+    layout.compact = true;
+  });
+
+  it("says Claude needs a login in the line, the dot and the row's name, in Traditional Chinese", async () => {
+    await i18n.changeLanguage("zh-TW");
+    snapshot.entries = [
+      claude("claude", "Claude", { state: "needs_login" }),
+      claude("work", "Work", { state: "signed_in", method: "subscription" }),
+      claude("old", "Old host"),
+    ];
+    render(<section.ProvidersSection serverId="host-1" />);
+
+    const line = "需要登入：請在主機上執行 claude auth login，或設定 API key。";
+    const signedOut = within(row(`Claude 供應商詳情，${line}`));
+    expect(signedOut.getByText(line)).toBeTruthy();
+    expect(signedOut.getByRole("img", { name: "需要登入" })).toBeTruthy();
+
+    const subscription = within(row("Work 供應商詳情，已使用 Claude 訂閱登入"));
+    expect(subscription.getByText("已使用 Claude 訂閱登入")).toBeTruthy();
+    expect(subscription.getByRole("img", { name: "已使用 Claude 訂閱登入" })).toBeTruthy();
+
+    // An entry from a daemon without the login state shows as it did before.
+    const old = within(row("Old host 供應商詳情"));
+    expect(old.queryByRole("img")).toBeNull();
+    expect(old.queryByText(/登入|API key|已設定/)).toBeNull();
+  });
+
+  it("says it in English", () => {
+    snapshot.entries = [
+      claude("claude", "Claude", { state: "needs_login" }),
+      claude("work", "Work", { state: "configured", method: "api_key" }),
+    ];
+    render(<section.ProvidersSection serverId="host-1" />);
+
+    const line = "Login required: Run claude auth login on the host, or set an API key.";
+    const signedOut = within(row(`Claude provider details, ${line}`));
+    expect(signedOut.getByText(line)).toBeTruthy();
+    expect(signedOut.getByRole("img", { name: "Login required" })).toBeTruthy();
+
+    const apiKey = "Uses an API key (billed per use), not a Claude subscription";
+    const billed = within(row(`Work provider details, ${apiKey}`));
+    expect(billed.getByText(apiKey)).toBeTruthy();
+    expect(billed.getByRole("img", { name: apiKey })).toBeTruthy();
   });
 });

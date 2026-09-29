@@ -25,6 +25,7 @@ const FINISHED: IteratorReturnResult<void> = { done: true, value: undefined };
 export class DeferredQuery implements Query {
   private real: Query | null = null;
   private closed = false;
+  private loadFailed = false;
   private readonly ready: Promise<Query | null>;
 
   /** @param pending resolves to a function that creates the real Query. */
@@ -37,7 +38,17 @@ export class DeferredQuery implements Query {
       return this.real;
     });
     // A failed load is reported through iteration; don't also raise an unhandled rejection.
-    this.ready.catch(() => {});
+    this.ready.catch(() => {
+      this.loadFailed = true;
+    });
+  }
+
+  /**
+   * The SDK did not load, or the real Query could not be created. This query can never run: every
+   * call repeats that one failure, so the session replaces it instead of reusing it.
+   */
+  get failed(): boolean {
+    return this.loadFailed;
   }
 
   private async forward<T>(method: string, call: (query: Query) => Promise<T>): Promise<T> {

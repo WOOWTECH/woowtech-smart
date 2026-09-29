@@ -102,6 +102,7 @@ import { useForkAgent } from "@/hooks/use-fork-agent";
 import { isWeb } from "@/constants/platform";
 import type { Theme } from "@/styles/theme";
 import { recordRenderProfileReasons } from "@/utils/render-profiler";
+import { claudeSdkSystemErrorMessage } from "@/utils/claude-sdk-error";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useStreamHistoryWindow } from "./use-stream-history-window";
 import { PluginTimelineItemView, useInstalledTimelineTransform } from "@/plugins/timeline";
@@ -709,6 +710,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
     const renderAssistantMessageItem = useCallback(
       (layoutItem: StreamLayoutItem, item: Extract<StreamItem, { kind: "assistant_message" }>) => {
+        // woowtech smart: a failed Claude SDK download reads as a translated error notice.
+        const claudeSdkError = claudeSdkSystemErrorMessage(item.text);
+        if (claudeSdkError) return <Notification level="error" message={claudeSdkError} />;
         return (
           <AssistantFileLinkResolverProvider
             client={client}
