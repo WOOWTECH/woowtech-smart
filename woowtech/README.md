@@ -1125,6 +1125,29 @@ node --test woowtech/*.test.mjs
   - 守門 `woowtech/claude-badge.test.mjs`：掃 App（`src`、`assets`、`public`、`plugins`）、桌面版（`src`、`assets`）、server 和 CLI 出貨的檔案，不准出現上游那兩份 Claude 標誌的路徑資料（去掉空白和逗號後比對開頭）；檔名有 claude 或 anthropic 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`）；兩個 `.svg` 和 ACP 那一筆都要等於徽章。上游換回標誌、新增一份複製的標誌，或把 Claude 圖示改成橘色時會失敗。
   - 小尺寸和深淺色主題上看不看得清楚，要在實機上看，單元測試證明不了。
 
+### 23. 關掉帳號用量（方案額度）
+
+- 原因：owner 在 2026-09-29 決定隱藏用量頁。上游的用量功能為了查每家 provider 的帳號額度，會讀使用者存下的 provider 憑證，再把 token 送到該家的額度 API。對我們的產品，這是隱私問題。讀的東西（全部在 `packages/server/src/services/quota-fetcher/providers/`，只讀不寫）：
+  - Claude：`$CLAUDE_HOME` 或 `~/.claude` 的 `.credentials.json`（不看 Claude Code 的 `CLAUDE_CONFIG_DIR`）；macOS 上沒有這個檔，就用 `security find-generic-password` 讀鑰匙圈的「Claude Code-credentials」，換了 `HOME` 也照樣讀得到。拿到 OAuth token 就呼叫 api.anthropic.com。
+  - Codex、Kimi、MiniMax、Grok：各自的 auth／credentials 檔（`~/.codex/auth.json`、`~/.kimi…`、`~/.mmx/…`、`~/.grok/auth.json`）或環境變數的 token。
+  - Copilot：`GITHUB_TOKEN` 這類環境變數或 `gh` 的 `hosts.yml`。Cursor：環境變數、Cursor 的 `state.vscdb`（SQLite）或 `~/.config/cursor/auth.json`。Z.AI：`ZAI_API_KEY`、`GLM_API_KEY`。
+- 關掉的：
+  - daemon：政策在 `packages/server/src/server/woowtech-provider-usage-policy.ts`，固定回 false，不讀 env、home 或設定。上游的 `ProviderUsageService`（`quota-fetcher/service.ts`，+18／−6 行，註解 `woowtech smart:`）關閉時建構子不建任何 fetcher，`listUsage` 第一行就回空清單，不經快取。`provider.usage.list.request` 照樣回 `provider.usage.list.response`，`providers` 是空陣列：沒有 rpc_error、沒有讀鑰匙圈或憑證檔、沒有網路請求。daemon 本來就沒有背景輪詢或主動推送帳號用量，只在收到請求時查。
+  - 協定不變，`server_info.features.providerUsageList` 仍是 true。改成 false 的話，舊版 App 每次打開 context 圓環的 tooltip 都會出現紅字「Update the host to see provider usage」；維持 true 加空清單，舊版 App 的 tooltip 不多東西，用量頁顯示「No usage data」。client SDK 的 `providers.listUsage()` 拿到空清單。
+  - App：旗標在 `packages/app/src/provider-usage/woowtech-usage-visibility.ts`（`PROVIDER_USAGE_VISIBLE = false`）。設定的主機清單（桌面版側欄和手機設定首頁共用）沒有「用量」這一列；`/settings/hosts/<id>/usage` 當成不認得的區段，開到「連線」；context 圓環的 tooltip 不送用量請求、不顯示用量區塊。連到還開著用量的舊版或上游 daemon 時也一樣，不會讓對方去讀憑證。接點都有 `woowtech smart:` 註解：`screens/settings-screen.tsx` 的 `HOST_SECTION_ITEMS`、`app/settings/hosts/[serverId]/[hostSection].tsx`、`components/context-window-meter.tsx` 三處。`HostUsagePage` 和 `provider-usage/` 的元件留著，走不到。沒有新的介面文字。
+- 保留的：每個工作階段自己的 token、context 和費用。它們來自 agent 的事件（`usage_updated`、`turn_completed` 帶的 usage；Pi、OMP 是 poller 向自己的 agent 行程要 `get_session_stats`），不讀帳號憑證，也不打額度 API。context 圓環和 tooltip 的「上下文視窗」、「已使用 N%」、tokens、「工作階段費用」照舊。
+- 以後要打開：
+  1. 先決定讀哪些憑證、要不要讓使用者自己選（例如設定頁的開關，預設關），再改。不要直接把政策改回 true。
+  2. 改 `isProviderUsageFetchingEnabled()` 和 `PROVIDER_USAGE_VISIBLE`（或接到使用者的選擇），同時改兩個守門（`woowtech/provider-usage*.test.mjs`）、fork 測試的 OFF 基線，以及兩個上游 e2e spec 的 `describe.skip`。
+  3. 上游的 `792715e76`（#5465，用量來源改成內建外掛、跟著工作階段的帳號）仍延後。它刪掉整個 `quota-fetcher/` 和 `provider-usage/`，也改了這節的三個 App 接點和 `websocket-server.ts`。拿它的時候，這節的 gate 要在新架構重做，守門會先紅。
+- 測試：
+  - `services/quota-fetcher/woowtech-provider-usage.test.ts`：OFF 基線（政策、service 和 RPC 都回空清單；stub fetcher、鑰匙圈 stub 和 fetch stub 都是 0 次）；ON 對照（同一組 stub 看得到 fetcher 1 次、鑰匙圈 1 次、api.anthropic.com 1 次）；Pi 和 OMP 的每工作階段計數照舊。Claude 的 fetcher 用暫存 home、鑰匙圈 stub 和 fetch stub，政策打開時也碰不到真的 `~/.claude`、鑰匙圈或網路。
+  - 上游 `service.test.ts` 每個 `new ProviderUsageService` 都注入 `isUsageFetchingEnabled: () => true`，原斷言不變（同第 20 節的做法）。
+  - App：`provider-usage/woowtech-usage-visibility.test.ts`（清單少了用量列、其他列順序不變，用量路由當成不認得，打開時恢復）；`components/woowtech-context-window-meter.test.tsx`（jsdom：主機仍宣告有用量，打開 tooltip 只有上下文、tokens 和費用，`listProviderUsage` 0 次）。
+  - 守門 `woowtech/provider-usage.test.mjs`（daemon）和 `provider-usage-app.test.mjs`（App）：政策固定 false；service 的兩個 gate；daemon 建 service 不帶任何 override；server 出貨的程式裡，fetcher 只能由 service 建、service 只能由 daemon 建（AST 掃描，擋 import alias、namespace、re-export、dynamic import、`extends`）；沒有出貨的 server 程式寫到 `isUsageFetchingEnabled`；App 旗標固定 false、三個接點；App 出貨的程式裡，除了現有的擁有者，沒有檔案用到用量的元件、hook、`listProviderUsage`、`provider.usage.list.request` 或 `section: "usage"`。
+  - e2e：上游的 `provider-usage-settings.spec.ts`、`provider-usage-tooltip.spec.ts` 改成 `describe.skip`，`helpers/settings.ts` 改成期待沒有用量列；新的 `woowtech-provider-usage-hidden.spec.ts` 驗側欄沒有用量列、用量路由開到「連線」、tooltip 不送請求。Playwright 還沒跑。
+- 合併上游後：跑 `node --test woowtech/provider-usage.test.mjs woowtech/provider-usage-app.test.mjs`、server 的 `woowtech-provider-usage.test.ts` 與 `service.test.ts`、App 的 `woowtech-usage-visibility.test.ts` 與 `woowtech-context-window-meter.test.tsx`。
+
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
 ### 第一批：上游 `836f1a9..d6861f81e`
@@ -1508,7 +1531,7 @@ node --test woowtech/*.test.mjs
   - 模型：Claude Code 2.1.284 以上列出 Sonnet 5.5，thinking 沒有「關閉」；舊版不列。OpenCode 選了 Medium 之後換到沒有這個選項的模型，thinking 選項被清掉，重新載入也不回來（`940dbfd24`）。
   - 自訂 Codex provider（`827178df9`、`dffde6ae8`、`9d010211a`）：回溯後仍是同一個 provider、工具還在；/ 選單列的是它自己 `CODEX_HOME` 的提示詞；封存後「匯入工作階段」不再列出它。
   - Codex 串流中的 Mermaid 圖（`f4ba16a0b`）、背景 `send_agent_prompt` 回報執行中（`8de52a3c9`）、外掛 provider 重新載入後已完成的工作階段沒有錯誤（`849a876bc`）。
-- 延後的 `78a0f093e`、`792715e76` 和不拿的 `a43c8d888`（Cursor 圖示）要 owner 決定。
+- 延後的 `78a0f093e`、`792715e76` 和不拿的 `a43c8d888`（Cursor 圖示）要 owner 決定。2026-09-29 owner 決定先關掉用量功能，`792715e76` 仍延後，見第 23 節。
 - 這個分支沒有 push。main 仍在 `ea9f49e49`；合進 main 之後重跑守門和 T1 測試，並重建 server 的 dist。
 
 ## Mac 開發環境
@@ -1589,7 +1612,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 審查與合併前守門（`integ0929-review.md`、`integ0929-repair.md`、`integ0929-gate.md`）：審查的 blocker 1 個：merge 步驟的 4 個 log 有 owner 的 email（git 提交身分，9 處），`integ0929-repair` 遮掉後，重新審查 blocker 0。守門第一次 no-go：內建碟在 20:47 低於 3 GB；`fix-first-tap` 留下 adb server 和含 token 的暫存；`first-tap-real` 的真 Claude 要 owner 本人確認；ship 的規則沒寫 NODE_OPTIONS。殘留清掉、owner 確認之後，第二次只因磁碟 no-go（21:20～21:33 別的工作階段的模擬器讓 swap 長到 12 GB，最低剩 2.28 GB），第三次 go。
   - 發現、還沒修：
     - 上游 `lifecycle.e2e.test.ts:368` 的 race（見上面的 CI）：改成輪詢到 JSON 能解析，再回報上游。
-    - 上游的用量頁和 composer 的 context 圓環 tooltip 會讀 macOS 鑰匙圈的「Claude Code-credentials」、不看 HOME，拿到就呼叫 api.anthropic.com。這台 Mac 上任何測試 daemon 都可能用到 owner 的 Claude 帳號，這一輪刻意不開。
+    - 上游的用量頁和 composer 的 context 圓環 tooltip 會讀 macOS 鑰匙圈的「Claude Code-credentials」、不看 HOME，拿到就呼叫 api.anthropic.com。這台 Mac 上任何測試 daemon 都可能用到 owner 的 Claude 帳號，這一輪刻意不開。2026-09-29 已關掉，見第 23 節。
     - `config.json` 的 claude 只能整個取代 command（會關掉備援），不能只加參數；dev 限定的 mock、mock-slow 在 config 裡關不掉。
     - 切換 App 語言後，設定頁的主機跳回第一台；在外觀換主題後，設定頁又跳出「新增連線」sheet。
     - 兩台主機時「從主機匯入」的搜尋框寫死英文「Search hosts...」，兩台同名時副標題顯示完整 server id；zh-TW 有兩處把 Agent 譯成「代理」；VoiceOver 念英文的「Filter: 全部」和側欄工作區的狀態；iPhone 17 的排程列第三行被截斷。
@@ -1597,7 +1620,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - 手機實機：iOS 的 APNs／FCM token 登記和推播送達、Android 實機的推播和點擊（這一輪都是模擬器）；首次點通知修正在實機上的點擊和正常負載下的時間（iOS 連模擬器都還沒驗）；徽章在 12～20 px 讀不讀得出來；VoiceOver、TalkBack 念不念得出「需要登入」。
     - 正式簽章：桌面版 Developer ID 簽章與公證（這一輪都是未簽章的 `--dir`）後的通知授權和自動更新，從 Dock 實際開正式版時的 claude 備援和 SDK 第一次下載；Android 正式簽章版（EAS `production`）；TestFlight 的 production APNs。
     - 公司網路：真的公司代理、SDK 鏡像站和 `NODE_EXTRA_CA_CERTS`，這一輪只有單元測試和本機代理。
-  - 待 owner 決定：深色主題「Claude」（#D97757）要不要改名換色、其他廠商的標誌（第 22 節）；用量頁要不要改成看 `CLAUDE_CONFIG_DIR` 或 HOME，或改成選用；config 要不要能只加參數（例如 `strictMcpConfig`）；「上游同步紀錄」第二、三批延後和不拿的 commit。Playwright 這一輪照 owner 的決定沒跑，仍在「接下來」。
+  - 待 owner 決定：深色主題「Claude」（#D97757）要不要改名換色、其他廠商的標誌（第 22 節）；用量頁要不要改成看 `CLAUDE_CONFIG_DIR` 或 HOME，或改成選用（2026-09-29 決定先關掉，第 23 節）；config 要不要能只加參數（例如 `strictMcpConfig`）；「上游同步紀錄」第二、三批延後和不拿的 commit。Playwright 這一輪照 owner 的決定沒跑，仍在「接下來」。
   - 「接下來」的 CI fork 守門步驟就是上面的 CI，已從清單拿掉。
 
 - 定向輪驗收（2026-09-28～29，整合分支 `woowtech/integration-0928` 的 `8985ff2a7`，第 6、7、14、16、21 節與「上游同步紀錄」的 OSC 8 查證）：main `f272fc8b6` 加上 `woowtech/fixes-0928`（`b7bd33075`，7 個 fork commit）和刪掉 `with-localized-app-name` 外掛的 `8985ff2a7`，共 9 個 commit、41 檔（+2008／−344）。只驗 fixes-0928 改到的五項：F1 繁中、F2 App 名稱的 locales 分平台、F3 附件撐過重連、F4 OSC 8、F5 S1 的「工作區不可用」閃爍；pi 的 F11 不在這一輪。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0928-*`（`integ0928-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0928-*`。
@@ -1893,4 +1916,5 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
 - Claude 的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表、側欄的 Agent 列、模型選單、匯入工作階段和排程這些 12～20 px 的地方都讀得出是 C。
 - 待 owner 決定（第 22 節）：其他廠商的標誌要不要也換成文字；深色主題「Claude」要不要改名換色。
+- 帳號用量關掉（第 23 節）要在實機看：桌面版、iOS、Android 的設定主機清單都沒有「用量」，其他列照舊；舊的 `/settings/hosts/<id>/usage` 連結開到「連線」；context 圓環的 tooltip 只有上下文、tokens 和費用，沒有「Loading plan usage…」或方案卡；用舊版 App 連新的 daemon，tooltip 不出現紅字，用量頁只顯示「No usage data」。Playwright 的 `woowtech-provider-usage-hidden.spec.ts` 要在手動勾選 Playwright 的 CI 跑一次。
 - 商標（TIPO）與 D-U-N-S。
