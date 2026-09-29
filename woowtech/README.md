@@ -277,7 +277,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 這是看過 A/B 兩版截圖後選定的。
   - 已知取捨：按鈕上的白字對比是 3.4:1，低於無障礙 AA 標準的 4.5:1。
 - 深色背景上的連結用比較淡的 #8fa6fd，確保讀得清楚。
-- 預設的深色主題原本帶上游的綠色調，現在背景改成中性灰（沿用 Zinc 的灰階），紅色也改用 Zinc 那組中性紅。其他深色主題（Zinc、Midnight、Claude、Ghostty）維持原樣。
+- 預設的深色主題原本帶上游的綠色調，現在背景改成中性灰（沿用 Zinc 的灰階），紅色也改用 Zinc 那組中性紅。其他深色主題（Zinc、Midnight、陶土、Ghostty）維持原樣。陶土原本叫 Claude，改名見第 22 節。
 - 品牌藍只寫在 `packages/app/src/styles/brand.ts`（`BRAND_BLUE`），主題的強調色直接引用它。
   主題清單裡代表預設深色主題的色塊（上游是綠色 #2D8B62）也引用它。選單上深色主題顯示的是月亮圖示，這個色塊目前沒有畫出來。
 - 下面兩個值沒辦法引用 `brand.ts`，改品牌藍時要一起改。上游兩處都是綠色 #20744A：
@@ -1104,25 +1104,59 @@ node --test woowtech/*.test.mjs
 - 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
 - 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送在定向輪（integration-0928）驗過，見「驗證紀錄」。
 
-### 22. Claude 改用文字徽章（品牌合規）
+### 22. 廠商標誌改用文字徽章（品牌合規）
 
-- 原因：Anthropic 的條款允許產品用純文字寫「Claude Code」，但使用它的標誌要書面許可。owner 在 2026-09-27 決定把 App 和桌面版裡的 Claude 標誌換成文字。
-- 做法：每個 Claude 圖示都改成中性的文字徽章：圓角方框裡一個字母 C，線條用呼叫端傳進來的顏色（主題的前景色或次要前景色）。沒有 Anthropic 的放射狀標誌，也沒有 Claude 的橘色（#D97757 這類）。
-  - 字母用路徑畫，不用 `<text>`：iOS、Android 和網頁不必靠字型，畫出來都一樣。
-  - 「Claude」這個名稱照舊用文字顯示在原本的地方。
-- 徽章只寫在 fork 檔 `packages/app/src/components/icons/claude-badge.ts`：方框和字母的幾何、SVG 字串、哪些 provider id 算 Claude（`claude`、`claude-acp`）。用到它的上游檔：
-  - `components/icons/claude-icon.tsx`：`ClaudeIcon` 改畫徽章，名稱和 props（size、color）不變，`provider-icons.ts` 不用改。
-  - `components/provider-icon-name.ts`：`claude-acp` 跟 `claude` 一樣回傳內建的徽章，而且先於主機快照的 SVG（+5 行）：主機（例如外掛 provider）替 `claude-acp` 送來的 SVG 不會顯示。
-  - `assets/acp-provider-icons.ts`：`claude-acp` 那一筆改成 `CLAUDE_BADGE_SVG`（+4／-2 行）。這個檔不是產生的：repo 裡沒有產生器，上游每次都手改它和旁邊的 `.svg`。
-  - `assets/acp-provider-icons/claude-acp.svg`、`assets/icons/claude.svg`：內容換成同一份徽章 SVG。後者沒有程式在用，留著是為了合併上游時不衝突。
-- 範圍：App（iOS、Android、網頁）和桌面版（載入同一份網頁）。桌面版自己的 `src`、`assets` 沒有 Claude 標誌。server 和 CLI 沒有自己的 Claude SVG：provider 的 SVG 只從外掛讀。上游官網 `packages/website` 還有 Claude 標誌，我們不部署它（第 18 節）。
+- 原因：Anthropic 的條款不准把它的名稱或標誌當成產品自己功能的名稱，使用標誌也要書面許可。owner 在 2026-09-27 先把 Claude 標誌換成文字徽章，2026-09-29 決定所有廠商都照這個做法，不逐家做法律審查。git 平台（GitHub、GitLab、Gitea、Forgejo、Codeberg）的圖示保留。owner 之後要逐家查能不能用（上游 Paseo 都用標誌），查過可以用的廠商會改回上游的標誌，做法見下面「改回上游標誌」。
+- 徽章：圓角方框裡是廠商名稱的縮寫，一個大寫字母，或大寫加一個小寫（C、Cx、Gh、Ge），線條用呼叫端傳進來的顏色（主題的前景色或次要前景色）。沒有廠商的標誌，也沒有廠商的代表色（Claude 的 #D97757 這類）。
+  - 字母是路徑畫的單線字形，不用 `<text>`：iOS、Android 和網頁不必靠字型，畫出來都一樣。viewBox 24 裡，一個字母高 10；兩個字母高 8.5，放不進方框時再縮，但至少 7（12 px 時 3.5 px），線寬至少 1.8。
+  - 廠商名稱照舊用文字顯示在徽章旁邊，所以縮寫可以重複；內建 7 家在模型選單裡並列，縮寫都不同。
+- fork 檔 `packages/app/src/components/icons/vendor-badge.ts`：方框、字形、縮寫表（`VENDOR_MONOGRAMS`，依 provider id、ACP 圖示 id、終端機設定檔圖示、桌面版編輯器 id）和 SVG 字串。沒列在表上的 id 用 id 的第一個英文字母。`vendor-badge-icon.tsx` 是 react-native-svg 的元件；`claude-badge.ts` 只剩 `CLAUDE_BADGE_SVG` 和哪些 id 算 Claude。
+- 哪一家顯示徽章、哪一家顯示上游標誌，是 `woowtech/vendor-marks.mjs` 的資料：每一家一筆，`show` 是 `"badge"` 或 `"upstream"`，另外列出它的圖示檔（`files`）、在 `acp-provider-icons.ts` 的項目（`acpIcons`）和標誌路徑資料的開頭（`logoPaths`，守門用）。`woowtech/tools/write-vendor-badges.mjs` 照這份資料寫檔：顯示徽章的廠商，圖示元件改成 `createVendorBadgeIcon("<id>")`、vendored `.svg` 寫成徽章、ACP 項目寫成 `vendorBadgeSvg("<id>")`、桌面版的 PNG 刪掉；顯示上游標誌的廠商，這些檔和 ACP 項目從 `UPSTREAM_REF`（`130705c02^`，fork 改任何廠商圖示之前的最後一個 commit；除了 Claude 以外內容跟 main `fde226d05` 相同）原樣還原。`--check` 只檢查。
+- 用到它的上游檔：
+  - `components/icons/{claude,codex,copilot,opencode,pi,omp,minimax,discord}-icon.tsx`：整個換成 `createVendorBadgeIcon("<id>")`，匯出名稱不變，`provider-icons.ts` 的內建對照不用改。Discord 那個沒有地方在用（第 10 節拿掉了 Discord 連結），換掉是為了不出貨它的路徑資料。
+  - `assets/acp-provider-icons.ts`：由上面的工具寫，不要手改。repo 裡沒有上游的產生器，上游每次都手改它；合併時上游新增的一筆會帶廠商的 SVG，守門會擋：在 `vendor-marks.mjs` 加那一家，再跑工具。
+  - `assets/acp-provider-icons/*.svg`（37 個）、`assets/icons/{claude,codex}.svg`：沒有程式讀，留著是為了合併上游時不衝突，內容由工具寫。
+  - `components/provider-icon-name.ts`（+5／-3 行）：已知的 id（內建、ACP、終端機設定檔）先於主機快照的 SVG，主機替這些 id 送來的 SVG 不會用到。
+  - `components/provider-icons.ts`（+4／-1 行）：主機送來的 SVG 不畫，改畫這個 provider 的徽章。放在繪製這一層、不放在 `resolveProviderIconName`，是因為上游的 `providers-snapshot.test.ts` 用解析結果裡的 SVG 判斷哪一份快照生效。
+- 主機送來的 SVG：外掛 provider 或自訂 provider 的圖示是執行時才拿到的內容，可能是任何廠商的標誌，App 認不出來，所以一律不畫，改畫徽章：縮寫表有的用表（`codex-acp` 顯示 Cx），沒有的用 id 的第一個字母（外掛範例 `direct-example` 顯示 D）。代價是外掛自己設計的圖示看不到（協調者 2026-09-29 同意）。原本「外掛用別的 id 帶 Claude 標誌時照樣顯示」的例外取消。沒有送 SVG 的未知 provider 照舊顯示機器人圖示。
+- 桌面版「在…中開啟」：上游其實有出貨編輯器標誌，`packages/desktop/assets/editor-targets/` 的 7 張 PNG（VS Code、Cursor、Zed、WebStorm、Android Studio、Antigravity、Finder），由 electron-builder 打包成 `editor-target-icons`，執行時讀檔。現在：
+  - 7 張 PNG 刪掉。`electron-builder.yml` 不改：來源資料夾不在時 electron-builder 只記一行 `file source doesn't exist` 警告，照常打包；哪天某家改回上游標誌，還原它的 PNG 就會打包進去。
+  - `runtime.ts` 的 `loadBundledIcon` 改呼叫 fork 檔 `features/editor-targets/woowtech-editor-icons.ts`（+3／-3 行）：PNG 在就照上游顯示圖片，不在就回傳 `{ kind: "badge", vendor }`，App 用同一個徽章畫；Finder 用資料夾符號（Explorer、Files 本來就用它）。
+  - 圖示多一種 `badge`：桌面版的 `target.ts`、App 的 `desktop/host.ts` 和 `workspace/desktop-open-targets.ts`；`components/icons/editor-target-icon.tsx` 畫徽章。
+  - 上游本來就沒有標誌的編輯器（VSCodium、VS Code Insiders、JetBrains 各 IDE、Kiro、Trae 等）照舊是終端機符號。
+- 改回上游標誌（例如 Cursor 查過可以用）：
+  1. `woowtech/vendor-marks.mjs` 裡 `cursor` 那一筆的 `show: "badge"` 改成 `show: "upstream"`（一行）。
+  2. `node woowtech/tools/write-vendor-badges.mjs`：從 `UPSTREAM_REF` 還原 `acp-provider-icons/cursor.svg`、桌面版的 `editor-targets/cursor.png`，並把 `acp-provider-icons.ts` 的 `cursor` 項目換回上游的 SVG。
+  3. `node --test woowtech/*.test.mjs`，再照驗證流程跑 App、桌面版的測試與 typecheck。守門會照資料自動放行這一家的檔案，同時繼續擋其他廠商。Claude 也一樣：改 `claude` 那一筆，守門裡 Claude 專用的三項會自動略過。
+  - 改回徽章：把 `show` 改回 `"badge"` 再跑一次工具。
+  - 解析和繪製的程式不用改：內建 provider 看圖示元件檔，ACP 看 `acp-provider-icons.ts`，桌面版看 PNG 在不在；主機送來的 SVG 不論哪一家都畫徽章。
+- 主題：內部名稱 `claude` 的深色主題改叫「陶土」，英文 Terracotta。
+  - 名稱寫在 fork 檔 `i18n/theme-copy.ts`，跟 `support-copy.ts` 一樣由 `brand.ts` 在載入翻譯時套用，不改上游的語系檔：繁中和簡中「陶土」、英文 Terracotta、日文テラコッタ、韓文테라코타、西班牙文和葡萄牙文 Terracota、法文 Terre cuite、俄文 Терракота、阿拉伯文 تيراكوتا。上游之後新增的語言顯示英文。
+  - `zh-TW.ts` 不用重新產生：產生器照舊留英文（`zh-tw-untranslated.mjs` 的 `KEEP_ENGLISH` 把這個 key 從「主題名稱」移到「載入時替換」那組），顯示時換成「陶土」。
+  - id、unistyles 名稱 `darkClaude` 和顏色（強調色 #d97757、代表色 #D97757）都不變，已經選了這個主題的人設定照舊。
 - 刻意沒改的：
-  - 其他廠商的標誌（OpenAI／Codex、Copilot、Cursor、Gemini、OpenCode、Pi、OMP、MiniMax 等）照舊，等 owner 決定。
-  - 深色主題「Claude」（`styles/theme.ts`：強調色 #d97757、代表色 #D97757）。它是主題不是標誌，但名稱和顏色都來自 Claude，要不要改名換色等 owner 決定。
-  - 外掛自己帶的圖示：外掛用 `claude`、`claude-acp` 以外的 id 帶 Claude 標誌時照樣顯示。那是外掛的內容，不是我們出貨的檔案。
-- 測試：
-  - `components/woowtech-claude-badge.test.ts`：內建 `claude` 在四種圖示尺寸（12、14、16、20）、每個主題的前景色和次要前景色下都畫徽章，線條就是傳進來的顏色；`claude-acp` 不論主機有沒有送 SVG 都是同一個徽章；ACP 那一筆就是徽章；徽章 SVG 只用 currentColor。
-  - 守門 `woowtech/claude-badge.test.mjs`：掃 App（`src`、`assets`、`public`、`plugins`）、桌面版（`src`、`assets`）、server 和 CLI 出貨的檔案，不准出現上游那兩份 Claude 標誌的路徑資料（去掉空白和逗號後比對開頭）；檔名有 claude 或 anthropic 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`）；兩個 `.svg` 和 ACP 那一筆都要等於徽章。上游換回標誌、新增一份複製的標誌，或把 Claude 圖示改成橘色時會失敗。
+  - git 平台的圖示（owner 決定保留）。
+  - 檔案總管的檔案類型圖示（`components/material-file-icons.ts`，material-icon-theme 的程式語言和工具圖形）：等 owner 決定，守門的白名單理由寫「file-type icons, pending owner decision」。
+  - `packages/app/assets/images/editor-apps/*.png`：上游放在 App 套件裡的編輯器標誌，App 沒有任何地方引用，不會打包；上游官網引用其中的 `finder.png`。
+  - 網頁版和桌面版啟動畫面的標誌遮罩（`screens/startup-splash-screen.tsx` 的 `WebLogoShimmer`）還是上游 Paseo 的蝴蝶形狀，手機版用的是 WOOW 標誌。這是第 8 節漏掉的品牌識別，不是廠商標誌，另外處理。`assets/images` 的 `butterfly-*.svg`、`favicon-*.svg` 也是上游 Paseo 的圖，沒有地方引用。
+  - 上游官網 `packages/website`（我們不部署，第 18 節）。
+- 測試（App 和桌面版的測試不看哪一家顯示什麼，改回上游標誌時不用改測試；照資料檢查的都在守門）：
+  - `components/woowtech-vendor-badge.test.ts`：縮寫表和沒列在表上的 id；每一種大寫、大寫加小寫都放得進方框並留邊，字高和線寬不低於上面的下限，而且置中；SVG 只用 currentColor；徽章元件在四種圖示尺寸（12、14、16、20）和淺色、深色主題的前景色下畫出正確的縮寫；ACP 目錄的每一家就算主機送了 SVG 也畫目錄自己的圖示；其他 provider 的主機 SVG 畫成徽章；每個 ACP 圖示 id 都有縮寫。
+  - `components/woowtech-claude-badge.test.ts`：Claude 的徽章是 C；`claude-acp` 不論主機有沒有送 SVG 都跟 `claude` 同一個圖示。
+  - 上游的 `provider-icons.test.ts`：主機 SVG 的預期值改成徽章（註解 `woowtech smart:`）。`provider-icon-name.test.ts`、`providers-snapshot.test.ts` 不用改。
+  - e2e `plugin-provider-icons.spec.ts` 的 helper：設定頁、新工作區的模型選單、窄版和既有 Agent 的 composer 都畫 `direct-example` 的徽章，而且沒畫外掛 `icon.svg` 的路徑。本機沒跑（要 Metro 和 daemon），交給 CI。
+  - 桌面版 `features/editor-targets/woowtech-editor-icons.test.ts`：用暫存資料夾，PNG 不在時編輯器是徽章、Finder 是資料夾，PNG 在時照上游回傳圖片。
+  - `i18n/woowtech-theme-copy.test.ts`：陶土、Terracotta；每種語言的主題名稱都不含 Claude（含各語言的音譯，例如西文的 claudio）；id、unistyles 名稱和顏色不變。
+  - 守門 `woowtech/claude-badge.test.mjs`（沿用檔名，範圍擴大到所有廠商，照 `vendor-marks.mjs` 檢查）掃 App（`src`、`assets`、`public`、`plugins`）、桌面版（`src`、`assets`）、server 和 CLI 出貨的檔案：
+    1. Claude 顯示徽章時，不准出現 Claude 標誌的兩份路徑資料；其他顯示徽章的廠商也不准出現各自的標誌路徑資料（取自上游，去掉空白和逗號後比對開頭）。
+    2. Claude 顯示徽章時，Claude 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`），兩個 `.svg` 和 ACP 那一筆等於 Claude 的徽章。
+    3. 每個廠商圖示檔都跟資料一致：顯示徽章的是徽章（元件、`.svg`、ACP 項目），PNG 不在；顯示上游標誌的跟 `UPSTREAM_REF` 逐位元組相同。徽章檔不准寫死顏色。
+    4. 上游出貨的每個廠商圖示（vendored `.svg`、桌面版 PNG、ACP 項目）都要在資料裡，而且只屬於一家。
+    5. 只有白名單的檔案可以有 SVG 路徑資料：徽章的字形、5 個 git 平台圖示、WOOW 標誌、齒輪、勾和叉、檔案類型圖示、Mermaid、終端機字形、啟動畫面的遮罩，每一項寫了理由；顯示上游標誌的廠商的檔案自動放行。白名單的檔案不再畫圖時也會失敗。
+    6. 出貨的點陣圖只能是我們自己的圖示（App、favicon、PWA、桌面版）和資料放行的廠商標誌；`editor-apps`、上游 Paseo 的 SVG 不准被引用。
+    7. 只有白名單的地方可以渲染 SVG 文件（`SvgXml`、`SvgCss`、`SvgIcon` 等）：provider 圖示、ACP 目錄、檔案類型圖示、使用者自己的專案圖示、配對 QR Code。上游 main 的 `usage/source-icon.tsx`（用量來源的 SVG）這類新地方合併進來就會失敗，要先決定怎麼換成徽章。
+    8. 主機替已知 provider 送 SVG 時解析結果不是那份 SVG，`provider-icons.ts` 在主機 SVG 的位置畫徽章。
+    9. 每種語言的主題名稱都不含 Claude（含音譯），繁中「陶土」、英文 Terracotta，`theme.ts` 的 id 和 unistyles 名稱不變。
   - 小尺寸和深淺色主題上看不看得清楚，要在實機上看，單元測試證明不了。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
@@ -1445,7 +1479,7 @@ node --test woowtech/*.test.mjs
 不拿的，依原因：
 
 - 要 OpenCode v2（`c906c2f4a`，第二批延後）：`da48803a4`（#5526，條件式）。改的 4 個檔有 3 個是 `opencode/v2/`，第 4 個（`provider-launch-config.ts`）只把 `createProviderEnv` 的回傳型別改給 v2 的呼叫點用。v1 在 `opencode/server-manager.ts` 用 launch env 起專屬的 `opencode serve`，沒有 v2 重新連線後遺失 session 環境的問題。
-- 新的介面能力、廠商標誌：`a43c8d888`（#5379，執行 cursor-agent 的終端機設定檔顯示 Cursor 圖示），要 owner 決定。
+- 新的介面能力、廠商標誌：`a43c8d888`（#5379，執行 cursor-agent 的終端機設定檔顯示 Cursor 圖示），要 owner 決定。第 22 節之後它顯示的是 Cursor 的文字徽章（Cu），不再有標誌的顧慮。
 - 只有 Windows：`cf4509631`（#1987）。
 - 網站：`dec2d861e`（#5538）、`7f5d32cdd`（#5537）、`c54f20e53`（#5138）、`d0a30ed4d`（#5555）、`8b5201fed`（#5575）。
 - 發版與版本號：`52d345db7`（0.10.0-beta.1）、`c481ecf3e`（0.10.0）；更新紀錄：`a50a47600`、`dfc9add77`、`4965af219`；發版前的 lock 排序：`6ca001c3e`。
@@ -1891,6 +1925,6 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
 - 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
-- Claude 的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表、側欄的 Agent 列、模型選單、匯入工作階段和排程這些 12～20 px 的地方都讀得出是 C。
-- 待 owner 決定（第 22 節）：其他廠商的標誌要不要也換成文字；深色主題「Claude」要不要改名換色。
+- 廠商的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表和新增 ACP 供應商的目錄、側欄的 Agent 列、模型選單、匯入工作階段、排程、終端機設定檔這些 12～24 px 的地方都讀得出縮寫（C、Cx、Gh、Oc、Pi、Om、Mm 等），桌面版「在…中開啟」選單的 VS Code、Cursor 等是徽章、Finder 是資料夾；外觀設定的主題選單顯示「陶土」／Terracotta，原本選了這個主題的裝置更新後仍是同一個主題。
+- 待 owner 決定（第 22 節）：檔案總管的檔案類型圖示（程式語言和工具的圖形）要不要也換。網頁版和桌面版啟動畫面的遮罩還是上游 Paseo 的蝴蝶，要換成 WOOW 標誌（第 8 節）。
 - 商標（TIPO）與 D-U-N-S。
