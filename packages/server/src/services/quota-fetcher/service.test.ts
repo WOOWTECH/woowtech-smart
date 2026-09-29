@@ -185,6 +185,7 @@ function findProvider(result: { providers: ProviderUsage[] }, providerId: string
 describe("ProviderUsageService", () => {
   it("returns arbitrary registered providers and windows as normalized usage data", async () => {
     const service = new ProviderUsageService({
+      isUsageFetchingEnabled: () => true,
       logger: createLogger(),
       now: () => Date.parse("2026-06-19T00:00:00.000Z"),
       fetchers: [
@@ -232,6 +233,7 @@ describe("ProviderUsageService", () => {
     let now = Date.parse("2026-06-19T00:00:00.000Z");
     let calls = 0;
     const service = new ProviderUsageService({
+      isUsageFetchingEnabled: () => true,
       logger: createLogger(),
       now: () => now,
       cacheTtlMs: 60_000,
@@ -267,6 +269,7 @@ describe("ProviderUsageService", () => {
     let calls = 0;
     let resolveUsage: ((usage: ProviderUsage) => void) | null = null;
     const service = new ProviderUsageService({
+      isUsageFetchingEnabled: () => true,
       logger: createLogger(),
       now: () => Date.parse("2026-06-19T00:00:00.000Z"),
       fetchers: [
@@ -302,6 +305,7 @@ describe("ProviderUsageService", () => {
 
   it("isolates one provider error without dropping other providers", async () => {
     const service = new ProviderUsageService({
+      isUsageFetchingEnabled: () => true,
       logger: createLogger(),
       now: () => Date.parse("2026-06-19T00:00:00.000Z"),
       fetchers: [
@@ -412,6 +416,7 @@ describe("real provider usage fetchers", () => {
     const fetchThroughTestDouble = ((url: RequestInfo | URL, init?: RequestInit) =>
       fetchApi(url, init)) as typeof fetch;
     return new ProviderUsageService({
+      isUsageFetchingEnabled: () => true,
       logger,
       now: () => Date.parse("2026-06-19T00:00:00.000Z"),
       fetchers: [

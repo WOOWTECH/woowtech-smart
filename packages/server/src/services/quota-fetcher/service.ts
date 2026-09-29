@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
 import type { ProviderUsage } from "../../server/messages.js";
+import { isProviderUsageFetchingEnabled } from "../../server/woowtech-provider-usage-policy.js";
 import { createProviderUsageFetchers } from "./manifest.js";
 import type { ProviderApiFetch, ProviderUsageFetcher } from "./provider.js";
 import { unavailableUsage } from "./usage.js";
@@ -10,6 +11,9 @@ export interface ProviderUsageServiceOptions {
   fetch?: ProviderApiFetch;
   cacheTtlMs?: number;
   now?: () => number;
+  // woowtech smart: tests pass `() => true` to keep upstream's behaviour. Production leaves
+  // it unset, so the fork policy decides, and it keeps account usage off.
+  isUsageFetchingEnabled?: () => boolean;
 }
 
 export interface ProviderUsageListResult {
@@ -24,22 +28,30 @@ export class ProviderUsageService {
   private readonly fetchers: ProviderUsageFetcher[];
   private readonly cacheTtlMs: number;
   private readonly now: () => number;
+  private readonly isUsageFetchingEnabled: () => boolean;
   private cached: { fetchedAtMs: number; result: ProviderUsageListResult } | null = null;
   private inFlight: Promise<ProviderUsageListResult> | null = null;
 
   constructor(options: ProviderUsageServiceOptions) {
     this.logger = options.logger.child({ module: "provider-usage-service" });
-    this.fetchers =
-      options.fetchers ??
-      createProviderUsageFetchers({
-        logger: this.logger,
-        fetch: options.fetch,
-      });
+    this.isUsageFetchingEnabled = options.isUsageFetchingEnabled ?? isProviderUsageFetchingEnabled;
+    // woowtech smart: with usage off no fetcher exists, so nothing reads provider credentials.
+    this.fetchers = this.isUsageFetchingEnabled()
+      ? (options.fetchers ??
+        createProviderUsageFetchers({
+          logger: this.logger,
+          fetch: options.fetch,
+        }))
+      : [];
     this.cacheTtlMs = options.cacheTtlMs ?? DEFAULT_PROVIDER_USAGE_CACHE_TTL_MS;
     this.now = options.now ?? Date.now;
   }
 
   async listUsage(options?: { forceRefresh?: boolean }): Promise<ProviderUsageListResult> {
+    // woowtech smart: usage off answers an empty list before the cache or any fetcher.
+    if (!this.isUsageFetchingEnabled()) {
+      return { fetchedAt: new Date(this.now()).toISOString(), providers: [] };
+    }
     const nowMs = this.now();
     if (
       !options?.forceRefresh &&

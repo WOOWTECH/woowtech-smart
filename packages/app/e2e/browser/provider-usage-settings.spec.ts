@@ -4,7 +4,9 @@ import { installProviderUsageFixture } from "../support/helpers/provider-usage";
 import { getServerId } from "../support/helpers/server-id";
 import { openSettingsHostSection } from "../support/helpers/settings";
 
-test.describe("provider usage settings", () => {
+// woowtech smart: account usage is hidden (woowtech/README.md section 23);
+// woowtech-provider-usage-hidden.spec.ts checks the hidden page instead.
+test.describe.skip("provider usage settings", () => {
   test("renders every provider returned by the daemon usage RPC", async ({ page }) => {
     test.setTimeout(120_000);
     const serverId = getServerId();
