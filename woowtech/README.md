@@ -113,7 +113,10 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - SDK 還沒載入時，對話的 Query 是 `DeferredQuery`；載入失敗後，它的每個呼叫都只會重複同一個失敗。熱檔 `agent.ts` 的 `ensureQuery()` 遇到這種 Query（`query.ts` 的 `claudeQueryLoadFailed()`）就換一個新的，新的會再向 daemon 的 SDK 來源要一次（+4 行，import 多一個名稱）。
   - 原因（integ0929 桌面驗收）：支援 fast mode 的模型，包括預設的 Opus 5.5（fast mode 關著也一樣），建 Query 時要先等 `applyFlagSettings`，載入失敗就在那裡浮現，失敗的 Query 卻留在對話上：下一則訊息沒有任何網路請求就以同一個錯誤失敗，第三則才重新下載。App 在第一則訊息前查 slash 指令或改權限模式時，也會先碰到失敗，情況相同。
   - 測試 `woowtech-claude-sdk-retry.test.ts`：假的 SDK 來源第一次載入失敗、之後成功。沒有指定模型、Sonnet 5、Opus 5.5（fast mode 關／開）、先查指令或改模式，以及經過 AgentManager 的 Opus 5.5，都要第二則訊息就成功、只載入兩次、不重送第一則。
-- App 對 loader 自己的完整錯誤格式提供繁中提示，說明首次需要下載、來源無法連線，以及下一則訊息會重試；完整性與安裝失敗各有自己的提示。只作用於 error notification，不翻一般 Agent 輸出或未知錯誤，也不把原始 URL、代理認證或 cause 帶進新提示。
+- App 對 loader 自己的完整錯誤格式提供繁中提示（其他語言顯示英文），說明首次需要下載、來源無法連線，以及下一則訊息會重試；完整性與安裝失敗各有自己的提示。不翻一般 Agent 輸出或未知錯誤，也不把原始 URL、代理認證或 cause 帶進新提示。
+  - daemon 把失敗的 turn 寫進時間軸時是一則 Agent 訊息：`[System Error] <錯誤>`（上游 `agent-manager.ts`）。時間軸（熱檔 `agent-stream/view.tsx` 的 `renderAssistantMessageItem`，+4 行）遇到整則剛好是 `[System Error] ` 加上完整自有格式時，改用錯誤通知顯示翻譯後的提示；error notification 本身也照舊翻譯（`utils/claude-sdk-error.ts`）。其他 `[System Error]`、多帶 code 或診斷的訊息照原文顯示。複製按鈕仍複製原文，回報問題時看得到錯誤代碼。
+  - 原因（integ0929 桌面驗收）：原本只接在錯誤通知，失敗的 turn 不走那裡，桌面版時間軸一直顯示英文原文。
+  - 測試：`utils/claude-sdk-error.test.ts` 用 App 的 reducer 和 i18n 確認 daemon 那一則在 zh-TW、英文顯示的文字，以及不該翻的訊息；`woowtech-claude-sdk-retry.test.ts` 釘住 daemon 經 AgentManager 寫出的那一則；守門 `woowtech/claude-sdk-error-display.test.mjs` 檢查 `view.tsx`、`message.tsx` 的接點，合併上游時接點被拿掉就會失敗。
 - 公司網路設定（只影響 SDK 下載，不更換 daemon 的全域 dispatcher）：
   - `https_proxy`／`HTTPS_PROXY`、`http_proxy`／`HTTP_PROXY`：小寫優先；HTTPS 沒有專用代理（或設為空字串）時使用 HTTP 代理。代理 URL 可含認證，錯誤不回傳 URL、headers 或原始網路錯誤。
   - `no_proxy`／`NO_PROXY`：小寫優先（含空字串），支援主機、主機加 port、子網域 suffix、逗號或空白分隔清單，以及 `*` 全部直連。
