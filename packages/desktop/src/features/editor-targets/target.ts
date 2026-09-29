@@ -2,7 +2,9 @@ export type EditorTargetKind = "editor" | "file-manager";
 
 export type EditorTargetIcon =
   | { kind: "image"; dataUrl: string }
-  | { kind: "symbol"; name: "folder" | "terminal" };
+  | { kind: "symbol"; name: "folder" | "terminal" }
+  // woowtech smart: a vendor's text badge instead of its logo (woowtech-editor-icons.ts).
+  | { kind: "badge"; vendor: string };
 
 export interface EditorTargetDescriptor {
   id: string;
