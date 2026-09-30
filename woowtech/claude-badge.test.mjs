@@ -2,8 +2,9 @@
 // name in the caller's color inside a rounded square, instead of the vendor's logo. Anthropic's
 // terms let a product name Claude Code in plain text, but using its logo takes written
 // permission; the owner chose the Claude badge on 2026-09-27 and the same badge for every vendor
-// on 2026-09-29. Which vendor shows its badge and which its upstream logo (after the owner clears
-// it) is data in woowtech/vendor-marks.mjs; the checks here follow it. GitLab's forge mark is in
+// on 2026-09-29. Which vendor shows its badge and which its own logo (after the owner clears it,
+// from upstream or from the vendor's own files, section 25) is data in woowtech/vendor-marks.mjs;
+// the checks here follow it. GitLab's forge mark is in
 // that data too and shows its badge; the other git forges (GitHub, Gitea, Forgejo, Codeberg) keep
 // their marks (section 24, woowtech/third-party-notices.test.mjs). No feature is named after
 // Claude: the Claude theme is called 陶土 (Terracotta).
@@ -23,9 +24,11 @@ import { importSource, requireSource } from "./source-modules.mjs";
 import {
   ACP_ICONS_FILE,
   EDITOR_LOGO_DIR,
+  MARK_STYLES_FILE,
   VENDOR_SVG_DIRS,
   expectedAcpIconsSource,
   expectedVendorFiles,
+  showsBadge,
 } from "./tools/write-vendor-badges.mjs";
 import { VENDOR_MARKS } from "./vendor-marks.mjs";
 
@@ -44,8 +47,19 @@ const IMAGE_FILES = /\.(?:png|jpe?g|gif|webp|bmp|tiff?|ico|icns|svg)$/i;
 
 const marks = Object.entries(VENDOR_MARKS);
 const showingBadge = marks.filter(([, mark]) => mark.show === "badge");
-const showingUpstream = marks.filter(([, mark]) => mark.show === "upstream");
-const upstreamFiles = showingUpstream.flatMap(([, mark]) => mark.files);
+// woowtech smart shows these vendors' own logos again, from upstream or their own files (section
+// 25); a file of theirs listed under badgeFiles still shows the badge.
+const showingLogo = marks.filter(([, mark]) => mark.show !== "badge");
+const officialFiles = marks.flatMap(([, mark]) => Object.keys(mark.official?.files ?? {}));
+const officialAcpIcons = showingLogo.some(([, mark]) => mark.official?.acpIcons !== undefined);
+/** The files that ship a vendor's logo: its upstream files, its own files and what embeds them. */
+const logoFiles = [
+  ...showingLogo.flatMap(([, mark]) =>
+    mark.show === "upstream" ? mark.files.filter((file) => !showsBadge(mark, file)) : [],
+  ),
+  ...officialFiles,
+  ...(officialAcpIcons ? [MARK_STYLES_FILE] : []),
+];
 const claudeShowsItsBadge = VENDOR_MARKS.claude.show === "badge";
 const ifClaudeShowsItsBadge = {
   skip: !claudeShowsItsBadge && "Claude shows its upstream logo (woowtech/vendor-marks.mjs)",
@@ -107,7 +121,8 @@ const UNREFERENCED_IMAGES_DIR = "packages/app/assets/images/editor-apps/";
 // host's or a vendor's SVG on screen, so it needs a decision first.
 const SVG_RENDER_SITES = {
   "packages/app/src/components/provider-icons.ts": "provider icons; a host's SVG as a badge",
-  "packages/app/src/components/provider-catalog-list.tsx": "the ACP catalog's icons",
+  "packages/app/src/components/icons/woowtech-vendor-mark-icon.tsx":
+    "vendor marks shown mono, in their own colours or as a badge by place (section 25)",
   "packages/app/src/components/material-file-icon.tsx": "file-type icons",
   "packages/app/src/components/project-icon-image.tsx": "the user's own project icon",
   "packages/app/src/desktop/components/pair-device-section.tsx": "the pairing QR code",
@@ -131,6 +146,7 @@ const relative = (file) => path.relative(repoRoot, file);
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
 const isVendorFile = (file) =>
   marks.some(([, mark]) => mark.files.includes(file)) ||
+  officialFiles.includes(file) ||
   VENDOR_SVG_DIRS.some((dir) => file.startsWith(`${dir}/`));
 
 function logosIn(logoPaths) {
@@ -233,7 +249,7 @@ test("every vendor icon file is as woowtech/vendor-marks.mjs says", () => {
 });
 
 test("every vendor icon upstream ships is in woowtech/vendor-marks.mjs, once", () => {
-  const listed = marks.flatMap(([, mark]) => mark.files);
+  const listed = [...marks.flatMap(([, mark]) => mark.files), ...officialFiles];
   const shipped = [
     ...VENDOR_SVG_DIRS.flatMap((dir) =>
       readdirSync(path.join(repoRoot, dir)).map((name) => `${dir}/${name}`),
@@ -264,20 +280,22 @@ test("every vendor icon upstream ships is in woowtech/vendor-marks.mjs, once", (
   );
   assert.deepEqual(
     marks
-      .filter(([, mark]) => !["badge", "upstream"].includes(mark.show))
+      .filter(([, mark]) => !["badge", "upstream", "official"].includes(mark.show))
       .map(([vendor]) => vendor),
     [],
-    'Each vendor shows "badge" or "upstream".',
+    'Each vendor shows "badge", "upstream" or "official".',
   );
 });
 
 test("vendor badge files draw only in the caller's color", () => {
-  const acpAllBadges = showingUpstream.every(([, mark]) => mark.acpIcons.length === 0);
+  const acpAllBadges = showingLogo.every(([, mark]) => mark.acpIcons.length === 0);
   const badgeFiles = [
     "packages/app/src/components/icons/vendor-badge.ts",
     "packages/app/src/components/icons/vendor-badge-icon.tsx",
     ...(acpAllBadges ? [ACP_ICONS_FILE] : []),
-    ...showingBadge.flatMap(([, mark]) => mark.files).filter((file) => !file.endsWith(".png")),
+    ...marks
+      .flatMap(([, mark]) => mark.files.filter((file) => showsBadge(mark, file)))
+      .filter((file) => !file.endsWith(".png")),
   ];
   assert.deepEqual(
     badgeFiles.filter((file) => COLOR.test(read(file))),
@@ -286,15 +304,15 @@ test("vendor badge files draw only in the caller's color", () => {
 });
 
 test("only the allowlisted files draw with SVG path data", () => {
-  const acpDraws = showingUpstream.some(([, mark]) => mark.acpIcons.length > 0);
+  const acpDraws = showingLogo.some(([, mark]) => mark.acpIcons.length > 0);
   const allowed = new Set([
     ...Object.keys(ALLOWED_DRAWINGS),
-    ...upstreamFiles,
+    ...logoFiles,
     ...(acpDraws ? [ACP_ICONS_FILE] : []),
   ]);
   const drawing = [...shippedFiles()]
     .map(relative)
-    .filter((file) => !isVendorFile(file) || upstreamFiles.includes(file))
+    .filter((file) => !isVendorFile(file) || logoFiles.includes(file))
     .filter((file) => PATH_DATA.test(read(file)));
   assert.deepEqual(
     drawing.filter((file) => !allowed.has(file)),

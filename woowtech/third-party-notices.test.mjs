@@ -9,7 +9,8 @@
 //     Dart and Elixir.
 // The list of marks that ship comes from woowtech/vendor-marks.mjs, the forge views and the
 // file-type icon table, so a mark cannot ship without its entry on the page, and the page cannot
-// name a mark that does not ship.
+// name a mark that does not ship. Stage 2 (section 25) restores vendors' logos under their rules;
+// an owner that asks for a trademark line gets it on the page, in the form its rules give.
 //
 // The stage 1 review (2026-09-30) found places that broke those rules. They are closed:
 //   - The app draws no lucide brand icon. Lucide redraws brands' logos as outline icons in the
@@ -29,6 +30,7 @@ import test from "node:test";
 
 import { repoRoot, shippedSourceFiles } from "./shipped-sources.mjs";
 import { requireSource } from "./source-modules.mjs";
+import { EDITOR_LOGO_DIR, shippedLogoFiles } from "./tools/write-vendor-badges.mjs";
 import { VENDOR_MARKS } from "./vendor-marks.mjs";
 
 const NOTICES_FILE = "packages/app/src/screens/settings/woowtech-third-party-notices.ts";
@@ -95,6 +97,28 @@ const REPLACED_FILE_TYPE_LOGOS = {
   lua: {
     extensions: ["lua"],
     path: "M30 6a3.86 3.86 0 0 1-1.167 2.833 4.024 4.024 0 0 1-5.666 0A3.86",
+  },
+};
+
+// The owners whose brand rules ask for a trademark line wherever their logo appears (research §3.4,
+// point 4, and the vendors' pages under coord/brand-assets), by vendor in vendor-marks.mjs: the form
+// of the line, and the site the rules ask the mark to link back to. A vendor here that shows its
+// logo has that line as its credit on the notices page.
+const jetBrains = (product) =>
+  new RegExp(
+    `^Copyright © \\d{4} JetBrains s\\.r\\.o\\. ${product} and the ${product} logo are trademarks of JetBrains s\\.r\\.o\\.$`,
+  );
+const googleLegalLine = /\bGoogle\b/; // Google's Legal line generator writes it (not yet obtained).
+const TRADEMARK_LINES = {
+  codex: { credit: /\bOpenAI\b/ }, // OpenAI: "acknowledge that it belongs to OpenAI".
+  gemini: { credit: googleLegalLine },
+  antigravity: { credit: googleLegalLine },
+  "android-studio": { credit: googleLegalLine },
+  junie: { credit: jetBrains("Junie"), link: "https://www.jetbrains.com" },
+  webstorm: { credit: jetBrains("WebStorm"), link: "https://www.jetbrains.com" },
+  vscode: {
+    credit:
+      /^Visual Studio Code, VS Code, and the Visual Studio Code icon are trademarks of Microsoft Corporation\. All rights reserved\.$/,
   },
 };
 
@@ -225,14 +249,58 @@ function* shippedFiles() {
   }
 }
 
-test("every agent that shows its own logo has an entry on the notices page, and no other", () => {
-  const showingLogo = Object.entries(VENDOR_MARKS)
-    .filter(([, mark]) => mark.show === "upstream")
-    .map(([vendor]) => vendor);
+/**
+ * The vendors that show their own logo (woowtech/vendor-marks.mjs): as an agent's icon, in the app,
+ * and as an editor's icon, in the desktop app's "Open in" menu.
+ */
+function vendorsShowingTheirLogo() {
+  const agents = [];
+  const editors = [];
+  for (const [vendor, mark] of Object.entries(VENDOR_MARKS)) {
+    if (mark.show === "badge") continue;
+    const files = shippedLogoFiles(mark);
+    if (mark.acpIcons.length > 0 || files.some((file) => file.startsWith("packages/app/"))) {
+      agents.push(vendor);
+    }
+    if (files.some((file) => file.startsWith(`${EDITOR_LOGO_DIR}/`))) editors.push(vendor);
+  }
+  return { agents, editors };
+}
+
+test("every agent and editor that shows its own logo has an entry on the notices page, and no other", () => {
+  const { VENDOR_MARK_NOTICES, EDITOR_MARK_NOTICES } = notices();
+  const { agents, editors } = vendorsShowingTheirLogo();
   assert.deepEqual(
-    sorted(Object.keys(notices().VENDOR_MARK_NOTICES)),
-    sorted(showingLogo),
-    `Give each vendor with show: "upstream" in woowtech/vendor-marks.mjs an entry in ${NOTICES_FILE}, and remove the entries of vendors that show their badge.`,
+    sorted(Object.keys(VENDOR_MARK_NOTICES)),
+    sorted(agents),
+    `Give each agent that shows its own logo in woowtech/vendor-marks.mjs an entry in ${NOTICES_FILE}'s VENDOR_MARK_NOTICES, and remove the entries of vendors that show their badge.`,
+  );
+  assert.deepEqual(
+    sorted(Object.keys(EDITOR_MARK_NOTICES ?? {})),
+    sorted(editors),
+    `Give each editor that shows its own logo in woowtech/vendor-marks.mjs an entry in ${NOTICES_FILE}'s EDITOR_MARK_NOTICES, and remove the others.`,
+  );
+});
+
+test("an owner that asks for a trademark line has it on the notices page, as its rules write it", () => {
+  const { VENDOR_MARK_NOTICES, EDITOR_MARK_NOTICES } = notices();
+  const entries = { ...EDITOR_MARK_NOTICES, ...VENDOR_MARK_NOTICES };
+  const { agents, editors } = vendorsShowingTheirLogo();
+  const missing = [...new Set([...agents, ...editors])]
+    .filter((vendor) => vendor in TRADEMARK_LINES)
+    .flatMap((vendor) => {
+      const line = TRADEMARK_LINES[vendor];
+      const notice = entries[vendor] ?? {};
+      const problems = [];
+      if (!line.credit.test(notice.credit ?? ""))
+        problems.push(`${vendor}: credit "${notice.credit}"`);
+      if (line.link && notice.link !== line.link) problems.push(`${vendor}: link "${notice.link}"`);
+      return problems;
+    });
+  assert.deepEqual(
+    missing,
+    [],
+    "Add the trademark line the owner's brand rules ask for (research §3.4, point 4).",
   );
 });
 
@@ -256,9 +324,11 @@ test("the app draws no lucide brand icon, under any of its names", () => {
 });
 
 test("every entry under an attribution license names its credit, license and source", () => {
-  const { FILE_TYPE_MARK_NOTICES, FORGE_MARK_NOTICES, VENDOR_MARK_NOTICES } = notices();
+  const { EDITOR_MARK_NOTICES, FILE_TYPE_MARK_NOTICES, FORGE_MARK_NOTICES, VENDOR_MARK_NOTICES } =
+    notices();
   const entries = [
     ...Object.entries(VENDOR_MARK_NOTICES),
+    ...Object.entries(EDITOR_MARK_NOTICES ?? {}),
     ...Object.entries(FORGE_MARK_NOTICES),
     ...FILE_TYPE_MARK_NOTICES.map((notice) => [notice.icons[0], notice]),
   ];
