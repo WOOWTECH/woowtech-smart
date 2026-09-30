@@ -14,6 +14,8 @@
 // The stage 1 review (2026-09-30) found places that broke those rules. They are closed:
 //   - The app draws no lucide brand icon. Lucide redraws brands' logos as outline icons in the
 //     caller's colour; the add-project flow drew its GitHub outline in muted grey.
+//   - The pull request actions draw the generic pull request glyph for GitHub and Codeberg. The
+//     actions dim when disabled or unavailable, which turns a black or white mark grey.
 //
 //   node --test woowtech/third-party-notices.test.mjs
 import assert from "node:assert/strict";
@@ -333,6 +335,35 @@ test("GitHub and Codeberg draw their marks in pure black or white, never tinted"
     assert.doesNotMatch(icon, /\bcolor\b/, `${forge}-icon.tsx takes a colour`);
     assert.match(read(`${FORGE_VIEWS}/${forge}.view.tsx`), /\bbrandColor: null,/);
   }
+});
+
+test("the pull request actions, which dim, draw the generic glyph for GitHub and Codeberg", () => {
+  const actions = read("packages/app/src/git/use-actions.tsx");
+  const has = (pattern) => pattern.test(actions);
+  assert.ok(
+    has(/import \{ dimmableForgeIconKind \} from "@\/git\/woowtech-forge-marks";/),
+    "use-actions.tsx does not import dimmableForgeIconKind",
+  );
+  const render =
+    /\nfunction renderForgePrIcon\(forge: Forge\): ReactElement \{\n([\s\S]*?)\n\}\n/.exec(
+      actions,
+    )?.[1];
+  assert.ok(render, "renderForgePrIcon not found in use-actions.tsx");
+  assert.ok(
+    /const icon = dimmableForgeIconKind\(getForgePresentation\(forge\)\.icon\);/.test(render),
+    "The pull request actions draw the forge's mark as it is, so GitHub's and Codeberg's dim grey.",
+  );
+  assert.ok(
+    has(/const prIcon = useMemo\(\(\) => renderForgePrIcon\(forge\), \[forge\]\);/),
+    "The change-request actions no longer share the icon renderForgePrIcon makes.",
+  );
+  // The fork module goes by the mark itself: any mark made to stay pure black or white.
+  assert.ok(
+    /isMonochromeMarkIcon\(getForgeIconComponent\(iconKind\)\)/.test(
+      read("packages/app/src/git/woowtech-forge-marks.ts"),
+    ),
+    "woowtech-forge-marks.ts does not ask whether the forge's mark is a monochrome mark",
+  );
 });
 
 test("the eight replaced file-type logos ship nowhere and their files show the generic icon", () => {

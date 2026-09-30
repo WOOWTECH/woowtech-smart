@@ -38,10 +38,21 @@ function MarkSvg({ size, color, viewBox, path }: MarkDrawing & { size: number; c
 
 const ThemedMarkSvg = withUnistyles(MarkSvg);
 
+const MONOCHROME_MARK_ICONS = new WeakSet<object>();
+
 /** A forge icon component that draws `path` in pure black or white by the theme. */
 export function createMonochromeMarkIcon({ viewBox, path }: MarkDrawing) {
   function MonochromeMarkIcon({ size = 16 }: MonochromeMarkIconProps) {
     return <ThemedMarkSvg size={size} viewBox={viewBox} path={path} uniProps={markColorMapping} />;
   }
+  MONOCHROME_MARK_ICONS.add(MonochromeMarkIcon);
   return MonochromeMarkIcon;
+}
+
+/**
+ * Whether `icon` is a mark made by createMonochromeMarkIcon. Places that dim their icon must not
+ * draw one: a pure black or white mark at half opacity is grey (git/woowtech-forge-marks.ts).
+ */
+export function isMonochromeMarkIcon(icon: unknown): boolean {
+  return typeof icon === "function" && MONOCHROME_MARK_ICONS.has(icon);
 }
