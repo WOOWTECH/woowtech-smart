@@ -1177,6 +1177,16 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   },
 };
 
+// The desktop "Open in" button names the editor it opens, in Microsoft's "Open in VS Code" format
+// (woowtech/README.md §25).
+const OPEN_IN_EDITOR_ENGLISH = {
+  openIn: "Open in {{target}}",
+};
+
+const OPEN_IN_EDITOR_ZH_TW: typeof OPEN_IN_EDITOR_ENGLISH = {
+  openIn: "在 {{target}} 中開啟",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
@@ -1199,5 +1209,6 @@ export function woowtechCopyFor(language: string) {
     workspaceRecovery: language === "zh-TW" ? WORKSPACE_RECOVERY_ZH_TW : WORKSPACE_RECOVERY_ENGLISH,
     thirdPartyNotices:
       language === "zh-TW" ? THIRD_PARTY_NOTICES_ZH_TW : THIRD_PARTY_NOTICES_ENGLISH,
+    openInEditor: language === "zh-TW" ? OPEN_IN_EDITOR_ZH_TW : OPEN_IN_EDITOR_ENGLISH,
   };
 }

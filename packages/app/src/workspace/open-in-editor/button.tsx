@@ -24,6 +24,7 @@ import { isWeb } from "@/constants/platform";
 import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 import { resolveWorkspaceFilePaths, type WorkspaceFileLocation } from "@/workspace/file-open";
 import { planWorkspaceOpenTargets } from "@/workspace/open-in-editor/planner";
+import { editorIconAlone } from "@/workspace/open-in-editor/woowtech-editor-marks";
 import type { Theme } from "@/styles/theme";
 import { ForgeBrandIcon } from "@/git/forge-icon";
 import { getForgePresentation } from "@/git/forge";
@@ -41,6 +42,8 @@ interface OpenTarget {
   id: string;
   label: string;
   icon: ReactElement;
+  // woowtech smart: the icon where it stands alone, without the target's name (README §25).
+  iconAlone: ReactElement;
   onOpen: () => Promise<void> | void;
 }
 
@@ -132,10 +135,12 @@ export function WorkspaceOpenInEditorButton({
       }).map((target) => {
         if (target.source === "forge") {
           const presentation = getForgePresentation(target.forge);
+          const icon = renderForgeOpenTargetIcon(presentation.icon);
           return {
             id: target.id,
             label: target.label,
-            icon: renderForgeOpenTargetIcon(presentation.icon),
+            icon,
+            iconAlone: icon,
             onOpen: () => openExternalUrl(target.url),
           };
         }
@@ -144,6 +149,13 @@ export function WorkspaceOpenInEditorButton({
           label: target.label,
           icon: (
             <ThemedEditorTargetIcon icon={target.icon} size={16} uniProps={mutedColorMapping} />
+          ),
+          iconAlone: (
+            <ThemedEditorTargetIcon
+              icon={editorIconAlone(target)}
+              size={16}
+              uniProps={mutedColorMapping}
+            />
           ),
           onOpen: () => openDesktopTarget(target.openInput),
         };
@@ -245,9 +257,12 @@ export function WorkspaceOpenInEditorButton({
             />
           ) : (
             <View style={styles.splitButtonContent}>
-              {primaryOption.icon}
+              {/* woowtech smart: the label names the target; alone, a mark may give way (§25). */}
+              {hideLabels ? primaryOption.iconAlone : primaryOption.icon}
               {!hideLabels && (
-                <Text style={styles.splitButtonText}>{t("workspace.git.openInEditor.open")}</Text>
+                <Text style={styles.splitButtonText}>
+                  {t("woowtech.openInEditor.openIn", { target: primaryOption.label })}
+                </Text>
               )}
             </View>
           )}

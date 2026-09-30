@@ -121,7 +121,8 @@ describe("woowtech smart's own text", () => {
           key.startsWith("workspaceRecovery.") ||
           key.startsWith("claudeSdk.") ||
           key.startsWith("claudeAuth.") ||
-          key.startsWith("thirdPartyNotices.");
+          key.startsWith("thirdPartyNotices.") ||
+          key.startsWith("openInEditor.");
         if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });

@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { loadEditorTargetIcon } from "./woowtech-editor-icons.js";
 
-// woowtech smart: an editor's logo ships only as a cleared PNG; otherwise the "Open in" menu
-// shows its text badge (woowtech/README.md section 22).
+// woowtech smart: an editor's logo ships only once cleared, as upstream's PNG or the vendor's own
+// SVG; otherwise the "Open in" menu shows its text badge (woowtech/README.md sections 22 and 25).
 describe("editor target icons", () => {
   let directory: string;
 
@@ -40,6 +40,28 @@ describe("editor target icons", () => {
     await writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
     expect(await loadEditorTargetIcon("zed.png", file)).toEqual({
+      kind: "image",
+      dataUrl: "data:image/png;base64,iVBORw==",
+    });
+  });
+
+  // woowtech smart: a vendor's own file can take the place of upstream's PNG, such as Microsoft's
+  // VS Code icon, which Microsoft publishes as SVG (woowtech/README.md section 25).
+  it("shows the vendor's own SVG where it ships in place of upstream's PNG, byte for byte", async () => {
+    const svg = '<svg viewBox="0 0 100 100"><path d="M0 0h100v100H0z" fill="#007ACC"/></svg>\n';
+    await writeFile(path.join(directory, "vscode.svg"), svg);
+
+    expect(await loadEditorTargetIcon("vscode.png", path.join(directory, "vscode.png"))).toEqual({
+      kind: "image",
+      dataUrl: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
+    });
+  });
+
+  it("prefers upstream's PNG when both ship", async () => {
+    await writeFile(path.join(directory, "zed.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await writeFile(path.join(directory, "zed.svg"), "<svg/>");
+
+    expect(await loadEditorTargetIcon("zed.png", path.join(directory, "zed.png"))).toEqual({
       kind: "image",
       dataUrl: "data:image/png;base64,iVBORw==",
     });
