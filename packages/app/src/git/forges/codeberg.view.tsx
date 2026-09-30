@@ -4,8 +4,7 @@ import type { ClientForgeViewModule } from "@/git/client-forge-module";
 export const codebergForgeView = {
   id: "codeberg",
   icon: CodebergIcon,
-  brandColor: {
-    light: "#2185D0",
-    dark: "#2185D0",
-  },
+  // woowtech smart: Codeberg's guidelines forbid tinting its logo, so the mark draws in pure black
+  // or white by the theme (woowtech/README.md §24).
+  brandColor: null,
 } satisfies ClientForgeViewModule;

@@ -2,7 +2,8 @@
 // a monogram of the vendor's name (one capital, or a capital and a small letter) in the caller's
 // color inside a rounded square. Anthropic's terms forbid using its logos without written
 // permission, and on 2026-09-29 the owner chose one approach for every vendor instead of a
-// per-vendor legal review (woowtech/README.md section 22). The git forges keep their own icons.
+// per-vendor legal review (woowtech/README.md section 22). GitLab's forge mark shows its badge
+// too; the other git forges keep their own icons (section 24).
 //
 // The letters are stroked paths, not <text>, so a badge looks the same on iOS, Android and the web
 // without depending on a font. The badge has no color of its own: it strokes in the color it is
@@ -81,6 +82,8 @@ const MONOGRAMS: ReadonlyArray<readonly [string, string]> = [
   ["zed", "Z"],
   // The help menu's old Discord link (section 10 replaced it; the icon file remains).
   ["discord", "D"],
+  // Git forges whose guidelines do not permit their logo (section 24).
+  ["gitlab", "Gl"],
 ];
 
 const MONOGRAMS_BY_ID = new Map(MONOGRAMS);

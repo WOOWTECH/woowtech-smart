@@ -258,10 +258,9 @@ function GitLabPipelineStatusIcon({
 export const gitlabForgeView = {
   id: "gitlab",
   icon: GitLabIcon,
-  brandColor: {
-    light: "#FC6D26",
-    dark: "#FC6D26",
-  },
+  // woowtech smart: GitLab shows the neutral text badge, which takes the caller's colour instead
+  // of GitLab's orange (woowtech/README.md §24).
+  brandColor: null,
   paneContributions: [
     definePaneContribution(GitlabMergeFactsSchema, {
       renderHeaderMeta: renderGitlabHeaderMeta,
