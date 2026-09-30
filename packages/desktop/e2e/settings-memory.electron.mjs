@@ -25,7 +25,7 @@ const SETTINGS_DESTINATIONS = [
   "Metadata",
   "Workspaces",
   "Providers",
-  "Usage",
+  // woowtech smart: no Usage row; account usage is hidden (woowtech/README.md section 23).
   "Terminals",
   "Plugins",
 ];

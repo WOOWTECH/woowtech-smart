@@ -484,3 +484,14 @@ test("CI's guard step skips one test: zh-TW's regeneration, which needs OpenCC",
     ],
   );
 });
+
+test("CI's typecheck job checks out the full history: the vendor guard reads icons at UPSTREAM_REF", () => {
+  // CI run 10 (2026-09-30): claude-badge.test.mjs failed in the guard step with "fatal: invalid
+  // object name '130705c02^'". woowtech/tools/write-vendor-badges.mjs reads the vendor icon files
+  // at UPSTREAM_REF (woowtech/vendor-marks.mjs) with git show, and actions/checkout fetches only
+  // the head commit unless fetch-depth is 0. A local clone has the full history, so only CI fails.
+  const depths = workflow("ci.yml")
+    .jobs.typecheck.steps.filter(({ uses }) => String(uses).startsWith("actions/checkout@"))
+    .map((step) => String(step.with?.["fetch-depth"]));
+  assert.deepEqual(depths, ["0"], "Give the typecheck job's checkout `with: fetch-depth: 0`.");
+});

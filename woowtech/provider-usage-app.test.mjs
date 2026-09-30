@@ -1,6 +1,6 @@
 // Account usage (plan quota) stays hidden in the App: no usage page, no usage block in the
-// context meter tooltip, and no usage request to a host. The daemon side is in
-// provider-usage.test.mjs. README section 23.
+// context meter tooltip, no usage request to a host, and no e2e that still opens the usage
+// page. The daemon side is in provider-usage.test.mjs. README section 23.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import ts from "typescript";
@@ -155,6 +155,216 @@ test("App usage scan rejects new entry points and allows the owners and tests", 
         'import type { useProviderUsage } from "x"; type T = typeof useProviderUsage;',
       ],
       ["components/woowtech-context-window-meter.test.tsx", "client.listProviderUsage();"],
+    ]),
+    [],
+  );
+});
+
+// The e2e side. Settings has no Usage row and the usage route opens Connections, so an e2e
+// that still opens the usage page waits for a row that never shows. The desktop browser E2E's
+// Settings rotation did, and CI #10 and #11 timed out on it.
+const REPO_ROOT = new URL("../", import.meta.url);
+const E2E_ROOTS = ["packages/app/e2e/", "packages/desktop/e2e/"];
+// Fork specs that open the old usage route on purpose, to check that it lands on Connections.
+const USAGE_ROUTE_FALLBACK_CHECKS = new Set([
+  "packages/app/e2e/browser/woowtech-provider-usage-hidden.spec.ts",
+]);
+const USAGE_ROW_TEST_ID = "settings-host-section-usage";
+const USAGE_ROUTE = /\/settings\/hosts\/[^/]+\/usage(?:[/?#]|$)/;
+const HOST_SECTION_HELPERS = new Set(["openSettingsHostSection", "buildSettingsHostSectionRoute"]);
+// agent-device flows are plain text: the row's test id, its quoted label, or the route.
+const FLOW_USAGE_REFERENCE =
+  /settings-host-section-usage|\\?"Usage\\?"|\/settings\/hosts\/[^/\s"]+\/usage(?![\w-])/;
+
+// A string or template's text; a template's placeholders read as "${}".
+function literalText(node) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (!ts.isTemplateExpression(node)) return null;
+  return node.head.text + node.templateSpans.map((span) => `\${}${span.literal.text}`).join("");
+}
+
+function calleeName(call) {
+  if (ts.isIdentifier(call.expression)) return call.expression.text;
+  if (ts.isPropertyAccessExpression(call.expression)) return call.expression.name.text;
+  return null;
+}
+
+function opensUsageSection(node, tree) {
+  const text = literalText(node);
+  if (text !== null) {
+    return text === "Usage" || text.includes(USAGE_ROW_TEST_ID) || USAGE_ROUTE.test(text);
+  }
+  if (ts.isCallExpression(node) && HOST_SECTION_HELPERS.has(calleeName(node))) {
+    return node.arguments.some(
+      (argument) => ts.isStringLiteral(argument) && argument.text === "usage",
+    );
+  }
+  return (
+    ts.isPropertyAssignment(node) &&
+    node.name.getText(tree) === "section" &&
+    ts.isStringLiteral(node.initializer) &&
+    node.initializer.text === "usage"
+  );
+}
+
+// Inside the callback of test.skip, test.describe.skip or describe.skip: upstream's usage specs.
+function isInSkippedCallback(node) {
+  for (let child = node; child.parent; child = child.parent) {
+    const call = child.parent;
+    if (
+      ts.isCallExpression(call) &&
+      ts.isFunctionLike(child) &&
+      call.arguments.includes(child) &&
+      ts.isPropertyAccessExpression(call.expression) &&
+      call.expression.name.text === "skip"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// expect(...).toHaveCount(0), .toBeHidden(), .not.toBeVisible() or .not.toBeAttached().
+function assertsAbsence(expectCall) {
+  let matcher = expectCall.parent;
+  if (!ts.isPropertyAccessExpression(matcher)) return false;
+  const negated = matcher.name.text === "not";
+  if (negated) matcher = matcher.parent;
+  if (!ts.isPropertyAccessExpression(matcher) || !ts.isCallExpression(matcher.parent)) return false;
+  const [expected] = matcher.parent.arguments;
+  switch (matcher.name.text) {
+    case "toHaveCount":
+      return (
+        !negated && expected !== undefined && ts.isNumericLiteral(expected) && expected.text === "0"
+      );
+    case "toBeHidden":
+      return !negated;
+    case "toBeVisible":
+    case "toBeAttached":
+      return negated;
+    default:
+      return false;
+  }
+}
+
+function isInAbsenceAssertion(node) {
+  for (let child = node; child.parent; child = child.parent) {
+    const call = child.parent;
+    if (
+      ts.isCallExpression(call) &&
+      ts.isIdentifier(call.expression) &&
+      call.expression.text === "expect" &&
+      call.arguments.includes(child)
+    ) {
+      return assertsAbsence(call);
+    }
+  }
+  return false;
+}
+
+function isAllowedUsageReference(node, file) {
+  if (isInSkippedCallback(node) || isInAbsenceAssertion(node)) return true;
+  return USAGE_ROUTE_FALLBACK_CHECKS.has(file) && USAGE_ROUTE.test(literalText(node) ?? "");
+}
+
+// Every e2e line that opens the usage page: its sidebar row (label or test id), the host
+// section helpers with "usage", a section: "usage" route, or a /settings/hosts/<id>/usage path.
+function findE2eUsageSectionReferences(files) {
+  const references = [];
+  for (const [file, text] of files) {
+    if (file.endsWith(".ad")) {
+      for (const [index, flowLine] of text.split("\n").entries()) {
+        if (FLOW_USAGE_REFERENCE.test(flowLine)) references.push(`${file}:${index + 1}`);
+      }
+      continue;
+    }
+    const tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    function visit(node) {
+      if (opensUsageSection(node, tree) && !isAllowedUsageReference(node, file)) {
+        const { line } = tree.getLineAndCharacterOfPosition(node.getStart(tree));
+        references.push(`${file}:${line + 1}`);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(tree);
+  }
+  return references;
+}
+
+function e2eSources(directories = E2E_ROOTS) {
+  return directories.flatMap((directory) =>
+    readdirSync(new URL(directory, REPO_ROOT), { withFileTypes: true }).flatMap((entry) => {
+      const file = `${directory}${entry.name}`;
+      if (entry.isDirectory()) return entry.name === "node_modules" ? [] : e2eSources([`${file}/`]);
+      if (!/\.(?:[cm]?[jt]sx?|ad)$/.test(entry.name)) return [];
+      return [[file, readFileSync(new URL(file, REPO_ROOT), "utf8")]];
+    }),
+  );
+}
+
+test("no app or desktop e2e opens the hidden usage page", () => {
+  const references = findE2eUsageSectionReferences(e2eSources());
+  assert.deepEqual(
+    references,
+    [],
+    "Account usage is hidden (woowtech/README.md section 23): Settings has no Usage row and " +
+      "the usage route opens Connections. These e2e lines still open the usage page:\n" +
+      references.join("\n"),
+  );
+});
+
+test("e2e usage scan rejects each way into the usage page and allows skips and absence checks", () => {
+  for (const text of [
+    'const DESTINATIONS = ["Providers", "Usage", "Terminals"];',
+    'await sidebar.getByRole("button", { name: "Usage", exact: true }).click();',
+    'await page.getByTestId("settings-host-section-usage").click();',
+    'await expect(page.getByTestId("settings-host-section-usage")).toBeVisible();',
+    'await expect(page.getByTestId("settings-host-section-usage")).not.toHaveCount(0);',
+    'await openSettingsHostSection(page, serverId, "usage");',
+    'await page.goto(buildSettingsHostSectionRoute(serverId, "usage"));',
+    `await page.goto(\`/settings/hosts/\${encodeURIComponent(serverId)}/usage\`);`,
+    'await page.goto("/settings/hosts/srv_1/usage?refresh=1");',
+    'router.push({ kind: "host", serverId, section: "usage" });',
+    'test.skip(isMobile); await openSettingsHostSection(page, serverId, "usage");',
+  ]) {
+    assert.ok(findE2eUsageSectionReferences([["e2e/unexpected.spec.ts", text]]).length > 0, text);
+  }
+  for (const text of ['press "id=\\"settings-host-section-usage\\""', 'press "Usage"']) {
+    assert.ok(findE2eUsageSectionReferences([["e2e/unexpected.ad", text]]).length > 0, text);
+  }
+  // The route check's own file may open the route, not the row.
+  assert.equal(
+    findE2eUsageSectionReferences([
+      [
+        [...USAGE_ROUTE_FALLBACK_CHECKS][0],
+        'await page.getByTestId("settings-host-section-usage").click();',
+      ],
+    ]).length,
+    1,
+  );
+  assert.deepEqual(
+    findE2eUsageSectionReferences([
+      [
+        "e2e/skipped.spec.ts",
+        'test.describe.skip("usage", () => { test("opens it", async ({ page }) => { ' +
+          'await openSettingsHostSection(page, id, "usage"); }); });',
+      ],
+      [
+        "e2e/absent.spec.ts",
+        'await expect(sidebar.getByTestId("settings-host-section-usage")).toHaveCount(0);',
+      ],
+      [
+        "e2e/hidden.spec.ts",
+        'await expect(sidebar.getByRole("button", { name: "Usage" })).not.toBeVisible();',
+      ],
+      ["e2e/helpers.ts", 'type HostSection = "providers" | "usage" | "terminals";'],
+      ["e2e/smoke.js", 'process.stderr.write("Usage: node smoke.js --app <app>");'],
+      ["e2e/plugin-buttons.ts", 'pill("usage", { title: "Composer status" });'],
+      [
+        [...USAGE_ROUTE_FALLBACK_CHECKS][0],
+        `await page.goto(\`/settings/hosts/\${encodeURIComponent(serverId)}/usage\`);`,
+      ],
+      ["e2e/flow.ad", 'press "id=\\"settings-host-section-providers\\""'],
     ]),
     [],
   );

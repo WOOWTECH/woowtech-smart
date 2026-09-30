@@ -853,6 +853,7 @@ node --test woowtech/*.test.mjs
   - 放在 typecheck job：這個 job 已經跑過 `npm ci` 和 `npm run build:server`，守門跨套件的匯入讀各套件的 dist。沒有新增 job；觸發、排程、Playwright 的手動 gate、Windows 開關、runner、逾時和 concurrency 都沒動。
   - 只跳過一項：zh-TW 重新產生（`zh-tw.test.mjs` 第一項）。它要 OpenCC，OpenCC 裝在 `woowtech/tools`（自己的 package.json），`npm ci` 不裝。用完整名稱跳過，同一個檔的其他 5 項照跑；本機照第 7 節裝好 tools 就會跑到它。`cli-name.test.mjs` 的 Install CLI 那一項照原本的規則只在 macOS 跑。Node 22 會把名稱被跳過的測試整個濾掉，報告裡不會列成 skipped。
   - `--test-concurrency=1`：一次跑一個檔。2 核 runner 的預設本來就是 1（核心數減一），寫出來讓本機的結果跟 CI 一樣。
+  - checkout 抓完整歷史（`fetch-depth: 0`，2026-09-30）：第 22 節的廠商圖示檢查用 `git show` 讀 `UPSTREAM_REF` 時的上游圖示檔，`actions/checkout` 預設只抓最新一個 commit。CI #10（run 36642688479）因此失敗：`fatal: invalid object name '130705c02^'`；本機的 clone 有完整歷史，所以沒發現。`woowtech/workflows.test.mjs` 檢查這個設定。
   - typecheck 看 `quality` 這組路徑（`.github/ci-paths.yml`）：PR 只改到 `.md`、`.svg` 這類檔案時它不跑，守門也跟著不跑；每週的排程和手動執行都會跑。
   - 守門：上游的 `scripts/ci-workflow.test.mjs` 多一項（在 `changes` job 的 Validate CI contracts 跑，不需要安裝）：typecheck 有這一步、指令完全一樣、在 build 之後、沒有 `if` 和 `continue-on-error`。拿掉這一步、加條件、改跳過的條件、縮小 glob 都會失敗。`woowtech/workflows.test.mjs` 另外檢查跳過的條件只對到 zh-TW 重新產生那一項。
   - 本機模擬（2026-09-29，這台 Mac，不是 Ubuntu）：Node 22.23.2、`CI=true`、全新的 HOME、PATH 沒有 `~/.local/bin`，`woowtech/tools/node_modules` 暫時移開（沒有 OpenCC）。先 `npm run build:server`，再跑 `changes` job 的三個契約檔（28 項全過）和這一步（132 項全過，36 秒）；被跳過的那一項單獨跑，因為沒有 OpenCC 而失敗，證明它不能在 CI 跑。macOS 會多跑 Install CLI 那一項。Ubuntu 2 核 runner 上的結果和時間見「驗證紀錄」的 F11 驗證輪（CI #9）。
@@ -976,7 +977,7 @@ secret 和外部服務：
 
 仍待確認：
 
-- Playwright（手動勾選）的完整執行：分片 4 的 4 GB heap、每個 test 60 秒上限，以及上面待分類的 5 個失敗和 1 個 flaky；run 3 略過 Playwright，不能算它們已修好。
+- Playwright（手動勾選）的完整執行：2026-09-30 在整合分支跑過一次（CI #10，run 36642688479，見「驗證紀錄」的整合輪驗收）。四片都沒有 heap 用完；60 秒上限只有 `creation-old-daemon.spec.ts:95` 碰到一次，重試通過。上面待分類的 6 個裡 4 個通過，`agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119` 仍失敗；加上 main 既有的 2 個失敗和計時造成的 flaky，還沒有整次綠過。
 - 真正 cron 觸發的一次排程與勾 Playwright 的手動執行時間；目前只有同組合的手動 run 3 實測值。
 - GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑。每個 job 的「Set up job」映像版本未在本次重新核對。
 
@@ -1198,14 +1199,16 @@ node --test woowtech/*.test.mjs
 - 保留的：每個工作階段自己的 token、context 和費用。它們來自 agent 的事件（`usage_updated`、`turn_completed` 帶的 usage；Pi、OMP 是 poller 向自己的 agent 行程要 `get_session_stats`），不讀帳號憑證，也不打額度 API。context 圓環和 tooltip 的「上下文視窗」、「已使用 N%」、tokens、「工作階段費用」照舊。
 - 以後要打開：
   1. 先決定讀哪些憑證、要不要讓使用者自己選（例如設定頁的開關，預設關），再改。不要直接把政策改回 true。
-  2. 改 `isProviderUsageFetchingEnabled()` 和 `PROVIDER_USAGE_VISIBLE`（或接到使用者的選擇），同時改兩個守門（`woowtech/provider-usage*.test.mjs`）、fork 測試的 OFF 基線，以及兩個上游 e2e spec 的 `describe.skip`。
+  2. 改 `isProviderUsageFetchingEnabled()` 和 `PROVIDER_USAGE_VISIBLE`（或接到使用者的選擇），同時改兩個守門（`woowtech/provider-usage*.test.mjs`）、fork 測試的 OFF 基線、兩個上游 e2e spec 的 `describe.skip`，並把「Usage」加回桌面版 `settings-memory.electron.mjs` 的設定清單。
   3. 上游的 `792715e76`（#5465，用量來源改成內建外掛、跟著工作階段的帳號）仍延後。它刪掉整個 `quota-fetcher/` 和 `provider-usage/`，也改了這節的三個 App 接點和 `websocket-server.ts`。拿它的時候，這節的 gate 要在新架構重做，守門會先紅。
 - 測試：
   - `services/quota-fetcher/woowtech-provider-usage.test.ts`：OFF 基線（政策、service 和 RPC 都回空清單；stub fetcher、鑰匙圈 stub 和 fetch stub 都是 0 次）；ON 對照（同一組 stub 看得到 fetcher 1 次、鑰匙圈 1 次、api.anthropic.com 1 次）；Pi 和 OMP 的每工作階段計數照舊。Claude 的 fetcher 用暫存 home、鑰匙圈 stub 和 fetch stub，政策打開時也碰不到真的 `~/.claude`、鑰匙圈或網路。
   - 上游 `service.test.ts` 每個 `new ProviderUsageService` 都注入 `isUsageFetchingEnabled: () => true`，原斷言不變（同第 20 節的做法）。
   - App：`provider-usage/woowtech-usage-visibility.test.ts`（清單少了用量列、其他列順序不變，用量路由當成不認得，打開時恢復）；`components/woowtech-context-window-meter.test.tsx`（jsdom：主機仍宣告有用量，打開 tooltip 只有上下文、tokens 和費用，`listProviderUsage` 0 次）。
   - 守門 `woowtech/provider-usage.test.mjs`（daemon）和 `provider-usage-app.test.mjs`（App）：政策固定 false；service 的兩個 gate；daemon 建 service 不帶任何 override；server 出貨的程式裡，fetcher 只能由 service 建、service 只能由 daemon 建（AST 掃描，擋 import alias、namespace、re-export、dynamic import、`extends`）；沒有出貨的 server 程式寫到 `isUsageFetchingEnabled`；App 旗標固定 false、三個接點；App 出貨的程式裡，除了現有的擁有者，沒有檔案用到用量的元件、hook、`listProviderUsage`、`provider.usage.list.request` 或 `section: "usage"`。
-  - e2e：上游的 `provider-usage-settings.spec.ts`、`provider-usage-tooltip.spec.ts` 改成 `describe.skip`，`helpers/settings.ts` 改成期待沒有用量列；新的 `woowtech-provider-usage-hidden.spec.ts` 驗側欄沒有用量列、用量路由開到「連線」、tooltip 不送請求。Playwright 還沒跑。
+  - e2e：上游的 `provider-usage-settings.spec.ts`、`provider-usage-tooltip.spec.ts` 改成 `describe.skip`，`helpers/settings.ts` 改成期待沒有用量列；新的 `woowtech-provider-usage-hidden.spec.ts` 驗側欄沒有用量列、用量路由開到「連線」、tooltip 不送請求。CI #10（run 36642688479，含 Playwright）這 2 個都過。
+  - 桌面版 browser E2E 的設定輪播（`packages/desktop/e2e/settings-memory.electron.mjs`，上游檔）拿掉「Usage」，其他列照舊輪一遍。CI #10、#11 的 desktop-tests 就是在這裡等不到用量列，30 秒逾時。
+  - `provider-usage-app.test.mjs` 也掃 App 和桌面版的 e2e（`packages/app/e2e/`、`packages/desktop/e2e/` 的 JS／TS 與 agent-device 流程），不准再開用量頁：「Usage」字樣、`settings-host-section-usage`、`openSettingsHostSection`／`buildSettingsHostSectionRoute` 帶 `"usage"`、`section: "usage"`、`/settings/hosts/<id>/usage`。例外：`describe.skip` 裡的上游 spec；斷言不存在的 `expect`（`toHaveCount(0)`、`toBeHidden()`、`not.toBeVisible()`、`not.toBeAttached()`）；`woowtech-provider-usage-hidden.spec.ts` 開舊路由、確認落到「連線」的那一行。改 settings-memory 前這項紅（抓到第 28 行），改後綠。
 - 合併上游後：跑 `node --test woowtech/provider-usage.test.mjs woowtech/provider-usage-app.test.mjs`、server 的 `woowtech-provider-usage.test.ts` 與 `service.test.ts`、App 的 `woowtech-usage-visibility.test.ts` 與 `woowtech-context-window-meter.test.tsx`。
 
 ### 24. 商標與第三方授權（上架合規）
@@ -1754,6 +1757,31 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 整合輪驗收（2026-09-30，整合分支 `woowtech/integration-0930` 的 `917fa512b`，第 8、9、18、22、23 節）：main `fde226d05` 加上帳號用量關掉（`woowtech/usage-off-0929` 的 4 個 commit）、廠商徽章（`woowtech/vendor-badges-0929` 的 8 個 commit）、兩次合併和 CI 的兩個修正（`63f74cf62`、`917fa512b`），共 16 個 commit、98 檔（+3266／−482）。新增的 17 檔都是文字；刪掉的 15 檔是上游的 8 個蝴蝶和 favicon SVG、桌面版的 7 張編輯器 PNG；package.json 和 lock 沒有變更，版本都是 0.8.0；`.github` 只改了 `ci.yml` 一處（`63f74cf62`）。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0930-*`（`integ0930-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0930-*`，CI 的 log 在同一個 logs 目錄的 `ci-0930/`。
+  - 這一輪的內容：
+    - 帳號用量關掉（第 23 節）：設定的主機清單沒有「用量」，舊的用量路由開到「連線」，context 圓環的 tooltip 只有上下文；daemon 收到用量請求回空清單，不讀憑證和鑰匙圈，也不打額度 API。
+    - 廠商徽章（第 22 節）：`woowtech/vendor-marks.mjs` 的 48 家裡 35 家顯示文字徽章；桌面版「在…中開啟」的 7 張編輯器 PNG 刪掉，改畫徽章，Finder 是資料夾。
+    - 研究後改回上游圖示的 13 家（第 22 節「顯示上游標誌的廠商」；除了 Gajae Code，都是廠商或作者自己送進 ACP registry 的檔案）：工具從 `130705c02^` 原樣還原，13 個 `.svg` 跟 `130705c02^`、`fde226d05` 是同一個 blob。
+    - 深色主題 `claude` 改叫「陶土」，英文 Terracotta（第 22 節）；id、unistyles 名稱和顏色不變。
+    - 網頁版和桌面版的啟動畫面改畫 WOOW 標誌，上游的蝴蝶拿掉（第 8 節）。
+  - 本機（`integ0930-merge.md`，`8c19faee0`，`env -i`、只准連 loopback 的 sandbox）：`build:server` 通過；守門 161/161，照 CI 拿掉 OpenCC 那一項後 160/160；`write-vendor-badges.mjs --check` 通過；typecheck app、server、client、cli、desktop 各一次；App 34 檔 364/364、server 32 檔 422/422、desktop 3 檔 14/14；`format:check` 4739 檔、lint 53 檔 0 個 warning、0 個 error。`8c19faee0..917fa512b` 只改 `ci.yml`、桌面版的 e2e 腳本、README 和兩個守門，沒有 App、server、桌面版的執行程式，所以下面在 `8c19faee0` 上的裝置結果也適用 `917fa512b`（`integ0930-review.md`）。
+  - CI：
+    - [run 36642688479](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36642688479)（CI #10，`8c19faee0`，手動、勾 Playwright）：Playwright 四片 633 個通過、5 個失敗、3 個 flaky、28 個略過，四片都沒有 heap 用完。兩條分支加或改的 spec 都過：`woowtech-provider-usage-hidden.spec.ts` 2/2、`plugin-provider-icons.spec.ts`、`appearance-theme-picker.spec.ts` 4 個、`settings-host-page.spec.ts` 9 個；上游兩個用量 spec 的 5 個照設計略過。失敗和 flaky 的 8 個 spec 這一輪都沒改，協調資料夾的分類報告（`coord/reports/ci-0930-triage.md`，不在 repo 裡）判定是 main 既有或 flaky，見下面「還沒做的」。另外兩個 job 失敗，都是這一輪造成、已修：typecheck 的守門（淺層 checkout 讀不到 `130705c02^`）和 desktop-tests 的 browser E2E（設定輪播還在找「Usage」，30 秒逾時）。
+    - [run 36645249296](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36645249296)（CI #11，`63f74cf62`，不勾 Playwright）：驗守門的修正。typecheck 轉綠；desktop-tests 仍在設定輪播逾時。
+    - [run 36659321759](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36659321759)（CI #12，`917fa512b`，手動、不勾 Playwright）：成功。第 1 次 attempt 只有 cli-tests（shard 2/3）失敗，是已知的 `lifecycle.e2e.test.ts:368` race（「Unexpected end of JSON input」，CI #9 同一行同錯，`packages/cli` 這一輪沒改）；attempt 2 只重跑這個 job，11 分 18 秒通過。最後 18 個 job：12 個成功；Playwright 四片和 Windows 兩組照設計略過，不算通過；沒有失敗。typecheck 的「Check woowtech fork guards」64 秒成功；desktop-tests（ubuntu）的 browser E2E、Linux 打包（`editor-targets` 資料夾刪掉後第一次在 CI 打包）和三個打包 smoke 都成功。
+    - 兩個修正：`63f74cf62` 讓 typecheck job 的 checkout 抓完整歷史（第 18 節），`woowtech/workflows.test.mjs` 檢查這個設定；`917fa512b` 把「Usage」從桌面版的設定輪播拿掉（第 23 節），`provider-usage-app.test.mjs` 掃 App 和桌面版的 e2e，不准再開用量頁。
+  - 平台矩陣（逐項結果表在各步驟紀錄的最後，「未測」都寫了原因）：
+    - Mac 桌面版（`integ0930-desktop.md`，打包 `8c19faee0`，未簽章、`--dir`、arm64，用假 claude、假 ACP agent 和 dev 的 mock）：通過：包裡顯示徽章的廠商標誌路徑資料、Claude 標誌、蝴蝶、編輯器 PNG、`wrangler*.toml`、relay.paseo.sh 都是 0（審查再用每家所有的路徑元素掃一次，也是 0：`integ0930-review-pkg-allpaths.json`）；徽章在繁中的淺色和深色、English 的淺色和陶土都對，看了供應商列表、ACP 目錄、模型選單、歷史的 Agent 列和 Agent 分頁；還原的 13 家顯示上游圖示；外掛送來的 SVG 不畫，改畫徽章 D；主題選單是「陶土」／Terracotta，選了以後重開仍是它；設定沒有用量，`/usage` 開到「連線」，tooltip 沒有用量、App 送出 0 次用量請求，直接問 daemon 也回空清單；第一次啟動（淺色）和重開（陶土）的啟動畫面都是 WOOW；「在…中開啟」是 Cu、Vs、Z、As 的徽章和 Finder 的資料夾。
+    - Android 模擬器（`integ0930-android.md`，`8c19faee0`，沿用 Debug App，JS 從這個分支的 Metro 載入，daemon 用 mock）：通過：徽章的淺色、深色（供應商列表、ACP 目錄、模型選單、Agent 列、Agent header）；還原的 13 家；主題「陶土」／Terracotta，重開 App 後仍選著；設定沒有用量、tooltip 只有上下文、`/usage` 開到「連線」（繁中、English），daemon 沒有用量查詢（正向對照有記到）。啟動畫面、「在…中開啟」和打包掃描只有網頁、桌面版有，未測。
+    - iOS 模擬器（`integ0930-ios.md`，`8c19faee0`）：守門 161/161、Metro、兩個 daemon、外開攔截通過。11:57 內建碟剩 1.6 GiB，照停止規則停下，徽章、主題、用量都未測；協調者改排在 `woowtech/logo-compliance-0930` 的 iOS 實測一起看。
+    - Playwright 只在 CI 跑（上面的 CI #10），本機沒跑。
+  - 審查與合併前守門（`integ0930-review.md`、`integ0930-gate.md`）：審查的 blocker 0；守門 go。記錄下來的規則偏差：Android 步驟的 adb server 自動連上別人的模擬器約 3 分鐘，沒有對它下指令，之後自己關掉；審查用了一次 `pgrep -f`，兩個暫存 SVG 寫到 `/tmp` 後同一個指令就刪掉。都不影響這一輪的證據。
+  - 還沒做的：
+    - 標誌：上架前必做的合規（授權與第三方聲明頁、GitLab 徽章、GitHub 和 Codeberg 改純黑白、8 個檔案類型圖示換成通用圖示）在 `woowtech/logo-compliance-0930`；另外 14 家補齊條件後改回標誌是之後的版本，在 `woowtech/logo-restore-0930`。
+    - Playwright（CI #10，分類報告）：main 既有的失敗 2 個：`sidebar-help.spec.ts:80`（官網 `/` 轉到 `/en`，期待值不接受）、`viewed-agent-timelines.spec.ts:384`（fork 把錯誤改成「Host is not connected」，spec 還期待「Transport not connected」）。不是這一輪造成、原因不明或計時造成：`agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`（第 18 節的 run 2 就已失敗）、`agent-message-submission.spec.ts:1298`。重試才過的 flaky：`provider-settings-refresh.spec.ts:122`、`creation-old-daemon.spec.ts:95`、`sidebar-context-menu.spec.ts:17`。修法建議在分類報告；要一次綠的 Playwright，先修 main 既有的 2 個。
+    - 發現、跟這一輪無關：新工作區的專案選單搜尋欄在繁中顯示英文「Search projects」（main 既有）；從主機清單新增主機後，在外觀換主題又跳出「新增連線」sheet（同 F11 驗證輪）；autohand 的 registry 圖示在 12～16 px 認不出內容（廠商原檔）。
+    - 要實機或正式簽章才驗得到的：手機實機上的徽章（12～24 px 讀不讀得出縮寫）、主題選單和沒有用量的設定；用舊版 App 連新的 daemon 時 tooltip 沒有紅字、用量頁只顯示「No usage data」；瀏覽器裡的網頁版啟動畫面；桌面版 Developer ID 簽章與公證後的正式版、Android 正式簽章版、TestFlight。徽章、主題、用量和啟動畫面的實機項目列在「接下來」。
+  - 「接下來」的兩項 Playwright 合成一項、照 CI #10 改寫，第 18 節「仍待確認」的 Playwright 完整執行也照 CI #10 改寫；「接下來」第 23 節那一項的 Playwright 已拿掉。
 - 帳號用量關掉（2026-09-29，分支 `woowtech/usage-off-0929` 的 `8dfa03bd2`，第 23 節）：步驟紀錄在 `~/.local/share/woowtech-smart/logs/usage-off.md`，log 在同目錄的 `usage-off-*`。
   - 先紅後綠：實作前，server 的 fork 測試 2 紅 4 綠（OFF 基線的 service 和 RPC 都拿到 stub 與 Claude 的用量，fetcher、鑰匙圈 stub 和 fetch stub 都被叫到）；App 的 meter 測試 tooltip 多出「ClaudeMax 20xSession42%」，visibility 測試還沒有模組；兩個守門 13 個紅 5 個。實作後 server 32 檔 421/422、App 4 檔 47/47、守門 13/13；`format:check`、改到的檔的 lint、server 和 App 的 typecheck 都通過。
   - server 唯一的紅是 `omp/agent.diagnostic.test.ts`：它斷言診斷輸出不含 `.pi/agent`，這台 Mac 的 PATH 有 `~/.pi/agent/bin`。9/25 的 main 一樣紅，跟這次改動無關；PATH 拿掉那一段後 5/5。
@@ -2090,12 +2118,11 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
-- CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
-- 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
+- Playwright：2026-09-30 在整合分支勾選跑過一次完整執行（CI #10，見「驗證紀錄」的整合輪驗收），5 個失敗、3 個 flaky 都不是那一輪的改動造成。先修 main 既有的 `sidebar-help.spec.ts:80`、`viewed-agent-timelines.spec.ts:384`，再決定 `agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`、`agent-message-submission.spec.ts:1298` 怎麼處理（修法建議在 `coord/reports/ci-0930-triage.md`），之後再勾一次 Playwright，要整次綠。
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
 - 廠商的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表和新增 ACP 供應商的目錄、側欄的 Agent 列、模型選單、匯入工作階段、排程、終端機設定檔這些 12～24 px 的地方都讀得出縮寫（C、Cx、Gh、Oc、Pi、Om、Mm 等），桌面版「在…中開啟」選單的 VS Code、Cursor 等是徽章、Finder 是資料夾；外觀設定的主題選單顯示「陶土」／Terracotta，原本選了這個主題的裝置更新後仍是同一個主題。
 - 網頁版和桌面版的啟動畫面（第 8 節）要在實機上看：淺色和深色主題都是 WOOW 標誌在閃，不是蝴蝶。
-- 帳號用量關掉（第 23 節）要在實機看：桌面版、iOS、Android 的設定主機清單都沒有「用量」，其他列照舊；舊的 `/settings/hosts/<id>/usage` 連結開到「連線」；context 圓環的 tooltip 只有上下文、tokens 和費用，沒有「Loading plan usage…」或方案卡；用舊版 App 連新的 daemon，tooltip 不出現紅字，用量頁只顯示「No usage data」。Playwright 的 `woowtech-provider-usage-hidden.spec.ts` 要在手動勾選 Playwright 的 CI 跑一次。
+- 帳號用量關掉（第 23 節）要在實機看：桌面版、iOS、Android 的設定主機清單都沒有「用量」，其他列照舊；舊的 `/settings/hosts/<id>/usage` 連結開到「連線」；context 圓環的 tooltip 只有上下文、tokens 和費用，沒有「Loading plan usage…」或方案卡；用舊版 App 連新的 daemon，tooltip 不出現紅字，用量頁只顯示「No usage data」。
 - 商標與第三方授權頁（第 24 節）要在實機看：iOS、Android、桌面版的淺色和深色主題，繁中和英文各一次。設定列表（手機）或側欄（桌面版）有這一列、點進去標題對、返回鍵回設定；五段都在，長的聲明和 MIT 條文完整換行、不被截斷，文字選得起來；側欄的英文列名放得下。GitHub、Codeberg 的標誌在工作區的 PR 按鈕、PR 分頁、「在…中開啟」選單、工作區卡片、附件列各種狀態下都是純黑（淺色主題）或純白（深色主題），GitLab 的遠端顯示 Gl 徽章；.go、.swift、.vue 等檔案在檔案總管是通用圖示。
 - 上架前（第 24 節）：商店截圖和宣傳圖不含第三方標誌；決定開放原始碼授權頁怎麼做；新增專案的 lucide GitHub 圖示要不要換。
 - 商標（TIPO）與 D-U-N-S。
