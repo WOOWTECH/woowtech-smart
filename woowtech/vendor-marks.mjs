@@ -110,6 +110,15 @@ export const VENDOR_MARKS = {
     acpIcons: [],
     logoPaths: ["M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785"],
   },
+  // The git forge. GitLab's trademark guidelines permit its name, not its logo, so the owner chose
+  // the badge on 2026-09-30 (README section 24). The other forges keep their marks.
+  gitlab: {
+    show: "badge",
+    logo: "GitLab's tanuki",
+    files: [`${icons}/gitlab-icon.tsx`],
+    acpIcons: [],
+    logoPaths: ["M23.6004 9.5927l-.0337-.0862L20.3 .9814a.851.851 0 0 0-.3362-.405"],
+  },
   antigravity: {
     show: "badge",
     files: [`${editors}/antigravity.png`],

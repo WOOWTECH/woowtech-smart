@@ -40,6 +40,7 @@ import {
   Blocks,
   PanelsTopLeft,
   ChevronRight,
+  Scale,
 } from "lucide-react-native";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
@@ -120,6 +121,7 @@ import { visibleHostSections } from "@/provider-usage/woowtech-usage-visibility"
 import { useInstalledPlugins } from "@/plugins/registry";
 import { HostPluginsPage } from "@/screens/settings/plugins-page";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
+import { renderWoowtechSettingsSection } from "@/screens/settings/woowtech-third-party-notices-section";
 import ProjectsScreen from "@/screens/projects-screen";
 import ProjectSettingsScreen from "@/screens/project-settings-screen";
 import { SETTINGS_DESKTOP_SIDEBAR_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
@@ -181,6 +183,8 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   },
   { id: "diagnostics", labelKey: "settings.sections.diagnostics", icon: Stethoscope },
   { id: "about", labelKey: "settings.sections.about", icon: Info },
+  // woowtech smart: the third-party marks the app shows, on every platform (README §24).
+  { id: "notices", labelKey: "woowtech.thirdPartyNotices.title", icon: Scale },
 ];
 
 interface HostSectionItem {
@@ -1568,6 +1572,9 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
                 isDesktopApp={isDesktopApp}
               />
             );
+          // woowtech smart: the fork's own sections, such as notices (woowtech/README.md §24).
+          default:
+            return renderWoowtechSettingsSection(view.section);
         }
       }
       return null;

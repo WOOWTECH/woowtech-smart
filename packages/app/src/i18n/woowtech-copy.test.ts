@@ -120,7 +120,8 @@ describe("woowtech smart's own text", () => {
           key.startsWith("message.") ||
           key.startsWith("workspaceRecovery.") ||
           key.startsWith("claudeSdk.") ||
-          key.startsWith("claudeAuth.");
+          key.startsWith("claudeAuth.") ||
+          key.startsWith("thirdPartyNotices.");
         if (traditionalChineseOnly && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });

@@ -3,9 +3,10 @@
 // terms let a product name Claude Code in plain text, but using its logo takes written
 // permission; the owner chose the Claude badge on 2026-09-27 and the same badge for every vendor
 // on 2026-09-29. Which vendor shows its badge and which its upstream logo (after the owner clears
-// it) is data in woowtech/vendor-marks.mjs; the checks here follow it. The git forges (GitHub,
-// GitLab, Gitea, Forgejo, Codeberg) keep their icons, and no feature is named after Claude: the
-// Claude theme is called 陶土 (Terracotta).
+// it) is data in woowtech/vendor-marks.mjs; the checks here follow it. GitLab's forge mark is in
+// that data too and shows its badge; the other git forges (GitHub, Gitea, Forgejo, Codeberg) keep
+// their marks (section 24, woowtech/third-party-notices.test.mjs). No feature is named after
+// Claude: the Claude theme is called 陶土 (Terracotta).
 //
 // An upstream merge can bring a logo back as a vendored ACP icon, a copied SVG, a new icon
 // component, a bundled image or a new place that renders a host's SVG, so this scans what ships
@@ -54,16 +55,18 @@ const ifClaudeShowsItsBadge = {
 // files are checked on their own against vendor-marks.mjs.
 const ALLOWED_DRAWINGS = {
   "packages/app/src/components/icons/vendor-badge.ts": "the badge's own letters",
-  "packages/app/src/components/icons/github-icon.tsx": "git forge icon, kept by the owner",
-  "packages/app/src/components/icons/gitlab-icon.tsx": "git forge icon, kept by the owner",
-  "packages/app/src/components/icons/gitea-icon.tsx": "git forge icon, kept by the owner",
-  "packages/app/src/components/icons/forgejo-icon.tsx": "git forge icon, kept by the owner",
-  "packages/app/src/components/icons/codeberg-icon.tsx": "git forge icon, kept by the owner",
+  "packages/app/src/components/icons/github-icon.tsx":
+    "git forge mark, kept by the owner, in pure black or white (section 24)",
+  "packages/app/src/components/icons/gitea-icon.tsx": "git forge mark, kept by the owner",
+  "packages/app/src/components/icons/forgejo-icon.tsx": "git forge mark, kept by the owner",
+  "packages/app/src/components/icons/codeberg-icon.tsx":
+    "git forge mark, kept by the owner, in pure black or white (section 24)",
   "packages/app/src/components/icons/paseo-logo.tsx": "the WOOW logo, our own mark",
   "packages/app/src/components/icons/manual-status-icon.tsx": "a plain gear for pipeline status",
   "packages/app/src/components/sidebar/workspace-meta-row/check-indicator.tsx":
     "check and cross marks",
-  "packages/app/src/components/material-file-icons.ts": "file-type icons, pending owner decision",
+  "packages/app/src/components/material-file-icons.ts":
+    "file-type icons the owner kept, each on the notices page or generic (section 24)",
   "packages/app/src/components/markdown/fence/mermaid/runtime/html.gen.ts":
     "the generated Mermaid runtime's diagram shapes",
   "packages/app/src/terminal/native-renderer/terminal-custom-glyph.ts": "terminal box glyphs",

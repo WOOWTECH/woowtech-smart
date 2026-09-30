@@ -1109,7 +1109,7 @@ node --test woowtech/*.test.mjs
 
 ### 22. 廠商標誌改用文字徽章（品牌合規）
 
-- 原因：Anthropic 的條款不准把它的名稱或標誌當成產品自己功能的名稱，使用標誌也要書面許可。owner 在 2026-09-27 先把 Claude 標誌換成文字徽章，2026-09-29 決定所有廠商都照這個做法，不逐家做法律審查。git 平台（GitHub、GitLab、Gitea、Forgejo、Codeberg）的圖示保留。owner 之後要逐家查能不能用（上游 Paseo 都用標誌），查過可以用的廠商會改回上游的標誌，做法見下面「改回上游標誌」。
+- 原因：Anthropic 的條款不准把它的名稱或標誌當成產品自己功能的名稱，使用標誌也要書面許可。owner 在 2026-09-27 先把 Claude 標誌換成文字徽章，2026-09-29 決定所有廠商都照這個做法，不逐家做法律審查。git 平台（GitHub、GitLab、Gitea、Forgejo、Codeberg）的圖示保留（2026-09-30 起 GitLab 改用徽章，第 24 節）。owner 之後要逐家查能不能用（上游 Paseo 都用標誌），查過可以用的廠商會改回上游的標誌，做法見下面「改回上游標誌」。
 - 徽章：圓角方框裡是廠商名稱的縮寫，一個大寫字母，或大寫加一個小寫（C、Cx、Gh、Ge），線條用呼叫端傳進來的顏色（主題的前景色或次要前景色）。沒有廠商的標誌，也沒有廠商的代表色（Claude 的 #D97757 這類）。
   - 字母是路徑畫的單線字形，不用 `<text>`：iOS、Android 和網頁不必靠字型，畫出來都一樣。viewBox 24 裡，一個字母高 10；兩個字母高 8.5，放不進方框時再縮，但至少 7（12 px 時 3.5 px），線寬至少 1.8。
   - 廠商名稱照舊用文字顯示在徽章旁邊，所以縮寫可以重複；內建 7 家在模型選單裡並列，縮寫都不同。
@@ -1152,8 +1152,8 @@ node --test woowtech/*.test.mjs
   - `zh-TW.ts` 不用重新產生：產生器照舊留英文（`zh-tw-untranslated.mjs` 的 `KEEP_ENGLISH` 把這個 key 從「主題名稱」移到「載入時替換」那組），顯示時換成「陶土」。
   - id、unistyles 名稱 `darkClaude` 和顏色（強調色 #d97757、代表色 #D97757）都不變，已經選了這個主題的人設定照舊。
 - 刻意沒改的：
-  - git 平台的圖示（owner 決定保留）。
-  - 檔案總管的檔案類型圖示（`components/material-file-icons.ts`，material-icon-theme 的程式語言和工具圖形）：等 owner 決定，守門的白名單理由寫「file-type icons, pending owner decision」。
+  - git 平台的圖示（owner 決定保留；2026-09-30 起 GitLab 改用徽章，GitHub 和 Codeberg 只畫純黑或純白，第 24 節）。
+  - 檔案總管的檔案類型圖示（`components/material-file-icons.ts`，material-icon-theme 的程式語言和工具圖形）：owner 在 2026-09-30 決定換掉 8 個，第一階段審查依所有者原文再換掉 Astro、Gradle、GraphQL、Lua 4 個，其餘保留，見第 24 節。
   - `packages/app/assets/images/editor-apps/*.png`：上游放在 App 套件裡的編輯器標誌，App 沒有任何地方引用，不會打包；上游官網引用其中的 `finder.png`。
   - 上游官網 `packages/website`（我們不部署，第 18 節）。
 - 測試（App 和桌面版的測試不看哪一家顯示什麼，改回上游標誌時不用改測試；照資料檢查的都在守門）：
@@ -1168,7 +1168,7 @@ node --test woowtech/*.test.mjs
     2. Claude 顯示徽章時，Claude 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`），兩個 `.svg` 和 ACP 那一筆等於 Claude 的徽章。
     3. 每個廠商圖示檔都跟資料一致：顯示徽章的是徽章（元件、`.svg`、ACP 項目），PNG 不在；顯示上游標誌的跟 `UPSTREAM_REF` 逐位元組相同。徽章檔不准寫死顏色。
     4. 上游出貨的每個廠商圖示（vendored `.svg`、桌面版 PNG、ACP 項目）都要在資料裡，而且只屬於一家。
-    5. 只有白名單的檔案可以有 SVG 路徑資料：徽章的字形、5 個 git 平台圖示、WOOW 標誌、齒輪、勾和叉、檔案類型圖示、Mermaid、終端機字形，每一項寫了理由；顯示上游標誌的廠商的檔案自動放行。白名單的檔案不再畫圖時也會失敗。
+    5. 只有白名單的檔案可以有 SVG 路徑資料：徽章的字形、4 個 git 平台標誌（GitLab 改成徽章後由資料檢查）、WOOW 標誌、齒輪、勾和叉、檔案類型圖示、Mermaid、終端機字形，每一項寫了理由；顯示上游標誌的廠商的檔案自動放行。白名單的檔案不再畫圖時也會失敗。
     6. 出貨的點陣圖只能是我們自己的圖示（App、favicon、PWA、桌面版）和資料放行的廠商標誌；`editor-apps` 的編輯器標誌不准被引用。
     7. 只有白名單的地方可以渲染 SVG 文件（`SvgXml`、`SvgCss`、`SvgIcon` 等）：provider 圖示、ACP 目錄、檔案類型圖示、使用者自己的專案圖示、配對 QR Code。上游 main 的 `usage/source-icon.tsx`（用量來源的 SVG）這類新地方合併進來就會失敗，要先決定怎麼換成徽章。
     8. 主機替已知 provider 送 SVG 時解析結果不是那份 SVG，`provider-icons.ts` 在主機 SVG 的位置畫徽章。
@@ -1210,6 +1210,115 @@ node --test woowtech/*.test.mjs
   - 桌面版 browser E2E 的設定輪播（`packages/desktop/e2e/settings-memory.electron.mjs`，上游檔）拿掉「Usage」，其他列照舊輪一遍。CI #10、#11 的 desktop-tests 就是在這裡等不到用量列，30 秒逾時。
   - `provider-usage-app.test.mjs` 也掃 App 和桌面版的 e2e（`packages/app/e2e/`、`packages/desktop/e2e/` 的 JS／TS 與 agent-device 流程），不准再開用量頁：「Usage」字樣、`settings-host-section-usage`、`openSettingsHostSection`／`buildSettingsHostSectionRoute` 帶 `"usage"`、`section: "usage"`、`/settings/hosts/<id>/usage`。例外：`describe.skip` 裡的上游 spec；斷言不存在的 `expect`（`toHaveCount(0)`、`toBeHidden()`、`not.toBeVisible()`、`not.toBeAttached()`）；`woowtech-provider-usage-hidden.spec.ts` 開舊路由、確認落到「連線」的那一行。改 settings-memory 前這項紅（抓到第 28 行），改後綠。
 - 合併上游後：跑 `node --test woowtech/provider-usage.test.mjs woowtech/provider-usage-app.test.mjs`、server 的 `woowtech-provider-usage.test.ts` 與 `service.test.ts`、App 的 `woowtech-usage-visibility.test.ts` 與 `woowtech-context-window-meter.test.tsx`。
+
+### 24. 商標與第三方授權（上架合規）
+
+- 依據：協調資料夾的 `coord/reports/logo-usage-research.md`（逐家研究，不在 repo 裡，不是法律意見）。
+- owner 的決定（2026-09-30）：
+  - 06:5x 同意協調者的四項建議：
+    1. 規則允許使用標誌的 14 家（codex、opencode、cursor、cline、kilo、gemini、antigravity（含 agy）、grok、mistral-vibe、junie、zed、webstorm、android-studio、vscode），等 App 符合各家的條件後改回標誌。
+    2. GitLab 的 forge 標誌改成文字徽章。
+    3. 檔案類型圖示 go、swift、terraform、hcl、vue、sass、dart、elixir 改成通用檔案圖示。
+    4. 只去問 GitHub（Copilot）、Pi 和 OMP：協調者擬稿，owner 寄出。對方同意之前維持徽章。
+  - 07:0x 補充：「同意前先用徽章，後面可以改版更新再優化，目前以可以先上架為目的」。所以分兩階段：
+    - 第一階段是上架前一定要有的，單獨先出：第 2、3 項和授權頁（本節，分支 `woowtech/logo-compliance-0930`）。
+    - 第二階段是之後的改版，不能擋第一階段：第 1 項（`woowtech/logo-restore-0930`）。第 4 項不改程式。
+- 設定的「商標與第三方授權」頁（英文 Trademarks and third-party notices）：
+  - 位置：設定的 App 區段，排在「關於」後面，網址 `/settings/notices`。桌面版在側欄，手機在設定首頁的列表，點進去有返回鍵。iOS、Android、網頁和桌面版是同一份程式。
+  - 內容依序：
+    1. 商標：渥屋智能跟列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書；名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。
+    2. Agent：顯示自己標誌的廠商，就是 `vendor-marks.mjs` 裡 `show: "upstream"` 的（目前是 13 家 ACP agent），列名稱和所有者。
+    3. Git 平台：GitHub、Gitea、Forgejo、Codeberg。Forgejo 附 CC BY-SA 4.0 署名「Forgejo logo by Caesar Schinas」（照原文），另一行說明改成單色（`changes: "singleColor"`，繁中「修改：重新繪製成單色」）；Codeberg 附它的商標聲明和 CC0；Gitea 的 logo 在它 MIT 授權的 repo 裡，列進 MIT。GitLab 是徽章，不列。
+    4. 檔案類型圖示：第一列說明改作（material-icon-theme 重新繪製、渥屋智能調淡顏色；改作自 CC BY-SA 標誌的圖示以同一授權分享），接著 24 個標誌（25 個圖示，React 的 .jsx、.tsx 共用一個），每個都有所有者。授權要求署名的照原文附上署名、授權連結和來源：Rust（CC BY 4.0）、PHP、R、Zig、SVG（CC BY-SA 4.0）、Ruby（CC BY-SA 2.5）、HTML5（「HTML5 Logo by W3C」，CC BY 3.0）、Nix（CC BY 4.0，NixOS 指定的 TASL 格式）。Python 附 PSF 要求放在法律聲明頁的句子；Kotlin、Apache Groovy 附各自的商標聲明。Haskell、Markdown 的標誌屬公眾領域。
+    5. MIT 授權：material-icon-theme（Copyright (c) 2025 Material Extensions）、JS、TOML、Gitea 標誌的版權行，加上 MIT 授權全文（MIT 要求隨附）。
+  - 名稱、所有者、署名和授權條文照原文，不翻譯；標籤（所有者、授權、來源、修改）、段落標題和說明有繁中和英文（`woowtech.thirdPartyNotices`，其他語言顯示英文）。不是任何所有者原文的字也翻譯：公眾領域（`LICENSES.publicDomain` 用 `nameKey`，不是授權名稱）、渥屋智能改了什麼（`changes`）、MIT 段作品標題裡的「標誌」（`logo: true`，繁中「JS 標誌」）。文字可以選取，方便複製授權網址。
+  - 署名的核對：每一項都讀過來源頁原文（2026-09-30），存在協調資料夾外的 `logs/logo-s1-sources/`。研究沒列、原文卻要求署名的有 4 項，已經補上：Nix（CC BY 4.0）、SVG（W3C 的 CC BY-SA 4.0，署名「W3C SVG Logo」）、JS logo 和 TOML logo（MIT）。
+  - 檔案：
+    - 資料 `screens/settings/woowtech-third-party-notices.ts`：這頁唯一的資料來源（`VENDOR_MARK_NOTICES`、`FORGE_MARK_NOTICES`、`FILE_TYPE_MARK_NOTICES`、`GENERIC_FILE_ICONS`、`MIT_NOTICES`、`MIT_LICENSE_TEXT`），和組出整頁文字的 `buildThirdPartyNotices(t)`。
+    - 畫面 `screens/settings/woowtech-third-party-notices-section.tsx`：跟其他設定頁一樣用 `SettingsSection` 和卡片；每段的用途放在標題旁的 info 提示，改作說明和商標聲明是卡片裡的列，一定看得到。
+    - 上游檔的接點（註解 `woowtech smart:`）：`utils/host-routes.ts` 的 `SETTINGS_SECTION_SLUGS` 加 `"notices"`；`screens/settings-screen.tsx` 的 `SIDEBAR_SECTION_ITEMS` 加一列（lucide 的 `Scale`），區段的 switch 加 `default`，交給 fork 的 `renderWoowtechSettingsSection`（在 `woowtech-third-party-notices-section.tsx`）。用 `default` 而不是再加一個 `case`，是因為那個函式的 complexity 已經是 lint 的上限 20。
+  - 新增一筆（例如第二階段把 codex 改回標誌）：
+    1. `woowtech/vendor-marks.mjs` 把它改成 `show: "upstream"`，跑 `node woowtech/tools/write-vendor-badges.mjs`。
+    2. `node --test woowtech/third-party-notices.test.mjs` 會紅，列出沒有條目的廠商。
+    3. 在 `VENDOR_MARK_NOTICES` 加一筆，key 跟 `vendor-marks.mjs` 相同：`name`（App 在標誌旁顯示的名稱）、`owner`，加上那家規則要求的 `credit`（照原文，例如 OpenAI 要承認標誌屬於 OpenAI、JetBrains 的「X and the X logo are trademarks of JetBrains s.r.o.」、Google 的法律聲明）；有授權時加 `license` 和 `source`，CC BY 系列三者都要有，守門會檢查。
+    4. 守門和 `woowtech-third-party-notices.test.ts` 綠了就好，畫面不用改。
+    - forge 或檔案類型圖示有增減時一樣：守門從 forge 的 view 模組和 `material-file-icons.ts` 算出會顯示的標誌，新標誌要有條目，通用圖形要列進 `GENERIC_FILE_ICONS`。
+    - App 不用 lucide 的品牌圖示（`Github`、`Gitlab`、`Figma` 等 18 個，任何別名，例如 `GithubIcon`、`LucideGitlab`）：lucide 的是自己重畫的線條版，而且跟著呼叫端的顏色（多半是灰），不是各家允許的官方圖。要畫 forge 標誌，用 `components/icons` 的元件，放在旁邊有平台名稱、不會變半透明的地方；其他地方用通用圖示。
+- GitLab（研究 §2.5）：GitLab 的商標指引只允許散佈 GitLab CE 時使用 logo，名稱可以用。
+  - `vendor-marks.mjs` 加了 `gitlab`（`show: "badge"`、tanuki 的路徑資料），工具把 `components/icons/gitlab-icon.tsx` 寫成 `createVendorBadgeIcon("gitlab")`，縮寫 Gl（`vendor-badge.ts`）。第 22 節的守門照資料一併檢查它，tanuki 的路徑資料不再出貨。
+  - `git/forges/gitlab.view.tsx` 的 `brandColor` 改成 `null`：徽章跟著呼叫端的顏色，不用 GitLab 的橘色（第 22 節：徽章沒有廠商的代表色）。
+  - 「Open on GitLab」、MR 這些文字不變。
+- GitHub、Codeberg（研究 §2.5）：GitHub 只允許黑、白（少數情況灰、綠），Codeberg 不准改色。
+  - fork 檔 `components/icons/woowtech-monochrome-mark.tsx` 的 `createMonochromeMarkIcon`：不管呼叫端傳什麼顏色（次要前景色、前景色或品牌色，隨 hover、選取、分頁狀態變），淺色主題畫純黑 #000000、深色主題畫純白 #FFFFFF，看 `theme.colorScheme` 決定，外掛主題也一樣。
+  - `github-icon.tsx`、`codeberg-icon.tsx` 改用它，路徑資料不變；`codeberg.view.tsx` 的 `brandColor`（#2185D0）改成 `null`。
+  - PR 動作（建立、檢視、合併 PR 和自動合併；分割按鈕、下拉選單和指令中心用同一個圖示）遇到 GitHub、Codeberg 時畫通用的 PR 圖示（lucide `GitPullRequest`，次要前景色），第一階段審查（2026-09-30）時改的：
+    - 原因：這些動作停用或無法使用時整列變半透明，分割按鈕停用 `opacity: 0.6`（`git/actions-split-button.tsx`），選單項停用 0.5、無法使用 0.72（`components/ui/menu/menu-item.tsx`）。淺色主題的純黑會變成約 #808080、#666666、#474747 的灰，深色主題的純白也一樣變灰；GitHub 只在少數情況允許灰色，Codeberg 不准染色。這些動作的文字（Create PR、Merge PR）也沒有平台名稱。
+    - 做法：`createMonochromeMarkIcon` 登記它做出的元件（`isMonochromeMarkIcon`）；fork 檔 `git/woowtech-forge-marks.ts` 的 `dimmableForgeIconKind` 遇到這種標誌就回傳沒有平台註冊的 icon kind，`ForgeBrandIcon` 對沒註冊的 kind 畫通用 PR 圖示。上游檔只改 `git/use-actions.tsx` 的 `renderForgePrIcon` 一行和一個 import。以後有新的純黑白標誌也自動適用。
+    - 其他畫 GitHub、Codeberg 標誌的地方都不會變半透明：「Open on GitHub」這類選單項、「用…開啟」主按鈕（進行中改顯示轉圈）、hover card 的檢查列、輸入框的附加選單、檔案總管的 PR 分頁。
+  - Gitea、Forgejo 照上游：一般是次要前景色，PR 動作按鈕上是 Gitea 綠、Forgejo 橘。
+- 檔案類型圖示（研究 §2.4）：`material-file-icons.ts` 拿掉 go、swift、terraform、hcl、vue、sass、dart、elixir 八個 SVG 和它們的副檔名對應（.go、.swift、.tf、.hcl、.vue、.scss、.dart、.ex、.exs），這些檔案顯示通用的 `_default`。原因：Go、Swift、HashiCorp（Terraform、HCL）要許可，Vue、Sass 不准商用，Dart、Elixir 不准改色（`file-icon-svg.ts` 會降飽和）。
+  - 第一階段審查（2026-09-30）照所有者的原文，另外拿掉 astro、gradle、graphql、lua 四個 SVG 和副檔名對應（.astro、.gradle、.graphql、.gql、.lua）。它們符合研究自己的 B 定義（要事先許可，或明文禁止這種用法，包括禁止改色），跟 Dart、Elixir 同一個理由：
+    - Astro（press 頁）：「Don't modify the Astro logo or change its colors」。
+    - Gradle（商標使用指引）：「You may not use any of the Trademarks unless you have a written agreement with Gradle」、「A logo should not be displayed with color variations」。
+    - Lua（lua.org/images）：允許任何用途，但「The only modification you can make is to adapt the orbiting text」；material 的圖示是重畫、改色的版本。
+    - GraphQL（brand 頁）：商標與 logo 受 LF Projects 商標政策約束，「any other commercial purpose」要先許可；研究 §2.2 的 goose 依同一份政策判 B。
+    - 原文存在協調資料夾外的 `logs/logo-s1-sources/`（gradle-tm-guidelines、astro-press、lua-images、graphql-brand）。研究把這四個判成 A 或 C，owner 06:5x 的決定是依研究的判定做的，沒看過這些原文；這裡依 owner 07:0x「同意前先用徽章」的原則先換成通用圖示，只降低風險。要改回，等所有者同意，或在第二階段換成不改色、不改形的官方檔（Gradle 仍要書面同意）。
+  - 留下 42 個：25 個畫標誌的圖示（24 個標誌）列在授權頁，17 個通用圖形（含 `_default`）列在 `GENERIC_FILE_ICONS`。
+- 上架規則：商店截圖、商店的宣傳圖、官網和其他行銷素材，不能出現第三方的標誌（廠商標誌、Git 平台標誌、檔案類型圖示）。
+  - 原因：Google 要求含 Android 或 Google 商標的行銷素材先送審（研究 §2.3、§3.4 第 6 點），多數廠商不准把標誌用在行銷或周邊，例如 Kotlin、Astro、LF Projects（goose、GraphQL）、Kimi、Rust。
+  - 做法：截圖避開檔案總管的語言圖示、設定的供應商列表、新增 ACP 供應商的目錄、Git 平台的按鈕和這一頁；需要時用只有徽章和通用圖示的示範專案拍。第二階段改回標誌之後同樣適用。
+- 守門 `woowtech/third-party-notices.test.mjs`（11 項）：
+  1. 顯示自己標誌的 Agent（`vendor-marks.mjs` 的 `show: "upstream"`）都有條目，沒有多的。
+  2. 畫自己標誌的 forge（view 模組的圖示不是徽章）都有條目，沒有多的。
+  3. App 不畫 lucide 的品牌圖示。名單和別名從 lucide 自己的型別宣告讀（標成 deprecated 的「Brand icons」，0.546.0 有 18 個，各有 3 到 6 個匯出名稱）；擋具名匯入和 re-export（含 `as` 改名）、整包匯入或 `icons` 物件的成員、直接匯入圖示檔。
+  4. CC BY 系列的條目都有署名、授權連結和來源；每個條目都有名稱和所有者。
+  5. 畫標誌的檔案類型圖示都有條目，通用圖形列在 `GENERIC_FILE_ICONS`，沒有多的或重複的。
+  6. MIT 的版權行和條文跟 `material-icon-theme/LICENSE` 一致（升級套件改了年份也會紅）。
+  7. 設定從 `/settings/notices` 開這頁：slug、側欄那一列（沒有限平台）、switch 的 case、畫面用 `buildThirdPartyNotices(t)`。
+  8. GitLab 是徽章、沒有 brandColor，tanuki 的路徑資料不出貨。
+  9. GitHub、Codeberg 用 `createMonochromeMarkIcon`、不收顏色，view 沒有 brandColor。
+  10. PR 動作的圖示經過 `dimmableForgeIconKind`（`use-actions.tsx` 的 `renderForgePrIcon`，所有 PR 動作共用它），fork 檔依標誌本身（`isMonochromeMarkIcon`）判斷。
+  11. 十二個換掉的檔案類型標誌不在表裡、副檔名不對應、路徑資料不出貨，表裡是 42 個。
+  - 第 22 節的 `claude-badge.test.mjs`：`ALLOWED_DRAWINGS` 拿掉 `gitlab-icon.tsx`，GitHub、Codeberg 和檔案類型圖示的理由改成這一節的決定。
+  - 變異測試（2026-09-30，在 `dcb7de72d` 上）：每次只改一處，跑 `third-party-notices.test.mjs` 和 `claude-badge.test.mjs`（共 22 項），看它變紅，再還原，每次還原後樹都是乾淨的：
+    - `VENDOR_MARK_NOTICES` 少了 agoragentic：1 項（第 1 項）。
+    - `FORGE_MARK_NOTICES` 多了 GitLab：1 項（第 2 項）。
+    - App 的檔案 import lucide 的 `Gitlab`：1 項（第 3 項）。
+    - Rust 那一筆少了 `source`：1 項（第 4 項）。
+    - `GENERIC_FILE_ICONS` 少了 lock：1 項（第 5 項）。
+    - MIT 版權行的年份改成 2024：1 項（第 6 項）。
+    - 設定的這一列加上 `desktopOnly: true`：1 項（第 7 項）。
+    - 放回上游的 GitLab 元件（tanuki）：4 項（第 22 節的標誌路徑和圖示檔，這一節的第 2、8 項）。
+    - 放回上游的 GitHub 元件（照呼叫端的顏色畫）：1 項（第 9 項）。
+    - 放回上游的 `material-file-icons.ts`（八個標誌回來）：2 項（第 5、10 項）。
+  - vitest 的對照：`createMonochromeMarkIcon` 改成把呼叫端的顏色傳下去時，`woowtech-forge-marks.test.ts` 的 GitHub、Codeberg 兩項照斷言失敗（呼叫端的 #666666 畫到了標誌上）；還原後 17/17 通過。
+- 第一階段審查的修正（2026-09-30）：審查找到四個 blocker，都已修正，每個都先寫測試、看它失敗再改：
+  1. 新增專案的「從 GitHub 複製專案」和 GitHub 儲存庫列原本用 lucide 的 `Github` 線條圖示，畫成次要前景色（灰），這一列停用時還會變半透明；授權頁卻寫 GitHub 只用黑白。現在兩處都用通用的 `FolderGit2`（`components/add-project-flow.tsx`，上游檔），列的文字仍寫 GitHub。守門第 3 項改成不准任何 lucide 品牌圖示。
+  2. Astro、Gradle、GraphQL、Lua 換成通用圖示，見上面「檔案類型圖示」。
+  3. PR 動作遇到 GitHub、Codeberg 畫通用 PR 圖示，見上面「GitHub、Codeberg」。
+  4. 繁中頁面原本有 fork 自己寫、沒有繁中的英文：Haskell、Markdown 的「授權：Public domain」，Forgejo 署名後面的「, redrawn in a single color」。現在是「授權：公眾領域」和另一行「修改：重新繪製成單色」，MIT 段的標題也改成「JS 標誌」這種寫法。
+  - 變異測試（在修正後的工作樹上，`logs/logo-s1-fix-mutate.sh`）：每次只改一處，跑 `third-party-notices.test.mjs` 和 `claude-badge.test.mjs`（共 23 項），每次都變紅，還原後檔案的 sha256 相同，最後 23/23：
+    - 新增專案放回 lucide `Github`：第 3 項。
+    - 匯入別名 `GithubIcon`：第 3 項。
+    - 匯入別名 `LucideGitlab` 並改名：第 3 項。
+    - 整包匯入的成員 `LucideIcons.Github`（`plugins/icons.ts`）：第 3 項。
+    - 直接匯入 `lucide-react-native/dist/esm/icons/gitlab`：第 3 項。
+    - `renderForgePrIcon` 改回上游那一行：第 10 項。
+    - fork 檔不再問標誌是不是純黑白：第 10 項。
+    - 放回 Lua 的 SVG 和 .lua 對應：第 5、11 項。
+    - 授權頁多一筆 Astro（圖示已不出貨）：第 5 項。
+- 測試：
+  - `screens/settings/woowtech-third-party-notices.test.ts`：`/settings/notices`；繁中與英文的頁名；商標聲明；13 家 Agent 與所有者；4 個 forge 與 Forgejo 的署名（照原文）和改成單色的說明；8 個檔案類型標誌的署名、授權和來源，Python 的聲明；授權頁列的 24 個檔案類型標誌；MIT 版權行和條文跟 LICENSE 一致；整頁的段落、列和每列的文字（英文和繁中），公眾領域、MIT 段標題的繁中；繁中頁面除了所有者的原文（名稱、所有者、署名、來源、授權名稱、版權行）和 App 刻意保留的「Agent」，沒有英文。
+  - `git/woowtech-forge-marks.test.ts`：GitLab 畫 Gl 徽章、沒有品牌色；GitHub、Codeberg 在每個註冊的主題、呼叫端傳任何顏色時都是淺色 #000000、深色 #FFFFFF，而且沒有品牌色；Gitea、Forgejo 照舊；PR 動作對 GitHub、Codeberg 畫通用圖示（次要前景色），其他平台畫自己的圖示和品牌色。
+  - `components/woowtech-file-type-logos.test.ts`：十二種標誌的檔案（14 個檔名，含 .exs、.gql）顯示通用圖示；其他 41 種副檔名各有自己的圖示，連同通用圖示共 42 個。
+  - `i18n/woowtech-copy.test.ts`：`thirdPartyNotices.` 只翻繁中，其他語言用英文。
+- 還沒處理的（列給 owner，不擋這一版）：
+  - Rust：研究判 A（標誌是 CC BY 4.0）。rust-artwork 的 README 摘要寫「most commercial uses require permission」，但 Rust Foundation 商標政策的全文只講文字「Rust」可以用來說明軟體用 Rust 寫成，沒有提到在軟體介面裡用標誌。依據比上面四個弱，這次保留，要不要一起換成通用圖示由 owner 決定。
+  - 標誌旁沒有平台名稱的地方（審查的建議，不是 blocker）：hover card 的檢查列（標誌＋「Checks」）、輸入框的附加選單（標誌＋「Add issue or PR」）、檔案總管的 PR 分頁（標誌＋PR 編號）、「用…開啟」主按鈕選了 forge 時（標誌＋「Open」，`hideLabels` 時只剩圖示）。研究對 GitHub 的條件之一是旁邊有「GitHub」。
+  - 外掛可以用名稱指定任何 lucide 圖示（`plugins/icons.ts` 的 `Reflect.get`），包括品牌圖示；守門只看 App 自己的程式。本 repo 沒有出貨的外掛用到品牌圖示。
+  - GitHub 標誌的路徑資料來源不明（上游 `1a01e836b` 加入，沒寫出處），沒有核對是不是官方 Invertocat 原檔；研究的條件是官方原檔、不改形。要換官方檔，由能下載品牌檔的步驟處理。
+  - Codeberg 官方 logo 包是藍色和白色兩版；淺色主題畫黑色是照研究「黑或白」的條件。
+  - App 沒有開放原始碼授權頁：上游 Paseo（Apache-2.0）和打包進去的 npm 套件的授權聲明，手機版和桌面版都沒有地方顯示。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
@@ -1648,6 +1757,43 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 第一階段驗收：商標與第三方授權（2026-09-30，分支 `woowtech/logo-compliance-0930` 的 `33f2fa8ac`，第 22、24 節）：main `7aee17b77` 加上第一階段從 `8c19faee0` 起的 11 個 commit（建置 6 個 `85775f63b`～`272aabfa9`、審查後的修正 5 個 `223de0c69`～`a0d8eec29`）和合併 main 的 `33f2fa8ac`，共 12 個 commit，都有 Co-Authored-By。對 main 改 24 檔（+1926／−77，新增 8 檔，沒有刪檔）：App 的 `packages/app/src` 20 檔、`woowtech/` 4 檔（README、`vendor-marks.mjs` 和兩個守門）；沒有 e2e、server、桌面版的檔案，package.json 和 lock 沒有變更，`.github` 跟 main 相同。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/logo-s1-*`（`logo-s1-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/logo-s1-*`，CI 的 API 回應和 job log 在同一個 logs 目錄的 `logo-s1-ci-*`。
+  - 為什麼：協調資料夾的逐家研究 `coord/reports/logo-usage-research.md`（不在 repo 裡，不是法律意見），和 owner 在 2026-09-30 的決定：06:5x 同意協調者的四項建議，07:0x 補充「同意前先用徽章，後面可以改版更新再優化，目前以可以先上架為目的」。所以分兩階段：第一階段只做上架前一定要有的，廠商標誌改回是第二階段。
+  - 這一輪的內容（細節在第 24 節）：
+    - 設定 App 區段「關於」後面的「商標與第三方授權」頁（英文 Trademarks and third-party notices，`/settings/notices`）：商標聲明；顯示自己標誌的 13 家 Agent、4 個 Git 平台、24 個檔案類型標誌的所有者，各家要求的署名、授權和來源照原文；MIT 條文。
+    - GitLab 的 forge 標誌改成文字徽章 Gl，不用 GitLab 的橘色，tanuki 的路徑資料不再出貨。
+    - GitHub、Codeberg 的標誌不管呼叫端傳什麼顏色，淺色主題畫純黑、深色主題畫純白。PR 動作遇到這兩家改畫通用的 PR 圖示，新增專案的「從 GitHub 複製專案」和 GitHub 儲存庫列改用通用的 `FolderGit2`（都是審查後的修正）。
+    - 檔案總管 12 種檔案類型改畫通用檔案圖示：owner 決定的 go、swift、terraform、hcl、vue、sass、dart、elixir，加上審查依所有者原文換掉的 astro、gradle、graphql、lua；表裡留 42 個。
+    - 上架規則：商店截圖、宣傳圖、官網和其他行銷素材不出現第三方的標誌。
+    - 守門 `woowtech/third-party-notices.test.mjs`（11 項）照資料檢查授權頁跟 App 畫的標誌一致；第 22 節的 `claude-badge.test.mjs` 白名單跟著改。
+  - 審查與修正：
+    - 三份獨立審查（`272aabfa9`，測試、合規、介面三個角度，`logo-s1-review-*.md`）共 4 個 blocker。合規 3 個：新增專案用 lucide 的 GitHub 線條圖示（灰色）；Astro、Gradle、GraphQL、Lua 依所有者原文要事先許可或不准改色，卻還保留；PR 動作停用或無法使用時，GitHub、Codeberg 的標誌跟著變成 0.5／0.6／0.72 的半透明灰。介面 1 個：繁中頁有 fork 自己寫的英文（「Public domain」「redrawn in a single color」）。測試 0 個。
+    - 修正（`logo-s1-fix.md`，每個都先寫測試、看它失敗再改）：`223de0c69`（新增專案改用 `FolderGit2`，守門第 3 項改成不准任何 lucide 品牌圖示）、`22e227a00`（PR 動作的通用圖示）、`07f62a056`（換掉 Astro、Gradle、GraphQL、Lua）、`74e007f88`（繁中頁的「公眾領域」「修改：重新繪製成單色」）、`a0d8eec29`（README）。
+    - 複查（`logo-s1-recheck.md`，`a0d8eec29`）：4 個 blocker 都已修正，沒有新的 blocker。守門 172/172；App 9 檔 69/69；typecheck app、lint、format 檢查通過；舊實作配新測試有 7 個失敗，forge 標誌的測試檔載入失敗；三種變異共 5 個失敗。
+    - 合進 main 前的審查（`logo-s1-final-review.md`，兩輪）blocker 0，守門（`logo-s1-gate.md`）go。留下的建議，不是 blocker：授權頁元件沒有畫面或 e2e 測試；守門抓不到 import 大括號裡夾註解的 lucide 品牌圖示，也抓不到不經 `renderForgePrIcon`、直接畫 forge 標誌的 PR 動作；繁中的結構測試信任資料欄位。記錄下來的規則偏差（低，都不影響證據）：桌面版輪的腳本用 `pgrep`、`lsof`、`ps -axo` 查程序，Android 輪的資源監看用 `pgrep -g` 看自己的 process group；修正輪用 `perl` 的 `setsid` 在背景排 heavy 鎖，沒用 `run_in_background`。
+  - 合併 main（`logo-s1-merge.md`，`33f2fa8ac`，父 `a0d8eec29`＋`7aee17b77`）：只有 README 的「接下來」衝突，兩邊都保留（第一階段 +115／−5、main +33／−6）。本機（`env -i`、只准連 loopback 的 sandbox）：`build:server` 通過；守門 175/175，照 CI 拿掉 OpenCC 那一項後 174/174；`write-vendor-badges.mjs --check` 通過；typecheck 11 個 workspace；App 20 檔 227/227；`format:check` 4747 檔、lint 26 檔 0 個 warning、0 個 error。`a0d8eec29..33f2fa8ac` 只改 `ci.yml`、桌面版的 e2e 腳本、README 和兩個守門，`packages/app/src` 的樹跟 `a0d8eec29` 相同，所以下面在 `a0d8eec29` 上的裝置結果也適用 `33f2fa8ac`。
+  - CI：[run 36697759152](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36697759152)（CI #13，`33f2fa8ac`，手動、勾 Playwright）：失敗，失敗的只有 Playwright 分片 1/4、4/4。18 個 job：14 個成功、2 個失敗，Windows 兩組照設計略過；attempt 1，沒有重跑。typecheck 的「Check woowtech fork guards」成功：174 項、173 通過、0 失敗、1 略過（只在 macOS 跑的「Install CLI」那一項），`third-party-notices.test.mjs` 的 11 項都過。desktop-tests（ubuntu）的 browser E2E、Linux 打包和三個打包 smoke 都成功。
+    - Playwright 四片共 669 個：630 通過、7 失敗、4 個 flaky、28 略過。CI #10（`8c19faee0`，第一階段之前）是 633、5、3、28，一樣是 669 個 test、188 個 spec 檔，略過的 28 個也相同。第一階段沒改任何 e2e 的 spec 和 helper（`packages/app/e2e` 的樹跟 main、CI #10 相同），兩次的差別只在第一階段的 App 原始碼和 runner。下面 7 個失敗、4 個 flaky 沒有一個是第一階段造成的。PR 分頁、附件和新工作區的 11 個 test 照舊略過（多半要 GitHub 認證，CI 沒有）。
+    - main 既有、CI #10 同樣失敗（兩次嘗試的錯誤和行號都相同）：`sidebar-help.spec.ts:80`（官網 `/` 轉到 `/en`，期待值不接受）、`viewed-agent-timelines.spec.ts:384`（fork 把錯誤改成「Host is not connected」，spec 還期待「Transport not connected」）。
+    - CI #10 同樣兩次都失敗、錯誤和堆疊行號相同，整合輪驗收歸為原因不明或計時造成：`agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`、`agent-message-submission.spec.ts:1298`。
+    - `creation-old-daemon.spec.ts:95`（已發佈的 0.7.2 daemon）：CI #10 重試才過，這次重試也失敗。第一次跟 CI #10 一樣在 `page.goto` 逾時，那時另一個 worker 的 `root-error-recovery.spec.ts` 正讓 Metro 冷打包 recovery-app；重試失敗在 spec 第 122 行的 `expectPromptOnce`：第一個 agent 的 timeline 還沒有使用者訊息（前一步的 `waitForFinish` 逾時只回傳狀態、不丟錯）。同一個 spec 的 0.2.5、0.8.0 兩組都過。本機沒跑（要從 npm 下載已發佈的上游 daemon）。
+    - `agent-stream-ui.spec.ts:188`：CI #10 通過，這次兩次都失敗，串流中往上捲以後 `distanceFromBottom` 一直是 0（要大於 300）。第 18 節的 run 2（`b6d442a73`，第一階段之前）就兩次都失敗；spec 和 helper 在 run 2、CI #10 和這次是同一個 blob，第一階段沒碰 agent 串流和捲動。本機（`logo-s1-final-repair.md`）在 `33f2fa8ac` 跑 6 次過 5 次，失敗的是 Metro 冷打包後的第一個 test，錯誤跟 CI 相同；App 原始碼換成 main 的跑 4 次、換回來再跑 4 次，都過。判定是間歇的計時問題，不是第一階段造成。
+    - 重試才過的 flaky：`provider-settings-refresh.spec.ts:122`（CI #10 同錯，也是 flaky）、`command-center-host.spec.ts:12`（run 2 也是 flaky）、`launcher-tab.spec.ts:217`（終端機分頁出現後只讀一次分頁、沒有輪詢；本機 2/2）、`root-error-recovery.spec.ts:83`（`beforeAll` 等 Metro 冷打包 recovery-app 的 120 秒上限被超過：這一片的 runner 比 CI #10 慢約三分之一，主 bundle 134.6 秒對 101.1 秒、recovery-app 136.7 秒對 103.0 秒；重試 16.5 秒通過，本機 2/2）。CI #10 是 flaky 的 `sidebar-context-menu.spec.ts:17` 這次通過。
+    - 沒有重跑：只重跑失敗的 job 仍是同一個 commit，分片 4/4 的 main 既有失敗每次都紅，分片 1/4 的三個計時失敗在 CI #10 和這次都兩次失敗，重跑看不到第一階段的新資訊（`logo-s1-final-repair.md`）。
+  - 平台矩陣（證據在 `~/.local/share/woowtech-smart/logs/logo-s1-desktop*`、`logo-s1-android*` 和 `shots/` 底下同樣的前綴；逐項結果表在各步驟紀錄的最後，「未測」都寫了原因）：
+    - Mac 桌面版（`logo-s1-desktop.md`，打包 `a0d8eec29`，未簽章、`--dir`、arm64，用假 claude、假 gh，git 的傳輸協定全部擋掉）：通過。包裡 tanuki 的路徑資料 0、12 個換掉的檔案類型標誌 0，授權頁的文字在 web bundle 裡（負向對照：`8c19faee0` 的包找得到 tanuki 和 12 個標誌，沒有授權頁）。授權頁在繁中的淺色、深色和 English 的深色、淺色：`/settings/notices`、5 段 48 列、沒有截斷，捲到底 MIT 條文完整，側欄的英文列名 228 px 放得進 263 px。GitHub、Codeberg 在「在…中開啟」選單、附件選單和標題列主按鈕（一般和 hover）淺色純黑、深色和陶土純白，切主題時即時變色；GitLab 三處都是 Gl 徽章；「建立 PR」是通用的 PR 圖示。檔案總管 12 種類型的 14 個檔案和檔案分頁是通用圖示，.py、.rs、.ts、.md 照舊；新增專案流程的 GitHub 那一列是 `FolderGit2`。回歸：供應商列表、ACP 目錄的 22 個徽章和 13 家上游圖示，設定沒有用量。daemon 背景的 `git fetch` 18 次都在連線前被擋。
+    - Android 模擬器（`logo-s1-android.md`，`a0d8eec29`，沿用 Debug App，JS 從這個分支的 Metro 載入，daemon 用 mock）：通過。授權頁在繁中的淺色、深色和 English 的深色、淺色（聲明、5 段、info 提示、抽查的署名、捲到底、可選取、返回鍵回設定）；附件選單的 GitHub、Codeberg 淺色純黑、深色純白（GitHub 按下時也一樣），GitLab 是 Gl 徽章，「建立 PR」是通用圖示；12 種類型的 13 個檔案，圖示跟沒有對應的 `a.zzz`（通用圖示）逐像素相同；ACP 目錄 38 列（徽章 22、上游圖示 13、通用符號 3），設定沒有用量。
+    - 兩個平台都未測：要有 PR 才出現的地方（PR 分頁、hover card 的檢查列、PR 面板），要主機的 gh 登入和真的 open PR，這一輪照規則不登入、不連網；這些地方在 CI 也略過，只有 vitest 檢查標誌元件本身。另外 Android 沒測小螢幕上的長段落。
+    - iOS 模擬器：第一階段的 iOS 輪還沒跑，等 owner 回到 Mac 前重開機再做（FileVault 開著，遠端重開會連不回來）。另一條線的上架候選驗收（`rc0930-ios.md`，`33f2fa8ac`）只看到設定 App 區段有「商標與第三方授權」這一列，19:57 內建碟降到 1.4 GB 照停止規則停下，授權頁的內容、forge 標誌和檔案圖示都還沒在 iOS 上看。
+  - 還沒做的：
+    - iOS 輪（見上）。
+    - 第二階段（`woowtech/logo-restore-0930`）：研究判定規則允許的 14 家補齊條件後改回標誌，放之後的改版，不擋第一階段上架。
+    - 授權信：GitHub（Copilot 的圖示）、Pi、OMP 三份草稿在協調資料夾的 `coord/reports/vendor-permission-drafts.md`（不在 repo 裡），都還沒寄，寄不寄由 owner 決定；對方同意前維持徽章。
+    - 要實機或正式簽章才驗得到的：手機實機上的授權頁、純黑白標誌和通用圖示；桌面版 Developer ID 簽章與公證後的正式版、Android 正式簽章版、TestFlight。實機項目列在「接下來」。
+    - 上架規則：拍商店截圖、做宣傳圖和其他行銷素材時照第 24 節，不出現第三方的標誌；第二階段改回標誌以後也一樣。
+    - 第 24 節「還沒處理的」等 owner 決定：Rust 標誌、旁邊沒有平台名稱的 forge 標誌、外掛用名稱指定的 lucide 品牌圖示、GitHub 標誌路徑資料的出處、Codeberg 的顏色、開放原始碼授權頁。
+    - Playwright 還沒有整次綠過，見「接下來」。
+  - 同一個 commit 也改了：第 22 節「刻意沒改的」檔案類型圖示改成換掉 12 個；「接下來」授權頁實機那一項照第 24 節改（PR 動作是通用的 PR 圖示，標誌列在實際會畫的地方），上架前那一項拿掉已經換掉的 lucide GitHub 圖示，Playwright 那一項加上 CI #13。
 - 整合輪驗收（2026-09-30，整合分支 `woowtech/integration-0930` 的 `917fa512b`，第 8、9、18、22、23 節）：main `fde226d05` 加上帳號用量關掉（`woowtech/usage-off-0929` 的 4 個 commit）、廠商徽章（`woowtech/vendor-badges-0929` 的 8 個 commit）、兩次合併和 CI 的兩個修正（`63f74cf62`、`917fa512b`），共 16 個 commit、98 檔（+3266／−482）。新增的 17 檔都是文字；刪掉的 15 檔是上游的 8 個蝴蝶和 favicon SVG、桌面版的 7 張編輯器 PNG；package.json 和 lock 沒有變更，版本都是 0.8.0；`.github` 只改了 `ci.yml` 一處（`63f74cf62`）。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0930-*`（`integ0930-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0930-*`，CI 的 log 在同一個 logs 目錄的 `ci-0930/`。
   - 這一輪的內容：
     - 帳號用量關掉（第 23 節）：設定的主機清單沒有「用量」，舊的用量路由開到「連線」，context 圓環的 tooltip 只有上下文；daemon 收到用量請求回空清單，不讀憑證和鑰匙圈，也不打額度 API。
@@ -2009,10 +2155,11 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
-- Playwright：2026-09-30 在整合分支勾選跑過一次完整執行（CI #10，見「驗證紀錄」的整合輪驗收），5 個失敗、3 個 flaky 都不是那一輪的改動造成。先修 main 既有的 `sidebar-help.spec.ts:80`、`viewed-agent-timelines.spec.ts:384`，再決定 `agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`、`agent-message-submission.spec.ts:1298` 怎麼處理（修法建議在 `coord/reports/ci-0930-triage.md`），之後再勾一次 Playwright，要整次綠。
+- Playwright：2026-09-30 在整合分支勾選跑過一次完整執行（CI #10，見「驗證紀錄」的整合輪驗收），5 個失敗、3 個 flaky 都不是那一輪的改動造成。先修 main 既有的 `sidebar-help.spec.ts:80`、`viewed-agent-timelines.spec.ts:384`，再決定 `agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`、`agent-message-submission.spec.ts:1298` 怎麼處理（修法建議在 `coord/reports/ci-0930-triage.md`），之後再勾一次 Playwright，要整次綠。第一階段的 CI #13（run 36697759152，見「驗證紀錄」的第一階段驗收）是 7 個失敗、4 個 flaky，也都不是那一輪造成；其中 `agent-stream-ui.spec.ts:188`（第 18 節的 run 2 就失敗過）和 `creation-old-daemon.spec.ts:95` 的 0.7.2（這次重試也失敗）要一起處理。
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
 - 廠商的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表和新增 ACP 供應商的目錄、側欄的 Agent 列、模型選單、匯入工作階段、排程、終端機設定檔這些 12～24 px 的地方都讀得出縮寫（C、Cx、Gh、Oc、Pi、Om、Mm 等），桌面版「在…中開啟」選單的 VS Code、Cursor 等是徽章、Finder 是資料夾；外觀設定的主題選單顯示「陶土」／Terracotta，原本選了這個主題的裝置更新後仍是同一個主題。
-- 待 owner 決定（第 22 節）：檔案總管的檔案類型圖示（程式語言和工具的圖形）要不要也換。
 - 網頁版和桌面版的啟動畫面（第 8 節）要在實機上看：淺色和深色主題都是 WOOW 標誌在閃，不是蝴蝶。
 - 帳號用量關掉（第 23 節）要在實機看：桌面版、iOS、Android 的設定主機清單都沒有「用量」，其他列照舊；舊的 `/settings/hosts/<id>/usage` 連結開到「連線」；context 圓環的 tooltip 只有上下文、tokens 和費用，沒有「Loading plan usage…」或方案卡；用舊版 App 連新的 daemon，tooltip 不出現紅字，用量頁只顯示「No usage data」。
+- 商標與第三方授權頁（第 24 節）要在實機看：iOS、Android、桌面版的淺色和深色主題，繁中和英文各一次（Android 模擬器和未簽章的桌面版已在驗證紀錄的第一階段驗收看過，iOS 模擬器等 owner 回到 Mac 前重開機再看）。設定列表（手機）或側欄（桌面版）有這一列、點進去標題對、返回鍵回設定；五段都在，長的聲明和 MIT 條文完整換行、不被截斷，文字選得起來；側欄的英文列名放得下。GitHub、Codeberg 的標誌在 PR 分頁、「在…中開啟」選單和主按鈕、hover card 的檢查列、輸入框的附加選單各種狀態下都是純黑（淺色主題）或純白（深色主題），PR 動作（建立、合併 PR）是通用的 PR 圖示，GitLab 的遠端顯示 Gl 徽章；.go、.swift、.vue、.astro、.lua 等檔案在檔案總管是通用圖示。
+- 上架前（第 24 節）：商店截圖和宣傳圖不含第三方標誌；決定開放原始碼授權頁怎麼做。
 - 商標（TIPO）與 D-U-N-S。

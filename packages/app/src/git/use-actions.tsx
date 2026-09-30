@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import type { Theme } from "@/styles/theme";
 import { getForgePresentation, type Forge } from "@/git/forge";
 import { ForgeBrandIcon, getForgeBrandColorMapping } from "@/git/forge-icon";
+import { dimmableForgeIconKind } from "@/git/woowtech-forge-marks";
 import { type CheckoutGitActionStatus, useCheckoutGitActionsStore } from "@/git/actions-store";
 import { type CheckoutStatusPayload, useCheckoutStatusQuery } from "@/git/use-status-query";
 import { type CheckoutPrStatusPayload, useCheckoutPrStatusQuery } from "@/git/use-pr-status-query";
@@ -63,7 +64,9 @@ export function useGitActionRunner(): (action: GitAction) => void {
  * The merge variants all share this one icon, so we build it once.
  */
 function renderForgePrIcon(forge: Forge): ReactElement {
-  const icon = getForgePresentation(forge).icon;
+  // woowtech smart: these actions dim when disabled or unavailable, so GitHub and Codeberg, whose
+  // marks must stay pure black or white, get the generic glyph (git/woowtech-forge-marks.ts).
+  const icon = dimmableForgeIconKind(getForgePresentation(forge).icon);
   return (
     <ForgeBrandIcon
       iconKind={icon}
