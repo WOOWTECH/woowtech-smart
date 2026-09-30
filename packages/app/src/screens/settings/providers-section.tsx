@@ -23,6 +23,7 @@ import {
 } from "@/hooks/use-acp-provider-catalog";
 import { ProviderCatalogList } from "@/components/provider-catalog-list";
 import { getProviderIcon } from "@/components/provider-icons";
+import { NAMED_ROW } from "@/components/icons/woowtech-vendor-mark-places";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -191,7 +192,8 @@ function ProviderRow({
   const { t } = useTranslation();
   const { theme } = useUnistyles();
   const isCompact = useIsCompactFormFactor();
-  const ProviderIcon = getProviderIcon(def.id, serverId);
+  // woowtech smart: the row names the provider beside an icon it never dims (README §25).
+  const ProviderIcon = getProviderIcon(def.id, serverId, NAMED_ROW);
   const providerError =
     enabled &&
     entry.status === "error" &&

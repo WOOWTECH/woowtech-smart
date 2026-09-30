@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
-import { SvgXml } from "react-native-svg";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ExternalLink, PackagePlus, Search } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
+import { NAMED_ROW } from "@/components/icons/woowtech-vendor-mark-places";
+import { getProviderIcon } from "@/components/provider-icons";
 import { isWeb } from "@/constants/platform";
 import {
   useAcpProviderCatalog,
@@ -25,8 +26,23 @@ const SEARCH_ICON_SIZE = 16;
 const PROVIDER_FALLBACK_ICON_SIZE = 20;
 const PROVIDER_REMOTE_ICON_SIZE = 24;
 
+// woowtech smart: the catalog names each agent beside an icon it never dims, so a vendor mark
+// with conditions shows its logo here (woowtech/README.md §25).
+function CatalogProviderIcon({
+  provider,
+  size,
+  color = "",
+}: {
+  provider: string;
+  size: number;
+  color?: string;
+}) {
+  const Icon = getProviderIcon(provider, null, NAMED_ROW);
+  return <Icon size={size} color={color} />;
+}
+
 const ThemedPackagePlus = withUnistyles(PackagePlus);
-const ThemedSvgXml = withUnistyles(SvgXml);
+const ThemedCatalogProviderIcon = withUnistyles(CatalogProviderIcon);
 const ThemedSearch = withUnistyles(Search);
 const ThemedExternalLink = withUnistyles(ExternalLink);
 const ThemedTextInput = withUnistyles(TextInput, (theme) => ({
@@ -69,10 +85,9 @@ function CatalogRow({ entry, installing, onInstall }: CatalogRowProps) {
     <View style={styles.row}>
       <View style={styles.iconFrame}>
         {entry.iconSvg ? (
-          <ThemedSvgXml
-            xml={entry.iconSvg}
-            width={PROVIDER_REMOTE_ICON_SIZE}
-            height={PROVIDER_REMOTE_ICON_SIZE}
+          <ThemedCatalogProviderIcon
+            provider={entry.id}
+            size={PROVIDER_REMOTE_ICON_SIZE}
             uniProps={foregroundColorMapping}
           />
         ) : (

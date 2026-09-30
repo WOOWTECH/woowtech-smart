@@ -12,6 +12,8 @@ import {
   vendorMonogram,
 } from "@/components/icons/vendor-badge";
 import { createVendorBadgeIcon } from "@/components/icons/vendor-badge-icon";
+import { UNCHECKED_PLACE, drawsLogoAt } from "@/components/icons/woowtech-vendor-mark-places";
+import { ACP_ICON_STYLES } from "@/components/icons/woowtech-vendor-mark-styles.gen";
 import { ICON_SIZE, darkTheme, lightTheme } from "@/styles/theme";
 import { replaceProviderSnapshotIcons, resolveProviderIconName } from "./provider-icon-name";
 import { getProviderIcon } from "./provider-icons";
@@ -227,7 +229,8 @@ describe("the vendor badge icon", () => {
 describe("vendor icons across the app", () => {
   // A host can send its own SVG for any provider id, such as a plugin provider's icon. It can be
   // any vendor's logo, so it must never reach the screen. Which vendors show their badge and which
-  // their upstream logo is woowtech/vendor-marks.mjs's decision, checked by woowtech/claude-badge.test.mjs.
+  // their own logo is woowtech/vendor-marks.mjs's decision, checked by woowtech/claude-badge.test.mjs
+  // and woowtech/vendor-logos.test.mjs.
   const HOST_SVG = '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z" /></svg>';
   const color = darkTheme.colors.foreground;
 
@@ -247,10 +250,20 @@ describe("vendor icons across the app", () => {
         kind: "catalog",
         id: entry.id,
       });
+      // A mark drawn mono or in its own colours draws its badge where the place may dim it
+      // (woowtech-vendor-mark-icon.test.ts); every other entry draws its own SVG.
+      const style = ACP_ICON_STYLES[entry.id];
+      const own = style === undefined || drawsLogoAt(style, UNCHECKED_PLACE);
       expect(render(entry.id)).toMatchObject({
         type: SvgXml,
-        props: { xml: entry.iconSvg, width: 16, height: 16, color },
+        props: {
+          xml: own ? entry.iconSvg : vendorBadgeSvg(entry.id),
+          width: 16,
+          height: 16,
+          color,
+        },
       });
+      expect(render(entry.id).props.xml).not.toBe(HOST_SVG);
     }
   });
 

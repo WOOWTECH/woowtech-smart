@@ -11,6 +11,12 @@ import { PiIcon } from "@/components/icons/pi-icon";
 import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
 import { resolveProviderIconName } from "@/components/provider-icon-name";
 import { vendorBadgeSvg } from "@/components/icons/vendor-badge";
+import { acpMarkIconAt } from "@/components/icons/woowtech-vendor-mark-icon";
+import {
+  UNCHECKED_PLACE,
+  vendorMarkPlaceKey,
+  type VendorMarkPlace,
+} from "@/components/icons/woowtech-vendor-mark-places";
 
 export interface ProviderIconProps {
   size: number;
@@ -49,8 +55,11 @@ function createSvgIcon(provider: string, iconSvg: string): ProviderIconComponent
   return SvgProviderIcon;
 }
 
-function getCatalogProviderIcon(provider: string): ProviderIconComponent {
-  const cached = catalogIconComponents.get(provider);
+function getCatalogProviderIcon(provider: string, place: VendorMarkPlace): ProviderIconComponent {
+  // woowtech smart: a vendor mark with conditions draws its logo only where its place meets them,
+  // and its badge elsewhere (woowtech/README.md §25).
+  const cacheKey = vendorMarkPlaceKey(provider, place);
+  const cached = catalogIconComponents.get(cacheKey);
   if (cached) {
     return cached;
   }
@@ -58,8 +67,8 @@ function getCatalogProviderIcon(provider: string): ProviderIconComponent {
   if (!iconSvg) {
     return Bot;
   }
-  const icon = createSvgIcon(provider, iconSvg);
-  catalogIconComponents.set(provider, icon);
+  const icon = acpMarkIconAt(provider, iconSvg, place) ?? createSvgIcon(provider, iconSvg);
+  catalogIconComponents.set(cacheKey, icon);
   return icon;
 }
 
@@ -71,13 +80,19 @@ function getSnapshotProviderIcon(provider: string, svg: string): ProviderIconCom
   return component;
 }
 
-export function getProviderIcon(provider: string, serverId?: string | null): ProviderIconComponent {
+export function getProviderIcon(
+  provider: string,
+  serverId?: string | null,
+  // woowtech smart: where the icon is drawn. Only a place checked to name the provider beside an
+  // icon it never dims says so; see woowtech-vendor-mark-icon.tsx.
+  place: VendorMarkPlace = UNCHECKED_PLACE,
+): ProviderIconComponent {
   const name = resolveProviderIconName(provider, serverId);
   if (name.kind === "builtin") {
     return BUILTIN_PROVIDER_ICONS[name.id];
   }
   if (name.kind === "catalog") {
-    return getCatalogProviderIcon(name.id);
+    return getCatalogProviderIcon(name.id, place);
   }
   if (name.kind === "svg") {
     // woowtech smart: a host's SVG can be any vendor's logo, so it draws as a text badge instead:
