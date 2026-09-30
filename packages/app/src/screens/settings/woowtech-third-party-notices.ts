@@ -367,10 +367,19 @@ export const MIT_LICENSE_TEXT = [
   'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.',
 ].join("\n\n");
 
+/** A link an owner's brand rules ask for, which the page opens. */
+export interface NoticeLink {
+  readonly url: string;
+  /** The link's text, in the page's language. */
+  readonly label: string;
+}
+
 export interface NoticeRow {
   readonly key: string;
   readonly title: string;
   readonly lines: readonly string[];
+  /** The owner's site its brand rules ask the mark to link back to. */
+  readonly link?: NoticeLink;
 }
 
 export interface NoticeSection {
@@ -396,16 +405,18 @@ function noticeLines(notice: MarkNotice, t: TFunction): string[] {
     ...(notice.changes ? [t(`${COPY}.changes.${notice.changes}`)] : []),
     ...(license ? [t(`${COPY}.license`, { license: licenseText(license, t) })] : []),
     ...(notice.source ? [t(`${COPY}.source`, { source: notice.source })] : []),
-    ...(notice.link ? [t(`${COPY}.link`, { link: notice.link })] : []),
   ];
 }
 
+function markRow(key: string, notice: MarkNotice, t: TFunction): NoticeRow {
+  const lines = noticeLines(notice, t);
+  if (!notice.link) return { key, title: notice.name, lines };
+  const link = { url: notice.link, label: t(`${COPY}.link`, { link: notice.link }) };
+  return { key, title: notice.name, lines, link };
+}
+
 function markRows(notices: Readonly<Record<string, MarkNotice>>, t: TFunction): NoticeRow[] {
-  return Object.entries(notices).map(([key, notice]) => ({
-    key,
-    title: notice.name,
-    lines: noticeLines(notice, t),
-  }));
+  return Object.entries(notices).map(([key, notice]) => markRow(key, notice, t));
 }
 
 /** Everything the page shows, in `t`'s language, section by section and row by row. */

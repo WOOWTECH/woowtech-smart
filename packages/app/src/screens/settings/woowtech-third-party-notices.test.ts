@@ -33,7 +33,16 @@ function pageIn(language: string): NoticeSection[] {
   return buildThirdPartyNotices(i18n.getFixedT(language));
 }
 
-const rowTexts = (row: NoticeRow) => [row.title].concat(row.lines);
+const rowTexts = (row: NoticeRow) =>
+  [row.title].concat(row.lines, row.link ? [row.link.label] : []);
+
+/** The keys of the rows that carry a link, in page order. */
+function linkedRows(sections: NoticeSection[]): string[] {
+  return sections
+    .flatMap((section) => section.rows)
+    .filter((row) => row.link !== undefined)
+    .map((row) => row.key);
+}
 
 /** Every title and line the page shows in `language`, in order. */
 function textsIn(language: string): string[] {
@@ -136,16 +145,29 @@ describe("the trademarks and third-party notices page", () => {
         credit: "The Zed name and logos are trademarks of Zed Industries, Inc.",
       },
     });
-    expect(rowOf(pageIn("en"), "agents", "junie").lines).toEqual([
-      "Owner: JetBrains s.r.o.",
-      "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
-      "Website: https://www.jetbrains.com",
-    ]);
-    expect(rowOf(pageIn("zh-TW"), "agents", "junie").lines).toEqual([
-      "所有者：JetBrains s.r.o.",
-      "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
-      "網站：https://www.jetbrains.com",
-    ]);
+    // JetBrains asks every use of its brand assets to link back to www.jetbrains.com: the row
+    // carries the link, which the page draws as a link that opens the site.
+    expect(rowOf(pageIn("en"), "agents", "junie")).toEqual({
+      key: "junie",
+      title: "Junie",
+      lines: [
+        "Owner: JetBrains s.r.o.",
+        "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
+      ],
+      link: { url: "https://www.jetbrains.com", label: "Website: https://www.jetbrains.com" },
+    });
+    expect(rowOf(pageIn("zh-TW"), "agents", "junie")).toEqual({
+      key: "junie",
+      title: "Junie",
+      lines: [
+        "所有者：JetBrains s.r.o.",
+        "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
+      ],
+      link: { url: "https://www.jetbrains.com", label: "網站：https://www.jetbrains.com" },
+    });
+    // No other row links anywhere.
+    expect(linkedRows(pageIn("en"))).toEqual(["junie"]);
+    expect(linkedRows(pageIn("zh-TW"))).toEqual(["junie"]);
     expect(rowOf(pageIn("zh-TW"), "editors", "zed")).toEqual({
       key: "zed",
       title: "Zed",
