@@ -1139,6 +1139,11 @@ const THIRD_PARTY_NOTICES_ENGLISH = {
   owner: "Owner: {{owner}}",
   license: "License: {{license}}",
   source: "Source: {{source}}",
+  publicDomain: "Public domain",
+  logoOf: "{{name}} logo",
+  changes: {
+    singleColor: "Changes: redrawn in a single color",
+  },
 };
 
 const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
@@ -1165,6 +1170,11 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   owner: "所有者：{{owner}}",
   license: "授權：{{license}}",
   source: "來源：{{source}}",
+  publicDomain: "公眾領域",
+  logoOf: "{{name}} 標誌",
+  changes: {
+    singleColor: "修改：重新繪製成單色",
+  },
 };
 
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */

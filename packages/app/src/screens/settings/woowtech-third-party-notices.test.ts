@@ -10,6 +10,7 @@ import {
   MIT_NOTICES,
   VENDOR_MARK_NOTICES,
   buildThirdPartyNotices,
+  type NoticeRow,
   type NoticeSection,
 } from "./woowtech-third-party-notices";
 
@@ -29,6 +30,15 @@ function fileTypeNotice(icon: string) {
 /** Every line the page shows in `language`, section by section. */
 function pageIn(language: string): NoticeSection[] {
   return buildThirdPartyNotices(i18n.getFixedT(language));
+}
+
+const rowTexts = (row: NoticeRow) => [row.title].concat(row.lines);
+
+/** Every title and line the page shows in `language`, in order. */
+function textsIn(language: string): string[] {
+  return pageIn(language).flatMap((section) =>
+    [section.title].concat(section.rows.flatMap(rowTexts)),
+  );
 }
 
 function rowOf(sections: NoticeSection[], sectionId: NoticeSection["id"], key: string) {
@@ -104,10 +114,12 @@ describe("the trademarks and third-party notices page", () => {
   it("lists the forge marks still shown, with Forgejo's CC BY-SA 4.0 credit to Caesar Schinas", () => {
     expect(Object.keys(FORGE_MARK_NOTICES)).toEqual(["github", "gitea", "forgejo", "codeberg"]);
     expect(FORGE_MARK_NOTICES.github).toEqual({ name: "GitHub", owner: "GitHub, Inc." });
+    // The credit is the one Forgejo asks for; what woowtech smart changed is a line of its own.
     expect(FORGE_MARK_NOTICES.forgejo).toEqual({
       name: "Forgejo",
       owner: "Forgejo",
-      credit: "Forgejo logo by Caesar Schinas, redrawn in a single color",
+      credit: "Forgejo logo by Caesar Schinas",
+      changes: "singleColor",
       license: CC_BY_SA_4,
       source: "https://codeberg.org/forgejo/meta/src/branch/readme/branding",
     });
@@ -218,11 +230,11 @@ describe("the trademarks and third-party notices page", () => {
     });
     expect(header).toContain(MIT_NOTICES[0]?.copyright[0]);
     expect(squeeze(MIT_LICENSE_TEXT)).toBe(squeeze(body.join("\n\n")));
-    expect(MIT_NOTICES.map((notice) => notice.work)).toEqual([
-      "material-icon-theme",
-      "JS logo",
-      "TOML logo",
-      "Gitea logo",
+    expect(MIT_NOTICES.map((notice) => [notice.work, notice.logo === true])).toEqual([
+      ["material-icon-theme", false],
+      ["JS", true],
+      ["TOML", true],
+      ["Gitea", true],
     ]);
   });
 
@@ -245,11 +257,13 @@ describe("the trademarks and third-party notices page", () => {
       title: "Forgejo",
       lines: [
         "Owner: Forgejo",
-        "Forgejo logo by Caesar Schinas, redrawn in a single color",
+        "Forgejo logo by Caesar Schinas",
+        "Changes: redrawn in a single color",
         "License: CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/",
         "Source: https://codeberg.org/forgejo/meta/src/branch/readme/branding",
       ],
     });
+    expect(rowOf(english, "fileTypes", "haskell").lines).toContain("License: Public domain");
     expect(rowOf(english, "fileTypes", "rust")).toEqual({
       key: "rust",
       title: "Rust",
@@ -298,7 +312,18 @@ describe("the trademarks and third-party notices page", () => {
       title: "License text",
       lines: [MIT_LICENSE_TEXT],
     });
-    expect(rowOf(pageIn("zh-TW"), "mit", "text").title).toBe("授權條文");
+    expect(mit?.rows.map((row) => row.title)).toEqual([
+      "material-icon-theme",
+      "JS logo",
+      "TOML logo",
+      "Gitea logo",
+      "License text",
+    ]);
+    expect(
+      pageIn("zh-TW")
+        .find((section) => section.id === "mit")
+        ?.rows.map((row) => row.title),
+    ).toEqual(["material-icon-theme", "JS 標誌", "TOML 標誌", "Gitea 標誌", "授權條文"]);
   });
 
   it("labels the lines in Traditional Chinese and keeps names, credits and license text as written", () => {
@@ -320,6 +345,22 @@ describe("the trademarks and third-party notices page", () => {
         "來源：https://www.ruby-lang.org/en/about/logo/",
       ],
     });
+    // Public domain is no license's name, so it reads in the page's language.
+    expect(rowOf(chinese, "fileTypes", "haskell").lines).toEqual([
+      "所有者：Haskell.org",
+      "Thompson-Wheeler logo by Darrin A. Thompson and Jeffrey Wheeler",
+      "授權：公眾領域",
+      "來源：https://wiki.haskell.org/Thompson-Wheeler_logo",
+    ]);
+    expect(rowOf(chinese, "fileTypes", "markdown").lines).toContain("授權：公眾領域");
+    // Forgejo's credit as Forgejo writes it; the change woowtech smart made, in Chinese.
+    expect(rowOf(chinese, "forges", "forgejo").lines).toEqual([
+      "所有者：Forgejo",
+      "Forgejo logo by Caesar Schinas",
+      "修改：重新繪製成單色",
+      "授權：CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/",
+      "來源：https://codeberg.org/forgejo/meta/src/branch/readme/branding",
+    ]);
     expect(rowOf(chinese, "fileTypes", "changes")).toEqual({
       key: "changes",
       title: "與原始標誌的差異",
@@ -360,5 +401,34 @@ describe("the trademarks and third-party notices page", () => {
         "The MIT License applies to each work below, under the copyright notice listed with it.",
       ],
     ]);
+  });
+
+  it("shows no English of woowtech smart's own in Traditional Chinese, only what the owners write", () => {
+    // Names, owners, credits, sources, license names and copyright lines stay as written.
+    const asWritten = new Set<string>([MIT_LICENSE_TEXT]);
+    const markNotices = [
+      ...Object.values(VENDOR_MARK_NOTICES),
+      ...Object.values(FORGE_MARK_NOTICES),
+      ...FILE_TYPE_MARK_NOTICES,
+    ];
+    for (const notice of markNotices) {
+      for (const text of [notice.name, notice.owner, notice.credit, notice.source]) {
+        if (text) asWritten.add(text);
+      }
+      const license = notice.license;
+      if (license && "name" in license) {
+        asWritten.add(license.url ? `${license.name} ${license.url}` : license.name);
+      }
+    }
+    for (const notice of MIT_NOTICES) {
+      if (!notice.logo) asWritten.add(notice.work);
+      for (const text of [...notice.copyright, notice.source]) asWritten.add(text);
+    }
+    // zh-TW keeps the word Agent in English across the app (woowtech/tools/zh-tw-untranslated.mjs).
+    asWritten.add("Agent");
+    const untranslated = textsIn("zh-TW")
+      .map((text) => text.replace(/^(?:所有者|授權|來源|修改)：/, ""))
+      .filter((text) => !asWritten.has(text) && !/[㐀-鿿]/.test(text));
+    expect(untranslated).toEqual([]);
   });
 });

@@ -11,17 +11,24 @@ import type { TFunction } from "i18next";
 // VENDOR_MARK_NOTICES with what its brand rules ask for.
 //
 // Names, owners, credits and license texts are proper nouns or legal text and stay as their owners
-// write them in every language; only the labels around them are translated.
+// write them in every language. The labels around them are translated, and so is what no owner
+// wrote: the public domain, which is no license's name, the changes woowtech smart made to a
+// drawing, and the word logo in a work's title.
 //
 // Sources: coord/reports/logo-usage-research.md (not in the repo) and the owners' own pages, read
 // on 2026-09-30.
 
-export interface NoticeLicense {
-  /** The license's short name. */
-  readonly name: string;
-  /** Where its text is, when it has one to link to. */
-  readonly url?: string;
-}
+export type NoticeLicense =
+  | {
+      /** The license's short name, as its steward writes it. */
+      readonly name: string;
+      /** Where its text is, when it has one to link to. */
+      readonly url?: string;
+    }
+  | {
+      /** No license's name, such as the public domain: its words under woowtech.thirdPartyNotices. */
+      readonly nameKey: "publicDomain";
+    };
 
 export interface MarkNotice {
   /** The name the app shows next to the mark. */
@@ -30,6 +37,11 @@ export interface MarkNotice {
   readonly owner: string;
   /** The attribution or trademark notice the mark's license or owner asks for, word for word. */
   readonly credit?: string;
+  /**
+   * What woowtech smart changed in the drawing, for a license that asks to say so: its words under
+   * woowtech.thirdPartyNotices.changes.
+   */
+  readonly changes?: "singleColor";
   /** The license the drawing comes with. */
   readonly license?: NoticeLicense;
   /** Where the licensed drawing is published. */
@@ -42,7 +54,10 @@ export interface FileTypeMarkNotice extends MarkNotice {
 }
 
 export interface MitNotice {
+  /** The work: material-icon-theme by its name, a logo by the name of what it stands for. */
   readonly work: string;
+  /** The work is the logo of `work`: the page calls it "JS logo", or 「JS 標誌」 in Chinese. */
+  readonly logo?: boolean;
   /** The work's copyright notices, as its license file writes them. */
   readonly copyright: readonly string[];
   readonly source: string;
@@ -55,7 +70,7 @@ const LICENSES = {
   ccBySa4: { name: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
   cc0: { name: "CC0 1.0", url: "https://creativecommons.org/publicdomain/zero/1.0/" },
   mit: { name: "MIT License" },
-  publicDomain: { name: "Public domain" },
+  publicDomain: { nameKey: "publicDomain" },
   unlicense: { name: "The Unlicense", url: "https://unlicense.org/" },
 } as const satisfies Record<string, NoticeLicense>;
 
@@ -95,7 +110,8 @@ export const FORGE_MARK_NOTICES: Readonly<Record<string, MarkNotice>> = {
   forgejo: {
     name: "Forgejo",
     owner: "Forgejo",
-    credit: "Forgejo logo by Caesar Schinas, redrawn in a single color",
+    credit: "Forgejo logo by Caesar Schinas",
+    changes: "singleColor",
     license: LICENSES.ccBySa4,
     source: "https://codeberg.org/forgejo/meta/src/branch/readme/branding",
   },
@@ -296,17 +312,20 @@ export const MIT_NOTICES: readonly MitNotice[] = [
     source: "https://github.com/material-extensions/vscode-material-icon-theme",
   },
   {
-    work: "JS logo",
+    work: "JS",
+    logo: true,
     copyright: ["Copyright (c) 2011 Christopher Williams <chris@iterativedesigns.com>"],
     source: "https://github.com/voodootikigod/logo.js",
   },
   {
-    work: "TOML logo",
+    work: "TOML",
+    logo: true,
     copyright: ["Copyright (c) Tom Preston-Werner"],
     source: "https://github.com/toml-lang/toml",
   },
   {
-    work: "Gitea logo",
+    work: "Gitea",
+    logo: true,
     copyright: ["Copyright (c) 2016 The Gitea Authors", "Copyright (c) 2015 The Gogs Authors"],
     source: "https://github.com/go-gitea/gitea",
   },
@@ -335,18 +354,18 @@ export interface NoticeSection {
 
 const COPY = "woowtech.thirdPartyNotices";
 
+function licenseText(license: NoticeLicense, t: TFunction): string {
+  if ("nameKey" in license) return t(`${COPY}.${license.nameKey}`);
+  return license.url ? `${license.name} ${license.url}` : license.name;
+}
+
 function noticeLines(notice: MarkNotice, t: TFunction): string[] {
   const license = notice.license;
   return [
     t(`${COPY}.owner`, { owner: notice.owner }),
     ...(notice.credit ? [notice.credit] : []),
-    ...(license
-      ? [
-          t(`${COPY}.license`, {
-            license: license.url ? `${license.name} ${license.url}` : license.name,
-          }),
-        ]
-      : []),
+    ...(notice.changes ? [t(`${COPY}.changes.${notice.changes}`)] : []),
+    ...(license ? [t(`${COPY}.license`, { license: licenseText(license, t) })] : []),
     ...(notice.source ? [t(`${COPY}.source`, { source: notice.source })] : []),
   ];
 }
@@ -402,8 +421,8 @@ export function buildThirdPartyNotices(t: TFunction): NoticeSection[] {
       info: t(`${COPY}.sections.mitInfo`),
       rows: [
         ...MIT_NOTICES.map((notice) => ({
-          key: notice.work,
-          title: notice.work,
+          key: notice.logo ? `${notice.work} logo` : notice.work,
+          title: notice.logo ? t(`${COPY}.logoOf`, { name: notice.work }) : notice.work,
           lines: notice.copyright.concat(t(`${COPY}.source`, { source: notice.source })),
         })),
         { key: "text", title: t(`${COPY}.sections.mitTextTitle`), lines: [MIT_LICENSE_TEXT] },
