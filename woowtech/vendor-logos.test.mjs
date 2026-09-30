@@ -14,7 +14,9 @@
 //     appears there: Google's, Microsoft's, Junie's and Zed's;
 //   - the places that draw provider marks and the desktop "Open in" button are wired to that.
 // What the app draws, per theme and state, is pinned by the app's vitest suites
-// (woowtech-vendor-mark-icon.test.ts, woowtech-editor-marks.test.ts).
+// (woowtech-vendor-mark-icon.test.ts, woowtech-editor-marks.test.ts), and the desktop "Open in"
+// button in the workspace header by the desktop renderer's
+// e2e/woowtech-open-in-editor-marks.spec.ts.
 //
 //   node --test woowtech/vendor-logos.test.mjs
 import assert from "node:assert/strict";
@@ -229,10 +231,18 @@ test("only the settings provider list and the ACP catalog draw a provider mark w
   assert.doesNotMatch(catalog, /\bSvgXml\b/, "the ACP catalog draws the entry's SVG as it is");
 });
 
-test("the desktop Open in button names its target and draws no Google or Microsoft mark alone", () => {
+test("the desktop Open in button names its target and draws no mark alone that needs its name", () => {
+  // A tripwire for the wiring only: e2e/woowtech-open-in-editor-marks.spec.ts in the desktop
+  // package checks what the header and the menu draw. Each element is tied to its field, so that
+  // swapping the two, which leaves every line in place, turns this red too.
   const button = read("packages/app/src/workspace/open-in-editor/button.tsx");
   assert.match(button, /t\("woowtech\.openInEditor\.openIn", \{ target: primaryOption\.label \}\)/);
   assert.doesNotMatch(button, /t\("workspace\.git\.openInEditor\.open"\)/);
   assert.match(button, /\{hideLabels \? primaryOption\.iconAlone : primaryOption\.icon\}/);
-  assert.match(button, /icon=\{editorIconAlone\(target\)\}/);
+  assert.match(button, /\bicon: \(\s*<ThemedEditorTargetIcon icon=\{target\.icon\} size=\{16\}/);
+  assert.match(
+    button,
+    /\biconAlone: \(\s*<ThemedEditorTargetIcon\s+icon=\{editorIconAlone\(target\)\}\s+size=\{16\}/,
+  );
+  assert.match(button, /\bleading=\{target\.icon\}/, "the menu names each editor beside its icon");
 });
