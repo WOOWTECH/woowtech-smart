@@ -1225,10 +1225,10 @@ node --test woowtech/*.test.mjs
   - 內容依序：
     1. 商標：渥屋智能跟列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書；名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。
     2. Agent：顯示自己標誌的廠商，就是 `vendor-marks.mjs` 裡 `show: "upstream"` 的（目前是 13 家 ACP agent），列名稱和所有者。
-    3. Git 平台：GitHub、Gitea、Forgejo、Codeberg。Forgejo 附 CC BY-SA 4.0 署名「Forgejo logo by Caesar Schinas」，並註明改成單色；Codeberg 附它的商標聲明和 CC0；Gitea 的 logo 在它 MIT 授權的 repo 裡，列進 MIT。GitLab 是徽章，不列。
-    4. 檔案類型圖示：第一列說明改作（material-icon-theme 重新繪製、渥屋智能調淡顏色；改作自 CC BY-SA 標誌的圖示以同一授權分享），接著 28 個標誌（29 個圖示，React 的 .jsx、.tsx 共用一個），每個都有所有者。授權要求署名的照原文附上署名、授權連結和來源：Rust（CC BY 4.0）、PHP、R、Zig、SVG（CC BY-SA 4.0）、Ruby（CC BY-SA 2.5）、HTML5（「HTML5 Logo by W3C」，CC BY 3.0）、Nix（CC BY 4.0，NixOS 指定的 TASL 格式）。Python 附 PSF 要求放在法律聲明頁的句子；Lua、Kotlin、Gradle、GraphQL、Apache Groovy 附各自的版權或商標聲明。
-    5. MIT 授權：material-icon-theme（Copyright (c) 2025 Material Extensions）、JS logo、TOML logo、Gitea logo 的版權行，加上 MIT 授權全文（MIT 要求隨附）。
-  - 名稱、所有者、署名和授權條文照原文，不翻譯；標籤（所有者、授權、來源）、段落標題和說明有繁中和英文（`woowtech.thirdPartyNotices`，其他語言顯示英文）。文字可以選取，方便複製授權網址。
+    3. Git 平台：GitHub、Gitea、Forgejo、Codeberg。Forgejo 附 CC BY-SA 4.0 署名「Forgejo logo by Caesar Schinas」（照原文），另一行說明改成單色（`changes: "singleColor"`，繁中「修改：重新繪製成單色」）；Codeberg 附它的商標聲明和 CC0；Gitea 的 logo 在它 MIT 授權的 repo 裡，列進 MIT。GitLab 是徽章，不列。
+    4. 檔案類型圖示：第一列說明改作（material-icon-theme 重新繪製、渥屋智能調淡顏色；改作自 CC BY-SA 標誌的圖示以同一授權分享），接著 24 個標誌（25 個圖示，React 的 .jsx、.tsx 共用一個），每個都有所有者。授權要求署名的照原文附上署名、授權連結和來源：Rust（CC BY 4.0）、PHP、R、Zig、SVG（CC BY-SA 4.0）、Ruby（CC BY-SA 2.5）、HTML5（「HTML5 Logo by W3C」，CC BY 3.0）、Nix（CC BY 4.0，NixOS 指定的 TASL 格式）。Python 附 PSF 要求放在法律聲明頁的句子；Kotlin、Apache Groovy 附各自的商標聲明。Haskell、Markdown 的標誌屬公眾領域。
+    5. MIT 授權：material-icon-theme（Copyright (c) 2025 Material Extensions）、JS、TOML、Gitea 標誌的版權行，加上 MIT 授權全文（MIT 要求隨附）。
+  - 名稱、所有者、署名和授權條文照原文，不翻譯；標籤（所有者、授權、來源、修改）、段落標題和說明有繁中和英文（`woowtech.thirdPartyNotices`，其他語言顯示英文）。不是任何所有者原文的字也翻譯：公眾領域（`LICENSES.publicDomain` 用 `nameKey`，不是授權名稱）、渥屋智能改了什麼（`changes`）、MIT 段作品標題裡的「標誌」（`logo: true`，繁中「JS 標誌」）。文字可以選取，方便複製授權網址。
   - 署名的核對：每一項都讀過來源頁原文（2026-09-30），存在協調資料夾外的 `logs/logo-s1-sources/`。研究沒列、原文卻要求署名的有 4 項，已經補上：Nix（CC BY 4.0）、SVG（W3C 的 CC BY-SA 4.0，署名「W3C SVG Logo」）、JS logo 和 TOML logo（MIT）。
   - 檔案：
     - 資料 `screens/settings/woowtech-third-party-notices.ts`：這頁唯一的資料來源（`VENDOR_MARK_NOTICES`、`FORGE_MARK_NOTICES`、`FILE_TYPE_MARK_NOTICES`、`GENERIC_FILE_ICONS`、`MIT_NOTICES`、`MIT_LICENSE_TEXT`），和組出整頁文字的 `buildThirdPartyNotices(t)`。
@@ -1239,7 +1239,8 @@ node --test woowtech/*.test.mjs
     2. `node --test woowtech/third-party-notices.test.mjs` 會紅，列出沒有條目的廠商。
     3. 在 `VENDOR_MARK_NOTICES` 加一筆，key 跟 `vendor-marks.mjs` 相同：`name`（App 在標誌旁顯示的名稱）、`owner`，加上那家規則要求的 `credit`（照原文，例如 OpenAI 要承認標誌屬於 OpenAI、JetBrains 的「X and the X logo are trademarks of JetBrains s.r.o.」、Google 的法律聲明）；有授權時加 `license` 和 `source`，CC BY 系列三者都要有，守門會檢查。
     4. 守門和 `woowtech-third-party-notices.test.ts` 綠了就好，畫面不用改。
-    - forge 或檔案類型圖示有增減時一樣：守門從 forge 的 view 模組和 `material-file-icons.ts` 算出會顯示的標誌，新標誌要有條目，通用圖形要列進 `GENERIC_FILE_ICONS`。App 用到 lucide 的品牌圖示（`Github`、`Gitlab`、`Figma` 等）時，那個品牌也要有條目，所以 GitLab 的 logo 從 lucide 也進不來。
+    - forge 或檔案類型圖示有增減時一樣：守門從 forge 的 view 模組和 `material-file-icons.ts` 算出會顯示的標誌，新標誌要有條目，通用圖形要列進 `GENERIC_FILE_ICONS`。
+    - App 不用 lucide 的品牌圖示（`Github`、`Gitlab`、`Figma` 等 18 個，任何別名，例如 `GithubIcon`、`LucideGitlab`）：lucide 的是自己重畫的線條版，而且跟著呼叫端的顏色（多半是灰），不是各家允許的官方圖。要畫 forge 標誌，用 `components/icons` 的元件，放在旁邊有平台名稱、不會變半透明的地方；其他地方用通用圖示。
 - GitLab（研究 §2.5）：GitLab 的商標指引只允許散佈 GitLab CE 時使用 logo，名稱可以用。
   - `vendor-marks.mjs` 加了 `gitlab`（`show: "badge"`、tanuki 的路徑資料），工具把 `components/icons/gitlab-icon.tsx` 寫成 `createVendorBadgeIcon("gitlab")`，縮寫 Gl（`vendor-badge.ts`）。第 22 節的守門照資料一併檢查它，tanuki 的路徑資料不再出貨。
   - `git/forges/gitlab.view.tsx` 的 `brandColor` 改成 `null`：徽章跟著呼叫端的顏色，不用 GitLab 的橘色（第 22 節：徽章沒有廠商的代表色）。
@@ -1247,23 +1248,34 @@ node --test woowtech/*.test.mjs
 - GitHub、Codeberg（研究 §2.5）：GitHub 只允許黑、白（少數情況灰、綠），Codeberg 不准改色。
   - fork 檔 `components/icons/woowtech-monochrome-mark.tsx` 的 `createMonochromeMarkIcon`：不管呼叫端傳什麼顏色（次要前景色、前景色或品牌色，隨 hover、選取、分頁狀態變），淺色主題畫純黑 #000000、深色主題畫純白 #FFFFFF，看 `theme.colorScheme` 決定，外掛主題也一樣。
   - `github-icon.tsx`、`codeberg-icon.tsx` 改用它，路徑資料不變；`codeberg.view.tsx` 的 `brandColor`（#2185D0）改成 `null`。
-  - 例外：PR 動作按鈕停用時，整顆按鈕（文字和圖示）照設計規則變半透明（`opacity: 0.6`），標誌本身仍畫純黑或純白。
+  - PR 動作（建立、檢視、合併 PR 和自動合併；分割按鈕、下拉選單和指令中心用同一個圖示）遇到 GitHub、Codeberg 時畫通用的 PR 圖示（lucide `GitPullRequest`，次要前景色），第一階段審查（2026-09-30）時改的：
+    - 原因：這些動作停用或無法使用時整列變半透明，分割按鈕停用 `opacity: 0.6`（`git/actions-split-button.tsx`），選單項停用 0.5、無法使用 0.72（`components/ui/menu/menu-item.tsx`）。淺色主題的純黑會變成約 #808080、#666666、#474747 的灰，深色主題的純白也一樣變灰；GitHub 只在少數情況允許灰色，Codeberg 不准染色。這些動作的文字（Create PR、Merge PR）也沒有平台名稱。
+    - 做法：`createMonochromeMarkIcon` 登記它做出的元件（`isMonochromeMarkIcon`）；fork 檔 `git/woowtech-forge-marks.ts` 的 `dimmableForgeIconKind` 遇到這種標誌就回傳沒有平台註冊的 icon kind，`ForgeBrandIcon` 對沒註冊的 kind 畫通用 PR 圖示。上游檔只改 `git/use-actions.tsx` 的 `renderForgePrIcon` 一行和一個 import。以後有新的純黑白標誌也自動適用。
+    - 其他畫 GitHub、Codeberg 標誌的地方都不會變半透明：「Open on GitHub」這類選單項、「用…開啟」主按鈕（進行中改顯示轉圈）、hover card 的檢查列、輸入框的附加選單、檔案總管的 PR 分頁。
   - Gitea、Forgejo 照上游：一般是次要前景色，PR 動作按鈕上是 Gitea 綠、Forgejo 橘。
-- 檔案類型圖示（研究 §2.4）：`material-file-icons.ts` 拿掉 go、swift、terraform、hcl、vue、sass、dart、elixir 八個 SVG 和它們的副檔名對應（.go、.swift、.tf、.hcl、.vue、.scss、.dart、.ex、.exs），這些檔案顯示通用的 `_default`。原因：Go、Swift、HashiCorp（Terraform、HCL）要許可，Vue、Sass 不准商用，Dart、Elixir 不准改色（`file-icon-svg.ts` 會降飽和）。留下 46 個：29 個畫標誌的圖示（28 個標誌）列在授權頁，17 個通用圖形（含 `_default`）列在 `GENERIC_FILE_ICONS`。
+- 檔案類型圖示（研究 §2.4）：`material-file-icons.ts` 拿掉 go、swift、terraform、hcl、vue、sass、dart、elixir 八個 SVG 和它們的副檔名對應（.go、.swift、.tf、.hcl、.vue、.scss、.dart、.ex、.exs），這些檔案顯示通用的 `_default`。原因：Go、Swift、HashiCorp（Terraform、HCL）要許可，Vue、Sass 不准商用，Dart、Elixir 不准改色（`file-icon-svg.ts` 會降飽和）。
+  - 第一階段審查（2026-09-30）照所有者的原文，另外拿掉 astro、gradle、graphql、lua 四個 SVG 和副檔名對應（.astro、.gradle、.graphql、.gql、.lua）。它們符合研究自己的 B 定義（要事先許可，或明文禁止這種用法，包括禁止改色），跟 Dart、Elixir 同一個理由：
+    - Astro（press 頁）：「Don't modify the Astro logo or change its colors」。
+    - Gradle（商標使用指引）：「You may not use any of the Trademarks unless you have a written agreement with Gradle」、「A logo should not be displayed with color variations」。
+    - Lua（lua.org/images）：允許任何用途，但「The only modification you can make is to adapt the orbiting text」；material 的圖示是重畫、改色的版本。
+    - GraphQL（brand 頁）：商標與 logo 受 LF Projects 商標政策約束，「any other commercial purpose」要先許可；研究 §2.2 的 goose 依同一份政策判 B。
+    - 原文存在協調資料夾外的 `logs/logo-s1-sources/`（gradle-tm-guidelines、astro-press、lua-images、graphql-brand）。研究把這四個判成 A 或 C，owner 06:5x 的決定是依研究的判定做的，沒看過這些原文；這裡依 owner 07:0x「同意前先用徽章」的原則先換成通用圖示，只降低風險。要改回，等所有者同意，或在第二階段換成不改色、不改形的官方檔（Gradle 仍要書面同意）。
+  - 留下 42 個：25 個畫標誌的圖示（24 個標誌）列在授權頁，17 個通用圖形（含 `_default`）列在 `GENERIC_FILE_ICONS`。
 - 上架規則：商店截圖、商店的宣傳圖、官網和其他行銷素材，不能出現第三方的標誌（廠商標誌、Git 平台標誌、檔案類型圖示）。
   - 原因：Google 要求含 Android 或 Google 商標的行銷素材先送審（研究 §2.3、§3.4 第 6 點），多數廠商不准把標誌用在行銷或周邊，例如 Kotlin、Astro、LF Projects（goose、GraphQL）、Kimi、Rust。
   - 做法：截圖避開檔案總管的語言圖示、設定的供應商列表、新增 ACP 供應商的目錄、Git 平台的按鈕和這一頁；需要時用只有徽章和通用圖示的示範專案拍。第二階段改回標誌之後同樣適用。
-- 守門 `woowtech/third-party-notices.test.mjs`（10 項）：
+- 守門 `woowtech/third-party-notices.test.mjs`（11 項）：
   1. 顯示自己標誌的 Agent（`vendor-marks.mjs` 的 `show: "upstream"`）都有條目，沒有多的。
   2. 畫自己標誌的 forge（view 模組的圖示不是徽章）都有條目，沒有多的。
-  3. App 用到的 lucide 品牌圖示，品牌都有條目（GitLab 沒有，所以進不來）。
+  3. App 不畫 lucide 的品牌圖示。名單和別名從 lucide 自己的型別宣告讀（標成 deprecated 的「Brand icons」，0.546.0 有 18 個，各有 3 到 6 個匯出名稱）；擋具名匯入和 re-export（含 `as` 改名）、整包匯入或 `icons` 物件的成員、直接匯入圖示檔。
   4. CC BY 系列的條目都有署名、授權連結和來源；每個條目都有名稱和所有者。
   5. 畫標誌的檔案類型圖示都有條目，通用圖形列在 `GENERIC_FILE_ICONS`，沒有多的或重複的。
   6. MIT 的版權行和條文跟 `material-icon-theme/LICENSE` 一致（升級套件改了年份也會紅）。
   7. 設定從 `/settings/notices` 開這頁：slug、側欄那一列（沒有限平台）、switch 的 case、畫面用 `buildThirdPartyNotices(t)`。
   8. GitLab 是徽章、沒有 brandColor，tanuki 的路徑資料不出貨。
   9. GitHub、Codeberg 用 `createMonochromeMarkIcon`、不收顏色，view 沒有 brandColor。
-  10. 八個換掉的檔案類型標誌不在表裡、副檔名不對應、路徑資料不出貨，表裡是 46 個。
+  10. PR 動作的圖示經過 `dimmableForgeIconKind`（`use-actions.tsx` 的 `renderForgePrIcon`，所有 PR 動作共用它），fork 檔依標誌本身（`isMonochromeMarkIcon`）判斷。
+  11. 十二個換掉的檔案類型標誌不在表裡、副檔名不對應、路徑資料不出貨，表裡是 42 個。
   - 第 22 節的 `claude-badge.test.mjs`：`ALLOWED_DRAWINGS` 拿掉 `gitlab-icon.tsx`，GitHub、Codeberg 和檔案類型圖示的理由改成這一節的決定。
   - 變異測試（2026-09-30，在 `dcb7de72d` 上）：每次只改一處，跑 `third-party-notices.test.mjs` 和 `claude-badge.test.mjs`（共 22 項），看它變紅，再還原，每次還原後樹都是乾淨的：
     - `VENDOR_MARK_NOTICES` 少了 agoragentic：1 項（第 1 項）。
@@ -1277,14 +1289,30 @@ node --test woowtech/*.test.mjs
     - 放回上游的 GitHub 元件（照呼叫端的顏色畫）：1 項（第 9 項）。
     - 放回上游的 `material-file-icons.ts`（八個標誌回來）：2 項（第 5、10 項）。
   - vitest 的對照：`createMonochromeMarkIcon` 改成把呼叫端的顏色傳下去時，`woowtech-forge-marks.test.ts` 的 GitHub、Codeberg 兩項照斷言失敗（呼叫端的 #666666 畫到了標誌上）；還原後 17/17 通過。
+- 第一階段審查的修正（2026-09-30）：審查找到四個 blocker，都已修正，每個都先寫測試、看它失敗再改：
+  1. 新增專案的「從 GitHub 複製專案」和 GitHub 儲存庫列原本用 lucide 的 `Github` 線條圖示，畫成次要前景色（灰），這一列停用時還會變半透明；授權頁卻寫 GitHub 只用黑白。現在兩處都用通用的 `FolderGit2`（`components/add-project-flow.tsx`，上游檔），列的文字仍寫 GitHub。守門第 3 項改成不准任何 lucide 品牌圖示。
+  2. Astro、Gradle、GraphQL、Lua 換成通用圖示，見上面「檔案類型圖示」。
+  3. PR 動作遇到 GitHub、Codeberg 畫通用 PR 圖示，見上面「GitHub、Codeberg」。
+  4. 繁中頁面原本有 fork 自己寫、沒有繁中的英文：Haskell、Markdown 的「授權：Public domain」，Forgejo 署名後面的「, redrawn in a single color」。現在是「授權：公眾領域」和另一行「修改：重新繪製成單色」，MIT 段的標題也改成「JS 標誌」這種寫法。
+  - 變異測試（在修正後的工作樹上，`logs/logo-s1-fix-mutate.sh`）：每次只改一處，跑 `third-party-notices.test.mjs` 和 `claude-badge.test.mjs`（共 23 項），每次都變紅，還原後檔案的 sha256 相同，最後 23/23：
+    - 新增專案放回 lucide `Github`：第 3 項。
+    - 匯入別名 `GithubIcon`：第 3 項。
+    - 匯入別名 `LucideGitlab` 並改名：第 3 項。
+    - 整包匯入的成員 `LucideIcons.Github`（`plugins/icons.ts`）：第 3 項。
+    - 直接匯入 `lucide-react-native/dist/esm/icons/gitlab`：第 3 項。
+    - `renderForgePrIcon` 改回上游那一行：第 10 項。
+    - fork 檔不再問標誌是不是純黑白：第 10 項。
+    - 放回 Lua 的 SVG 和 .lua 對應：第 5、11 項。
+    - 授權頁多一筆 Astro（圖示已不出貨）：第 5 項。
 - 測試：
-  - `screens/settings/woowtech-third-party-notices.test.ts`：`/settings/notices`；繁中與英文的頁名；商標聲明；13 家 Agent 與所有者；4 個 forge 與 Forgejo 的署名；8 個檔案類型標誌的署名、授權和來源，Python、Lua 的聲明；MIT 版權行和條文跟 LICENSE 一致；整頁的段落、列和每列的文字（英文和繁中）。
-  - `git/woowtech-forge-marks.test.ts`：GitLab 畫 Gl 徽章、沒有品牌色；GitHub、Codeberg 在每個註冊的主題、呼叫端傳任何顏色時都是淺色 #000000、深色 #FFFFFF，而且沒有品牌色；Gitea、Forgejo 照舊。
-  - `components/woowtech-file-type-logos.test.ts`：八種檔案顯示通用圖示；其他 45 種副檔名各有自己的圖示，連同通用圖示共 46 個。
+  - `screens/settings/woowtech-third-party-notices.test.ts`：`/settings/notices`；繁中與英文的頁名；商標聲明；13 家 Agent 與所有者；4 個 forge 與 Forgejo 的署名（照原文）和改成單色的說明；8 個檔案類型標誌的署名、授權和來源，Python 的聲明；授權頁列的 24 個檔案類型標誌；MIT 版權行和條文跟 LICENSE 一致；整頁的段落、列和每列的文字（英文和繁中），公眾領域、MIT 段標題的繁中；繁中頁面除了所有者的原文（名稱、所有者、署名、來源、授權名稱、版權行）和 App 刻意保留的「Agent」，沒有英文。
+  - `git/woowtech-forge-marks.test.ts`：GitLab 畫 Gl 徽章、沒有品牌色；GitHub、Codeberg 在每個註冊的主題、呼叫端傳任何顏色時都是淺色 #000000、深色 #FFFFFF，而且沒有品牌色；Gitea、Forgejo 照舊；PR 動作對 GitHub、Codeberg 畫通用圖示（次要前景色），其他平台畫自己的圖示和品牌色。
+  - `components/woowtech-file-type-logos.test.ts`：十二種標誌的檔案（14 個檔名，含 .exs、.gql）顯示通用圖示；其他 41 種副檔名各有自己的圖示，連同通用圖示共 42 個。
   - `i18n/woowtech-copy.test.ts`：`thirdPartyNotices.` 只翻繁中，其他語言用英文。
 - 還沒處理的（列給 owner，不擋這一版）：
-  - 新增專案的「從 GitHub 複製專案」和 GitHub 儲存庫列用 lucide 的 `Github` 線條圖示（`components/add-project-flow.tsx`），是 GitHub 標誌的非官方改畫，畫成次要前景色（灰）。建議換成 `GitHubIcon`（純黑白）或通用圖示。
-  - 研究判 A 或 C、原文另有限制的檔案類型標誌：Astro 和 Gradle 不准改色，GraphQL 受 LF Projects 政策約束（商業用途要先許可），Lua 只准改環繞的文字，rust-artwork 說多數商業用途要許可。owner 決定保留，這裡照做。
+  - Rust：研究判 A（標誌是 CC BY 4.0）。rust-artwork 的 README 摘要寫「most commercial uses require permission」，但 Rust Foundation 商標政策的全文只講文字「Rust」可以用來說明軟體用 Rust 寫成，沒有提到在軟體介面裡用標誌。依據比上面四個弱，這次保留，要不要一起換成通用圖示由 owner 決定。
+  - 標誌旁沒有平台名稱的地方（審查的建議，不是 blocker）：hover card 的檢查列（標誌＋「Checks」）、輸入框的附加選單（標誌＋「Add issue or PR」）、檔案總管的 PR 分頁（標誌＋PR 編號）、「用…開啟」主按鈕選了 forge 時（標誌＋「Open」，`hideLabels` 時只剩圖示）。研究對 GitHub 的條件之一是旁邊有「GitHub」。
+  - 外掛可以用名稱指定任何 lucide 圖示（`plugins/icons.ts` 的 `Reflect.get`），包括品牌圖示；守門只看 App 自己的程式。本 repo 沒有出貨的外掛用到品牌圖示。
   - GitHub 標誌的路徑資料來源不明（上游 `1a01e836b` 加入，沒寫出處），沒有核對是不是官方 Invertocat 原檔；研究的條件是官方原檔、不改形。要換官方檔，由能下載品牌檔的步驟處理。
   - Codeberg 官方 logo 包是藍色和白色兩版；淺色主題畫黑色是照研究「黑或白」的條件。
   - App 沒有開放原始碼授權頁：上游 Paseo（Apache-2.0）和打包進去的 npm 套件的授權聲明，手機版和桌面版都沒有地方顯示。
