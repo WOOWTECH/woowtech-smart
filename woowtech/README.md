@@ -977,7 +977,7 @@ secret 和外部服務：
 
 仍待確認：
 
-- Playwright（手動勾選）的完整執行：分片 4 的 4 GB heap、每個 test 60 秒上限，以及上面待分類的 5 個失敗和 1 個 flaky；run 3 略過 Playwright，不能算它們已修好。
+- Playwright（手動勾選）的完整執行：2026-09-30 在整合分支跑過一次（CI #10，run 36642688479，見「驗證紀錄」的整合輪驗收）。四片都沒有 heap 用完；60 秒上限只有 `creation-old-daemon.spec.ts:95` 碰到一次，重試通過。上面待分類的 6 個裡 4 個通過，`agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119` 仍失敗；加上 main 既有的 2 個失敗和計時造成的 flaky，還沒有整次綠過。
 - 真正 cron 觸發的一次排程與勾 Playwright 的手動執行時間；目前只有同組合的手動 run 3 實測值。
 - GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑。每個 job 的「Set up job」映像版本未在本次重新核對。
 
@@ -1648,6 +1648,31 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 整合輪驗收（2026-09-30，整合分支 `woowtech/integration-0930` 的 `917fa512b`，第 8、9、18、22、23 節）：main `fde226d05` 加上帳號用量關掉（`woowtech/usage-off-0929` 的 4 個 commit）、廠商徽章（`woowtech/vendor-badges-0929` 的 8 個 commit）、兩次合併和 CI 的兩個修正（`63f74cf62`、`917fa512b`），共 16 個 commit、98 檔（+3266／−482）。新增的 17 檔都是文字；刪掉的 15 檔是上游的 8 個蝴蝶和 favicon SVG、桌面版的 7 張編輯器 PNG；package.json 和 lock 沒有變更，版本都是 0.8.0；`.github` 只改了 `ci.yml` 一處（`63f74cf62`）。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0930-*`（`integ0930-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0930-*`，CI 的 log 在同一個 logs 目錄的 `ci-0930/`。
+  - 這一輪的內容：
+    - 帳號用量關掉（第 23 節）：設定的主機清單沒有「用量」，舊的用量路由開到「連線」，context 圓環的 tooltip 只有上下文；daemon 收到用量請求回空清單，不讀憑證和鑰匙圈，也不打額度 API。
+    - 廠商徽章（第 22 節）：`woowtech/vendor-marks.mjs` 的 48 家裡 35 家顯示文字徽章；桌面版「在…中開啟」的 7 張編輯器 PNG 刪掉，改畫徽章，Finder 是資料夾。
+    - 研究後改回上游圖示的 13 家（第 22 節「顯示上游標誌的廠商」；除了 Gajae Code，都是廠商或作者自己送進 ACP registry 的檔案）：工具從 `130705c02^` 原樣還原，13 個 `.svg` 跟 `130705c02^`、`fde226d05` 是同一個 blob。
+    - 深色主題 `claude` 改叫「陶土」，英文 Terracotta（第 22 節）；id、unistyles 名稱和顏色不變。
+    - 網頁版和桌面版的啟動畫面改畫 WOOW 標誌，上游的蝴蝶拿掉（第 8 節）。
+  - 本機（`integ0930-merge.md`，`8c19faee0`，`env -i`、只准連 loopback 的 sandbox）：`build:server` 通過；守門 161/161，照 CI 拿掉 OpenCC 那一項後 160/160；`write-vendor-badges.mjs --check` 通過；typecheck app、server、client、cli、desktop 各一次；App 34 檔 364/364、server 32 檔 422/422、desktop 3 檔 14/14；`format:check` 4739 檔、lint 53 檔 0 個 warning、0 個 error。`8c19faee0..917fa512b` 只改 `ci.yml`、桌面版的 e2e 腳本、README 和兩個守門，沒有 App、server、桌面版的執行程式，所以下面在 `8c19faee0` 上的裝置結果也適用 `917fa512b`（`integ0930-review.md`）。
+  - CI：
+    - [run 36642688479](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36642688479)（CI #10，`8c19faee0`，手動、勾 Playwright）：Playwright 四片 633 個通過、5 個失敗、3 個 flaky、28 個略過，四片都沒有 heap 用完。兩條分支加或改的 spec 都過：`woowtech-provider-usage-hidden.spec.ts` 2/2、`plugin-provider-icons.spec.ts`、`appearance-theme-picker.spec.ts` 4 個、`settings-host-page.spec.ts` 9 個；上游兩個用量 spec 的 5 個照設計略過。失敗和 flaky 的 8 個 spec 這一輪都沒改，協調資料夾的分類報告（`coord/reports/ci-0930-triage.md`，不在 repo 裡）判定是 main 既有或 flaky，見下面「還沒做的」。另外兩個 job 失敗，都是這一輪造成、已修：typecheck 的守門（淺層 checkout 讀不到 `130705c02^`）和 desktop-tests 的 browser E2E（設定輪播還在找「Usage」，30 秒逾時）。
+    - [run 36645249296](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36645249296)（CI #11，`63f74cf62`，不勾 Playwright）：驗守門的修正。typecheck 轉綠；desktop-tests 仍在設定輪播逾時。
+    - [run 36659321759](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36659321759)（CI #12，`917fa512b`，手動、不勾 Playwright）：成功。第 1 次 attempt 只有 cli-tests（shard 2/3）失敗，是已知的 `lifecycle.e2e.test.ts:368` race（「Unexpected end of JSON input」，CI #9 同一行同錯，`packages/cli` 這一輪沒改）；attempt 2 只重跑這個 job，11 分 18 秒通過。最後 18 個 job：12 個成功；Playwright 四片和 Windows 兩組照設計略過，不算通過；沒有失敗。typecheck 的「Check woowtech fork guards」64 秒成功；desktop-tests（ubuntu）的 browser E2E、Linux 打包（`editor-targets` 資料夾刪掉後第一次在 CI 打包）和三個打包 smoke 都成功。
+    - 兩個修正：`63f74cf62` 讓 typecheck job 的 checkout 抓完整歷史（第 18 節），`woowtech/workflows.test.mjs` 檢查這個設定；`917fa512b` 把「Usage」從桌面版的設定輪播拿掉（第 23 節），`provider-usage-app.test.mjs` 掃 App 和桌面版的 e2e，不准再開用量頁。
+  - 平台矩陣（逐項結果表在各步驟紀錄的最後，「未測」都寫了原因）：
+    - Mac 桌面版（`integ0930-desktop.md`，打包 `8c19faee0`，未簽章、`--dir`、arm64，用假 claude、假 ACP agent 和 dev 的 mock）：通過：包裡顯示徽章的廠商標誌路徑資料、Claude 標誌、蝴蝶、編輯器 PNG、`wrangler*.toml`、relay.paseo.sh 都是 0（審查再用每家所有的路徑元素掃一次，也是 0：`integ0930-review-pkg-allpaths.json`）；徽章在繁中的淺色和深色、English 的淺色和陶土都對，看了供應商列表、ACP 目錄、模型選單、歷史的 Agent 列和 Agent 分頁；還原的 13 家顯示上游圖示；外掛送來的 SVG 不畫，改畫徽章 D；主題選單是「陶土」／Terracotta，選了以後重開仍是它；設定沒有用量，`/usage` 開到「連線」，tooltip 沒有用量、App 送出 0 次用量請求，直接問 daemon 也回空清單；第一次啟動（淺色）和重開（陶土）的啟動畫面都是 WOOW；「在…中開啟」是 Cu、Vs、Z、As 的徽章和 Finder 的資料夾。
+    - Android 模擬器（`integ0930-android.md`，`8c19faee0`，沿用 Debug App，JS 從這個分支的 Metro 載入，daemon 用 mock）：通過：徽章的淺色、深色（供應商列表、ACP 目錄、模型選單、Agent 列、Agent header）；還原的 13 家；主題「陶土」／Terracotta，重開 App 後仍選著；設定沒有用量、tooltip 只有上下文、`/usage` 開到「連線」（繁中、English），daemon 沒有用量查詢（正向對照有記到）。啟動畫面、「在…中開啟」和打包掃描只有網頁、桌面版有，未測。
+    - iOS 模擬器（`integ0930-ios.md`，`8c19faee0`）：守門 161/161、Metro、兩個 daemon、外開攔截通過。11:57 內建碟剩 1.6 GiB，照停止規則停下，徽章、主題、用量都未測；協調者改排在 `woowtech/logo-compliance-0930` 的 iOS 實測一起看。
+    - Playwright 只在 CI 跑（上面的 CI #10），本機沒跑。
+  - 審查與合併前守門（`integ0930-review.md`、`integ0930-gate.md`）：審查的 blocker 0；守門 go。記錄下來的規則偏差：Android 步驟的 adb server 自動連上別人的模擬器約 3 分鐘，沒有對它下指令，之後自己關掉；審查用了一次 `pgrep -f`，兩個暫存 SVG 寫到 `/tmp` 後同一個指令就刪掉。都不影響這一輪的證據。
+  - 還沒做的：
+    - 標誌：上架前必做的合規（授權與第三方聲明頁、GitLab 徽章、GitHub 和 Codeberg 改純黑白、8 個檔案類型圖示換成通用圖示）在 `woowtech/logo-compliance-0930`；另外 14 家補齊條件後改回標誌是之後的版本，在 `woowtech/logo-restore-0930`。
+    - Playwright（CI #10，分類報告）：main 既有的失敗 2 個：`sidebar-help.spec.ts:80`（官網 `/` 轉到 `/en`，期待值不接受）、`viewed-agent-timelines.spec.ts:384`（fork 把錯誤改成「Host is not connected」，spec 還期待「Transport not connected」）。不是這一輪造成、原因不明或計時造成：`agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`（第 18 節的 run 2 就已失敗）、`agent-message-submission.spec.ts:1298`。重試才過的 flaky：`provider-settings-refresh.spec.ts:122`、`creation-old-daemon.spec.ts:95`、`sidebar-context-menu.spec.ts:17`。修法建議在分類報告；要一次綠的 Playwright，先修 main 既有的 2 個。
+    - 發現、跟這一輪無關：新工作區的專案選單搜尋欄在繁中顯示英文「Search projects」（main 既有）；從主機清單新增主機後，在外觀換主題又跳出「新增連線」sheet（同 F11 驗證輪）；autohand 的 registry 圖示在 12～16 px 認不出內容（廠商原檔）。
+    - 要實機或正式簽章才驗得到的：手機實機上的徽章（12～24 px 讀不讀得出縮寫）、主題選單和沒有用量的設定；用舊版 App 連新的 daemon 時 tooltip 沒有紅字、用量頁只顯示「No usage data」；瀏覽器裡的網頁版啟動畫面；桌面版 Developer ID 簽章與公證後的正式版、Android 正式簽章版、TestFlight。徽章、主題、用量和啟動畫面的實機項目列在「接下來」。
+  - 「接下來」的兩項 Playwright 合成一項、照 CI #10 改寫，第 18 節「仍待確認」的 Playwright 完整執行也照 CI #10 改寫；「接下來」第 23 節那一項的 Playwright 已拿掉。
 - 帳號用量關掉（2026-09-29，分支 `woowtech/usage-off-0929` 的 `8dfa03bd2`，第 23 節）：步驟紀錄在 `~/.local/share/woowtech-smart/logs/usage-off.md`，log 在同目錄的 `usage-off-*`。
   - 先紅後綠：實作前，server 的 fork 測試 2 紅 4 綠（OFF 基線的 service 和 RPC 都拿到 stub 與 Claude 的用量，fetcher、鑰匙圈 stub 和 fetch stub 都被叫到）；App 的 meter 測試 tooltip 多出「ClaudeMax 20xSession42%」，visibility 測試還沒有模組；兩個守門 13 個紅 5 個。實作後 server 32 檔 421/422、App 4 檔 47/47、守門 13/13；`format:check`、改到的檔的 lint、server 和 App 的 typecheck 都通過。
   - server 唯一的紅是 `omp/agent.diagnostic.test.ts`：它斷言診斷輸出不含 `.pi/agent`，這台 Mac 的 PATH 有 `~/.pi/agent/bin`。9/25 的 main 一樣紅，跟這次改動無關；PATH 拿掉那一段後 5/5。
@@ -1984,11 +2009,10 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
-- CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
-- 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
+- Playwright：2026-09-30 在整合分支勾選跑過一次完整執行（CI #10，見「驗證紀錄」的整合輪驗收），5 個失敗、3 個 flaky 都不是那一輪的改動造成。先修 main 既有的 `sidebar-help.spec.ts:80`、`viewed-agent-timelines.spec.ts:384`，再決定 `agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`、`agent-message-submission.spec.ts:1298` 怎麼處理（修法建議在 `coord/reports/ci-0930-triage.md`），之後再勾一次 Playwright，要整次綠。
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
 - 廠商的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表和新增 ACP 供應商的目錄、側欄的 Agent 列、模型選單、匯入工作階段、排程、終端機設定檔這些 12～24 px 的地方都讀得出縮寫（C、Cx、Gh、Oc、Pi、Om、Mm 等），桌面版「在…中開啟」選單的 VS Code、Cursor 等是徽章、Finder 是資料夾；外觀設定的主題選單顯示「陶土」／Terracotta，原本選了這個主題的裝置更新後仍是同一個主題。
 - 待 owner 決定（第 22 節）：檔案總管的檔案類型圖示（程式語言和工具的圖形）要不要也換。
 - 網頁版和桌面版的啟動畫面（第 8 節）要在實機上看：淺色和深色主題都是 WOOW 標誌在閃，不是蝴蝶。
-- 帳號用量關掉（第 23 節）要在實機看：桌面版、iOS、Android 的設定主機清單都沒有「用量」，其他列照舊；舊的 `/settings/hosts/<id>/usage` 連結開到「連線」；context 圓環的 tooltip 只有上下文、tokens 和費用，沒有「Loading plan usage…」或方案卡；用舊版 App 連新的 daemon，tooltip 不出現紅字，用量頁只顯示「No usage data」。Playwright 的 `woowtech-provider-usage-hidden.spec.ts` 要在手動勾選 Playwright 的 CI 跑一次。
+- 帳號用量關掉（第 23 節）要在實機看：桌面版、iOS、Android 的設定主機清單都沒有「用量」，其他列照舊；舊的 `/settings/hosts/<id>/usage` 連結開到「連線」；context 圓環的 tooltip 只有上下文、tokens 和費用，沒有「Loading plan usage…」或方案卡；用舊版 App 連新的 daemon，tooltip 不出現紅字，用量頁只顯示「No usage data」。
 - 商標（TIPO）與 D-U-N-S。
