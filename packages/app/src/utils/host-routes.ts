@@ -500,6 +500,8 @@ export const SETTINGS_SECTION_SLUGS = [
   "permissions",
   "diagnostics",
   "about",
+  // woowtech smart: Trademarks and third-party notices (woowtech/README.md §24).
+  "notices",
 ] as const;
 
 export type SettingsSectionSlug = (typeof SETTINGS_SECTION_SLUGS)[number];

@@ -1111,6 +1111,62 @@ const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
   rowWithStatus: "{{row}}，{{status}}",
 };
 
+// Settings > Trademarks and third-party notices (woowtech/README.md §24). The marks' names,
+// owners, credits and license texts come from screens/settings/woowtech-third-party-notices.ts and
+// stay as their owners write them.
+const THIRD_PARTY_NOTICES_ENGLISH = {
+  title: "Trademarks and third-party notices",
+  statement:
+    "woowtech smart is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.",
+  sections: {
+    trademarks: "Trademarks",
+    agents: "Agents",
+    agentsInfo:
+      "Agents shown with their own icon, as each author publishes it for ACP clients. Other agents show a text badge.",
+    forges: "Git forges",
+    forgesInfo:
+      "Shown next to links that open a forge. GitHub and Codeberg draw in black or white, and GitLab shows a text badge.",
+    fileTypes: "File type icons",
+    fileTypesInfo: "Icons for files written in these languages and formats, in the file explorer.",
+    fileTypesChangesTitle: "Changes from the original logos",
+    fileTypesChanges:
+      "material-icon-theme redrew these logos as file icons, and woowtech smart tones down their colors. Icons adapted from a logo under a Creative Commons ShareAlike license are shared under that same license.",
+    mit: "MIT License",
+    mitInfo:
+      "The MIT License applies to each work below, under the copyright notice listed with it.",
+    mitTextTitle: "License text",
+  },
+  owner: "Owner: {{owner}}",
+  license: "License: {{license}}",
+  source: "Source: {{source}}",
+};
+
+const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
+  title: "商標與第三方授權",
+  statement:
+    "渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。",
+  sections: {
+    trademarks: "商標",
+    agents: "Agent",
+    agentsInfo:
+      "以自己的圖示顯示的 Agent，圖示是作者提供給 ACP 用戶端的版本。其他 Agent 顯示文字徽章。",
+    forges: "Git 平台",
+    forgesInfo:
+      "顯示在開啟 Git 平台的連結旁。GitHub 與 Codeberg 只用黑色或白色顯示，GitLab 顯示文字徽章。",
+    fileTypes: "檔案類型圖示",
+    fileTypesInfo: "檔案總管裡，代表這些程式語言與格式的檔案圖示。",
+    fileTypesChangesTitle: "與原始標誌的差異",
+    fileTypesChanges:
+      "material-icon-theme 把這些標誌重新繪製成檔案圖示，渥屋智能再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。",
+    mit: "MIT 授權",
+    mitInfo: "MIT 授權適用於下列每項作品，著作權聲明列在各項作品下。",
+    mitTextTitle: "授權條文",
+  },
+  owner: "所有者：{{owner}}",
+  license: "授權：{{license}}",
+  source: "來源：{{source}}",
+};
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
@@ -1131,5 +1187,7 @@ export function woowtechCopyFor(language: string) {
     time: language === "zh-TW" ? TIME_ZH_TW : TIME_ENGLISH,
     message: language === "zh-TW" ? MESSAGE_ZH_TW : MESSAGE_ENGLISH,
     workspaceRecovery: language === "zh-TW" ? WORKSPACE_RECOVERY_ZH_TW : WORKSPACE_RECOVERY_ENGLISH,
+    thirdPartyNotices:
+      language === "zh-TW" ? THIRD_PARTY_NOTICES_ZH_TW : THIRD_PARTY_NOTICES_ENGLISH,
   };
 }
