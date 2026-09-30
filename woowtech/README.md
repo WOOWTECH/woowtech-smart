@@ -260,11 +260,13 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - favicon：字形放大，16px 也看得出輪廓。狀態點沿用上游的顏色，執行中是 #3b82f6、需要注意是 #22c55e。
   - macOS：照 824/1024 的格線畫，含陰影。
 - App 裡的 logo 元件（`paseo-logo.tsx`，有 5 個地方在用）改畫 WOOW 標誌，顏色見第 9 節。
+- 網頁版和桌面版的啟動畫面用 CSS 遮罩畫標誌，沒有經過 logo 元件，到 2026-09-29 都還是上游 Paseo 的蝴蝶（手機版一直是 WOOW 標誌）。現在遮罩用 `paseo-logo.tsx` 的 `woowSymbolMaskSvg()`，跟元件同樣的 10 筆筆畫。上游留下的 `assets/images/butterfly-*.svg`、`favicon-*.svg` 在整個 repo（含官網）都沒有引用，已刪；App 用的 favicon 是 `generate-icons.mjs` 產生的 PNG。
 - `woowtech/icons.test.mjs` 檢查以下幾件事，合併上游時如果被換回 Paseo 的圖示就會失敗：
   - 圖示內容：有品牌藍、沒有上游的黑色方塊。
   - 尺寸和格式。
   - Android 的底色和通知的強調色。
   - logo 元件跟品牌檔一致。
+  - 出貨的檔案裡沒有上游 Paseo 蝴蝶的路徑資料（App、網頁、桌面版、server、CLI）。
 - 換 logo 的步驟：
   1. 更新 `woowtech/brand` 裡的來源檔。
   2. 跑 `flatten-symbol.py`。
@@ -277,7 +279,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 這是看過 A/B 兩版截圖後選定的。
   - 已知取捨：按鈕上的白字對比是 3.4:1，低於無障礙 AA 標準的 4.5:1。
 - 深色背景上的連結用比較淡的 #8fa6fd，確保讀得清楚。
-- 預設的深色主題原本帶上游的綠色調，現在背景改成中性灰（沿用 Zinc 的灰階），紅色也改用 Zinc 那組中性紅。其他深色主題（Zinc、Midnight、Claude、Ghostty）維持原樣。
+- 預設的深色主題原本帶上游的綠色調，現在背景改成中性灰（沿用 Zinc 的灰階），紅色也改用 Zinc 那組中性紅。其他深色主題（Zinc、Midnight、陶土、Ghostty）維持原樣。陶土原本叫 Claude，改名見第 22 節。
 - 品牌藍只寫在 `packages/app/src/styles/brand.ts`（`BRAND_BLUE`），主題的強調色直接引用它。
   主題清單裡代表預設深色主題的色塊（上游是綠色 #2D8B62）也引用它。選單上深色主題顯示的是月亮圖示，這個色塊目前沒有畫出來。
 - 下面兩個值沒辦法引用 `brand.ts`，改品牌藍時要一起改。上游兩處都是綠色 #20744A：
@@ -851,6 +853,7 @@ node --test woowtech/*.test.mjs
   - 放在 typecheck job：這個 job 已經跑過 `npm ci` 和 `npm run build:server`，守門跨套件的匯入讀各套件的 dist。沒有新增 job；觸發、排程、Playwright 的手動 gate、Windows 開關、runner、逾時和 concurrency 都沒動。
   - 只跳過一項：zh-TW 重新產生（`zh-tw.test.mjs` 第一項）。它要 OpenCC，OpenCC 裝在 `woowtech/tools`（自己的 package.json），`npm ci` 不裝。用完整名稱跳過，同一個檔的其他 5 項照跑；本機照第 7 節裝好 tools 就會跑到它。`cli-name.test.mjs` 的 Install CLI 那一項照原本的規則只在 macOS 跑。Node 22 會把名稱被跳過的測試整個濾掉，報告裡不會列成 skipped。
   - `--test-concurrency=1`：一次跑一個檔。2 核 runner 的預設本來就是 1（核心數減一），寫出來讓本機的結果跟 CI 一樣。
+  - checkout 抓完整歷史（`fetch-depth: 0`，2026-09-30）：第 22 節的廠商圖示檢查用 `git show` 讀 `UPSTREAM_REF` 時的上游圖示檔，`actions/checkout` 預設只抓最新一個 commit。CI #10（run 36642688479）因此失敗：`fatal: invalid object name '130705c02^'`；本機的 clone 有完整歷史，所以沒發現。`woowtech/workflows.test.mjs` 檢查這個設定。
   - typecheck 看 `quality` 這組路徑（`.github/ci-paths.yml`）：PR 只改到 `.md`、`.svg` 這類檔案時它不跑，守門也跟著不跑；每週的排程和手動執行都會跑。
   - 守門：上游的 `scripts/ci-workflow.test.mjs` 多一項（在 `changes` job 的 Validate CI contracts 跑，不需要安裝）：typecheck 有這一步、指令完全一樣、在 build 之後、沒有 `if` 和 `continue-on-error`。拿掉這一步、加條件、改跳過的條件、縮小 glob 都會失敗。`woowtech/workflows.test.mjs` 另外檢查跳過的條件只對到 zh-TW 重新產生那一項。
   - 本機模擬（2026-09-29，這台 Mac，不是 Ubuntu）：Node 22.23.2、`CI=true`、全新的 HOME、PATH 沒有 `~/.local/bin`，`woowtech/tools/node_modules` 暫時移開（沒有 OpenCC）。先 `npm run build:server`，再跑 `changes` job 的三個契約檔（28 項全過）和這一步（132 項全過，36 秒）；被跳過的那一項單獨跑，因為沒有 OpenCC 而失敗，證明它不能在 CI 跑。macOS 會多跑 Install CLI 那一項。Ubuntu 2 核 runner 上的結果和時間見「驗證紀錄」的 F11 驗證輪（CI #9）。
@@ -974,7 +977,7 @@ secret 和外部服務：
 
 仍待確認：
 
-- Playwright（手動勾選）的完整執行：分片 4 的 4 GB heap、每個 test 60 秒上限，以及上面待分類的 5 個失敗和 1 個 flaky；run 3 略過 Playwright，不能算它們已修好。
+- Playwright（手動勾選）的完整執行：2026-09-30 在整合分支跑過一次（CI #10，run 36642688479，見「驗證紀錄」的整合輪驗收）。四片都沒有 heap 用完；60 秒上限只有 `creation-old-daemon.spec.ts:95` 碰到一次，重試通過。上面待分類的 6 個裡 4 個通過，`agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119` 仍失敗；加上 main 既有的 2 個失敗和計時造成的 flaky，還沒有整次綠過。
 - 真正 cron 觸發的一次排程與勾 Playwright 的手動執行時間；目前只有同組合的手動 run 3 實測值。
 - GitHub 在 run 1 的提示：actions 的 Node 20 已淘汰，被強制改用 Node 24 跑。每個 job 的「Set up job」映像版本未在本次重新核對。
 
@@ -1104,26 +1107,109 @@ node --test woowtech/*.test.mjs
 - 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
 - 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送在定向輪（integration-0928）驗過，見「驗證紀錄」。
 
-### 22. Claude 改用文字徽章（品牌合規）
+### 22. 廠商標誌改用文字徽章（品牌合規）
 
-- 原因：Anthropic 的條款允許產品用純文字寫「Claude Code」，但使用它的標誌要書面許可。owner 在 2026-09-27 決定把 App 和桌面版裡的 Claude 標誌換成文字。
-- 做法：每個 Claude 圖示都改成中性的文字徽章：圓角方框裡一個字母 C，線條用呼叫端傳進來的顏色（主題的前景色或次要前景色）。沒有 Anthropic 的放射狀標誌，也沒有 Claude 的橘色（#D97757 這類）。
-  - 字母用路徑畫，不用 `<text>`：iOS、Android 和網頁不必靠字型，畫出來都一樣。
-  - 「Claude」這個名稱照舊用文字顯示在原本的地方。
-- 徽章只寫在 fork 檔 `packages/app/src/components/icons/claude-badge.ts`：方框和字母的幾何、SVG 字串、哪些 provider id 算 Claude（`claude`、`claude-acp`）。用到它的上游檔：
-  - `components/icons/claude-icon.tsx`：`ClaudeIcon` 改畫徽章，名稱和 props（size、color）不變，`provider-icons.ts` 不用改。
-  - `components/provider-icon-name.ts`：`claude-acp` 跟 `claude` 一樣回傳內建的徽章，而且先於主機快照的 SVG（+5 行）：主機（例如外掛 provider）替 `claude-acp` 送來的 SVG 不會顯示。
-  - `assets/acp-provider-icons.ts`：`claude-acp` 那一筆改成 `CLAUDE_BADGE_SVG`（+4／-2 行）。這個檔不是產生的：repo 裡沒有產生器，上游每次都手改它和旁邊的 `.svg`。
-  - `assets/acp-provider-icons/claude-acp.svg`、`assets/icons/claude.svg`：內容換成同一份徽章 SVG。後者沒有程式在用，留著是為了合併上游時不衝突。
-- 範圍：App（iOS、Android、網頁）和桌面版（載入同一份網頁）。桌面版自己的 `src`、`assets` 沒有 Claude 標誌。server 和 CLI 沒有自己的 Claude SVG：provider 的 SVG 只從外掛讀。上游官網 `packages/website` 還有 Claude 標誌，我們不部署它（第 18 節）。
+- 原因：Anthropic 的條款不准把它的名稱或標誌當成產品自己功能的名稱，使用標誌也要書面許可。owner 在 2026-09-27 先把 Claude 標誌換成文字徽章，2026-09-29 決定所有廠商都照這個做法，不逐家做法律審查。git 平台（GitHub、GitLab、Gitea、Forgejo、Codeberg）的圖示保留。owner 之後要逐家查能不能用（上游 Paseo 都用標誌），查過可以用的廠商會改回上游的標誌，做法見下面「改回上游標誌」。
+- 徽章：圓角方框裡是廠商名稱的縮寫，一個大寫字母，或大寫加一個小寫（C、Cx、Gh、Ge），線條用呼叫端傳進來的顏色（主題的前景色或次要前景色）。沒有廠商的標誌，也沒有廠商的代表色（Claude 的 #D97757 這類）。
+  - 字母是路徑畫的單線字形，不用 `<text>`：iOS、Android 和網頁不必靠字型，畫出來都一樣。viewBox 24 裡，一個字母高 10；兩個字母高 8.5，放不進方框時再縮，但至少 7（12 px 時 3.5 px），線寬至少 1.8。
+  - 廠商名稱照舊用文字顯示在徽章旁邊，所以縮寫可以重複；內建 7 家在模型選單裡並列，縮寫都不同。
+- fork 檔 `packages/app/src/components/icons/vendor-badge.ts`：方框、字形、縮寫表（`VENDOR_MONOGRAMS`，依 provider id、ACP 圖示 id、終端機設定檔圖示、桌面版編輯器 id）和 SVG 字串。沒列在表上的 id 用 id 的第一個英文字母。`vendor-badge-icon.tsx` 是 react-native-svg 的元件；`claude-badge.ts` 只剩 `CLAUDE_BADGE_SVG` 和哪些 id 算 Claude。
+- 哪一家顯示徽章、哪一家顯示上游標誌，是 `woowtech/vendor-marks.mjs` 的資料：每一家一筆，`show` 是 `"badge"` 或 `"upstream"`，另外列出它的圖示檔（`files`）、在 `acp-provider-icons.ts` 的項目（`acpIcons`）和標誌路徑資料的開頭（`logoPaths`，守門用）。`woowtech/tools/write-vendor-badges.mjs` 照這份資料寫檔：顯示徽章的廠商，圖示元件改成 `createVendorBadgeIcon("<id>")`、vendored `.svg` 寫成徽章、ACP 項目寫成 `vendorBadgeSvg("<id>")`、桌面版的 PNG 刪掉；顯示上游標誌的廠商，這些檔和 ACP 項目從 `UPSTREAM_REF`（`130705c02^`，fork 改任何廠商圖示之前的最後一個 commit；除了 Claude 以外內容跟 main `fde226d05` 相同）原樣還原。`--check` 只檢查。
+- 用到它的上游檔：
+  - `components/icons/{claude,codex,copilot,opencode,pi,omp,minimax,discord}-icon.tsx`：整個換成 `createVendorBadgeIcon("<id>")`，匯出名稱不變，`provider-icons.ts` 的內建對照不用改。Discord 那個沒有地方在用（第 10 節拿掉了 Discord 連結），換掉是為了不出貨它的路徑資料。
+  - `assets/acp-provider-icons.ts`：由上面的工具寫，不要手改。repo 裡沒有上游的產生器，上游每次都手改它；合併時上游新增的一筆會帶廠商的 SVG，守門會擋：在 `vendor-marks.mjs` 加那一家，再跑工具。
+  - `assets/acp-provider-icons/*.svg`（37 個）、`assets/icons/{claude,codex}.svg`：沒有程式讀，留著是為了合併上游時不衝突，內容由工具寫。
+  - `components/provider-icon-name.ts`（+5／-3 行）：已知的 id（內建、ACP、終端機設定檔）先於主機快照的 SVG，主機替這些 id 送來的 SVG 不會用到。
+  - `components/provider-icons.ts`（+4／-1 行）：主機送來的 SVG 不畫，改畫這個 provider 的徽章。放在繪製這一層、不放在 `resolveProviderIconName`，是因為上游的 `providers-snapshot.test.ts` 用解析結果裡的 SVG 判斷哪一份快照生效。
+- 主機送來的 SVG：外掛 provider 或自訂 provider 的圖示是執行時才拿到的內容，可能是任何廠商的標誌，App 認不出來，所以一律不畫，改畫徽章：縮寫表有的用表（`codex-acp` 顯示 Cx），沒有的用 id 的第一個字母（外掛範例 `direct-example` 顯示 D）。代價是外掛自己設計的圖示看不到（協調者 2026-09-29 同意）。原本「外掛用別的 id 帶 Claude 標誌時照樣顯示」的例外取消。沒有送 SVG 的未知 provider 照舊顯示機器人圖示。
+- 桌面版「在…中開啟」：上游其實有出貨編輯器標誌，`packages/desktop/assets/editor-targets/` 的 7 張 PNG（VS Code、Cursor、Zed、WebStorm、Android Studio、Antigravity、Finder），由 electron-builder 打包成 `editor-target-icons`，執行時讀檔。現在：
+  - 7 張 PNG 刪掉。`electron-builder.yml` 不改：來源資料夾不在時 electron-builder 只記一行 `file source doesn't exist` 警告，照常打包；哪天某家改回上游標誌，還原它的 PNG 就會打包進去。
+  - `runtime.ts` 的 `loadBundledIcon` 改呼叫 fork 檔 `features/editor-targets/woowtech-editor-icons.ts`（+3／-3 行）：PNG 在就照上游顯示圖片，不在就回傳 `{ kind: "badge", vendor }`，App 用同一個徽章畫；Finder 用資料夾符號（Explorer、Files 本來就用它）。
+  - 圖示多一種 `badge`：桌面版的 `target.ts`、App 的 `desktop/host.ts` 和 `workspace/desktop-open-targets.ts`；`components/icons/editor-target-icon.tsx` 畫徽章。
+  - 上游本來就沒有標誌的編輯器（VSCodium、VS Code Insiders、JetBrains 各 IDE、Kiro、Trae 等）照舊是終端機符號。
+- 改回上游標誌（例如 Cursor 查過可以用）：
+  1. `woowtech/vendor-marks.mjs` 裡 `cursor` 那一筆的 `show: "badge"` 改成 `show: "upstream"`（一行）。
+  2. `node woowtech/tools/write-vendor-badges.mjs`：從 `UPSTREAM_REF` 還原 `acp-provider-icons/cursor.svg`、桌面版的 `editor-targets/cursor.png`，並把 `acp-provider-icons.ts` 的 `cursor` 項目換回上游的 SVG。
+  3. `node --test woowtech/*.test.mjs`，再照驗證流程跑 App、桌面版的測試與 typecheck。守門會照資料自動放行這一家的檔案，同時繼續擋其他廠商。Claude 也一樣：改 `claude` 那一筆，守門裡 Claude 專用的三項會自動略過。
+  - 改回徽章：把 `show` 改回 `"badge"` 再跑一次工具。
+  - 解析和繪製的程式不用改：內建 provider 看圖示元件檔，ACP 看 `acp-provider-icons.ts`，桌面版看 PNG 在不在；主機送來的 SVG 不論哪一家都畫徽章。
+- 顯示上游標誌的廠商（2026-09-30，逐家研究的第一部分）：
+  - 依據：協調資料夾的 `coord/reports/logo-usage-research.md`（不在 repo 裡）§2.0、§2.2、§3.1 (a)。這 13 家都判 A：圖示是廠商或專案作者自己送進官方 ACP registry 的（作者本人加的 Gajae Code 例外，它不在 registry，是作者在上游 PR #3471 加的），而且找不到相反的規則。registry 要求圖示用 `currentColor`，就是設計來讓 ACP 客戶端照主題色顯示，跟我們的畫法相同。上游的檔案就是 registry 的檔案，工具從 `130705c02^` 原樣還原，沒有下載任何檔案。
+  - 13 家與判定：
+    - agoragentic（Agoragentic 本人送）、autohand（創辦人送）、crow（作者本人）、dirac（dirac-run）、fast-agent（作者本人）、nova（主要貢獻者）、sigit（第二大貢獻者）、stakpak（Stakpak 工程師重送）、vtcode（作者本人）：A（registry）。
+    - cortex-code（Snowflake 員工送）：A（registry，弱）；另外不能把 Snowflake、Cortex 放進自家產品名。
+    - dimcode（ArcShips）：A（registry）；條款只禁止會造成混淆的用法。
+    - qoder（Qoder 開發者送）：A（registry）。
+    - gajae-code（`gjc`）：A（作者本人），作者的 README 把 Paseo 列為支援的客戶端。
+  - 條件（研究 §2.2 的 R 條件）：用 registry 原檔；照主題色顯示；旁邊有 agent 名稱，不暗示背書或合作；registry 更新時跟著更新；廠商要求撤下時改回徽章。
+  - 「旁邊有 agent 名稱」的現況（只讀程式，沒有改）：
+    - 有名稱：設定頁的供應商列表、新增 ACP 供應商的目錄（圖示＋名稱＋版本＋說明）、模型選單的供應商列和供應商頁的標題（混合清單的模型列寫「供應商 · 說明」）、匯入工作階段的供應商篩選、用量卡、指令選單的模型路徑。
+    - 圖示旁是標題，不是 agent 名稱：側欄的 Agent 列（對話標題）、工作區的 Agent 分頁（對話標題；供應商名稱只在副標題「{供應商} agent」和 tooltip）、子 Agent 列和分頁（子 Agent 名稱；分頁副標題有供應商）、排程列（排程標題）、匯入工作階段的列（工作階段標題）、composer 的模型按鈕（模型名稱）。終端機設定檔顯示的是使用者自己取的設定檔名稱。
+  - 哪一家要求撤下，就把它在 `woowtech/vendor-marks.mjs` 的 `show` 改回 `"badge"`（一行）再跑工具。
+  - 其他廠商繼續顯示徽章，等 owner 決定條件怎麼做：junie、zed、webstorm、android-studio 要先加商標歸屬聲明或改標籤；研究 §3.1 (b) 的 opencode、cursor、cline、kilo 要先核對跟官方素材一致；(c) 的 codex、vscode、gemini、antigravity、grok、mistral-vibe 要換官方檔或改色（工具只能還原上游檔）；B、C 兩類照研究維持徽章。
+- 主題：內部名稱 `claude` 的深色主題改叫「陶土」，英文 Terracotta。
+  - 名稱寫在 fork 檔 `i18n/theme-copy.ts`，跟 `support-copy.ts` 一樣由 `brand.ts` 在載入翻譯時套用，不改上游的語系檔：繁中和簡中「陶土」、英文 Terracotta、日文テラコッタ、韓文테라코타、西班牙文和葡萄牙文 Terracota、法文 Terre cuite、俄文 Терракота、阿拉伯文 تيراكوتا。上游之後新增的語言顯示英文。
+  - `zh-TW.ts` 不用重新產生：產生器照舊留英文（`zh-tw-untranslated.mjs` 的 `KEEP_ENGLISH` 把這個 key 從「主題名稱」移到「載入時替換」那組），顯示時換成「陶土」。
+  - id、unistyles 名稱 `darkClaude` 和顏色（強調色 #d97757、代表色 #D97757）都不變，已經選了這個主題的人設定照舊。
 - 刻意沒改的：
-  - 其他廠商的標誌（OpenAI／Codex、Copilot、Cursor、Gemini、OpenCode、Pi、OMP、MiniMax 等）照舊，等 owner 決定。
-  - 深色主題「Claude」（`styles/theme.ts`：強調色 #d97757、代表色 #D97757）。它是主題不是標誌，但名稱和顏色都來自 Claude，要不要改名換色等 owner 決定。
-  - 外掛自己帶的圖示：外掛用 `claude`、`claude-acp` 以外的 id 帶 Claude 標誌時照樣顯示。那是外掛的內容，不是我們出貨的檔案。
-- 測試：
-  - `components/woowtech-claude-badge.test.ts`：內建 `claude` 在四種圖示尺寸（12、14、16、20）、每個主題的前景色和次要前景色下都畫徽章，線條就是傳進來的顏色；`claude-acp` 不論主機有沒有送 SVG 都是同一個徽章；ACP 那一筆就是徽章；徽章 SVG 只用 currentColor。
-  - 守門 `woowtech/claude-badge.test.mjs`：掃 App（`src`、`assets`、`public`、`plugins`）、桌面版（`src`、`assets`）、server 和 CLI 出貨的檔案，不准出現上游那兩份 Claude 標誌的路徑資料（去掉空白和逗號後比對開頭）；檔名有 claude 或 anthropic 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`）；兩個 `.svg` 和 ACP 那一筆都要等於徽章。上游換回標誌、新增一份複製的標誌，或把 Claude 圖示改成橘色時會失敗。
+  - git 平台的圖示（owner 決定保留）。
+  - 檔案總管的檔案類型圖示（`components/material-file-icons.ts`，material-icon-theme 的程式語言和工具圖形）：等 owner 決定，守門的白名單理由寫「file-type icons, pending owner decision」。
+  - `packages/app/assets/images/editor-apps/*.png`：上游放在 App 套件裡的編輯器標誌，App 沒有任何地方引用，不會打包；上游官網引用其中的 `finder.png`。
+  - 上游官網 `packages/website`（我們不部署，第 18 節）。
+- 測試（App 和桌面版的測試不看哪一家顯示什麼，改回上游標誌時不用改測試；照資料檢查的都在守門）：
+  - `components/woowtech-vendor-badge.test.ts`：縮寫表和沒列在表上的 id；每一種大寫、大寫加小寫都放得進方框並留邊，字高和線寬不低於上面的下限，而且置中；SVG 只用 currentColor；徽章元件在四種圖示尺寸（12、14、16、20）和淺色、深色主題的前景色下畫出正確的縮寫；ACP 目錄的每一家就算主機送了 SVG 也畫目錄自己的圖示；其他 provider 的主機 SVG 畫成徽章；每個 ACP 圖示 id 都有縮寫。
+  - `components/woowtech-claude-badge.test.ts`：Claude 的徽章是 C；`claude-acp` 不論主機有沒有送 SVG 都跟 `claude` 同一個圖示。
+  - 上游的 `provider-icons.test.ts`：主機 SVG 的預期值改成徽章（註解 `woowtech smart:`）。`provider-icon-name.test.ts`、`providers-snapshot.test.ts` 不用改。
+  - e2e `plugin-provider-icons.spec.ts` 的 helper：設定頁、新工作區的模型選單、窄版和既有 Agent 的 composer 都畫 `direct-example` 的徽章，而且沒畫外掛 `icon.svg` 的路徑。本機沒跑（要 Metro 和 daemon），交給 CI。
+  - 桌面版 `features/editor-targets/woowtech-editor-icons.test.ts`：用暫存資料夾，PNG 不在時編輯器是徽章、Finder 是資料夾，PNG 在時照上游回傳圖片。
+  - `i18n/woowtech-theme-copy.test.ts`：陶土、Terracotta；每種語言的主題名稱都不含 Claude（含各語言的音譯，例如西文的 claudio）；id、unistyles 名稱和顏色不變。
+  - 守門 `woowtech/claude-badge.test.mjs`（沿用檔名，範圍擴大到所有廠商，照 `vendor-marks.mjs` 檢查）掃 App（`src`、`assets`、`public`、`plugins`）、桌面版（`src`、`assets`）、server 和 CLI 出貨的檔案：
+    1. Claude 顯示徽章時，不准出現 Claude 標誌的兩份路徑資料；其他顯示徽章的廠商也不准出現各自的標誌路徑資料（取自上游，去掉空白和逗號後比對開頭）。
+    2. Claude 顯示徽章時，Claude 的圖示檔不准寫死顏色（hex、`rgb()`、`hsl()`），兩個 `.svg` 和 ACP 那一筆等於 Claude 的徽章。
+    3. 每個廠商圖示檔都跟資料一致：顯示徽章的是徽章（元件、`.svg`、ACP 項目），PNG 不在；顯示上游標誌的跟 `UPSTREAM_REF` 逐位元組相同。徽章檔不准寫死顏色。
+    4. 上游出貨的每個廠商圖示（vendored `.svg`、桌面版 PNG、ACP 項目）都要在資料裡，而且只屬於一家。
+    5. 只有白名單的檔案可以有 SVG 路徑資料：徽章的字形、5 個 git 平台圖示、WOOW 標誌、齒輪、勾和叉、檔案類型圖示、Mermaid、終端機字形，每一項寫了理由；顯示上游標誌的廠商的檔案自動放行。白名單的檔案不再畫圖時也會失敗。
+    6. 出貨的點陣圖只能是我們自己的圖示（App、favicon、PWA、桌面版）和資料放行的廠商標誌；`editor-apps` 的編輯器標誌不准被引用。
+    7. 只有白名單的地方可以渲染 SVG 文件（`SvgXml`、`SvgCss`、`SvgIcon` 等）：provider 圖示、ACP 目錄、檔案類型圖示、使用者自己的專案圖示、配對 QR Code。上游 main 的 `usage/source-icon.tsx`（用量來源的 SVG）這類新地方合併進來就會失敗，要先決定怎麼換成徽章。
+    8. 主機替已知 provider 送 SVG 時解析結果不是那份 SVG，`provider-icons.ts` 在主機 SVG 的位置畫徽章。
+    9. 每種語言的主題名稱都不含 Claude（含音譯），繁中「陶土」、英文 Terracotta，`theme.ts` 的 id 和 unistyles 名稱不變。
+  - 變異測試（2026-09-30，在 `c057fae60` 上）：每次只改一處，跑 `claude-badge.test.mjs` 和 `icons.test.mjs`（共 18 項），看它變紅，再還原，每次還原後樹都是乾淨的：
+    - 放回上游的 Codex 元件：2 項失敗（標誌路徑、圖示檔跟資料不符）。
+    - `acp-provider-icons.ts` 的 Cursor 那一筆放回上游的 SVG：3 項（標誌路徑、圖示檔、畫圖白名單）。
+    - 放回桌面版的 `cursor.png`：1 項（圖示檔）。
+    - `provider-icons.ts` 改回畫主機的 SVG：1 項。
+    - 繁中的主題名稱改回 Claude：1 項。
+    - 放回上游的 Claude 元件：2 項（Claude 標誌、圖示檔）。
+    - 網頁版啟動畫面放回 Paseo 的蝴蝶：2 項（畫圖白名單、Paseo 標誌）。
+    - 新增一個用 `SvgXml` 的檔案：1 項（渲染 SVG 的地方）。
+    - ACP 圖示資料夾多一個資料沒列的 SVG（上游的 Cursor 圖）：2 項（標誌路徑、資料沒列）。
+  - 改回上游標誌的演練（同一天）：把 `cursor` 改成 `"upstream"` 再跑工具。工具改了 3 個檔（`acp-provider-icons/cursor.svg`、`editor-targets/cursor.png`、`acp-provider-icons.ts` 的 cursor 項目），內容跟 `130705c02^` 逐位元組相同。守門 18/18、App 的 5 個廠商相關測試檔 37/37、桌面版 3 檔 14/14、App 的 typecheck 都通過，程式和測試都不用改。改回 `"badge"` 再跑一次工具，樹回到乾淨。
   - 小尺寸和深淺色主題上看不看得清楚，要在實機上看，單元測試證明不了。
+
+### 23. 關掉帳號用量（方案額度）
+
+- 原因：owner 在 2026-09-29 決定隱藏用量頁。上游的用量功能為了查每家 provider 的帳號額度，會讀使用者存下的 provider 憑證，再把 token 送到該家的額度 API。對我們的產品，這是隱私問題。讀的東西（全部在 `packages/server/src/services/quota-fetcher/providers/`，只讀不寫）：
+  - Claude：`$CLAUDE_HOME` 或 `~/.claude` 的 `.credentials.json`（不看 Claude Code 的 `CLAUDE_CONFIG_DIR`）；macOS 上沒有這個檔，就用 `security find-generic-password` 讀鑰匙圈的「Claude Code-credentials」，換了 `HOME` 也照樣讀得到。拿到 OAuth token 就呼叫 api.anthropic.com。
+  - Codex、Kimi、MiniMax、Grok：各自的 auth／credentials 檔（`~/.codex/auth.json`、`~/.kimi…`、`~/.mmx/…`、`~/.grok/auth.json`）或環境變數的 token。
+  - Copilot：`GITHUB_TOKEN` 這類環境變數或 `gh` 的 `hosts.yml`。Cursor：環境變數、Cursor 的 `state.vscdb`（SQLite）或 `~/.config/cursor/auth.json`。Z.AI：`ZAI_API_KEY`、`GLM_API_KEY`。
+- 關掉的：
+  - daemon：政策在 `packages/server/src/server/woowtech-provider-usage-policy.ts`，固定回 false，不讀 env、home 或設定。上游的 `ProviderUsageService`（`quota-fetcher/service.ts`，+18／−6 行，註解 `woowtech smart:`）關閉時建構子不建任何 fetcher，`listUsage` 第一行就回空清單，不經快取。`provider.usage.list.request` 照樣回 `provider.usage.list.response`，`providers` 是空陣列：沒有 rpc_error、沒有讀鑰匙圈或憑證檔、沒有網路請求。daemon 本來就沒有背景輪詢或主動推送帳號用量，只在收到請求時查。
+  - 協定不變，`server_info.features.providerUsageList` 仍是 true。改成 false 的話，舊版 App 每次打開 context 圓環的 tooltip 都會出現紅字「Update the host to see provider usage」；維持 true 加空清單，舊版 App 的 tooltip 不多東西，用量頁顯示「No usage data」。client SDK 的 `providers.listUsage()` 拿到空清單。
+  - App：旗標在 `packages/app/src/provider-usage/woowtech-usage-visibility.ts`（`PROVIDER_USAGE_VISIBLE = false`）。設定的主機清單（桌面版側欄和手機設定首頁共用）沒有「用量」這一列；`/settings/hosts/<id>/usage` 當成不認得的區段，開到「連線」；context 圓環的 tooltip 不送用量請求、不顯示用量區塊。連到還開著用量的舊版或上游 daemon 時也一樣，不會讓對方去讀憑證。接點都有 `woowtech smart:` 註解：`screens/settings-screen.tsx` 的 `HOST_SECTION_ITEMS`、`app/settings/hosts/[serverId]/[hostSection].tsx`、`components/context-window-meter.tsx` 三處。`HostUsagePage` 和 `provider-usage/` 的元件留著，走不到。沒有新的介面文字。
+- 保留的：每個工作階段自己的 token、context 和費用。它們來自 agent 的事件（`usage_updated`、`turn_completed` 帶的 usage；Pi、OMP 是 poller 向自己的 agent 行程要 `get_session_stats`），不讀帳號憑證，也不打額度 API。context 圓環和 tooltip 的「上下文視窗」、「已使用 N%」、tokens、「工作階段費用」照舊。
+- 以後要打開：
+  1. 先決定讀哪些憑證、要不要讓使用者自己選（例如設定頁的開關，預設關），再改。不要直接把政策改回 true。
+  2. 改 `isProviderUsageFetchingEnabled()` 和 `PROVIDER_USAGE_VISIBLE`（或接到使用者的選擇），同時改兩個守門（`woowtech/provider-usage*.test.mjs`）、fork 測試的 OFF 基線、兩個上游 e2e spec 的 `describe.skip`，並把「Usage」加回桌面版 `settings-memory.electron.mjs` 的設定清單。
+  3. 上游的 `792715e76`（#5465，用量來源改成內建外掛、跟著工作階段的帳號）仍延後。它刪掉整個 `quota-fetcher/` 和 `provider-usage/`，也改了這節的三個 App 接點和 `websocket-server.ts`。拿它的時候，這節的 gate 要在新架構重做，守門會先紅。
+- 測試：
+  - `services/quota-fetcher/woowtech-provider-usage.test.ts`：OFF 基線（政策、service 和 RPC 都回空清單；stub fetcher、鑰匙圈 stub 和 fetch stub 都是 0 次）；ON 對照（同一組 stub 看得到 fetcher 1 次、鑰匙圈 1 次、api.anthropic.com 1 次）；Pi 和 OMP 的每工作階段計數照舊。Claude 的 fetcher 用暫存 home、鑰匙圈 stub 和 fetch stub，政策打開時也碰不到真的 `~/.claude`、鑰匙圈或網路。
+  - 上游 `service.test.ts` 每個 `new ProviderUsageService` 都注入 `isUsageFetchingEnabled: () => true`，原斷言不變（同第 20 節的做法）。
+  - App：`provider-usage/woowtech-usage-visibility.test.ts`（清單少了用量列、其他列順序不變，用量路由當成不認得，打開時恢復）；`components/woowtech-context-window-meter.test.tsx`（jsdom：主機仍宣告有用量，打開 tooltip 只有上下文、tokens 和費用，`listProviderUsage` 0 次）。
+  - 守門 `woowtech/provider-usage.test.mjs`（daemon）和 `provider-usage-app.test.mjs`（App）：政策固定 false；service 的兩個 gate；daemon 建 service 不帶任何 override；server 出貨的程式裡，fetcher 只能由 service 建、service 只能由 daemon 建（AST 掃描，擋 import alias、namespace、re-export、dynamic import、`extends`）；沒有出貨的 server 程式寫到 `isUsageFetchingEnabled`；App 旗標固定 false、三個接點；App 出貨的程式裡，除了現有的擁有者，沒有檔案用到用量的元件、hook、`listProviderUsage`、`provider.usage.list.request` 或 `section: "usage"`。
+  - e2e：上游的 `provider-usage-settings.spec.ts`、`provider-usage-tooltip.spec.ts` 改成 `describe.skip`，`helpers/settings.ts` 改成期待沒有用量列；新的 `woowtech-provider-usage-hidden.spec.ts` 驗側欄沒有用量列、用量路由開到「連線」、tooltip 不送請求。CI #10（run 36642688479，含 Playwright）這 2 個都過。
+  - 桌面版 browser E2E 的設定輪播（`packages/desktop/e2e/settings-memory.electron.mjs`，上游檔）拿掉「Usage」，其他列照舊輪一遍。CI #10、#11 的 desktop-tests 就是在這裡等不到用量列，30 秒逾時。
+  - `provider-usage-app.test.mjs` 也掃 App 和桌面版的 e2e（`packages/app/e2e/`、`packages/desktop/e2e/` 的 JS／TS 與 agent-device 流程），不准再開用量頁：「Usage」字樣、`settings-host-section-usage`、`openSettingsHostSection`／`buildSettingsHostSectionRoute` 帶 `"usage"`、`section: "usage"`、`/settings/hosts/<id>/usage`。例外：`describe.skip` 裡的上游 spec；斷言不存在的 `expect`（`toHaveCount(0)`、`toBeHidden()`、`not.toBeVisible()`、`not.toBeAttached()`）；`woowtech-provider-usage-hidden.spec.ts` 開舊路由、確認落到「連線」的那一行。改 settings-memory 前這項紅（抓到第 28 行），改後綠。
+- 合併上游後：跑 `node --test woowtech/provider-usage.test.mjs woowtech/provider-usage-app.test.mjs`、server 的 `woowtech-provider-usage.test.ts` 與 `service.test.ts`、App 的 `woowtech-usage-visibility.test.ts` 與 `woowtech-context-window-meter.test.tsx`。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
@@ -1445,7 +1531,7 @@ node --test woowtech/*.test.mjs
 不拿的，依原因：
 
 - 要 OpenCode v2（`c906c2f4a`，第二批延後）：`da48803a4`（#5526，條件式）。改的 4 個檔有 3 個是 `opencode/v2/`，第 4 個（`provider-launch-config.ts`）只把 `createProviderEnv` 的回傳型別改給 v2 的呼叫點用。v1 在 `opencode/server-manager.ts` 用 launch env 起專屬的 `opencode serve`，沒有 v2 重新連線後遺失 session 環境的問題。
-- 新的介面能力、廠商標誌：`a43c8d888`（#5379，執行 cursor-agent 的終端機設定檔顯示 Cursor 圖示），要 owner 決定。
+- 新的介面能力、廠商標誌：`a43c8d888`（#5379，執行 cursor-agent 的終端機設定檔顯示 Cursor 圖示），要 owner 決定。第 22 節之後它顯示的是 Cursor 的文字徽章（Cu），不再有標誌的顧慮。
 - 只有 Windows：`cf4509631`（#1987）。
 - 網站：`dec2d861e`（#5538）、`7f5d32cdd`（#5537）、`c54f20e53`（#5138）、`d0a30ed4d`（#5555）、`8b5201fed`（#5575）。
 - 發版與版本號：`52d345db7`（0.10.0-beta.1）、`c481ecf3e`（0.10.0）；更新紀錄：`a50a47600`、`dfc9add77`、`4965af219`；發版前的 lock 排序：`6ca001c3e`。
@@ -1508,7 +1594,7 @@ node --test woowtech/*.test.mjs
   - 模型：Claude Code 2.1.284 以上列出 Sonnet 5.5，thinking 沒有「關閉」；舊版不列。OpenCode 選了 Medium 之後換到沒有這個選項的模型，thinking 選項被清掉，重新載入也不回來（`940dbfd24`）。
   - 自訂 Codex provider（`827178df9`、`dffde6ae8`、`9d010211a`）：回溯後仍是同一個 provider、工具還在；/ 選單列的是它自己 `CODEX_HOME` 的提示詞；封存後「匯入工作階段」不再列出它。
   - Codex 串流中的 Mermaid 圖（`f4ba16a0b`）、背景 `send_agent_prompt` 回報執行中（`8de52a3c9`）、外掛 provider 重新載入後已完成的工作階段沒有錯誤（`849a876bc`）。
-- 延後的 `78a0f093e`、`792715e76` 和不拿的 `a43c8d888`（Cursor 圖示）要 owner 決定。
+- 延後的 `78a0f093e`、`792715e76` 和不拿的 `a43c8d888`（Cursor 圖示）要 owner 決定。2026-09-29 owner 決定先關掉用量功能，`792715e76` 仍延後，見第 23 節。
 - 這個分支沒有 push。main 仍在 `ea9f49e49`；合進 main 之後重跑守門和 T1 測試，並重建 server 的 dist。
 
 ## Mac 開發環境
@@ -1562,6 +1648,41 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 整合輪驗收（2026-09-30，整合分支 `woowtech/integration-0930` 的 `917fa512b`，第 8、9、18、22、23 節）：main `fde226d05` 加上帳號用量關掉（`woowtech/usage-off-0929` 的 4 個 commit）、廠商徽章（`woowtech/vendor-badges-0929` 的 8 個 commit）、兩次合併和 CI 的兩個修正（`63f74cf62`、`917fa512b`），共 16 個 commit、98 檔（+3266／−482）。新增的 17 檔都是文字；刪掉的 15 檔是上游的 8 個蝴蝶和 favicon SVG、桌面版的 7 張編輯器 PNG；package.json 和 lock 沒有變更，版本都是 0.8.0；`.github` 只改了 `ci.yml` 一處（`63f74cf62`）。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0930-*`（`integ0930-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0930-*`，CI 的 log 在同一個 logs 目錄的 `ci-0930/`。
+  - 這一輪的內容：
+    - 帳號用量關掉（第 23 節）：設定的主機清單沒有「用量」，舊的用量路由開到「連線」，context 圓環的 tooltip 只有上下文；daemon 收到用量請求回空清單，不讀憑證和鑰匙圈，也不打額度 API。
+    - 廠商徽章（第 22 節）：`woowtech/vendor-marks.mjs` 的 48 家裡 35 家顯示文字徽章；桌面版「在…中開啟」的 7 張編輯器 PNG 刪掉，改畫徽章，Finder 是資料夾。
+    - 研究後改回上游圖示的 13 家（第 22 節「顯示上游標誌的廠商」；除了 Gajae Code，都是廠商或作者自己送進 ACP registry 的檔案）：工具從 `130705c02^` 原樣還原，13 個 `.svg` 跟 `130705c02^`、`fde226d05` 是同一個 blob。
+    - 深色主題 `claude` 改叫「陶土」，英文 Terracotta（第 22 節）；id、unistyles 名稱和顏色不變。
+    - 網頁版和桌面版的啟動畫面改畫 WOOW 標誌，上游的蝴蝶拿掉（第 8 節）。
+  - 本機（`integ0930-merge.md`，`8c19faee0`，`env -i`、只准連 loopback 的 sandbox）：`build:server` 通過；守門 161/161，照 CI 拿掉 OpenCC 那一項後 160/160；`write-vendor-badges.mjs --check` 通過；typecheck app、server、client、cli、desktop 各一次；App 34 檔 364/364、server 32 檔 422/422、desktop 3 檔 14/14；`format:check` 4739 檔、lint 53 檔 0 個 warning、0 個 error。`8c19faee0..917fa512b` 只改 `ci.yml`、桌面版的 e2e 腳本、README 和兩個守門，沒有 App、server、桌面版的執行程式，所以下面在 `8c19faee0` 上的裝置結果也適用 `917fa512b`（`integ0930-review.md`）。
+  - CI：
+    - [run 36642688479](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36642688479)（CI #10，`8c19faee0`，手動、勾 Playwright）：Playwright 四片 633 個通過、5 個失敗、3 個 flaky、28 個略過，四片都沒有 heap 用完。兩條分支加或改的 spec 都過：`woowtech-provider-usage-hidden.spec.ts` 2/2、`plugin-provider-icons.spec.ts`、`appearance-theme-picker.spec.ts` 4 個、`settings-host-page.spec.ts` 9 個；上游兩個用量 spec 的 5 個照設計略過。失敗和 flaky 的 8 個 spec 這一輪都沒改，協調資料夾的分類報告（`coord/reports/ci-0930-triage.md`，不在 repo 裡）判定是 main 既有或 flaky，見下面「還沒做的」。另外兩個 job 失敗，都是這一輪造成、已修：typecheck 的守門（淺層 checkout 讀不到 `130705c02^`）和 desktop-tests 的 browser E2E（設定輪播還在找「Usage」，30 秒逾時）。
+    - [run 36645249296](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36645249296)（CI #11，`63f74cf62`，不勾 Playwright）：驗守門的修正。typecheck 轉綠；desktop-tests 仍在設定輪播逾時。
+    - [run 36659321759](https://github.com/WOOWTECH/woowtech-smart/actions/runs/36659321759)（CI #12，`917fa512b`，手動、不勾 Playwright）：成功。第 1 次 attempt 只有 cli-tests（shard 2/3）失敗，是已知的 `lifecycle.e2e.test.ts:368` race（「Unexpected end of JSON input」，CI #9 同一行同錯，`packages/cli` 這一輪沒改）；attempt 2 只重跑這個 job，11 分 18 秒通過。最後 18 個 job：12 個成功；Playwright 四片和 Windows 兩組照設計略過，不算通過；沒有失敗。typecheck 的「Check woowtech fork guards」64 秒成功；desktop-tests（ubuntu）的 browser E2E、Linux 打包（`editor-targets` 資料夾刪掉後第一次在 CI 打包）和三個打包 smoke 都成功。
+    - 兩個修正：`63f74cf62` 讓 typecheck job 的 checkout 抓完整歷史（第 18 節），`woowtech/workflows.test.mjs` 檢查這個設定；`917fa512b` 把「Usage」從桌面版的設定輪播拿掉（第 23 節），`provider-usage-app.test.mjs` 掃 App 和桌面版的 e2e，不准再開用量頁。
+  - 平台矩陣（逐項結果表在各步驟紀錄的最後，「未測」都寫了原因）：
+    - Mac 桌面版（`integ0930-desktop.md`，打包 `8c19faee0`，未簽章、`--dir`、arm64，用假 claude、假 ACP agent 和 dev 的 mock）：通過：包裡顯示徽章的廠商標誌路徑資料、Claude 標誌、蝴蝶、編輯器 PNG、`wrangler*.toml`、relay.paseo.sh 都是 0（審查再用每家所有的路徑元素掃一次，也是 0：`integ0930-review-pkg-allpaths.json`）；徽章在繁中的淺色和深色、English 的淺色和陶土都對，看了供應商列表、ACP 目錄、模型選單、歷史的 Agent 列和 Agent 分頁；還原的 13 家顯示上游圖示；外掛送來的 SVG 不畫，改畫徽章 D；主題選單是「陶土」／Terracotta，選了以後重開仍是它；設定沒有用量，`/usage` 開到「連線」，tooltip 沒有用量、App 送出 0 次用量請求，直接問 daemon 也回空清單；第一次啟動（淺色）和重開（陶土）的啟動畫面都是 WOOW；「在…中開啟」是 Cu、Vs、Z、As 的徽章和 Finder 的資料夾。
+    - Android 模擬器（`integ0930-android.md`，`8c19faee0`，沿用 Debug App，JS 從這個分支的 Metro 載入，daemon 用 mock）：通過：徽章的淺色、深色（供應商列表、ACP 目錄、模型選單、Agent 列、Agent header）；還原的 13 家；主題「陶土」／Terracotta，重開 App 後仍選著；設定沒有用量、tooltip 只有上下文、`/usage` 開到「連線」（繁中、English），daemon 沒有用量查詢（正向對照有記到）。啟動畫面、「在…中開啟」和打包掃描只有網頁、桌面版有，未測。
+    - iOS 模擬器（`integ0930-ios.md`，`8c19faee0`）：守門 161/161、Metro、兩個 daemon、外開攔截通過。11:57 內建碟剩 1.6 GiB，照停止規則停下，徽章、主題、用量都未測；協調者改排在 `woowtech/logo-compliance-0930` 的 iOS 實測一起看。
+    - Playwright 只在 CI 跑（上面的 CI #10），本機沒跑。
+  - 審查與合併前守門（`integ0930-review.md`、`integ0930-gate.md`）：審查的 blocker 0；守門 go。記錄下來的規則偏差：Android 步驟的 adb server 自動連上別人的模擬器約 3 分鐘，沒有對它下指令，之後自己關掉；審查用了一次 `pgrep -f`，兩個暫存 SVG 寫到 `/tmp` 後同一個指令就刪掉。都不影響這一輪的證據。
+  - 還沒做的：
+    - 標誌：上架前必做的合規（授權與第三方聲明頁、GitLab 徽章、GitHub 和 Codeberg 改純黑白、8 個檔案類型圖示換成通用圖示）在 `woowtech/logo-compliance-0930`；另外 14 家補齊條件後改回標誌是之後的版本，在 `woowtech/logo-restore-0930`。
+    - Playwright（CI #10，分類報告）：main 既有的失敗 2 個：`sidebar-help.spec.ts:80`（官網 `/` 轉到 `/en`，期待值不接受）、`viewed-agent-timelines.spec.ts:384`（fork 把錯誤改成「Host is not connected」，spec 還期待「Transport not connected」）。不是這一輪造成、原因不明或計時造成：`agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`（第 18 節的 run 2 就已失敗）、`agent-message-submission.spec.ts:1298`。重試才過的 flaky：`provider-settings-refresh.spec.ts:122`、`creation-old-daemon.spec.ts:95`、`sidebar-context-menu.spec.ts:17`。修法建議在分類報告；要一次綠的 Playwright，先修 main 既有的 2 個。
+    - 發現、跟這一輪無關：新工作區的專案選單搜尋欄在繁中顯示英文「Search projects」（main 既有）；從主機清單新增主機後，在外觀換主題又跳出「新增連線」sheet（同 F11 驗證輪）；autohand 的 registry 圖示在 12～16 px 認不出內容（廠商原檔）。
+    - 要實機或正式簽章才驗得到的：手機實機上的徽章（12～24 px 讀不讀得出縮寫）、主題選單和沒有用量的設定；用舊版 App 連新的 daemon 時 tooltip 沒有紅字、用量頁只顯示「No usage data」；瀏覽器裡的網頁版啟動畫面；桌面版 Developer ID 簽章與公證後的正式版、Android 正式簽章版、TestFlight。徽章、主題、用量和啟動畫面的實機項目列在「接下來」。
+  - 「接下來」的兩項 Playwright 合成一項、照 CI #10 改寫，第 18 節「仍待確認」的 Playwright 完整執行也照 CI #10 改寫；「接下來」第 23 節那一項的 Playwright 已拿掉。
+- 帳號用量關掉（2026-09-29，分支 `woowtech/usage-off-0929` 的 `8dfa03bd2`，第 23 節）：步驟紀錄在 `~/.local/share/woowtech-smart/logs/usage-off.md`，log 在同目錄的 `usage-off-*`。
+  - 先紅後綠：實作前，server 的 fork 測試 2 紅 4 綠（OFF 基線的 service 和 RPC 都拿到 stub 與 Claude 的用量，fetcher、鑰匙圈 stub 和 fetch stub 都被叫到）；App 的 meter 測試 tooltip 多出「ClaudeMax 20xSession42%」，visibility 測試還沒有模組；兩個守門 13 個紅 5 個。實作後 server 32 檔 421/422、App 4 檔 47/47、守門 13/13；`format:check`、改到的檔的 lint、server 和 App 的 typecheck 都通過。
+  - server 唯一的紅是 `omp/agent.diagnostic.test.ts`：它斷言診斷輸出不含 `.pi/agent`，這台 Mac 的 PATH 有 `~/.pi/agent/bin`。9/25 的 main 一樣紅，跟這次改動無關；PATH 拿掉那一段後 5/5。
+  - 突變（`usage-off-mutation.sh`，每個之後從 HEAD 還原，最後樹是乾淨的）：
+    - 政策改回 true：daemon 守門紅，fork 測試 5 紅（OFF 基線 3 個，Pi、OMP 的計數測試也斷言政策是關的）。
+    - service 的預設改成打開：守門紅，fork 測試 OFF 基線的 service 和 RPC 紅。
+    - meter 換回上游：App 守門紅，meter 測試紅（tooltip 又出現方案卡）。
+    - 設定清單和路由換回上游：App 守門紅。
+  - 最終驗證（`8dfa03bd2`）：`build:server` 通過；全部 `woowtech/*.test.mjs`（比照 CI 略過 zh-TW 重新產生那一個）150/150；server 32 檔 421/422（同上，只有 OMP 診斷那一個）；App 4 檔 47/47。
+  - 沒跑：Playwright（`woowtech-provider-usage-hidden.spec.ts`、`settings-host-page.spec.ts`）和實機，見「接下來」的第 23 節那一項。
 - F11 驗證輪（2026-09-29，整合分支 `woowtech/integration-0929` 的 `b8c8f4954`，第 3、16、18、22 節與「上游同步紀錄」第三批）：main `ea9f49e49` 加上 F11 Claude 補強（`woowtech/f11-b` 的 10 個 commit，含 pi 在 `woowtech/pi-fixes-4` 的 2 個）、上游第三批（`woowtech/upstream-picks-0929` 的 15 個）和整合分支自己的 6 個（兩次合併、徽章那節改成第 22 節、合併 F11 驗收發現的 D1～D3 修正、首次點通知修正 `7ccdd372e`、CI 的 heap 設定 `b8c8f4954`），共 31 個 commit、115 檔（+7021／−420）。沒有刪檔和二進位檔，依賴只多 server 的 undici，版本都是 0.8.0，金鑰掃描沒有真的金鑰。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0929-*`（`integ0929-<步驟>.md`）、`fix-first-tap*` 和 `first-tap-real*`，截圖在 `~/.local/share/woowtech-smart/shots/` 底下同樣的前綴。
   - 本機（`env -i`、只准連 loopback 的 sandbox）：
     - 合併（`integ0929-merge.md`，`06bf83240`）：守門 134/134，照 CI 拿掉 OpenCC 那一項後 133/133；CI 契約 28/28；typecheck app、server、client、cli、desktop 各一次，三次 commit hook 的 11 個 workspace 也過；App 117 檔 1453/1453；server 非 Claude 的 67 檔 1541/1542、1 略過；Claude provider 36 檔 506/506（假 claude 只回 `--version`）；protocol 218/218；CLI 15/15；`format:check` 4718 檔、lint 100 檔 0 個 warning、0 個 error。沒過的 1 個是 `provider-availability` 的「Codex Microsoft Store」：Homebrew 的 node@22 複製到別的資料夾後載不到 libnode，給 dyld 路徑就 6/6，受測程式沒改，CI 用官方的 Node，不受影響。main 和 f11-b 都新增了第 21 節，`06bf83240` 把徽章那節改成第 22 節。
@@ -1589,7 +1710,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 審查與合併前守門（`integ0929-review.md`、`integ0929-repair.md`、`integ0929-gate.md`）：審查的 blocker 1 個：merge 步驟的 4 個 log 有 owner 的 email（git 提交身分，9 處），`integ0929-repair` 遮掉後，重新審查 blocker 0。守門第一次 no-go：內建碟在 20:47 低於 3 GB；`fix-first-tap` 留下 adb server 和含 token 的暫存；`first-tap-real` 的真 Claude 要 owner 本人確認；ship 的規則沒寫 NODE_OPTIONS。殘留清掉、owner 確認之後，第二次只因磁碟 no-go（21:20～21:33 別的工作階段的模擬器讓 swap 長到 12 GB，最低剩 2.28 GB），第三次 go。
   - 發現、還沒修：
     - 上游 `lifecycle.e2e.test.ts:368` 的 race（見上面的 CI）：改成輪詢到 JSON 能解析，再回報上游。
-    - 上游的用量頁和 composer 的 context 圓環 tooltip 會讀 macOS 鑰匙圈的「Claude Code-credentials」、不看 HOME，拿到就呼叫 api.anthropic.com。這台 Mac 上任何測試 daemon 都可能用到 owner 的 Claude 帳號，這一輪刻意不開。
+    - 上游的用量頁和 composer 的 context 圓環 tooltip 會讀 macOS 鑰匙圈的「Claude Code-credentials」、不看 HOME，拿到就呼叫 api.anthropic.com。這台 Mac 上任何測試 daemon 都可能用到 owner 的 Claude 帳號，這一輪刻意不開。2026-09-29 已關掉，見第 23 節。
     - `config.json` 的 claude 只能整個取代 command（會關掉備援），不能只加參數；dev 限定的 mock、mock-slow 在 config 裡關不掉。
     - 切換 App 語言後，設定頁的主機跳回第一台；在外觀換主題後，設定頁又跳出「新增連線」sheet。
     - 兩台主機時「從主機匯入」的搜尋框寫死英文「Search hosts...」，兩台同名時副標題顯示完整 server id；zh-TW 有兩處把 Agent 譯成「代理」；VoiceOver 念英文的「Filter: 全部」和側欄工作區的狀態；iPhone 17 的排程列第三行被截斷。
@@ -1597,7 +1718,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - 手機實機：iOS 的 APNs／FCM token 登記和推播送達、Android 實機的推播和點擊（這一輪都是模擬器）；首次點通知修正在實機上的點擊和正常負載下的時間（iOS 連模擬器都還沒驗）；徽章在 12～20 px 讀不讀得出來；VoiceOver、TalkBack 念不念得出「需要登入」。
     - 正式簽章：桌面版 Developer ID 簽章與公證（這一輪都是未簽章的 `--dir`）後的通知授權和自動更新，從 Dock 實際開正式版時的 claude 備援和 SDK 第一次下載；Android 正式簽章版（EAS `production`）；TestFlight 的 production APNs。
     - 公司網路：真的公司代理、SDK 鏡像站和 `NODE_EXTRA_CA_CERTS`，這一輪只有單元測試和本機代理。
-  - 待 owner 決定：深色主題「Claude」（#D97757）要不要改名換色、其他廠商的標誌（第 22 節）；用量頁要不要改成看 `CLAUDE_CONFIG_DIR` 或 HOME，或改成選用；config 要不要能只加參數（例如 `strictMcpConfig`）；「上游同步紀錄」第二、三批延後和不拿的 commit。Playwright 這一輪照 owner 的決定沒跑，仍在「接下來」。
+  - 待 owner 決定：深色主題「Claude」（#D97757）要不要改名換色、其他廠商的標誌（第 22 節）；用量頁要不要改成看 `CLAUDE_CONFIG_DIR` 或 HOME，或改成選用（2026-09-29 決定先關掉，第 23 節）；config 要不要能只加參數（例如 `strictMcpConfig`）；「上游同步紀錄」第二、三批延後和不拿的 commit。Playwright 這一輪照 owner 的決定沒跑，仍在「接下來」。
   - 「接下來」的 CI fork 守門步驟就是上面的 CI，已從清單拿掉。
 
 - 定向輪驗收（2026-09-28～29，整合分支 `woowtech/integration-0928` 的 `8985ff2a7`，第 6、7、14、16、21 節與「上游同步紀錄」的 OSC 8 查證）：main `f272fc8b6` 加上 `woowtech/fixes-0928`（`b7bd33075`，7 個 fork commit）和刪掉 `with-localized-app-name` 外掛的 `8985ff2a7`，共 9 個 commit、41 檔（+2008／−344）。只驗 fixes-0928 改到的五項：F1 繁中、F2 App 名稱的 locales 分平台、F3 附件撐過重連、F4 OSC 8、F5 S1 的「工作區不可用」閃爍；pi 的 F11 不在這一輪。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/integ0928-*`（`integ0928-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/integ0928-*`。
@@ -1888,9 +2009,10 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。
     - Firebase 在 2026 年 10 月以後不再發到 CocoaPods，要停在最後一版，還是規劃回到 SPM。
     - EAS 的上游專案值要保留還是拿掉（第 1 節）。
-- CI：main `1f4b2b00f` 的第三次手動、不勾 Playwright 執行已成功（run 36163380457），時間與已確認項目見第 18 節；仍需手動勾選 Playwright 完整執行，不把略過當成通過。
-- 在本機對照上游分類第 18 節待分類的 5 個 Playwright 失敗和 1 個 flaky。
+- Playwright：2026-09-30 在整合分支勾選跑過一次完整執行（CI #10，見「驗證紀錄」的整合輪驗收），5 個失敗、3 個 flaky 都不是那一輪的改動造成。先修 main 既有的 `sidebar-help.spec.ts:80`、`viewed-agent-timelines.spec.ts:384`，再決定 `agent-consecutive-turns.spec.ts:816`、`agent-message-rewind.spec.ts:119`、`agent-message-submission.spec.ts:1298` 怎麼處理（修法建議在 `coord/reports/ci-0930-triage.md`），之後再勾一次 Playwright，要整次綠。
 - Claude 執行檔的備援位置（第 3 節）要實機驗收：從 Dock 開桌面版、登入 shell 的 PATH 沒有 `~/.local/bin` 時，設定頁的 Claude 顯示可用，診斷的 Resolved path 是 `~/.local/bin/claude`，Agent 能建立。
-- Claude 的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表、側欄的 Agent 列、模型選單、匯入工作階段和排程這些 12～20 px 的地方都讀得出是 C。
-- 待 owner 決定（第 22 節）：其他廠商的標誌要不要也換成文字；深色主題「Claude」要不要改名換色。
+- 廠商的文字徽章（第 22 節）要在實機上看：桌面版、iOS、Android 的淺色和深色主題，設定頁的供應商列表和新增 ACP 供應商的目錄、側欄的 Agent 列、模型選單、匯入工作階段、排程、終端機設定檔這些 12～24 px 的地方都讀得出縮寫（C、Cx、Gh、Oc、Pi、Om、Mm 等），桌面版「在…中開啟」選單的 VS Code、Cursor 等是徽章、Finder 是資料夾；外觀設定的主題選單顯示「陶土」／Terracotta，原本選了這個主題的裝置更新後仍是同一個主題。
+- 待 owner 決定（第 22 節）：檔案總管的檔案類型圖示（程式語言和工具的圖形）要不要也換。
+- 網頁版和桌面版的啟動畫面（第 8 節）要在實機上看：淺色和深色主題都是 WOOW 標誌在閃，不是蝴蝶。
+- 帳號用量關掉（第 23 節）要在實機看：桌面版、iOS、Android 的設定主機清單都沒有「用量」，其他列照舊；舊的 `/settings/hosts/<id>/usage` 連結開到「連線」；context 圓環的 tooltip 只有上下文、tokens 和費用，沒有「Loading plan usage…」或方案卡；用舊版 App 連新的 daemon，tooltip 不出現紅字，用量頁只顯示「No usage data」。
 - 商標（TIPO）與 D-U-N-S。

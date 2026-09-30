@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
+import { PROVIDER_USAGE_VISIBLE } from "@/provider-usage/woowtech-usage-visibility";
 import { formatTokenCount } from "./context-window-meter.utils";
 
 interface ContextWindowMeterProps {
@@ -109,16 +110,18 @@ export function ContextWindowMeter({
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+  // woowtech smart: account usage is hidden, so the tooltip never asks the host for it and
+  // shows only the session's own context (woowtech/README.md section 23).
   const { view: providerUsageView, refresh: refreshProviderUsage } = useProviderUsage(
     serverId ?? null,
-    { enabled: isTooltipOpen },
+    { enabled: PROVIDER_USAGE_VISIBLE && isTooltipOpen },
   );
   const percentage =
     maxTokens !== null && usedTokens !== null ? getUsagePercentage(maxTokens, usedTokens) : null;
   const handleTooltipOpenChange = useCallback(
     (nextOpen: boolean) => {
       setIsTooltipOpen(nextOpen);
-      if (nextOpen) {
+      if (nextOpen && PROVIDER_USAGE_VISIBLE) {
         void refreshProviderUsage().catch(() => {});
       }
     },
@@ -233,7 +236,9 @@ export function ContextWindowMeter({
               {t("contextWindow.sessionCost", { cost: formattedSessionCost })}
             </Text>
           ) : null}
-          <ProviderUsageTooltipSection view={providerUsageView} activeProviderId={provider} />
+          {PROVIDER_USAGE_VISIBLE ? (
+            <ProviderUsageTooltipSection view={providerUsageView} activeProviderId={provider} />
+          ) : null}
         </View>
       </TooltipContent>
     </Tooltip>

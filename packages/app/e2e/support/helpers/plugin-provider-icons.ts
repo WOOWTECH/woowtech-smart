@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Locator, TestInfo } from "@playwright/test";
 import { expect, test as base, type Page } from "../fixtures";
+import { vendorBadgeDrawing, vendorMonogram } from "../../../src/components/icons/vendor-badge";
 import { gotoAppShell, openSettings } from "./app";
 import { openModelPicker } from "./agent-profiles";
 import { openAgentRoute } from "./mock-agent";
@@ -27,19 +28,32 @@ async function readIconPaths(page: Page, pluginDirectory: string): Promise<strin
   );
 }
 
+// woowtech smart: a plugin's own SVG can be any vendor's logo, so the app draws the provider's
+// text badge instead (woowtech/README.md §22).
+function badgePaths(provider: string): string[] {
+  const { letters } = vendorBadgeDrawing(vendorMonogram(provider));
+  return letters ? [letters.d] : [];
+}
+
 function readIconDrawings(icons: SVGElement[]): string[][] {
   return icons.map((icon) =>
     Array.from(icon.querySelectorAll("path"), (element) => element.getAttribute("d") ?? ""),
   );
 }
 
-async function expectProviderIcon(surface: Locator, paths: string[]): Promise<void> {
+async function expectProviderIcon(
+  surface: Locator,
+  { iconPaths, pluginPaths }: Pick<ProviderIconJourney, "iconPaths" | "pluginPaths">,
+): Promise<void> {
   await expect(surface).toBeVisible();
   // Provider icons are decorative SVGs without accessible names. Compare the
-  // plugin asset's drawing, allowing surface-specific size and theme colours.
+  // badge's drawing, allowing surface-specific size and theme colours.
   await expect
     .poll(() => surface.locator("svg").evaluateAll(readIconDrawings))
-    .toContainEqual(paths);
+    .toContainEqual(iconPaths);
+  expect(await surface.locator("svg").evaluateAll(readIconDrawings)).not.toContainEqual(
+    pluginPaths,
+  );
 }
 
 async function selectPluginModel(page: Page): Promise<void> {
@@ -60,6 +74,7 @@ interface ProviderIconJourney {
   page: Page;
   testInfo: TestInfo;
   iconPaths: string[];
+  pluginPaths: string[];
   workspace: SeededWorkspace;
 }
 
@@ -77,8 +92,9 @@ export const test = base.extend<{ providerIcons: ProviderIconJourney }>({
           try {
             await page.setViewportSize(WIDE);
             await gotoAppShell(page);
-            const iconPaths = await readIconPaths(page, plugin.directory);
-            await provide({ page, testInfo, iconPaths, workspace });
+            const pluginPaths = await readIconPaths(page, plugin.directory);
+            const iconPaths = badgePaths("direct-example");
+            await provide({ page, testInfo, iconPaths, pluginPaths, workspace });
           } finally {
             await workspace.cleanup();
           }
@@ -101,6 +117,7 @@ export const test = base.extend<{ providerIcons: ProviderIconJourney }>({
 export async function verifyProviderSettings({
   page,
   iconPaths,
+  pluginPaths,
   testInfo,
 }: ProviderIconJourney): Promise<void> {
   await test.step("provider settings render the registered icon", async () => {
@@ -108,7 +125,7 @@ export async function verifyProviderSettings({
     await openSettingsHostSection(page, getServerId(), "providers");
     await expectProviderIcon(
       page.getByRole("button", { name: "Direct provider example provider details", exact: true }),
-      iconPaths,
+      { iconPaths, pluginPaths },
     );
     await capture(page, testInfo, "provider-settings");
     await page.getByTestId("settings-back-to-workspace").click();
@@ -118,19 +135,23 @@ export async function verifyProviderSettings({
 export async function verifyNewWorkspaceModelIcon({
   page,
   iconPaths,
+  pluginPaths,
   testInfo,
 }: ProviderIconJourney): Promise<void> {
   await test.step("new workspace keeps the picker icon on its selected model button", async () => {
     await openGlobalNewWorkspaceComposer(page);
     await selectPluginModel(page);
     await openModelPicker(page);
-    await expectProviderIcon(page.getByTestId("model-row-direct-example-example-1"), iconPaths);
+    await expectProviderIcon(page.getByTestId("model-row-direct-example-example-1"), {
+      iconPaths,
+      pluginPaths,
+    });
     await capture(page, testInfo, "new-workspace-picker");
     await page.keyboard.press("Escape");
-    await expectProviderIcon(
-      page.getByRole("button", { name: MODEL_LABEL, exact: true }),
+    await expectProviderIcon(page.getByRole("button", { name: MODEL_LABEL, exact: true }), {
       iconPaths,
-    );
+      pluginPaths,
+    });
     await capture(page, testInfo, "new-workspace-selected-model");
   });
 }
@@ -138,14 +159,15 @@ export async function verifyNewWorkspaceModelIcon({
 export async function verifyCompactModelIcon({
   page,
   iconPaths,
+  pluginPaths,
   testInfo,
 }: ProviderIconJourney): Promise<void> {
   await test.step("compact composer preserves the same provider icon", async () => {
     await page.setViewportSize(COMPACT);
-    await expectProviderIcon(
-      page.getByRole("button", { name: MODEL_LABEL, exact: true }),
+    await expectProviderIcon(page.getByRole("button", { name: MODEL_LABEL, exact: true }), {
       iconPaths,
-    );
+      pluginPaths,
+    });
     await capture(page, testInfo, "compact-selected-model");
   });
 }
@@ -153,6 +175,7 @@ export async function verifyCompactModelIcon({
 export async function verifyExistingAgentModelIcon({
   page,
   iconPaths,
+  pluginPaths,
   testInfo,
   workspace,
 }: ProviderIconJourney): Promise<void> {
@@ -166,10 +189,10 @@ export async function verifyExistingAgentModelIcon({
     });
     await page.setViewportSize(WIDE);
     await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: agent.id });
-    await expectProviderIcon(
-      page.getByRole("button", { name: MODEL_LABEL, exact: true }),
+    await expectProviderIcon(page.getByRole("button", { name: MODEL_LABEL, exact: true }), {
       iconPaths,
-    );
+      pluginPaths,
+    });
     await capture(page, testInfo, "agent-selected-model");
   });
 }

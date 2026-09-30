@@ -395,7 +395,8 @@ export async function expectRetiredSidebarSectionsAbsent(page: Page): Promise<vo
   await expect(sidebar.getByTestId("settings-host-section-agents")).toBeVisible();
   await expect(sidebar.getByTestId("settings-host-section-workspaces")).toBeVisible();
   await expect(sidebar.getByTestId("settings-host-section-providers")).toBeVisible();
-  await expect(sidebar.getByTestId("settings-host-section-usage")).toBeVisible();
+  // woowtech smart: account usage is hidden, so its row is gone (woowtech/README.md section 23).
+  await expect(sidebar.getByTestId("settings-host-section-usage")).toHaveCount(0);
   await expect(sidebar.getByTestId("settings-host-section-host")).toBeVisible();
 
   // The old per-host entry rows are replaced by the host picker.
