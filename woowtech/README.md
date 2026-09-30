@@ -1265,6 +1265,18 @@ node --test woowtech/*.test.mjs
   9. GitHub、Codeberg 用 `createMonochromeMarkIcon`、不收顏色，view 沒有 brandColor。
   10. 八個換掉的檔案類型標誌不在表裡、副檔名不對應、路徑資料不出貨，表裡是 46 個。
   - 第 22 節的 `claude-badge.test.mjs`：`ALLOWED_DRAWINGS` 拿掉 `gitlab-icon.tsx`，GitHub、Codeberg 和檔案類型圖示的理由改成這一節的決定。
+  - 變異測試（2026-09-30，在 `dcb7de72d` 上）：每次只改一處，跑 `third-party-notices.test.mjs` 和 `claude-badge.test.mjs`（共 22 項），看它變紅，再還原，每次還原後樹都是乾淨的：
+    - `VENDOR_MARK_NOTICES` 少了 agoragentic：1 項（第 1 項）。
+    - `FORGE_MARK_NOTICES` 多了 GitLab：1 項（第 2 項）。
+    - App 的檔案 import lucide 的 `Gitlab`：1 項（第 3 項）。
+    - Rust 那一筆少了 `source`：1 項（第 4 項）。
+    - `GENERIC_FILE_ICONS` 少了 lock：1 項（第 5 項）。
+    - MIT 版權行的年份改成 2024：1 項（第 6 項）。
+    - 設定的這一列加上 `desktopOnly: true`：1 項（第 7 項）。
+    - 放回上游的 GitLab 元件（tanuki）：4 項（第 22 節的標誌路徑和圖示檔，這一節的第 2、8 項）。
+    - 放回上游的 GitHub 元件（照呼叫端的顏色畫）：1 項（第 9 項）。
+    - 放回上游的 `material-file-icons.ts`（八個標誌回來）：2 項（第 5、10 項）。
+  - vitest 的對照：`createMonochromeMarkIcon` 改成把呼叫端的顏色傳下去時，`woowtech-forge-marks.test.ts` 的 GitHub、Codeberg 兩項照斷言失敗（呼叫端的 #666666 畫到了標誌上）；還原後 17/17 通過。
 - 測試：
   - `screens/settings/woowtech-third-party-notices.test.ts`：`/settings/notices`；繁中與英文的頁名；商標聲明；13 家 Agent 與所有者；4 個 forge 與 Forgejo 的署名；8 個檔案類型標誌的署名、授權和來源，Python、Lua 的聲明；MIT 版權行和條文跟 LICENSE 一致；整頁的段落、列和每列的文字（英文和繁中）。
   - `git/woowtech-forge-marks.test.ts`：GitLab 畫 Gl 徽章、沒有品牌色；GitHub、Codeberg 在每個註冊的主題、呼叫端傳任何顏色時都是淺色 #000000、深色 #FFFFFF，而且沒有品牌色；Gitea、Forgejo 照舊。
