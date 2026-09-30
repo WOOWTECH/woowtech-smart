@@ -6,9 +6,9 @@ import type { WorkspaceProjectDescriptorPayload } from "@getpaseo/protocol/messa
 import {
   ArrowLeft,
   Folder,
+  FolderGit2,
   FolderOpen,
   FolderPlus,
-  Github,
   HardDrive,
   Plus,
   Search,
@@ -164,8 +164,11 @@ function FlowBackButton({ onPress }: { onPress: () => void }) {
   );
 }
 
+// woowtech smart: cloning from GitHub and its repositories show a generic git folder, not lucide's
+// redrawn GitHub outline in muted grey. GitHub allows only its own mark in black or white, and a
+// disabled row dims (woowtech/README.md section 24). The row titles still name GitHub.
 function methodIcon(method: AddProjectMethodId): FlowRowOption["icon"] {
-  if (method === "github") return Github;
+  if (method === "github") return FolderGit2;
   if (method === "browse") return FolderOpen;
   if (method === "new-directory") return FolderPlus;
   return Search;
@@ -671,7 +674,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
             })
           : repository.nameWithOwner,
         subtitle: repository.description,
-        icon: Github,
+        icon: FolderGit2,
         testID: `add-project-flow-repository-${repository.id}`,
         select: () =>
           setState((current) => openGithubLocationPage(current, page.hostId, repository)),

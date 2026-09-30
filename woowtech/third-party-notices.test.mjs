@@ -11,6 +11,10 @@
 // file-type icon table, so a mark cannot ship without its entry on the page, and the page cannot
 // name a mark that does not ship.
 //
+// The stage 1 review (2026-09-30) found places that broke those rules. They are closed:
+//   - The app draws no lucide brand icon. Lucide redraws brands' logos as outline icons in the
+//     caller's colour; the add-project flow drew its GitHub outline in muted grey.
+//
 //   node --test woowtech/third-party-notices.test.mjs
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
@@ -72,28 +76,7 @@ const REPLACED_FILE_TYPE_LOGOS = {
   },
 };
 
-// Lucide's brand icons, by the notice that covers the brand. Lucide draws them from the brands'
-// logos, so using one in the app shows that brand's mark.
-const LUCIDE_BRAND_ICONS = {
-  Chrome: "chrome",
-  Chromium: "chromium",
-  Codepen: "codepen",
-  Codesandbox: "codesandbox",
-  Dribbble: "dribbble",
-  Facebook: "facebook",
-  Figma: "figma",
-  Framer: "framer",
-  Github: "github",
-  Gitlab: "gitlab",
-  Instagram: "instagram",
-  Linkedin: "linkedin",
-  Pocket: "pocket",
-  Slack: "slack",
-  Trello: "trello",
-  Twitch: "twitch",
-  Twitter: "twitter",
-  Youtube: "youtube",
-};
+const LUCIDE = "lucide-react-native";
 
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
 const relative = (file) => path.relative(repoRoot, file);
@@ -137,19 +120,81 @@ function forgesShowingTheirMark() {
   return shown;
 }
 
-/** Lucide brand icons the shipped app code imports, as the notice keys of their brands. */
-function lucideBrandsShown() {
-  const brands = new Set();
+/**
+ * Lucide's brand icons, by every name lucide-react-native exports them under (Github, GithubIcon,
+ * LucideGithub and so on), and the files it draws them in (github). Lucide's own type declarations
+ * list them: it marks each one deprecated as one of its "Brand icons".
+ */
+function lucideBrandIcons() {
+  const types = readFileSync(
+    createRequire(path.join(repoRoot, "packages/app/package.json")).resolve(
+      `${LUCIDE}/dist/lucide-react-native.d.ts`,
+    ),
+    "utf8",
+  );
+  const brands = new Set(
+    [...types.matchAll(/\/\*\*((?:(?!\*\/)[\s\S])*?)\*\/\s*declare const (\w+): LucideIcon;/g)]
+      .filter(([, doc]) => doc.includes("Brand icons have been deprecated"))
+      .map(([, , name]) => name),
+  );
+  assert.ok(brands.has("Github") && brands.has("Gitlab"), `${LUCIDE}'s brand icons not found`);
+  const names = new Set(brands);
+  const exported = /^export \{([^}]*)\};?$/m.exec(types)?.[1] ?? "";
+  for (const entry of exported.split(",")) {
+    const [name, alias] = entry.trim().split(/\s+as\s+/);
+    if (alias && brands.has(name)) names.add(alias);
+  }
+  const files = new Set(
+    [...brands].map((name) => name.replace(/(?<=[a-z\d])([A-Z])/g, "-$1").toLowerCase()),
+  );
+  return { names, files };
+}
+
+/**
+ * Where the shipped app code draws a lucide brand icon, as "file: name": a named import or
+ * re-export under any of the icon's names, a member of the whole library or of its `icons` object,
+ * or an import of the icon's own file.
+ */
+function lucideBrandIconsDrawn() {
+  const { names, files } = lucideBrandIcons();
+  const drawn = [];
   for (const file of shippedSourceFiles(path.join(repoRoot, "packages/app/src"), /\.[jt]sx?$/)) {
     const source = readFileSync(file, "utf8");
-    for (const match of source.matchAll(/import\s*\{([^}]*)\}\s*from\s*"lucide-react-native"/g)) {
-      for (const imported of match[1].split(",")) {
-        const name = imported.trim().split(/\s+as\s+/)[0];
-        if (name in LUCIDE_BRAND_ICONS) brands.add(LUCIDE_BRAND_ICONS[name]);
+    const draw = (name) => drawn.push(`${relative(file)}: ${name}`);
+    const named =
+      /(?:import|export)\s*(?:type\s*)?\{([^}]*)\}\s*from\s*["']lucide-react-native["']/g;
+    for (const [, list] of source.matchAll(named)) {
+      for (const entry of list.split(",")) {
+        const name = entry
+          .trim()
+          .replace(/^type\s+/, "")
+          .split(/\s+as\s+/)[0];
+        if (names.has(name)) draw(name);
       }
     }
+    const wholeLibrary = /import\s*\*\s*as\s+(\w+)\s+from\s*["']lucide-react-native["']/g;
+    const iconsObject =
+      /import\s*\{[^}]*\bicons(?:\s+as\s+(\w+))?\b[^}]*\}\s*from\s*["']lucide-react-native["']/g;
+    const libraries = [
+      ...[...source.matchAll(wholeLibrary)].map(([, local]) => local),
+      ...[...source.matchAll(iconsObject)].map(([, local]) => local ?? "icons"),
+    ];
+    for (const library of libraries) {
+      const member = new RegExp(
+        `\\b${library}\\s*(?:\\.\\s*(\\w+)|\\[\\s*["'](\\w+)["']\\s*\\])`,
+        "g",
+      );
+      for (const [, dotted, indexed] of source.matchAll(member)) {
+        if (names.has(dotted ?? indexed)) draw(dotted ?? indexed);
+      }
+    }
+    for (const [, iconFile] of source.matchAll(
+      /["']lucide-react-native\/[^"']*\/([\w-]+?)(?:\.js)?["']/g,
+    )) {
+      if (files.has(iconFile)) draw(iconFile);
+    }
   }
-  return [...brands];
+  return drawn;
 }
 
 function* shippedFiles() {
@@ -177,12 +222,14 @@ test("every forge mark the app draws has an entry on the notices page, and no ot
   );
 });
 
-test("the app draws no lucide brand icon whose brand has no entry, so never GitLab's", () => {
-  const { FORGE_MARK_NOTICES } = notices();
+test("the app draws no lucide brand icon, under any of its names", () => {
   assert.deepEqual(
-    lucideBrandsShown().filter((brand) => !(brand in FORGE_MARK_NOTICES)),
+    lucideBrandIconsDrawn(),
     [],
-    "A lucide brand icon ships. Decide whether its brand's logo may show, first.",
+    "A lucide brand icon ships. Lucide redraws the brand's logo as an outline in the caller's " +
+      "colour, which the brands' rules do not allow: GitHub asks for its own mark in black or " +
+      "white, GitLab allows no logo. Draw a forge's mark from components/icons where its name " +
+      "stands next to it, or use a generic icon.",
   );
 });
 
