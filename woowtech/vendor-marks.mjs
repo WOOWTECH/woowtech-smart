@@ -324,11 +324,14 @@ export const VENDOR_MARKS = {
     logoPaths: ["M395.479 633.828L735.91 381.105C752.599 368.715 776.454 373.548"],
   },
   // The icon JetBrains' own staff sent to the ACP registry, in currentColor for theme support
-  // (coord/brand-assets/junie/manifest.json, status matches). JetBrains asks for its attribution
-  // and a link back to www.jetbrains.com (the notices page).
+  // (coord/brand-assets/junie/manifest.json, status matches). The research restores it with the
+  // name Junie beside it (§2.2), so an agent row, a workspace tab or a schedule row, which show a
+  // title, draw the Ju badge. JetBrains asks for its attribution and a link back to
+  // www.jetbrains.com (the notices page).
   junie: {
     show: "upstream",
     color: "theme",
+    onlyBesideName: true,
     files: [`${acp}/junie.svg`],
     acpIcons: ["junie"],
     logoPaths: ["M25 15H35V16.75C35 29 30.5001 35 16.5001 35H15V25H16.5001"],
@@ -434,18 +437,14 @@ export const VENDOR_MARKS = {
     acpIcons: [],
     logoPaths: [],
   },
-  // Microsoft's "stable" icon from code.visualstudio.com, in its own colours: upstream's PNG is the
-  // macOS app icon the brand page names as one not to use (coord/brand-assets/vscode, status
-  // ready). The desktop app loads it as SVG, byte for byte. Microsoft's buttons read "Open in VS
-  // Code" and the icon never pairs up with the name as a logo, so it appears only beside its name.
+  // Badge (section 25): Microsoft allows its icon on action buttons that read "Open in VS Code",
+  // and not paired with the name "VS Code" alone as a logo. The app's button shows its icon alone
+  // in the workspace header, and its menu reads "VS Code", so no place meets that; the research's
+  // conservative choice is the badge. Microsoft's "stable" icon (coord/brand-assets/vscode, status
+  // ready) can come back as show "official" once the app shows it only beside "Open in VS Code".
   vscode: {
-    show: "official",
-    color: "original",
+    show: "badge",
     onlyBesideName: true,
-    official: {
-      manifest: "woowtech/brand/vendor-marks/vscode/manifest.json",
-      files: { [`${editors}/vscode.svg`]: "woowtech/brand/vendor-marks/vscode/vscode.svg" },
-    },
     files: [`${editors}/vscode.png`],
     acpIcons: [],
     logoPaths: [],
@@ -459,13 +458,13 @@ export const VENDOR_MARKS = {
     logoPaths: [],
   },
   // Upstream's PNG is Zed's stable app icon from zed.dev/brand, scaled with the macOS icon margin
-  // (coord/brand-assets/zed/manifest.json, status matches), in its own colours. Zed's rules do not
-  // ask for its name beside it (research §3.4 asks that only of Google and VS Code), so the
-  // icon-only "Open in" button shows it too; onlyBesideName: true would give it the generic editor
-  // icon there.
+  // (coord/brand-assets/zed/manifest.json, status matches), in its own colours. The research
+  // restores it with the name Zed beside it (§2.3): the "Open in" menu names Zed, and the
+  // workspace header's icon-only button draws the generic editor icon instead.
   zed: {
     show: "upstream",
     color: "original",
+    onlyBesideName: true,
     files: [`${editors}/zed.png`],
     acpIcons: [],
     logoPaths: [],

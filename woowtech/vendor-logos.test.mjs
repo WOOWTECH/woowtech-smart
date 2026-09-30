@@ -10,7 +10,8 @@
 //   - a vendor's own files are committed as downloaded, with where and when they came from, and
 //     the app ships them byte for byte;
 //   - the app knows how to draw each mark (woowtech-vendor-mark-styles.gen.ts);
-//   - a Google or Microsoft mark only ever appears beside its product's name;
+//   - a mark whose owner or the research asks for its product's name beside it only ever
+//     appears there: Google's, Microsoft's, Junie's and Zed's;
 //   - the places that draw provider marks and the desktop "Open in" button are wired to that.
 // What the app draws, per theme and state, is pinned by the app's vitest suites
 // (woowtech-vendor-mark-icon.test.ts, woowtech-editor-marks.test.ts).
@@ -47,8 +48,16 @@ const FIELDS = new Set([
   "logoPaths",
 ]);
 // Google asks that its product icons never stand on their own ("Don't use product icons by
-// themselves"); Microsoft's buttons read "Open in VS Code". Research §3.4, point 1.
-const ONLY_BESIDE_THEIR_NAME = ["gemini", "antigravity", "android-studio", "vscode"];
+// themselves"); Microsoft's buttons read "Open in VS Code" (research §3.4, point 1). The research
+// restores Junie's and Zed's icons with the name Junie or Zed beside them (§2.2, §2.3).
+const ONLY_BESIDE_THEIR_NAME = [
+  "gemini",
+  "antigravity",
+  "android-studio",
+  "vscode",
+  "junie",
+  "zed",
+];
 
 const marks = Object.entries(VENDOR_MARKS);
 const showingLogo = marks.filter(([, mark]) => mark.show !== "badge");
@@ -174,7 +183,7 @@ test("the app knows how to draw each vendor mark that shows its logo", () => {
   assert.deepEqual(colors(EDITOR_ICON_STYLES), expectedEditors);
 });
 
-test("Google's and Microsoft's marks may only appear beside their product's name", () => {
+test("Google's, Microsoft's, Junie's and Zed's marks may only appear beside their product's name", () => {
   assert.deepEqual(
     ONLY_BESIDE_THEIR_NAME.filter((vendor) => VENDOR_MARKS[vendor]?.onlyBesideName !== true),
     [],

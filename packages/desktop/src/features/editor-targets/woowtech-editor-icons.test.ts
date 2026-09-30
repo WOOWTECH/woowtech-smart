@@ -1,9 +1,16 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { loadEditorTargetIcon } from "./woowtech-editor-icons.js";
+
+/** The editor icons the desktop app ships (electron-builder packs the whole folder). */
+const SHIPPED_ICONS = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../assets/editor-targets",
+);
 
 // woowtech smart: an editor's logo ships only once cleared, as upstream's PNG or the vendor's own
 // SVG; otherwise the "Open in" menu shows its text badge (woowtech/README.md sections 22 and 25).
@@ -45,8 +52,8 @@ describe("editor target icons", () => {
     });
   });
 
-  // woowtech smart: a vendor's own file can take the place of upstream's PNG, such as Microsoft's
-  // VS Code icon, which Microsoft publishes as SVG (woowtech/README.md section 25).
+  // woowtech smart: a vendor's own file can take the place of upstream's PNG, such as the VS Code
+  // icon Microsoft publishes as SVG, once it is cleared to show (woowtech/README.md section 25).
   it("shows the vendor's own SVG where it ships in place of upstream's PNG, byte for byte", async () => {
     const svg = '<svg viewBox="0 0 100 100"><path d="M0 0h100v100H0z" fill="#007ACC"/></svg>\n';
     await writeFile(path.join(directory, "vscode.svg"), svg);
@@ -54,6 +61,19 @@ describe("editor target icons", () => {
     expect(await loadEditorTargetIcon("vscode.png", path.join(directory, "vscode.png"))).toEqual({
       kind: "image",
       dataUrl: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
+    });
+  });
+
+  // woowtech smart: VS Code keeps its text badge until the app shows its icon only beside "Open in
+  // VS Code"; Zed's own icon ships (woowtech/README.md section 25).
+  it("shows VS Code's text badge and Zed's own icon, from the icons the desktop app ships", async () => {
+    expect(
+      await loadEditorTargetIcon("vscode.png", path.join(SHIPPED_ICONS, "vscode.png")),
+    ).toEqual({ kind: "badge", vendor: "vscode" });
+    const zed = await readFile(path.join(SHIPPED_ICONS, "zed.png"));
+    expect(await loadEditorTargetIcon("zed.png", path.join(SHIPPED_ICONS, "zed.png"))).toEqual({
+      kind: "image",
+      dataUrl: `data:image/png;base64,${zed.toString("base64")}`,
     });
   });
 

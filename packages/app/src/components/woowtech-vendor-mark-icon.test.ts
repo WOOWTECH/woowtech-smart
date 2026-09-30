@@ -133,13 +133,22 @@ describe("the vendor marks the app ships", () => {
     }
   });
 
-  it("draws Junie's registry icon everywhere, in the colour its place gives it", () => {
-    expect(ACP_ICON_STYLES.junie).toEqual({ color: "theme" });
-    for (const place of [undefined, UNCHECKED_PLACE, NAMED_ROW]) {
-      for (const color of CALLER_COLORS) {
+  // JetBrains' staff put this icon in the registry to be drawn in the theme's colour; the research
+  // restores it with the name Junie beside it (woowtech/README.md section 25). An agent row, a
+  // workspace tab or a schedule row shows a conversation's or schedule's title instead.
+  it("draws Junie's registry icon, in the colour its place gives it, only beside the name Junie", () => {
+    expect(ACP_ICON_STYLES.junie).toEqual({ color: "theme", onlyBesideName: true });
+    for (const color of CALLER_COLORS) {
+      for (const place of [NAMED_ROW, { nameBeside: true, keepsColors: false }]) {
         expect(drawProvider("junie", color, place)).toMatchObject({
           type: SvgXml,
           props: { xml: ACP_PROVIDER_ICON_SVGS.junie, width: 20, height: 20, color },
+        });
+      }
+      for (const place of [undefined, UNCHECKED_PLACE, { nameBeside: false, keepsColors: true }]) {
+        expect(drawProvider("junie", color, place)).toMatchObject({
+          type: SvgXml,
+          props: { xml: vendorBadgeSvg("junie"), width: 20, height: 20, color },
         });
       }
     }

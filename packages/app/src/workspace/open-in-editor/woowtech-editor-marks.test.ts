@@ -6,9 +6,11 @@ import { GENERIC_EDITOR_ICON, editorIconAlone } from "./woowtech-editor-marks";
 
 // woowtech smart: the desktop "Open in" button (woowtech/README.md section 25). Its label names the
 // editor it opens, in Microsoft's "Open in VS Code" format. The workspace header shows the button
-// without its label, so the editor's icon stands alone there: Google's and Microsoft's marks may
-// only appear beside their product's name, so there they give way to the generic editor icon. The
-// menu beside the button names every editor, so it keeps each editor's own icon.
+// without its label, so the editor's icon stands alone there. Google's product icons, and the
+// icons the research restores with the editor's name beside them (Zed's), may only appear beside
+// their product's name, so there they give way to the generic editor icon. The menu beside the
+// button names every editor, so it keeps each editor's own icon. VS Code shows its text badge
+// until the app shows its icon only beside "Open in VS Code".
 
 const IMAGE: DesktopOpenTargetIcon = {
   kind: "image",
@@ -34,9 +36,9 @@ describe("the desktop Open in button", () => {
     );
   });
 
-  it("draws the generic editor icon where VS Code's icon would stand alone", () => {
-    expect(EDITOR_ICON_STYLES.vscode).toEqual({ color: "original", onlyBesideName: true });
-    expect(editorIconAlone({ editorId: "vscode", icon: IMAGE })).toEqual(GENERIC_EDITOR_ICON);
+  it("draws the generic editor icon where Zed's icon would stand alone", () => {
+    expect(EDITOR_ICON_STYLES.zed).toEqual({ color: "original", onlyBesideName: true });
+    expect(editorIconAlone({ editorId: "zed", icon: IMAGE })).toEqual(GENERIC_EDITOR_ICON);
     expect(GENERIC_EDITOR_ICON).toEqual({ kind: "symbol", name: "terminal" });
   });
 
@@ -47,9 +49,19 @@ describe("the desktop Open in button", () => {
     );
   });
 
-  it("keeps Zed's own icon alone, and every badge and symbol", () => {
-    expect(EDITOR_ICON_STYLES.zed).toEqual({ color: "original" });
-    expect(editorIconAlone({ editorId: "zed", icon: IMAGE })).toBe(IMAGE);
+  it("stands no editor's own icon alone: every editor that shows its logo gives way there", () => {
+    expect(Object.keys(EDITOR_ICON_STYLES)).toEqual(["zed"]);
+    for (const editorId of Object.keys(EDITOR_ICON_STYLES)) {
+      expect({ editorId, alone: editorIconAlone({ editorId, icon: IMAGE }) }).toEqual({
+        editorId,
+        alone: GENERIC_EDITOR_ICON,
+      });
+    }
+  });
+
+  it("keeps every badge and symbol, such as VS Code's badge, alone too", () => {
+    const vscode: DesktopOpenTargetIcon = { kind: "badge", vendor: "vscode" };
+    expect(editorIconAlone({ editorId: "vscode", icon: vscode })).toBe(vscode);
     const badge: DesktopOpenTargetIcon = { kind: "badge", vendor: "android-studio" };
     expect(editorIconAlone({ editorId: "android-studio", icon: badge })).toBe(badge);
     const folder: DesktopOpenTargetIcon = { kind: "symbol", name: "folder" };

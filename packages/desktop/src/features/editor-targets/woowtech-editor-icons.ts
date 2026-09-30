@@ -6,9 +6,9 @@ import type { EditorTargetIcon } from "./target.js";
 // woowtech smart: vendor logos ship only where the owner has cleared them
 // (woowtech/vendor-marks.mjs, woowtech/README.md sections 22 and 25). An editor's logo ships in
 // assets/editor-targets as upstream's PNG, or as the vendor's own SVG beside where the PNG was
-// (Microsoft publishes the VS Code icon as SVG). An editor whose logo is not there shows its text
-// badge, which the app draws from the vendor id, and Finder the folder symbol that Explorer and
-// Files already use.
+// (Microsoft publishes the VS Code icon as SVG, for when it is cleared to show). An editor whose
+// logo is not there shows its text badge, which the app draws from the vendor id, and Finder the
+// folder symbol that Explorer and Files already use.
 export async function loadEditorTargetIcon(
   fileName: string,
   file: string,

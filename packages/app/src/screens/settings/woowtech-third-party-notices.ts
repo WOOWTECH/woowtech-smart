@@ -113,15 +113,10 @@ export const VENDOR_MARK_NOTICES: Readonly<Record<string, MarkNotice>> = {
 
 /**
  * The desktop editors whose own icon the "Open in" menu shows, keyed as in woowtech/vendor-marks.mjs
- * (research §2.3, section 25), with the trademark line on each owner's brand page.
+ * (research §2.3, section 25), with the trademark line on each owner's brand page. VS Code shows
+ * its text badge.
  */
 export const EDITOR_MARK_NOTICES: Readonly<Record<string, MarkNotice>> = {
-  vscode: {
-    name: "VS Code",
-    owner: "Microsoft Corporation",
-    credit:
-      "Visual Studio Code, VS Code, and the Visual Studio Code icon are trademarks of Microsoft Corporation. All rights reserved.",
-  },
   zed: {
     name: "Zed",
     owner: "Zed Industries, Inc.",

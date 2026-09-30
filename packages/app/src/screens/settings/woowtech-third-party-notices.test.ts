@@ -116,8 +116,9 @@ describe("the trademarks and third-party notices page", () => {
   });
 
   // Stage 2 (woowtech/README.md section 25): the marks restored under their owners' rules, with the
-  // trademark line each owner asks for, word for word, and JetBrains' link back to its site.
-  it("credits JetBrains, Microsoft and Zed in the words their brand rules ask for", () => {
+  // trademark line each owner asks for, word for word, and JetBrains' link back to its site. VS
+  // Code keeps its text badge, so the page does not list it.
+  it("credits JetBrains and Zed in the words their brand rules ask for", () => {
     expect(VENDOR_MARK_NOTICES.junie).toEqual({
       name: "Junie",
       owner: "JetBrains s.r.o.",
@@ -129,12 +130,6 @@ describe("the trademarks and third-party notices page", () => {
     expect(VENDOR_MARK_NOTICES.cursor).toEqual({ name: "Cursor", owner: "Anysphere, Inc." });
     expect(VENDOR_MARK_NOTICES.grok).toEqual({ name: "Grok", owner: "SpaceXAI LLC" });
     expect(EDITOR_MARK_NOTICES).toEqual({
-      vscode: {
-        name: "VS Code",
-        owner: "Microsoft Corporation",
-        credit:
-          "Visual Studio Code, VS Code, and the Visual Studio Code icon are trademarks of Microsoft Corporation. All rights reserved.",
-      },
       zed: {
         name: "Zed",
         owner: "Zed Industries, Inc.",
@@ -151,12 +146,12 @@ describe("the trademarks and third-party notices page", () => {
       "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
       "網站：https://www.jetbrains.com",
     ]);
-    expect(rowOf(pageIn("zh-TW"), "editors", "vscode")).toEqual({
-      key: "vscode",
-      title: "VS Code",
+    expect(rowOf(pageIn("zh-TW"), "editors", "zed")).toEqual({
+      key: "zed",
+      title: "Zed",
       lines: [
-        "所有者：Microsoft Corporation",
-        "Visual Studio Code, VS Code, and the Visual Studio Code icon are trademarks of Microsoft Corporation. All rights reserved.",
+        "所有者：Zed Industries, Inc.",
+        "The Zed name and logos are trademarks of Zed Industries, Inc.",
       ],
     });
     // Zed, JetBrains and SpaceXAI forbid suggesting their endorsement; the page opens by saying
@@ -342,7 +337,7 @@ describe("the trademarks and third-party notices page", () => {
     const agents = english.find((section) => section.id === "agents")?.rows ?? [];
     expect(agents.map((row) => row.key)).toEqual(Object.keys(VENDOR_MARK_NOTICES));
     const editors = english.find((section) => section.id === "editors")?.rows ?? [];
-    expect(editors.map((row) => row.key)).toEqual(["vscode", "zed"]);
+    expect(editors.map((row) => row.key)).toEqual(["zed"]);
     const fileTypes = english.find((section) => section.id === "fileTypes")?.rows ?? [];
     expect(fileTypes.map((row) => row.key)).toEqual([
       "changes",
