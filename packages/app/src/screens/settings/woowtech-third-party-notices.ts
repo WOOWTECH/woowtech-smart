@@ -1,14 +1,16 @@
 import type { TFunction } from "i18next";
 
 // woowtech smart: the Trademarks and third-party notices page (商標與第三方授權) in Settings,
-// woowtech/README.md section 24. It lists every third-party mark the app shows, with its owner and
-// the credit or license its owner asks for, and says woowtech smart is not affiliated with them.
+// woowtech/README.md sections 24 and 25. It lists every third-party mark the app shows, with its
+// owner and the credit or license its owner asks for, and says woowtech smart is not affiliated
+// with them.
 //
 // This file is the page's only data. woowtech/third-party-notices.test.mjs derives the marks that
 // ship from woowtech/vendor-marks.mjs, the forge views and the file-type icon table, and fails
 // until each has its entry here and no entry names a mark that does not ship. To show a vendor's
-// own logo: set its show to "upstream" in vendor-marks.mjs, run the tool, and add its entry to
-// VENDOR_MARK_NOTICES with what its brand rules ask for.
+// own logo: set its show in vendor-marks.mjs (section 25), run the tool, and add its entry to
+// VENDOR_MARK_NOTICES (an agent) or EDITOR_MARK_NOTICES (a desktop editor) with what its brand
+// rules ask for.
 //
 // Names, owners, credits and license texts are proper nouns or legal text and stay as their owners
 // write them in every language. The labels around them are translated, and so is what no owner
@@ -46,6 +48,8 @@ export interface MarkNotice {
   readonly license?: NoticeLicense;
   /** Where the licensed drawing is published. */
   readonly source?: string;
+  /** The owner's site its brand rules ask the mark to link back to. */
+  readonly link?: string;
 }
 
 export interface FileTypeMarkNotice extends MarkNotice {
@@ -76,23 +80,53 @@ const LICENSES = {
 
 /**
  * The agents that show their own logo, keyed as in woowtech/vendor-marks.mjs: the 13 whose
- * authors put their icon in the Agent Client Protocol registry (research §2.2). The research asks
- * for the registry's own file, the agent's name next to it and no suggestion of endorsement.
+ * authors put their icon in the Agent Client Protocol registry (research §2.2), for which the
+ * research asks for the registry's own file, the agent's name next to it and no suggestion of
+ * endorsement; and, from section 25, Cursor's cube, the Junie icon JetBrains' staff put in the
+ * registry, and SpaceXAI's own Grok files.
  */
 export const VENDOR_MARK_NOTICES: Readonly<Record<string, MarkNotice>> = {
   agoragentic: { name: "Agoragentic", owner: "Agoragentic" },
   autohand: { name: "Autohand Code", owner: "Autohand AI" },
   "cortex-code": { name: "Cortex Code", owner: "Snowflake Inc." },
   crow: { name: "crow-cli", owner: "Thomas Wood" },
+  cursor: { name: "Cursor", owner: "Anysphere, Inc." },
   dimcode: { name: "DimCode", owner: "ArcShips (法至)" },
   dirac: { name: "Dirac", owner: "Dirac Delta Labs" },
   "fast-agent": { name: "fast-agent", owner: "evalstate" },
   "gajae-code": { name: "Gajae Code", owner: "Yeachan-Heo" },
+  grok: { name: "Grok", owner: "SpaceXAI LLC" },
+  // JetBrains' brand page: its attribution, with the current year, and a link back to its site.
+  junie: {
+    name: "Junie",
+    owner: "JetBrains s.r.o.",
+    credit:
+      "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
+    link: "https://www.jetbrains.com",
+  },
   nova: { name: "Nova", owner: "Compass AI" },
   qoder: { name: "Qoder CLI", owner: "Qoder (BRIGHT ZENITH PRIVATE LIMITED)" },
   sigit: { name: "siGit Code", owner: "PT Sigit Mitra Bangun" },
   stakpak: { name: "Stakpak", owner: "Stakpak" },
   vtcode: { name: "VT Code", owner: "Vinh Nguyen" },
+};
+
+/**
+ * The desktop editors whose own icon the "Open in" menu shows, keyed as in woowtech/vendor-marks.mjs
+ * (research §2.3, section 25), with the trademark line on each owner's brand page.
+ */
+export const EDITOR_MARK_NOTICES: Readonly<Record<string, MarkNotice>> = {
+  vscode: {
+    name: "VS Code",
+    owner: "Microsoft Corporation",
+    credit:
+      "Visual Studio Code, VS Code, and the Visual Studio Code icon are trademarks of Microsoft Corporation. All rights reserved.",
+  },
+  zed: {
+    name: "Zed",
+    owner: "Zed Industries, Inc.",
+    credit: "The Zed name and logos are trademarks of Zed Industries, Inc.",
+  },
 };
 
 /**
@@ -345,7 +379,7 @@ export interface NoticeRow {
 }
 
 export interface NoticeSection {
-  readonly id: "trademarks" | "agents" | "forges" | "fileTypes" | "mit";
+  readonly id: "trademarks" | "agents" | "editors" | "forges" | "fileTypes" | "mit";
   readonly title: string;
   /** What the section is for, for its header's info tooltip. */
   readonly info?: string;
@@ -367,6 +401,7 @@ function noticeLines(notice: MarkNotice, t: TFunction): string[] {
     ...(notice.changes ? [t(`${COPY}.changes.${notice.changes}`)] : []),
     ...(license ? [t(`${COPY}.license`, { license: licenseText(license, t) })] : []),
     ...(notice.source ? [t(`${COPY}.source`, { source: notice.source })] : []),
+    ...(notice.link ? [t(`${COPY}.link`, { link: notice.link })] : []),
   ];
 }
 
@@ -391,6 +426,12 @@ export function buildThirdPartyNotices(t: TFunction): NoticeSection[] {
       title: t(`${COPY}.sections.agents`),
       info: t(`${COPY}.sections.agentsInfo`),
       rows: markRows(VENDOR_MARK_NOTICES, t),
+    },
+    {
+      id: "editors",
+      title: t(`${COPY}.sections.editors`),
+      info: t(`${COPY}.sections.editorsInfo`),
+      rows: markRows(EDITOR_MARK_NOTICES, t),
     },
     {
       id: "forges",

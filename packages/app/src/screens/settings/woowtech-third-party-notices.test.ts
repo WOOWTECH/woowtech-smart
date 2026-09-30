@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { buildSettingsSectionRoute, isSettingsSectionSlug } from "@/utils/host-routes";
 import {
+  EDITOR_MARK_NOTICES,
   FILE_TYPE_MARK_NOTICES,
   FORGE_MARK_NOTICES,
   MIT_LICENSE_TEXT,
@@ -75,18 +76,18 @@ describe("the trademarks and third-party notices page", () => {
       {
         key: "statement",
         title:
-          "woowtech smart is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.",
+          "woowtech smart is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, editors, services and file types they stand for.",
         lines: [],
       },
     ]);
     const [chinese] = pageIn("zh-TW");
     expect(chinese).toMatchObject({ id: "trademarks", title: "商標" });
     expect(chinese?.rows[0]?.title).toBe(
-      "渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。",
+      "渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、編輯器、服務與檔案類型。",
     );
   });
 
-  it("lists the 13 agents that show their own icon, each with its owner", () => {
+  it("lists the 16 agents that show their own icon, each with its owner", () => {
     expect(
       Object.fromEntries(
         Object.entries(VENDOR_MARK_NOTICES).map(([vendor, notice]) => [
@@ -99,16 +100,70 @@ describe("the trademarks and third-party notices page", () => {
       autohand: "Autohand Code — Autohand AI",
       "cortex-code": "Cortex Code — Snowflake Inc.",
       crow: "crow-cli — Thomas Wood",
+      cursor: "Cursor — Anysphere, Inc.",
       dimcode: "DimCode — ArcShips (法至)",
       dirac: "Dirac — Dirac Delta Labs",
       "fast-agent": "fast-agent — evalstate",
       "gajae-code": "Gajae Code — Yeachan-Heo",
+      grok: "Grok — SpaceXAI LLC",
+      junie: "Junie — JetBrains s.r.o.",
       nova: "Nova — Compass AI",
       qoder: "Qoder CLI — Qoder (BRIGHT ZENITH PRIVATE LIMITED)",
       sigit: "siGit Code — PT Sigit Mitra Bangun",
       stakpak: "Stakpak — Stakpak",
       vtcode: "VT Code — Vinh Nguyen",
     });
+  });
+
+  // Stage 2 (woowtech/README.md section 25): the marks restored under their owners' rules, with the
+  // trademark line each owner asks for, word for word, and JetBrains' link back to its site.
+  it("credits JetBrains, Microsoft and Zed in the words their brand rules ask for", () => {
+    expect(VENDOR_MARK_NOTICES.junie).toEqual({
+      name: "Junie",
+      owner: "JetBrains s.r.o.",
+      credit:
+        "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
+      link: "https://www.jetbrains.com",
+    });
+    // Cursor and SpaceXAI ask for no credit line.
+    expect(VENDOR_MARK_NOTICES.cursor).toEqual({ name: "Cursor", owner: "Anysphere, Inc." });
+    expect(VENDOR_MARK_NOTICES.grok).toEqual({ name: "Grok", owner: "SpaceXAI LLC" });
+    expect(EDITOR_MARK_NOTICES).toEqual({
+      vscode: {
+        name: "VS Code",
+        owner: "Microsoft Corporation",
+        credit:
+          "Visual Studio Code, VS Code, and the Visual Studio Code icon are trademarks of Microsoft Corporation. All rights reserved.",
+      },
+      zed: {
+        name: "Zed",
+        owner: "Zed Industries, Inc.",
+        credit: "The Zed name and logos are trademarks of Zed Industries, Inc.",
+      },
+    });
+    expect(rowOf(pageIn("en"), "agents", "junie").lines).toEqual([
+      "Owner: JetBrains s.r.o.",
+      "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
+      "Website: https://www.jetbrains.com",
+    ]);
+    expect(rowOf(pageIn("zh-TW"), "agents", "junie").lines).toEqual([
+      "所有者：JetBrains s.r.o.",
+      "Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.",
+      "網站：https://www.jetbrains.com",
+    ]);
+    expect(rowOf(pageIn("zh-TW"), "editors", "vscode")).toEqual({
+      key: "vscode",
+      title: "VS Code",
+      lines: [
+        "所有者：Microsoft Corporation",
+        "Visual Studio Code, VS Code, and the Visual Studio Code icon are trademarks of Microsoft Corporation. All rights reserved.",
+      ],
+    });
+    // Zed, JetBrains and SpaceXAI forbid suggesting their endorsement; the page opens by saying
+    // there is none.
+    expect(rowOf(pageIn("en"), "trademarks", "statement").title).toContain(
+      "is not affiliated with, sponsored or endorsed by",
+    );
   });
 
   it("lists the forge marks still shown, with Forgejo's CC BY-SA 4.0 credit to Caesar Schinas", () => {
@@ -243,6 +298,7 @@ describe("the trademarks and third-party notices page", () => {
     expect(english.map((section) => section.id)).toEqual([
       "trademarks",
       "agents",
+      "editors",
       "forges",
       "fileTypes",
       "mit",
@@ -285,6 +341,8 @@ describe("the trademarks and third-party notices page", () => {
 
     const agents = english.find((section) => section.id === "agents")?.rows ?? [];
     expect(agents.map((row) => row.key)).toEqual(Object.keys(VENDOR_MARK_NOTICES));
+    const editors = english.find((section) => section.id === "editors")?.rows ?? [];
+    expect(editors.map((row) => row.key)).toEqual(["vscode", "zed"]);
     const fileTypes = english.find((section) => section.id === "fileTypes")?.rows ?? [];
     expect(fileTypes.map((row) => row.key)).toEqual([
       "changes",
@@ -331,6 +389,7 @@ describe("the trademarks and third-party notices page", () => {
     expect(chinese.map((section) => section.title)).toEqual([
       "商標",
       "Agent",
+      "編輯器",
       "Git 平台",
       "檔案類型圖示",
       "MIT 授權",
@@ -373,8 +432,9 @@ describe("the trademarks and third-party notices page", () => {
       ["trademarks", undefined],
       [
         "agents",
-        "以自己的圖示顯示的 Agent，圖示是作者提供給 ACP 用戶端的版本。其他 Agent 顯示文字徽章。",
+        "以自己的圖示顯示的 Agent，圖示取自廠商或作者公開的版本。其他 Agent 顯示文字徽章。",
       ],
+      ["editors", "顯示在桌面版選擇編輯器的選單。其他編輯器顯示文字徽章或通用圖示。"],
       [
         "forges",
         "顯示在開啟 Git 平台的連結旁。GitHub 與 Codeberg 只用黑色或白色顯示，GitLab 顯示文字徽章。",
@@ -386,7 +446,11 @@ describe("the trademarks and third-party notices page", () => {
       ["trademarks", undefined],
       [
         "agents",
-        "Agents shown with their own icon, as each author publishes it for ACP clients. Other agents show a text badge.",
+        "Agents shown with their own icon, as their makers publish it. Other agents show a text badge.",
+      ],
+      [
+        "editors",
+        "Shown in the desktop app's Choose editor menu. Other editors show a text badge or a generic icon.",
       ],
       [
         "forges",
@@ -408,11 +472,12 @@ describe("the trademarks and third-party notices page", () => {
     const asWritten = new Set<string>([MIT_LICENSE_TEXT]);
     const markNotices = [
       ...Object.values(VENDOR_MARK_NOTICES),
+      ...Object.values(EDITOR_MARK_NOTICES),
       ...Object.values(FORGE_MARK_NOTICES),
       ...FILE_TYPE_MARK_NOTICES,
     ];
     for (const notice of markNotices) {
-      for (const text of [notice.name, notice.owner, notice.credit, notice.source]) {
+      for (const text of [notice.name, notice.owner, notice.credit, notice.source, notice.link]) {
         if (text) asWritten.add(text);
       }
       const license = notice.license;
@@ -427,7 +492,7 @@ describe("the trademarks and third-party notices page", () => {
     // zh-TW keeps the word Agent in English across the app (woowtech/tools/zh-tw-untranslated.mjs).
     asWritten.add("Agent");
     const untranslated = textsIn("zh-TW")
-      .map((text) => text.replace(/^(?:所有者|授權|來源|修改)：/, ""))
+      .map((text) => text.replace(/^(?:所有者|授權|來源|修改|網站)：/, ""))
       .filter((text) => !asWritten.has(text) && !/[㐀-鿿]/.test(text));
     expect(untranslated).toEqual([]);
   });

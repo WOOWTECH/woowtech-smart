@@ -1117,12 +1117,15 @@ const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
 const THIRD_PARTY_NOTICES_ENGLISH = {
   title: "Trademarks and third-party notices",
   statement:
-    "woowtech smart is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.",
+    "woowtech smart is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, editors, services and file types they stand for.",
   sections: {
     trademarks: "Trademarks",
     agents: "Agents",
     agentsInfo:
-      "Agents shown with their own icon, as each author publishes it for ACP clients. Other agents show a text badge.",
+      "Agents shown with their own icon, as their makers publish it. Other agents show a text badge.",
+    editors: "Editors",
+    editorsInfo:
+      "Shown in the desktop app's Choose editor menu. Other editors show a text badge or a generic icon.",
     forges: "Git forges",
     forgesInfo:
       "Shown next to links that open a forge. GitHub and Codeberg draw in black or white, and GitLab shows a text badge.",
@@ -1139,6 +1142,7 @@ const THIRD_PARTY_NOTICES_ENGLISH = {
   owner: "Owner: {{owner}}",
   license: "License: {{license}}",
   source: "Source: {{source}}",
+  link: "Website: {{link}}",
   publicDomain: "Public domain",
   logoOf: "{{name}} logo",
   changes: {
@@ -1149,12 +1153,13 @@ const THIRD_PARTY_NOTICES_ENGLISH = {
 const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   title: "商標與第三方授權",
   statement:
-    "渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。",
+    "渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、編輯器、服務與檔案類型。",
   sections: {
     trademarks: "商標",
     agents: "Agent",
-    agentsInfo:
-      "以自己的圖示顯示的 Agent，圖示是作者提供給 ACP 用戶端的版本。其他 Agent 顯示文字徽章。",
+    agentsInfo: "以自己的圖示顯示的 Agent，圖示取自廠商或作者公開的版本。其他 Agent 顯示文字徽章。",
+    editors: "編輯器",
+    editorsInfo: "顯示在桌面版選擇編輯器的選單。其他編輯器顯示文字徽章或通用圖示。",
     forges: "Git 平台",
     forgesInfo:
       "顯示在開啟 Git 平台的連結旁。GitHub 與 Codeberg 只用黑色或白色顯示，GitLab 顯示文字徽章。",
@@ -1170,6 +1175,7 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   owner: "所有者：{{owner}}",
   license: "授權：{{license}}",
   source: "來源：{{source}}",
+  link: "網站：{{link}}",
   publicDomain: "公眾領域",
   logoOf: "{{name}} 標誌",
   changes: {
