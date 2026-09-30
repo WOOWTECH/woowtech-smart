@@ -1323,13 +1323,13 @@ node --test woowtech/*.test.mjs
 - owner 的決定（2026-09-30）：06:5x 同意規則允許使用標誌的 14 家，等 App 符合各家的條件後改回標誌；07:0x「同意前先用徽章，後面可以改版更新再優化，目前以可以先上架為目的」。所以這是第二階段，分支 `woowtech/logo-restore-0930`，從第一階段的 `a0d8eec29` 分出，不擋第一階段上架，第一階段的行為不變。
 - 規則：官方檔的比對結果是 ready 或 matches，而且這一節的條件都做到，才改回標誌；否則維持徽章，理由寫在 `vendor-marks.mjs` 那一筆的註解。
 - 結果：
-  - 改回 5 家：
+  - 改回 4 家（第二階段審查後，2026-09-30 晚；VS Code 改回徽章，見下面）：
     - Cursor（ACP 圖示）：上游的 `cursor.svg` 跟 cursor.com 頁首的 2D 方塊同形（Hausdorff 0.001%、IoU 1.0，matches）。`mono`。桌面版的 `cursor.png` 維持徽章（`badgeFiles`）：方塊圖案相同，但多了 macOS 圓角遮罩，品牌包放在 Vercel Blob 的網域，沒下載核對（unclear）。
-    - Junie（ACP 圖示）：上游的 `junie.svg` 就是 JetBrains 員工送進 ACP registry 的檔（matches）。`theme`，跟 registry 的 13 家一樣照呼叫端的顏色畫。
+    - Junie（ACP 圖示）：上游的 `junie.svg` 就是 JetBrains 員工送進 ACP registry 的檔（matches）。`theme`，照呼叫端的顏色畫；`onlyBesideName`：研究 §2.2 的條件是「旁邊寫 Junie」，所以只在設定的供應商列表和 ACP 目錄畫標誌，側欄的 Agent 列、工作區分頁、排程列這些旁邊是標題的地方畫 Ju 徽章。
     - Grok（ACP 圖示）：SpaceXAI 自己的 `Grok_Logomark_Dark.svg`、`Grok_Logomark_Light.svg`（ready），淺色主題用 Dark（#0A0A0A）、深色主題用 Light（white），不改色。上游的路徑相同，但改成了 currentColor。
-    - Zed（桌面版「在…中開啟」）：上游的 `zed.png` 就是 zed.dev 的 stable App 圖示縮小（matches）。`original`。
-    - VS Code（桌面版「在…中開啟」）：微軟品牌包的 `vscode.svg`（ready）取代上游的 `vscode.png`（微軟品牌頁點名不准用的 macOS App 圖示）。`original`、`onlyBesideName`。
+    - Zed（桌面版「在…中開啟」）：上游的 `zed.png` 就是 zed.dev 的 stable App 圖示縮小（matches）。`original`、`onlyBesideName`：研究 §2.3 的條件是「旁邊寫 Zed」，所以選單照畫 Zed 標誌和名稱，工作區頂端只有圖示的按鈕畫通用的編輯器圖示。
   - 維持徽章：
+    - vscode：微軟的品牌頁准圖示用在「Open in VS Code」這種動作按鈕上，不准把圖示和名稱配成 logo（lock-up）；研究 §2.3 的條件是「文字用 Open in VS Code 格式」。App 的按鈕在工作區頂端一律只有圖示，選單寫的是「VS Code」，選單項只設定偏好的編輯器、不開啟，沒有地方符合，研究的保守做法是維持徽章。第一版（`9e4cd8fad`）用微軟品牌包的 `vscode.svg`（ready），審查後拿掉：桌面版的 `assets/editor-targets/vscode.svg`、`woowtech/brand/vendor-marks/vscode/`、授權頁的 VS Code。官方檔仍在 `coord/brand-assets/vscode` 和 git 歷史，改回的做法見「要 owner 決定的」。
     - codex：官方的 Blossom 要先在 openai.com/brand 勾選同意 marks usage terms 才能下載，要 owner 自己做（blocked）；上游檔的來源沒有標明。
     - opencode、cline、kilo、webstorm：比對不符（mismatch）。OpenCode 的 ACP 圖示把框壓扁、少了內塊；Cline 是舊版造型；Kilo 拿掉了外框、「o」往上移；WebStorm 是 macOS 圓角方塊的 App 圖示，不是 JetBrains 的產品圖示。官方檔已經收在 `coord/brand-assets/`，要改用官方檔（`show: "official"`）得另外核准。
     - gemini、antigravity（含 agy）、android-studio：Google 的產品圖示要先開 Partner Marketing Hub 帳號、用 approval form 申請；Google 要求的法律聲明（legal line）只能用登入後的 Legal line generator 產生。agy 的 registry 圖示是 Google 員工送的（ready），但許可和法律聲明一樣沒有。
@@ -1338,37 +1338,39 @@ node --test woowtech/*.test.mjs
   - `show`：`"badge"`、`"upstream"`（從 `UPSTREAM_REF` 原樣還原）或 `"official"`（廠商自己的檔，放在 `woowtech/brand/vendor-marks/<廠商>/`）。
   - `color`，顯示標誌時必填：`"theme"` 照呼叫端的顏色（currentColor，ACP registry 設計的用法）；`"mono"` 淺色主題純黑、深色主題純白，不用呼叫端的顏色；`"original"` 檔案自己的顏色，不染色。其他值工具會拒絕，守門跟著紅。桌面版把編輯器的標誌畫成圖片，改不了顏色，所以編輯器的標誌只能是 `"original"`；圖示元件（`*-icon.tsx`）只能是 `"theme"`。
   - `official`：manifest 的位置、App 出貨的檔（`files`：出貨路徑對廠商的檔）、ACP 圖示的檔（`acpIcons`：淺色主題用的檔和深色主題用的檔）。
-  - `badgeFiles`：顯示標誌的廠商裡，還是顯示徽章的檔。`onlyBesideName`：標誌只能出現在產品名稱旁（Google 的「Don't use product icons by themselves」、微軟的「Open in VS Code」格式），Google 四家和 VS Code 都有，Google 四家改回標誌時就會生效。
+  - `badgeFiles`：顯示標誌的廠商裡，還是顯示徽章的檔。`onlyBesideName`：標誌只能出現在產品名稱旁（Google 的「Don't use product icons by themselves」、微軟的「Open in VS Code」格式），Google 四家、VS Code、Junie、Zed 都有；Junie、Zed 現在生效，Google 四家和 VS Code 改回標誌時生效。
   - 工具照資料寫檔，另外寫 `components/icons/woowtech-vendor-mark-styles.gen.ts`：每個顯示標誌的 ACP 圖示和桌面版編輯器怎麼畫（`ACP_ICON_STYLES`、`EDITOR_ICON_STYLES`），以及 ACP 圖示用的官方檔（`OFFICIAL_ACP_ICON_SVGS`，`acp-provider-icons.ts` 引用它）。這個檔不要手改（oxfmt 設定本來就略過 `*.gen.ts`）。
-- 官方檔：`woowtech/brand/vendor-marks/grok/` 兩個 SVG、`vscode/vscode.svg`，都跟 `coord/brand-assets` 的檔逐位元組相同，沒改任何內容。旁邊的 `manifest.json` 記每個檔的來源網址（壓縮檔）、壓縮檔裡的路徑、壓縮檔的 sha256、下載日期和檔案的 sha256，並摘錄規則原文。App 和桌面版出貨的檔（`acp-provider-icons.ts` 的 grok、`packages/desktop/assets/editor-targets/vscode.svg`）是逐位元組的複本，守門比對。本步驟沒有下載任何檔。
+- 官方檔：`woowtech/brand/vendor-marks/grok/` 兩個 SVG，跟 `coord/brand-assets` 的檔逐位元組相同，沒改任何內容。旁邊的 `manifest.json` 記每個檔的來源網址（壓縮檔）、壓縮檔裡的路徑、壓縮檔的 sha256、下載日期和檔案的 sha256，並摘錄規則原文。App 出貨的檔（`acp-provider-icons.ts` 的 grok）是逐位元組的複本，守門比對。本步驟沒有下載任何檔。
 - 畫的地方：
   - provider 圖示：`getProviderIcon(provider, serverId, place)` 多一個參數（上游檔 `provider-icons.ts`，+21／−6 行）。沒有給 `place` 的地方算「沒檢查過」：旁邊可能不是產品名稱，也可能把圖示變淡或染色。在這些地方，`mono`、`original` 和 `onlyBesideName` 的標誌畫徽章；`theme` 的標誌照呼叫端的顏色畫。
-  - 檢查過、宣告 `NAMED_ROW`（名稱在旁邊、圖示任何狀態都不變淡）的只有兩處：設定的供應商列表（`providers-section.tsx`，16 px、前景色，hover 和按下只換背景）和新增 ACP 供應商的目錄（`provider-catalog-list.tsx`，24 px、在 36 px 的底塊裡，旁邊是名稱、版本和說明；原本直接畫 SVG，改成走 `getProviderIcon`，圖示內容一樣）。Cursor 和 Grok 的標誌只出現在這兩處；側欄的 Agent 列、工作區分頁、子 Agent、排程、模型選單、匯入工作階段、指令中心、終端機設定檔畫 Cu、Gr 徽章。Google 的標誌改回後也一樣，在 Agent 列、工作區分頁、排程列這些旁邊不是產品名稱的地方畫徽章。
+  - 檢查過、宣告 `NAMED_ROW`（名稱在旁邊、圖示任何狀態都不變淡）的只有兩處：設定的供應商列表（`providers-section.tsx`，16 px、前景色，hover 和按下只換背景）和新增 ACP 供應商的目錄（`provider-catalog-list.tsx`，24 px、在 36 px 的底塊裡，旁邊是名稱、版本和說明；原本直接畫 SVG，改成走 `getProviderIcon`，圖示內容一樣）。Cursor、Grok 和 Junie 的標誌只出現在這兩處；側欄的 Agent 列、工作區分頁、子 Agent、排程、模型選單、匯入工作階段、指令中心、終端機設定檔畫 Cu、Gr、Ju 徽章。Google 的標誌改回後也一樣，在 Agent 列、工作區分頁、排程列這些旁邊不是產品名稱的地方畫徽章。
   - fork 檔：`components/icons/woowtech-vendor-mark-places.ts`（`UNCHECKED_PLACE`、`NAMED_ROW`、`drawsLogoAt`，沒有 React Native 的 import）、`components/icons/woowtech-vendor-mark-icon.tsx`（`acpMarkIconAt`）。
   - `mono` 的兩個官方檔只由主題決定用哪一個（withUnistyles 的 `uniProps`），元件不自己傳 `xml`：withUnistyles 合併時，元素自己傳的 prop 蓋過主題的值，傳了就會在深色主題也畫深色的檔。這是實作中抓到的錯，vitest 照 unistyles 的合併順序寫。
 - 桌面版「在…中開啟」：
   - 主按鈕的文字改成「在 {{target}} 中開啟」／「Open in {{target}}」（`woowtech.openInEditor.openIn`，繁中和英文，其他語言顯示英文），上游檔 `workspace/open-in-editor/button.tsx`（+18／−3 行）。工作區頂端的按鈕目前一律 `hideLabels`（只有圖示），這段文字在不隱藏標籤的地方才看得到；無障礙標籤照舊是上游的「在 {{target}} 中開啟工作區」。
-  - 只有圖示時，`onlyBesideName` 的標誌（VS Code，以後的 Google）改畫通用的編輯器圖示，也就是上游給沒有標誌的編輯器用的終端機符號（fork 檔 `workspace/open-in-editor/woowtech-editor-marks.ts` 的 `editorIconAlone`）。選單的每一項都有名稱，照畫標誌。Zed 的規則沒有要求名稱在旁邊，研究 §3.4 也只要 Google 和 VS Code 讓位，所以 Zed 在只有圖示的按鈕上照畫；要改成通用圖示，在它那一筆加 `onlyBesideName: true`。
+  - 只有圖示時，`onlyBesideName` 的標誌（Zed，以後的 Google）改畫通用的編輯器圖示，也就是上游給沒有標誌的編輯器用的終端機符號（fork 檔 `workspace/open-in-editor/woowtech-editor-marks.ts` 的 `editorIconAlone`）。選單的每一項都有名稱，照畫標誌。VS Code 是徽章，按鈕和選單都畫 Vs。
   - 狀態：按下後主按鈕改畫轉圈，標誌不會變淡；選單項沒有停用或變淡的狀態；編輯器圖示是 Image，不染色。
-  - VS Code 的留白（魚形的 25%）：官方 SVG 的魚形佔滿 100×100，選單裡 16 px 的圖示要 4 px；選單項左邊 8 px、圖示和名稱之間 8 px、上下至少 6 px。主按鈕顯示文字時，左右和圖示到文字是 8 px，上下 4 px（按鈕高 26 px，含 1 px 框線），剛好 25%。圖示旁是名稱，跟微軟品牌頁自己的「Open in VS Code」按鈕一樣，不是把圖示和名稱組成 lock-up。
-  - 桌面版載入圖示（fork 檔 `features/editor-targets/woowtech-editor-icons.ts`）：PNG 不在時找同名的 `.svg`（微軟只提供 VS Code 的 SVG 和 PNG，SVG 是向量原檔），回傳 `data:image/svg+xml` 的圖片；兩個都在時用 PNG。electron-builder 打包整個 `assets/editor-targets`，不用改。
+  - 桌面版載入圖示（fork 檔 `features/editor-targets/woowtech-editor-icons.ts`）：PNG 不在時找同名的 `.svg`（微軟只提供 VS Code 的 SVG 和 PNG，SVG 是向量原檔），回傳 `data:image/svg+xml` 的圖片；兩個都在時用 PNG。electron-builder 打包整個 `assets/editor-targets`，不用改。現在沒有編輯器出貨 SVG，VS Code 改回標誌時會用到。
 - 授權頁（第 24 節的頁面）：
-  - Agent 多了 Cursor（Anysphere, Inc.）、Grok（SpaceXAI LLC）、Junie（JetBrains s.r.o.）。Junie 附 JetBrains 固定格式的署名「Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.」（年份是品牌頁的當年），和 JetBrains 要求的連回網址「網站：https://www.jetbrains.com」（跟授權連結一樣是可以選取的文字）。Cursor 和 SpaceXAI 沒有要求署名。
-  - 新的一段「編輯器」（英文 Editors，排在 Agent 後面，`EDITOR_MARK_NOTICES`）：VS Code 附微軟品牌頁的 Legal 行「Visual Studio Code, VS Code, and the Visual Studio Code icon are trademarks of Microsoft Corporation. All rights reserved.」；Zed 附 zed.dev/brand 的「The Zed name and logos are trademarks of Zed Industries, Inc.」。Zed、JetBrains、SpaceXAI 都不准暗示背書，頁首的聲明已經寫明沒有從屬、贊助或背書，聲明也改成列出「Agent、編輯器、服務與檔案類型」。
+  - Agent 多了 Cursor（Anysphere, Inc.）、Grok（SpaceXAI LLC）、Junie（JetBrains s.r.o.）。Junie 附 JetBrains 固定格式的署名「Copyright © 2026 JetBrains s.r.o. Junie and the Junie logo are trademarks of JetBrains s.r.o.」（年份是品牌頁的當年），和 JetBrains 要求的連回網址：「網站：https://www.jetbrains.com」畫成連結（`accessibilityRole="link"`，旁邊有外部連結圖示，排法同 ACP 目錄的安裝說明連結），按下用 `openExternalUrl` 開 JetBrains 的網站。它是按鈕，字不能選取；其他行照舊可以選取。整頁只有這一個連結；授權的網址照舊是可以選取的文字。資料是 `NoticeRow.link`（網址和目前語言的文字），不再混在 `lines` 裡。Cursor 和 SpaceXAI 沒有要求署名。
+  - 新的一段「編輯器」（英文 Editors，排在 Agent 後面，`EDITOR_MARK_NOTICES`）：Zed 附 zed.dev/brand 的「The Zed name and logos are trademarks of Zed Industries, Inc.」。VS Code 是徽章，不列（改回時要附微軟品牌頁的 Legal 行）。Zed、JetBrains、SpaceXAI 都不准暗示背書，頁首的聲明已經寫明沒有從屬、贊助或背書，聲明也改成列出「Agent、編輯器、服務與檔案類型」。
   - Agent 段的說明改成「以自己的圖示顯示的 Agent，圖示取自廠商或作者公開的版本。其他 Agent 顯示文字徽章。」（Grok 用的不是 ACP 的版本）。
   - 以後改回 Google 或 OpenAI 的標誌時，守門要求 Google 的 legal line、OpenAI 的歸屬聲明，JetBrains 的要照固定格式並附連回網址，VS Code 的要是那一句 Legal 行（`third-party-notices.test.mjs` 的 `TRADEMARK_LINES`）。
 - 守門與測試：
   - 新的守門 `woowtech/vendor-logos.test.mjs`（7 項）：
     1. 每一筆的欄位和值都是工具認得的（`show`、`color`、`onlyBesideName`、`badgeFiles`、`official`），不認得的值會紅；編輯器的標誌只能是 `"original"`。
     2. 廠商自己的檔照下載的樣子提交：manifest 列了每個檔，sha256 相同，有來源網址和下載日期。
-    3. App 和桌面版出貨的是逐位元組的複本（ACP 圖示淺色、深色主題用的檔，桌面版的 `vscode.svg`）。
+    3. App 和桌面版出貨的是逐位元組的複本（ACP 圖示淺色、深色主題用的檔；桌面版的編輯器 SVG，現在沒有）。
     4. `woowtech-vendor-mark-styles.gen.ts` 跟資料算出來的一樣。
-    5. Google 四家和 VS Code 都是 `onlyBesideName`，產生的樣式也是。
+    5. Google 四家、VS Code、Junie、Zed 都是 `onlyBesideName`，產生的樣式也是。
     6. `getProviderIcon` 沒給位置時是 `UNCHECKED_PLACE`；只有設定的供應商列表和 ACP 目錄宣告 `NAMED_ROW`；目錄不再自己畫 SVG。
-    7. 桌面版主按鈕的文字是 `woowtech.openInEditor.openIn`，只有圖示時畫 `iconAlone`（`editorIconAlone`）。
+    7. 桌面版主按鈕的文字是 `woowtech.openInEditor.openIn`，只有圖示時畫 `iconAlone`。regex 綁在欄位上：`icon:` 用 `target.icon`、`iconAlone:` 用 `editorIconAlone(target)`、選單的 `leading={target.icon}`，兩個對調也會紅（審查時的 regex 只找字樣，對調照樣全綠）。這一項只是接線的絆線，畫出來的是什麼由桌面版的 e2e 檢查。
   - `third-party-notices.test.mjs` 現在 12 項：第 1 項改成 Agent 和編輯器分開比對（`VENDOR_MARK_NOTICES`、`EDITOR_MARK_NOTICES`）；新的第 2 項要求 owner 規則要的商標行（`TRADEMARK_LINES`）；第 24 節列的第 2～11 項順延成第 3～12 項。
   - `claude-badge.test.mjs`：跟著 `show` 不是 `"badge"` 的廠商和官方檔走；會畫 SVG 文件的地方從 ACP 目錄換成 `woowtech-vendor-mark-icon.tsx`。
-  - vitest：`woowtech-vendor-mark-icon.test.ts`（11 項：每個主題、每種呼叫端顏色、每種位置畫出的檔和顏色）、`woowtech-editor-marks.test.ts`（4 項）、桌面版 `woowtech-editor-icons.test.ts`（多 2 項）、`woowtech-third-party-notices.test.ts`、`woowtech-vendor-badge.test.ts`（目錄的每一項在沒檢查過的地方：`mono`、`original` 的畫徽章，其他畫自己的 SVG）。
+  - vitest：`woowtech-vendor-mark-icon.test.ts`（11 項：每個主題、每種呼叫端顏色、每種位置畫出的檔和顏色；Junie 只在名稱旁畫標誌）、`woowtech-editor-marks.test.ts`（5 項：Zed 只有圖示時讓位、顯示標誌的編輯器只剩 Zed 而且都讓位、VS Code 的徽章原樣）、桌面版 `woowtech-editor-icons.test.ts`（多 3 項，其中一項讀桌面版真正出貨的 `assets/editor-targets`：VS Code 是徽章、Zed 是它的 PNG）、`woowtech-third-party-notices.test.ts`（編輯器只有 Zed；Junie 那一列帶連結，其他列沒有）、`woowtech-vendor-badge.test.ts`（目錄的每一項在沒檢查過的地方：`mono`、`original`、`onlyBesideName` 的畫徽章，其他畫自己的 SVG）。
+  - e2e（fork 自己的檔）：
+    - 桌面版 renderer `packages/desktop/e2e/woowtech-open-in-editor-marks.spec.ts`：注入兩個編輯器，Kiro 帶一張沒有條件的圖、Zed 帶真正的 `zed.png`。Kiro 為偏好時，工作區頂端的按鈕畫它的圖（證明這裡驗得到圖）；Zed 為偏好時，按鈕畫通用符號、沒有任何圖，選單的 Zed 項目寫 Zed、畫 Zed 的圖。
+    - App `packages/app/e2e/browser/woowtech-third-party-notices.spec.ts`：授權頁 Junie 那一列有 JetBrains 的署名和一個連結，按下開 `https://www.jetbrains.com/`（網站由 Playwright 的 route 在本機回應，不出網）；整頁只有這一個連結。
 - 驗證（2026-09-30，工作樹在 `a0d8eec29` 上，heavy lock 內跑兩輪：`logs/logo-s2-run-1.sh`、`logs/logo-s2-run-2.sh`，結果在同名的 `.out` 和 `logo-s2-run-*` 記錄）：
   - vitest RED（第一輪）：把這一節的實作放一邊（改過的檔還原成 `a0d8eec29` 的版本、新檔拿掉），App 的 5 個測試檔有 4 個失敗：3 個找不到新模組，授權頁 6 項斷言失敗；桌面版 SVG 那一項失敗。實作放回後 sha256 相同。
   - vitest GREEN：第一輪 App 25 個檔 220 項、桌面版 3 個檔 16 項；第二輪同樣是 App 25 個檔 220 項、桌面版 3 個檔 16 項。
@@ -1397,12 +1399,17 @@ node --test woowtech/*.test.mjs
     - ACP 目錄放回上游（自己畫 SVG）：vendor-logos 第 6 項、claude-badge 第 10 項。
     - 上游的桌面版 `cursor.png` 出貨（它是徽章檔）：claude-badge 第 5 項。
   - 沒做：在實機或模擬器上看畫面（這一步不開模擬器）；CI 由協調者在 owner 同意後跑。
-- 撤下：任何一家要求停用，把它在 `vendor-marks.mjs` 的 `show` 改回 `"badge"`（一行），跑 `node woowtech/tools/write-vendor-badges.mjs`，再依授權頁守門的提示拿掉它的條目。官方檔（`official`）連同 `woowtech/brand/vendor-marks/<廠商>/` 一起拿掉。
-- 上架規則照第 24 節：商店截圖、宣傳圖和其他行銷素材不能出現這些標誌。
+- 審查修正的驗證（2026-09-30 晚；審查紀錄 `logs/logo-s2-review-*`，修正的步驟紀錄 `logs/logo-s2-fix.md`；heavy lock 內三輪 `logs/logo-s2-fix-c1.sh`〔RED〕、`-c2.sh`、`-c3.sh`，結果在同名的 `.out` 和 `logo-s2-fix-c*` 記錄）：
+  - RED（實作仍是 `8a337695d`，只換了測試）：App vitest 5 項失敗、24 過（Junie 的樣式、授權頁的編輯器有 VS Code、Zed 的樣式、`EDITOR_ICON_STYLES` 有 vscode）；桌面版 vitest 1 項（出貨的 VS Code 是 SVG 圖）；App e2e：Junie 那一列沒有連結；桌面版 e2e：Kiro 對照組通過，Zed 為偏好時頂端畫的是 Zed 的圖。守門第 5 項紅（junie、zed）；審查的 swap（preload，只在記憶體）讓收緊後的第 7 項變紅。
+  - GREEN：App 25 個檔 221 項、桌面版 3 個檔 17 項，兩個 e2e 通過；typecheck App、桌面版；lint 第二輪抓到 3 個錯（測試的 `max-nested-callbacks`、`markRows` 的 `no-map-spread`），改成 `markRow` 函式和模組層的 helper，行為不變，第三輪 0 錯；format 檢查（改到的程式和這份 README）通過；守門 180/180，`--check` 通過。
+  - 變異，每次一處、還原後 sha256 相同：vitest 的 `drawsLogoAt` 不看 `onlyBesideName`（2 項紅）、`editorIconAlone` 一律回原圖（3 項）、授權頁的列不帶連結（1 項，`markRow` 版本再做一次也紅）、桌面版的 `vscode.svg` 放回去（1 項）；e2e 的審查 swap 寫在磁碟上（桌面版 e2e 紅：頂端畫 Zed 的圖）、連結按了不開（App e2e 紅）；守門 8 個（Junie、Zed 拿掉 `onlyBesideName`，手改產生的樣式，`vscode.svg` 放回去，授權頁列回 VS Code，按鈕 swap，選單改畫 `iconAlone`，Junie 少了連回網址）全紅，最後 31/31。
+  - e2e 在本機跑：Playwright 1.58.2 的 Chromium（WOOW-BUILD 上的共用快取），`env -i`、暫存 HOME、PATH 沒有任何 agent CLI、daemon 的 relay 關；截圖在 `/Volumes/WOOW-BUILD/woowtech-smart/logo-s2-fix-evidence/`（頂端的終端機符號、選單的 Zed 圖、Junie 那一列）。
+- 撤下：任何一家要求停用，把它在 `vendor-marks.mjs` 的 `show` 改回 `"badge"`（一行），跑 `node woowtech/tools/write-vendor-badges.mjs`，再依授權頁守門的提示拿掉它的條目。官方檔（`official`，連同 `color`）和 `woowtech/brand/vendor-marks/<廠商>/`、桌面版出貨的複本一起拿掉，守門會指出還在的檔。審查後的 VS Code 就是這樣改回徽章的。
+- 上架規則照第 24 節：商店截圖、宣傳圖和其他行銷素材不能出現這些標誌。截圖另外要避開桌面版「在…中開啟」的選單（Zed 標誌）。
 - 要 owner 決定的：
   - 使用條款：SpaceXAI 寫「By using our logos, you agree to the Usage Terms」，JetBrains 寫「By using JetBrains Brand Assets, you accept and agree to the JetBrains Brand Guidelines」。合併這個分支並出貨，就等於接受這兩份條款；要先讀過再合併。
-  - VS Code：微軟品牌頁允許「Open in VS Code」按鈕，但研究記錄的微軟通則寫產品圖示要有明示授權才能用（研究 §2.3，有張力）。保守的做法是維持徽章（`vscode` 改回 `"badge"`）。
-  - Zed 在只有圖示的按鈕：研究 §2.3 列的條件有「旁邊寫 Zed」，§3.4 和這次的任務只要求 Google 和 VS Code 在只有圖示時讓位。工作區頂端的按鈕一律只有圖示，所以偏好的編輯器是 Zed 時，Zed 的圖示會單獨出現在那裡。要保守就在 `zed` 那一筆加 `onlyBesideName: true`（一行），那裡改畫通用的編輯器圖示。
+  - VS Code（目前是徽章）：要改回標誌，圖示只能出現在「Open in VS Code」旁。做法例如：偏好的編輯器是 VS Code 時，工作區頂端的按鈕顯示文字「Open in VS Code」（`woowtech.openInEditor.openIn` 已經是這個格式，要改上游檔 `workspace-screen.tsx` 一律 `hideLabels` 的做法，標題列會變寬），選單的 VS Code 改畫通用圖示；或把選單項改成直接開啟的「Open in VS Code」（上游的 e2e「selects an editor without opening it」寫明選單只選不開，要一起改）。兩種都改上游的標題列或選單，要 owner 決定。微軟通則（產品圖示要有明示授權）和品牌頁的按鈕許可仍有張力（研究 §2.3）。改回時：`show: "official"`、`color: "original"`、`official` 指回官方檔（`coord/brand-assets/vscode/vscode.svg`，或從 `9e4cd8fad` 取回 `woowtech/brand/vendor-marks/vscode/`），授權頁加微軟的 Legal 行；留白是魚形的 25%（官方 SVG 的魚形佔滿 100×100，16 px 的圖示四周要 4 px）。
+  - registry 的 13 家（第 22 節）：在 Agent 列、工作區分頁、排程列這些旁邊是標題的地方照畫標誌（第一階段起就是這樣，上游也是）。研究 §2.2 的 R 條件寫「旁邊有 agent 名稱」，§3.4 只要求 Google 在清單和分頁讓位。要一致的話，`drawsLogoAt` 可以改成每個標誌都要名稱在旁邊（`theme` 的也一樣），這 13 家在那些地方就會改畫徽章。
   - Cursor 的桌面 PNG：要先允許從 Cursor 的 Vercel Blob 網域下載品牌包再核對。
   - Google 四家：Partner Marketing Hub 的申請和 legal line。OpenAI：在品牌頁勾選同意後下載官方檔。
   - opencode、cline、kilo、webstorm 要不要改用 `coord/brand-assets` 裡的官方檔。
