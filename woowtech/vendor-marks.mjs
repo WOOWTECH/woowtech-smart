@@ -1,10 +1,30 @@
 // Every third-party vendor mark upstream ships in the app and the desktop app, by vendor, and
-// whether woowtech smart shows it. woowtech/README.md section 22.
+// whether woowtech smart shows it. woowtech/README.md sections 22 and 25.
 //
 //   show       "badge": woowtech smart's neutral text badge
 //              (packages/app/src/components/icons/vendor-badge.ts).
-//              "upstream": the vendor's own logo, as upstream shows it. Only for a vendor whose
-//              logo the owner has cleared for use.
+//              "upstream": the vendor's own logo, as upstream shows it, from UPSTREAM_REF.
+//              "official": the vendor's own logo from its own files, committed under
+//              woowtech/brand/vendor-marks/<vendor>/ with their manifest.
+//              A logo is only for a vendor whose logo the owner has cleared for use, and only
+//              once the app meets the vendor's conditions (section 25).
+//   color      For a logo, how the app colours it:
+//                "theme"     in the colour the place gives it (currentColor), the way the ACP
+//                            registry means its icons to be shown;
+//                "mono"      pure black on light themes and pure white on dark ones, never the
+//                            place's colour, never dimmed;
+//                "original"  the file's own colours, never tinted, never dimmed.
+//              Where a place may dim or tint its icon, a mono or original mark draws its badge.
+//   official   For show "official": the manifest (where and when each file was downloaded, and
+//              its sha256), and where the app ships each file: `files` maps a shipped path to
+//              the vendor's file; `acpIcons` maps an ACP icon id to the vendor's file for light
+//              themes and, for a mono mark, the one for dark themes.
+//   badgeFiles Files of a vendor that shows its logo which still show the badge, each for the
+//              reason in the comment beside it.
+//   onlyBesideName
+//              The mark may only appear beside its product's name, so a place that does not
+//              name the product draws the badge, and the desktop "Open in" button, which shows
+//              only an icon, draws the generic editor icon.
 //   logo       How the badge's icon component names what it replaces, for its comment.
 //   files      The vendor's icon files, as upstream ships them at UPSTREAM_REF.
 //   acpIcons   The vendor's entries in packages/app/src/assets/acp-provider-icons.ts.
@@ -13,11 +33,14 @@
 //              badge. Logos drawn only from circles, rectangles or <text>, or from paths too plain
 //              to tell apart from other drawings, have none; the file checks cover them.
 //
-// To show one vendor's upstream logo again: set its show to "upstream", then run
+// To show one vendor's logo again: set its show to "upstream" (or "official" with its files and
+// manifest) and its color, then run
 //   node woowtech/tools/write-vendor-badges.mjs
-//   node --test woowtech/claude-badge.test.mjs
-// The tool restores the vendor's files and ACP entries from UPSTREAM_REF; setting show back to
-// "badge" and running it again writes the badge.
+//   node --test woowtech/claude-badge.test.mjs woowtech/vendor-logos.test.mjs woowtech/third-party-notices.test.mjs
+// The tool restores the vendor's files and ACP entries from UPSTREAM_REF, or copies its own files,
+// and writes how the app draws them. When a vendor asks us to stop, setting its show back to
+// "badge" (one line) and running the tool again writes the badge; the notices guard then asks for
+// its entry to go too.
 
 // The last commit before woowtech smart changed any vendor icon. For every vendor but Claude it
 // matches main fde226d05; fde226d05 already had the Claude badge (commit 130705c02).
@@ -42,6 +65,9 @@ export const VENDOR_MARKS = {
       "M 233.959793 800.214905 L 468.644287 668.536987 L 472.590637 657.100647",
     ],
   },
+  // Badge (section 25): OpenAI asks for its own file, "exactly as provided", in black or white.
+  // openai.com/brand offers it only after ticking agreement to its marks usage terms, which is the
+  // owner's to do (coord/brand-assets/codex/manifest.json, status blocked).
   codex: {
     show: "badge",
     logo: "OpenAI's Codex logo",
@@ -66,6 +92,9 @@ export const VENDOR_MARKS = {
       "M7.99816 14.2779C12.0678 14.2779 14.9997 11.6274 14.9997 10.9574",
     ],
   },
+  // Badge (section 25): the research allows only OpenCode's own art. Upstream's ACP icon is not
+  // it (squashed frame, no inner block), and OpenCode's files are two-coloured, while upstream's
+  // component recolours them (coord/brand-assets/opencode/manifest.json, status mismatch).
   opencode: {
     show: "badge",
     logo: "OpenCode's logo",
@@ -119,14 +148,23 @@ export const VENDOR_MARKS = {
     acpIcons: [],
     logoPaths: ["M23.6004 9.5927l-.0337-.0862L20.3 .9814a.851.851 0 0 0-.3362-.405"],
   },
+  // Badge (section 25), with gemini and android-studio: a Google product icon takes Google's
+  // permission through its Partner Marketing Hub approval form, and the legal line Google asks for
+  // comes only from its Legal line generator behind that account; the press icons also sit
+  // behind ticking its terms (coord/brand-assets/antigravity, status blocked). The registry's agy
+  // icon was sent by a Google employee (coord/brand-assets/agy, ready), but that is no permission
+  // and the legal line is still missing. Google's icons never stand alone ("Don't use product
+  // icons by themselves"): with its name beside it, or the badge.
   antigravity: {
     show: "badge",
+    onlyBesideName: true,
     files: [`${editors}/antigravity.png`],
     acpIcons: ["agy"],
     logoPaths: ["M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12"],
   },
   agoragentic: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/agoragentic-acp.svg`],
     acpIcons: ["agoragentic-acp"],
     logoPaths: [],
@@ -145,10 +183,14 @@ export const VENDOR_MARKS = {
   },
   autohand: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/autohand.svg`],
     acpIcons: ["autohand"],
     logoPaths: ["M7.23002 9.59292C7.23002 9.40231 7.07148 9.24779 6.87591 9.24779"],
   },
+  // Badge (section 25): upstream's icon is an older design (solid antenna, round sides), not
+  // Cline's current bot, and the research allows only Cline's own art
+  // (coord/brand-assets/cline/manifest.json, status mismatch).
   cline: {
     show: "badge",
     files: [`${acp}/cline.svg`],
@@ -169,6 +211,7 @@ export const VENDOR_MARKS = {
   },
   "cortex-code": {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/cortex-code.svg`],
     acpIcons: ["cortex-code"],
     logoPaths: ["M1562.63,107.07h-4.18v5.15h4.18c1.94,0,3.21-.87,3.21-2.53"],
@@ -181,12 +224,20 @@ export const VENDOR_MARKS = {
   },
   crow: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/crow-cli.svg`],
     acpIcons: ["crow-cli"],
     logoPaths: ["m 26,275.93574 c 0.65,-9.32 8.46,-15.43 15,-20.96 15.43,-13.04"],
   },
+  // The ACP icon is the cube cursor.com draws in its own header (same shape: Hausdorff 0.001%,
+  // IoU 1.0; coord/brand-assets/cursor/manifest.json, status matches). Cursor publishes light and
+  // dark versions and no colour rule, so it is mono. Research §2.2: the name Cursor beside it.
   cursor: {
-    show: "badge",
+    show: "upstream",
+    color: "mono",
+    // The desktop app's Cursor icon is Cursor's cube inside a macOS rounded tile; Cursor's brand
+    // kit, which holds the app icons, was not downloaded, so the tile is unchecked ("unclear").
+    badgeFiles: [`${editors}/cursor.png`],
     files: [`${acp}/cursor.svg`, `${editors}/cursor.png`],
     acpIcons: ["cursor"],
     logoPaths: ["M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94"],
@@ -199,12 +250,14 @@ export const VENDOR_MARKS = {
   },
   dimcode: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/dimcode.svg`],
     acpIcons: ["dimcode"],
     logoPaths: ["M3.12109 11.0078H1.99902V5.49316H3.12109V11.0078Z"],
   },
   dirac: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/dirac.svg`],
     acpIcons: ["dirac"],
     logoPaths: [],
@@ -217,18 +270,23 @@ export const VENDOR_MARKS = {
   },
   "fast-agent": {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/fast-agent.svg`],
     acpIcons: ["fast-agent"],
     logoPaths: [],
   },
+  // Badge (section 25): Google's Gemini icon is behind its Partner Marketing Hub (see antigravity);
+  // upstream's is the registry's monochrome redraw, not Google's art.
   gemini: {
     show: "badge",
+    onlyBesideName: true,
     files: [`${acp}/gemini.svg`],
     acpIcons: ["gemini"],
     logoPaths: ["M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81"],
   },
   "gajae-code": {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/gjc.svg`],
     acpIcons: ["gjc"],
     logoPaths: ["M365.5 654H450.5A15.5 15.5 0 0 1 466 669.5A15.5 15.5 0 0 1 450.5 685"],
@@ -245,18 +303,39 @@ export const VENDOR_MARKS = {
     acpIcons: ["goose"],
     logoPaths: ["M20.9093 19.3861L19.5185 18.2413C18.7624 17.619 18.1189 16.8713"],
   },
+  // SpaceXAI's own logomark files: "only use our logos exactly as provided ... without any
+  // alteration or adjustment", so the dark mark on light themes and the white one on dark themes,
+  // never recoloured (coord/brand-assets/grok/manifest.json, status ready). Upstream's copy has the
+  // same paths recoloured to currentColor.
   grok: {
-    show: "badge",
+    show: "official",
+    color: "mono",
+    official: {
+      manifest: "woowtech/brand/vendor-marks/grok/manifest.json",
+      acpIcons: {
+        grok: {
+          light: "woowtech/brand/vendor-marks/grok/Grok_Logomark_Dark.svg",
+          dark: "woowtech/brand/vendor-marks/grok/Grok_Logomark_Light.svg",
+        },
+      },
+    },
     files: [],
     acpIcons: ["grok"],
     logoPaths: ["M395.479 633.828L735.91 381.105C752.599 368.715 776.454 373.548"],
   },
+  // The icon JetBrains' own staff sent to the ACP registry, in currentColor for theme support
+  // (coord/brand-assets/junie/manifest.json, status matches). JetBrains asks for its attribution
+  // and a link back to www.jetbrains.com (the notices page).
   junie: {
-    show: "badge",
+    show: "upstream",
+    color: "theme",
     files: [`${acp}/junie.svg`],
     acpIcons: ["junie"],
     logoPaths: ["M25 15H35V16.75C35 29 30.5001 35 16.5001 35H15V25H16.5001"],
   },
+  // Badge (section 25): upstream's lettering drops Kilo's frame and moves the "o" up; Kilo allows
+  // the logos in its open-source repositories, and the docs copy was not matched to the repo
+  // (coord/brand-assets/kilo/manifest.json, status mismatch).
   kilo: {
     show: "badge",
     files: [`${acp}/kilo.svg`],
@@ -275,6 +354,10 @@ export const VENDOR_MARKS = {
     acpIcons: ["minion-code"],
     logoPaths: [],
   },
+  // Badge (section 25): Mistral's own files are ready (coord/brand-assets/mistral-vibe), but its
+  // guidelines ask for at least 20 px width for the symbol alone, clear space around it as tall as
+  // the symbol, and no frame. The app draws provider icons at 12 to 24 px, a few pixels from the
+  // name, and the ACP catalog inside a tile, so no place meets them.
   "mistral-vibe": {
     show: "badge",
     files: [`${acp}/mistral-vibe.svg`],
@@ -283,6 +366,7 @@ export const VENDOR_MARKS = {
   },
   nova: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/nova.svg`],
     acpIcons: ["nova"],
     logoPaths: [],
@@ -295,6 +379,7 @@ export const VENDOR_MARKS = {
   },
   qoder: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/qoder.svg`],
     acpIcons: ["qoder"],
     logoPaths: [],
@@ -307,6 +392,7 @@ export const VENDOR_MARKS = {
   },
   sigit: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/sigit.svg`],
     acpIcons: ["sigit"],
     logoPaths: [
@@ -316,6 +402,7 @@ export const VENDOR_MARKS = {
   },
   stakpak: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/stakpak.svg`],
     acpIcons: ["stakpak"],
     logoPaths: ["M6.53 4.412h5.883v3.587H9.471v3.588H3.588V7.999H6.53Z"],
@@ -328,12 +415,15 @@ export const VENDOR_MARKS = {
   },
   vtcode: {
     show: "upstream",
+    color: "theme",
     files: [`${acp}/vtcode.svg`],
     acpIcons: ["vtcode"],
     logoPaths: [],
   },
+  // Badge (section 25): a Google product icon, behind Google's approval form (see antigravity).
   "android-studio": {
     show: "badge",
+    onlyBesideName: true,
     files: [`${editors}/android-studio.png`],
     acpIcons: [],
     logoPaths: [],
@@ -344,20 +434,38 @@ export const VENDOR_MARKS = {
     acpIcons: [],
     logoPaths: [],
   },
+  // Microsoft's "stable" icon from code.visualstudio.com, in its own colours: upstream's PNG is the
+  // macOS app icon the brand page names as one not to use (coord/brand-assets/vscode, status
+  // ready). The desktop app loads it as SVG, byte for byte. Microsoft's buttons read "Open in VS
+  // Code" and the icon never pairs up with the name as a logo, so it appears only beside its name.
   vscode: {
-    show: "badge",
+    show: "official",
+    color: "original",
+    onlyBesideName: true,
+    official: {
+      manifest: "woowtech/brand/vendor-marks/vscode/manifest.json",
+      files: { [`${editors}/vscode.svg`]: "woowtech/brand/vendor-marks/vscode/vscode.svg" },
+    },
     files: [`${editors}/vscode.png`],
     acpIcons: [],
     logoPaths: [],
   },
+  // Badge (section 25): upstream's PNG is a macOS rounded-tile app icon; JetBrains' WebStorm product
+  // icon has another outline and must not be altered (coord/brand-assets/webstorm, status mismatch).
   webstorm: {
     show: "badge",
     files: [`${editors}/webstorm.png`],
     acpIcons: [],
     logoPaths: [],
   },
+  // Upstream's PNG is Zed's stable app icon from zed.dev/brand, scaled with the macOS icon margin
+  // (coord/brand-assets/zed/manifest.json, status matches), in its own colours. Zed's rules do not
+  // ask for its name beside it (research §3.4 asks that only of Google and VS Code), so the
+  // icon-only "Open in" button shows it too; onlyBesideName: true would give it the generic editor
+  // icon there.
   zed: {
-    show: "badge",
+    show: "upstream",
+    color: "original",
     files: [`${editors}/zed.png`],
     acpIcons: [],
     logoPaths: [],

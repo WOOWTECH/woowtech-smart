@@ -1,0 +1,34 @@
+{
+  "vendor": "grok",
+  "mark": "The Grok logomark",
+  "owner": "SpaceXAI LLC",
+  "brandPage": "https://x.ai/legal/brand-guidelines",
+  "files": [
+    {
+      "file": "Grok_Logomark_Dark.svg",
+      "theme": "light",
+      "sha256": "a127a7cd42b0450f7d3827a331b0730aab49fd99c3fe920d172475b9ffc83992",
+      "source": "https://data.x.ai/logos/SpaceXAI_Grok_Assets.zip",
+      "archiveEntry": "SpaceXAI_Grok_Assets/Grok_Logomark_Dark.svg",
+      "archiveSha256": "db9129acd4efc4c2202d25afe31b70281a79f8507f75520ab5e6b3356895a7e9",
+      "retrieved": "2026-09-30",
+      "changes": "none: the file as the archive holds it"
+    },
+    {
+      "file": "Grok_Logomark_Light.svg",
+      "theme": "dark",
+      "sha256": "b20648e2f111d7fbc91f58b22d1e76e9885b68a163cb5a1010f7f11bf5840491",
+      "source": "https://data.x.ai/logos/SpaceXAI_Grok_Assets.zip",
+      "archiveEntry": "SpaceXAI_Grok_Assets/Grok_Logomark_Light.svg",
+      "archiveSha256": "db9129acd4efc4c2202d25afe31b70281a79f8507f75520ab5e6b3356895a7e9",
+      "retrieved": "2026-09-30",
+      "changes": "none: the file as the archive holds it"
+    }
+  ],
+  "rules": [
+    "Use our Marks only to accurately refer to us or our services.",
+    "By using our logos, you agree to the Usage Terms above and further agree to only use our logos exactly as provided at the download link below, without any alteration or adjustment.",
+    "And we may terminate your permission to use our Marks at any time, in which case you must stop using them promptly."
+  ],
+  "research": "coord/reports/logo-usage-research.md §2.2 and coord/brand-assets/grok/manifest.json, outside the repo (woowtech/README.md section 25)"
+}
