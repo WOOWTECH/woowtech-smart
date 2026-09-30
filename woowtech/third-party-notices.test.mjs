@@ -16,6 +16,9 @@
 //     caller's colour; the add-project flow drew its GitHub outline in muted grey.
 //   - The pull request actions draw the generic pull request glyph for GitHub and Codeberg. The
 //     actions dim when disabled or unavailable, which turns a black or white mark grey.
+//   - Astro, Gradle, GraphQL and Lua also become the generic file icon: their owners forbid the
+//     colour change or ask for permission first, as with the eight above. Per the owner, a mark
+//     waits as a generic icon or badge until its owner agrees.
 //
 //   node --test woowtech/third-party-notices.test.mjs
 import assert from "node:assert/strict";
@@ -45,10 +48,11 @@ const SHIPPED_DIRS = [
 ];
 const SHIPPED_FILES = /\.(?:[cm]?[jt]sx?|json|svg|html|css|xml)$/;
 
-// The file-type logos the owner replaced with the generic file icon, with the extensions that
-// showed them and the start of each logo's path data (compared with whitespace and commas
-// removed). Research §2.4: B, their owners ask for permission, allow no commercial use, or forbid
-// the colour changes file-icon-svg.ts makes.
+// The file-type logos replaced with the generic file icon, with the extensions that showed them and
+// the start of each logo's path data (compared with whitespace and commas removed). Research §2.4:
+// B, their owners ask for permission, allow no commercial use, or forbid the colour changes
+// file-icon-svg.ts makes. The owner replaced the first eight; the stage 1 review found the last four
+// in the same group by their owners' own words (woowtech/README.md section 24).
 const REPLACED_FILE_TYPE_LOGOS = {
   go: { extensions: ["go"], path: "M2 12h4v2H2zm-2 4h6v2H0zm4 4h2v2H4zm16.954-5H14v3h3.239a4.42" },
   swift: {
@@ -75,6 +79,22 @@ const REPLACED_FILE_TYPE_LOGOS = {
   elixir: {
     extensions: ["ex", "exs"],
     path: "M12.173 22.681c-3.86 0-6.99-3.64-6.99-8.13 0-3.678 2.773-8.1",
+  },
+  astro: {
+    extensions: ["astro"],
+    path: "M12.106 25.849c-1.262-1.156-1.63-3.586-1.105-5.346a5.18 5.18",
+  },
+  gradle: {
+    extensions: ["gradle"],
+    path: "M26 4h-2a4 4 0 0 0-4 4h4a1 1 0 0 1 2 0v4H16v-2h-5.317A2.683",
+  },
+  graphql: {
+    extensions: ["graphql", "gql"],
+    path: "M26.688 21.724 15.014 28.59 14 26.866 25.674 20zM5.124 10.382",
+  },
+  lua: {
+    extensions: ["lua"],
+    path: "M30 6a3.86 3.86 0 0 1-1.167 2.833 4.024 4.024 0 0 1-5.666 0A3.86",
   },
 };
 
@@ -366,7 +386,7 @@ test("the pull request actions, which dim, draw the generic glyph for GitHub and
   );
 });
 
-test("the eight replaced file-type logos ship nowhere and their files show the generic icon", () => {
+test("the twelve replaced file-type logos ship nowhere and their files show the generic icon", () => {
   const { icons, extensions } = fileIconTable();
   assert.deepEqual(
     Object.keys(REPLACED_FILE_TYPE_LOGOS).filter((icon) => icons.includes(icon)),
@@ -392,9 +412,5 @@ test("the eight replaced file-type logos ship nowhere and their files show the g
     }
   }
   assert.deepEqual(drawing, [], "A replaced file-type logo ships.");
-  assert.equal(
-    icons.length,
-    46,
-    "the file-type icon table no longer has the 46 icons the owner kept",
-  );
+  assert.equal(icons.length, 42, "the file-type icon table no longer has the 42 icons that stay");
 });

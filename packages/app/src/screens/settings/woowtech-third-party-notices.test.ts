@@ -170,11 +170,37 @@ describe("the trademarks and third-party notices page", () => {
     expect(fileTypeNotice("python").credit).toBe(
       "“Python” and the Python logos are trademarks or registered trademarks of the Python Software Foundation, used by woowtech smart with permission from the Foundation.",
     );
-    expect(fileTypeNotice("lua").credit).toBe(
-      "Copyright © 1998 Lua.org. Graphic design by Alexandre Nakonechnyj.",
-    );
     // One React logo draws both the .jsx and the .tsx icon.
     expect(fileTypeNotice("react_ts")).toBe(fileTypeNotice("react"));
+  });
+
+  it("lists the 24 file-type logos still shown, and not the twelve that became the generic icon", () => {
+    expect(FILE_TYPE_MARK_NOTICES.map((notice) => notice.name)).toEqual([
+      "Apache Groovy",
+      "Clojure",
+      "CSS",
+      "Erlang",
+      "Haskell",
+      "HTML5",
+      "JavaScript",
+      "Kotlin",
+      "Markdown",
+      "Nix",
+      "OCaml",
+      "PHP",
+      "Python",
+      "R",
+      "React",
+      "Ruby",
+      "Rust",
+      "Scala",
+      "Svelte",
+      "SVG",
+      "TOML",
+      "TypeScript",
+      "WebAssembly",
+      "Zig",
+    ]);
   });
 
   it("carries material-icon-theme's copyright line and the MIT permission notice as its license says", () => {

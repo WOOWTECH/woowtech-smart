@@ -120,7 +120,6 @@ export const FILE_TYPE_MARK_NOTICES: readonly FileTypeMarkNotice[] = [
     credit:
       "Apache, Apache Groovy, Groovy, and the ASF logo are either registered trademarks or trademarks of The Apache Software Foundation.",
   },
-  { icons: ["astro"], name: "Astro", owner: "Astro" },
   {
     icons: ["clojure"],
     name: "Clojure",
@@ -135,18 +134,6 @@ export const FILE_TYPE_MARK_NOTICES: readonly FileTypeMarkNotice[] = [
     source: "https://github.com/CSS-Next/logo.css",
   },
   { icons: ["erlang"], name: "Erlang", owner: "Ericsson AB" },
-  {
-    icons: ["gradle"],
-    name: "Gradle",
-    owner: "Gradle, Inc.",
-    credit: "Gradle® and the Gradlephant logo are registered trademarks of Gradle, Inc.",
-  },
-  {
-    icons: ["graphql"],
-    name: "GraphQL",
-    owner: "GraphQL Foundation",
-    credit: "“GraphQL” is a trademark managed by the GraphQL Foundation.",
-  },
   {
     icons: ["haskell"],
     name: "Haskell",
@@ -175,13 +162,6 @@ export const FILE_TYPE_MARK_NOTICES: readonly FileTypeMarkNotice[] = [
     name: "Kotlin",
     owner: "Kotlin Foundation",
     credit: "Kotlin® is a registered trademark of the Kotlin Foundation.",
-  },
-  {
-    icons: ["lua"],
-    name: "Lua",
-    owner: "Lua.org, PUC-Rio",
-    credit: "Copyright © 1998 Lua.org. Graphic design by Alexandre Nakonechnyj.",
-    source: "https://www.lua.org/images/",
   },
   {
     icons: ["markdown"],
