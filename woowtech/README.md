@@ -786,7 +786,7 @@ node --test woowtech/*.test.mjs
 - iOS（2026-09-30 上架候選驗收，舊 Mac 的 `rc0930-ios.md`，`33f2fa8ac`）：App 被滑掉後點 agent B 的通知，開到對的工作區，聚焦的卻是之前記住的 agent A。點到別的工作區時，聚焦那個工作區上次的 agent。同一條 JS 路徑 Android 也走。
 - 原因在上游，跟 fork 的推播無關，是兩條上游規則疊在一起：
   - 冷啟動時 `PushNotificationRouter` 在根 layout 第一次 commit 就讀啟動的那次點擊，那時主機清單還沒載入、沒有 session。`navigateToWorkspace` 認不得工作區，把 agent 延後成 `?open=agent:B`。
-  - 工作區路由在 `hasHydratedWorkspaces` 之前不消費 agent 意圖（上游 `5da6548af`，#2002，2026-07-16，給封存工作區的 recovery 用）。這個旗標只有 live 目錄的 snapshot 會設。後來加的目錄快取（#4421，2026-09-07）在主機清單載入後就讓工作區存在，但不設這個旗標。
+  - 工作區路由在 `hasHydratedWorkspaces` 之前不消費 agent 意圖（上游 `5da6548af`，#2002，2026-07-16，給封存工作區的 recovery 用）。這個旗標只有 live 目錄的 snapshot 會設。後來加的目錄快取（`workspace-replica.ts` 的 `commitCached`／`commitCachedWorkspace`：上游 #3907 加入，之後經 #3975、#4160、#4421 和撤回 #4421 的 #4436 調整）在主機清單載入後就讓工作區存在，但不設這個旗標。
   - 等的期間路由照樣畫工作區，分頁和聚焦來自持久化的 layout，所以是 A。live snapshot 到了才換成 B，主機連不上時一直停在 A。熱啟動不等：工作區已經在 store，`navigateToWorkspace` 直接開分頁。
   - 一起修的另一個上游缺口：`expo-notifications` 的原生模組一直留著最後一次點擊，App 從不清掉，`PushNotificationRouter` 用 `useRef` 去重，remount 就重置。根 error boundary 的 Reload 或 Fast Refresh 之後會重播那次點擊，把使用者拉回已經離開的 agent。真正的冷啟動碰不到這條。
 - 修法：
