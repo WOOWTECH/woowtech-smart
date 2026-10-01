@@ -131,8 +131,11 @@ test("notification icon ships with every packaged desktop and is resolved from r
   assert.doesNotMatch(main, /path\.resolve\(__dirname, "\.\.\/assets\//);
   assert.match(
     main,
-    /notificationIconCandidates\(\{\s*isPackaged: app.isPackaged,\s*resourcesPath: process.resourcesPath,\s*moduleDir: __dirname,?\s*\}\)/,
+    /notificationIconCandidates\(\{\s*platform: process.platform,\s*isPackaged: app.isPackaged,\s*resourcesPath: process.resourcesPath,\s*moduleDir: __dirname,?\s*\}\)/,
   );
+  // macOS banners already show the app icon; an explicit icon would be drawn again as a content image.
+  const iconModule = source("packages/desktop/src/features/woowtech-notification-icon.ts");
+  assert.match(iconModule, /if \(input\.platform === "darwin"\) \{\s*return \[\];\s*\}/);
   const builder = source("packages/desktop/electron-builder.yml");
   for (const platform of ["mac", "linux", "win"]) {
     const start = builder.search(new RegExp(`^${platform}:$`, "m"));
