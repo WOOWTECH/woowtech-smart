@@ -7,6 +7,7 @@ describe("notification icon candidates", () => {
   it("uses the icon.png that electron-builder copies into the packaged resources", () => {
     expect(
       notificationIconCandidates({
+        platform: "linux",
         isPackaged: true,
         resourcesPath: "/Applications/woowtech smart.app/Contents/Resources",
         moduleDir: "/ignored/dist/features",
@@ -17,6 +18,7 @@ describe("notification icon candidates", () => {
   it("resolves the desktop package assets from the compiled features folder in development", () => {
     const desktopRoot = path.resolve(__dirname, "../..");
     const candidates = notificationIconCandidates({
+      platform: "win32",
       isPackaged: false,
       resourcesPath: "/ignored",
       moduleDir: path.join(desktopRoot, "dist", "features"),
@@ -28,6 +30,19 @@ describe("notification icon candidates", () => {
     ]);
     for (const candidate of candidates) {
       expect(existsSync(candidate), candidate).toBe(true);
+    }
+  });
+
+  it("gives macOS no icon, so banners keep the app icon without a second content image", () => {
+    for (const isPackaged of [true, false]) {
+      expect(
+        notificationIconCandidates({
+          platform: "darwin",
+          isPackaged,
+          resourcesPath: "/Applications/woowtech smart.app/Contents/Resources",
+          moduleDir: "/ignored/dist/features",
+        }),
+      ).toEqual([]);
     }
   });
 });

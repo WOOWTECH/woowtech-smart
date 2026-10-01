@@ -35,6 +35,7 @@ function toRecord(value: unknown): Record<string, unknown> | undefined {
 
 function getNotificationIcon(): Electron.NativeImage | null {
   const candidates = notificationIconCandidates({
+    platform: process.platform,
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     moduleDir: __dirname,
