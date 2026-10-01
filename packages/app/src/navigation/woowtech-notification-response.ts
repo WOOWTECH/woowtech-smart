@@ -8,11 +8,20 @@
 // boundary's Reload, a Fast Refresh of the root layout) therefore replayed the last tap and
 // navigated back to an agent the user had already left.
 //
-// The handled identifiers live at module scope, so they survive remounts of the router, and the
+// The handled deliveries live at module scope, so they survive remounts of the router, and the
 // native copy is cleared once handled, so a reload of the JS bundle cannot replay it either.
+//
+// A delivery is its request identifier plus its date, not the identifier alone. The push relay
+// sets apns-collapse-id to the agent id (refs/woowtech-push-relay functions/smart-payload.js) and
+// iOS uses the collapse id as the request identifier, so every notification for one agent shares
+// an identifier; keyed on it alone, a second notification for an agent already tapped was dropped.
+// The date (UNNotification.date on iOS, the FCM sent time on Android, EXNotificationSerializer.m
+// and NotificationSerializer.java) tells a new notification from the same one delivered twice.
 
 export interface NotificationResponseLike {
   notification: {
+    /** When this delivery arrived; expo-notifications serializes it on both platforms. */
+    date: number;
     request: {
       identifier: string;
       content: { data?: unknown };
@@ -36,16 +45,22 @@ export interface NotificationResponseSource {
 export type NotificationTapHandler = (data: Record<string, unknown> | undefined) => void;
 
 /** Far more taps than one app process sees; the oldest entries fall off first. */
-const HANDLED_IDENTIFIER_LIMIT = 32;
-const handledIdentifiers: string[] = [];
+const HANDLED_DELIVERY_LIMIT = 32;
+const handledDeliveries: string[] = [];
 
-function rememberHandled(identifier: string): boolean {
-  if (handledIdentifiers.includes(identifier)) {
+function deliveryKey(response: NotificationResponseLike): string {
+  const { date, request } = response.notification;
+  return `${request.identifier}\u0000${String(date)}`;
+}
+
+function rememberHandled(response: NotificationResponseLike): boolean {
+  const key = deliveryKey(response);
+  if (handledDeliveries.includes(key)) {
     return false;
   }
-  handledIdentifiers.push(identifier);
-  if (handledIdentifiers.length > HANDLED_IDENTIFIER_LIMIT) {
-    handledIdentifiers.shift();
+  handledDeliveries.push(key);
+  if (handledDeliveries.length > HANDLED_DELIVERY_LIMIT) {
+    handledDeliveries.shift();
   }
   return true;
 }
@@ -67,7 +82,7 @@ export function subscribeToNotificationTaps(
   open: NotificationTapHandler,
 ): () => void {
   function handle(response: NotificationResponseLike): void {
-    if (!rememberHandled(response.notification.request.identifier)) {
+    if (!rememberHandled(response)) {
       return;
     }
     source.clearLastNotificationResponse();
@@ -82,7 +97,7 @@ export function subscribeToNotificationTaps(
   return () => subscription.remove();
 }
 
-/** Test seam: the identifiers are process state on purpose. */
+/** Test seam: the handled deliveries are process state on purpose. */
 export function forgetHandledNotificationTapsForTest(): void {
-  handledIdentifiers.length = 0;
+  handledDeliveries.length = 0;
 }

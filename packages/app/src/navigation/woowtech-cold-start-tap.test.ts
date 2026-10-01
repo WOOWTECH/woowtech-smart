@@ -315,3 +315,80 @@ describe("a remounted PushNotificationRouter does not replay the launch tap", ()
     expect(app.visible()).toBe(`${W}/${B}`);
   });
 });
+
+// Upstream #2002: an ?open=agent intent asks the workspace screen to inspect recovery, so a
+// workspace archived while the app was killed shows 「Workspace archived」 with Restore. The cached
+// directory still lists it until the live snapshot replaces the cache, and the intent is consumed
+// against the cache, so the route keeps the request until the live directory decides.
+describe("a cold-start tap still requests recovery for a workspace archived meanwhile", () => {
+  function withoutWorkspace(content: DirectoryContent, workspaceId: string): DirectoryContent {
+    return {
+      workspaceIds: content.workspaceIds.filter((id) => id !== workspaceId),
+      agents: content.agents.filter((agent) => agent.workspaceId !== workspaceId),
+    };
+  }
+
+  for (const [name, fixture] of VARIANTS) {
+    const tapped = fixture.tap?.workspaceId ?? "";
+
+    it(`${name}: the live directory drops the cached workspace`, async () => {
+      const app = await launchFromTap(fixture, { waitRule: "app", router: "app" });
+
+      await bootUntilCached(app, fixture);
+      expect(app.visible()).toBe(fixture.tappedAgent);
+      expect(app.recovery()).toEqual({ requested: true, inspects: false });
+
+      app.liveDirectoryArrives(withoutWorkspace(fixture.live, tapped));
+      expect(app.recovery()).toEqual({ requested: true, inspects: true });
+    });
+
+    it(`witness, ${name}: upstream's wait rule requests it the same way`, async () => {
+      const app = await launchFromTap(fixture, { waitRule: "upstream", router: "upstream" });
+
+      await bootUntilCached(app, fixture);
+      app.liveDirectoryArrives(withoutWorkspace(fixture.live, tapped));
+
+      expect(app.recovery()).toEqual({ requested: true, inspects: true });
+    });
+  }
+
+  it("ends once the live directory has the workspace, as upstream's consumption did", async () => {
+    const app = await launchFromTap(SAME_WORKSPACE, { waitRule: "app", router: "app" });
+    await bootUntilCached(app, SAME_WORKSPACE);
+
+    app.liveDirectoryArrives(SAME_WORKSPACE.live);
+    expect(app.recovery()).toEqual({ requested: false, inspects: false });
+
+    // Archived later, while the user is on it: not this route's intent any more.
+    app.liveDirectoryArrives(withoutWorkspace(SAME_WORKSPACE.live, W));
+    expect(app.recovery()).toEqual({ requested: false, inspects: false });
+  });
+
+  it("stays requested without inspecting while the host cannot be reached", async () => {
+    const app = await launchFromTap(SAME_WORKSPACE, { waitRule: "app", router: "app" });
+
+    await bootUntilCached(app, SAME_WORKSPACE);
+
+    expect(app.visible()).toBe(`${W}/${B}`);
+    expect(app.recovery()).toEqual({ requested: true, inspects: false });
+  });
+
+  it("a tap after the live directory does not latch it", async () => {
+    await seedPreviousProcess(S, SAME_WORKSPACE.layouts);
+    const app = createColdStartScenario({
+      serverId: S,
+      persistedLayouts: SAME_WORKSPACE.layouts,
+      rememberedWorkspaceId: W,
+      waitRule: "app",
+      router: "app",
+    });
+    scenarios.push(app);
+    await bootUntilCached(app, SAME_WORKSPACE);
+    app.liveDirectoryArrives(SAME_WORKSPACE.live);
+
+    app.tapWhileRunning("warm-tap", tapData(W, B));
+
+    expect(app.visible()).toBe(`${W}/${B}`);
+    expect(app.recovery()).toEqual({ requested: false, inspects: false });
+  });
+});

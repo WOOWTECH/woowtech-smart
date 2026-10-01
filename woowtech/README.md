@@ -790,17 +790,22 @@ node --test woowtech/*.test.mjs
   - 等的期間路由照樣畫工作區，分頁和聚焦來自持久化的 layout，所以是 A。live snapshot 到了才換成 B，主機連不上時一直停在 A。熱啟動不等：工作區已經在 store，`navigateToWorkspace` 直接開分頁。
   - 一起修的另一個上游缺口：`expo-notifications` 的原生模組一直留著最後一次點擊，App 從不清掉，`PushNotificationRouter` 用 `useRef` 去重，remount 就重置。根 error boundary 的 Reload 或 Fast Refresh 之後會重播那次點擊，把使用者拉回已經離開的 agent。真正的冷啟動碰不到這條。
 - 修法：
-  - fork 的 `navigation/woowtech-workspace-open-intent.ts` 加 `isAgentOpenIntentWaitingForWorkspace`：agent 意圖只在 store 不認得工作區時等，快取來的也算認得。工作區路由 `index.tsx` 改用它（+10／−5 行，註解 `woowtech smart:`）。沒見過的工作區照舊等，T1 的目錄 demand 和 recovery 不變；這跟熱啟動點通知的行為一樣。
-  - fork 的 `navigation/woowtech-notification-response.ts`（`subscribeToNotificationTaps`）：處理過的通知 identifier 記在模組層，整個 App 行程有效（最多 32 個），處理後呼叫 `clearLastNotificationResponse()`。`_layout.tsx` 的 effect 改成回傳它（+4／−27 行）。F-Droid 的 `expo-notifications` stub 加上 `getLastNotificationResponse` 和 `clearLastNotificationResponse`。
+  - fork 的 `navigation/woowtech-workspace-open-intent.ts` 加 `isAgentOpenIntentWaitingForWorkspace`：agent 意圖只在 store 不認得工作區時等，快取來的也算認得。工作區路由 `index.tsx` 改用它（註解 `woowtech smart:`）。沒見過的工作區照舊等，T1 的目錄 demand 和 recovery 不變；這跟熱啟動點通知的行為一樣。
+  - 同一個檔案的 `shouldLatchWorkspaceRecovery`、`isWorkspaceRecoveryLatchHeld`：在 live 目錄之前消費的 agent 意圖，路由記住那個工作區，`WorkspaceDeck` 的 `recoveryRequested` 一直帶著，直到 live 目錄裡有這個工作區（上游消費意圖、不再要 recovery 的那一刻）。live 目錄沒有它（App 被滑掉時封存了）時照上游 #2002 顯示「Workspace archived」和 Restore。換工作區時放掉。路由合計 +32／−5 行。
+  - fork 的 `navigation/woowtech-notification-response.ts`（`subscribeToNotificationTaps`）：處理過的那次送達（通知 identifier 加上 `notification.date`）記在模組層，整個 App 行程有效（最多 32 個），處理後呼叫 `clearLastNotificationResponse()`。只用 identifier 不行：relay 把 `apns-collapse-id` 設成 agent ID，iOS 拿它當 request identifier，同一個 agent 的每則通知 identifier 都一樣；date 是那次送達的時間（iOS 的 `UNNotification.date`、Android 的 FCM sent time），listener 和 `getLastNotificationResponse` 送的同一次點擊 date 相同。`_layout.tsx` 的 effect 改成回傳它（+4／−27 行）。F-Droid 的 `expo-notifications` stub 加上 `getLastNotificationResponse` 和 `clearLastNotificationResponse`。
   - 沒採用：等 live 目錄時畫空白，不畫記住的 agent。主機連不上時會一直空白。
 - 測試：
-  - `navigation/woowtech-cold-start-tap.test.ts`（14 個）：同一個工作區、跨工作區，快取到了就聚焦 B，live 目錄晚到或不來（主機連不上）都一樣；沒見過的工作區等 live 目錄（T1）；啟動還原在程式允許的五種順序下都不蓋掉點擊；點擊比快取晚到時走熱啟動的路；layout hydrate 之前不開分頁；router remount 後不重播、之後的點擊照常。見證：上游的等待規則在 live 目錄之前顯示 A（跨工作區是 C），上游的 router remount 後把人拉回 B，沒帶 ID 的點擊回到記住的工作區（iOS 的 ID 不在 `userInfo["body"]` 時就是這樣）。
-  - `navigation/woowtech-cold-start-tap.test-support.ts`：延伸 T1 S3 的 harness，加上根 index 和主機 index 的啟動還原、比 live 早到的目錄快取、真的 `createWorkspaceLayoutStore`（持久化、hydrate、`reconcileTabs`），以及真的 `subscribeToNotificationTaps`。等待規則用真的 `isAgentOpenIntentWaitingForWorkspace`；T1 S3 的 harness 也改用它，不再轉寫路由那一行。
-  - `navigation/woowtech-notification-response.test.ts`（8 個）：啟動的點擊只送一次、listener 再送一次不重複、處理後清掉原生那份、remount 不重播（F-Droid stub 清不掉也不重播）、之後的點擊照常、取消訂閱、沒有 data。
-  - 守門：`woowtech/workspace-open-intent.test.mjs` 多一個，看 `isOpenIntentWaitingForWorkspace` 是 `isAgentOpenIntentWaitingForWorkspace({ openIntent, workspaceExists })`、`workspaceExists` 來自 `useWorkspaceExists`，路由本體不用 `useHasHydratedWorkspaces`。新的 `woowtech/notification-taps.test.mjs`：`PushNotificationRouter` 的 effect 回傳 `subscribeToNotificationTaps(Notifications, openNotification)`，自己不讀 `getLastNotificationResponseAsync`、不加 listener；F-Droid stub 有那三個函式。把 `index.tsx` 或 `_layout.tsx` 改回上游時，紅的是守門。
+  - `navigation/woowtech-cold-start-tap.test.ts`（21 個）：同一個工作區、跨工作區，快取到了就聚焦 B，live 目錄晚到或不來（主機連不上）都一樣；沒見過的工作區等 live 目錄（T1）；啟動還原在程式允許的五種順序下都不蓋掉點擊；點擊比快取晚到時走熱啟動的路；layout hydrate 之前不開分頁；router remount 後不重播、之後的點擊照常。見證：上游的等待規則在 live 目錄之前顯示 A（跨工作區是 C），上游的 router remount 後把人拉回 B，沒帶 ID 的點擊回到記住的工作區（iOS 的 ID 不在 `userInfo["body"]` 時就是這樣）。recovery（7 個）：快取有、live 目錄沒有的工作區（同一個、跨工作區）在 live 目錄到之前就要 recovery、到了之後 inspect；live 目錄有它時放掉，之後再封存也不要；主機連不上時一直要但不 inspect；live 目錄之後的點擊不記住。見證：上游的等待規則在同樣情況也 inspect。
+  - `navigation/woowtech-cold-start-tap.test-support.ts`：延伸 T1 S3 的 harness，加上根 index 和主機 index 的啟動還原、比 live 早到的目錄快取（live snapshot 取代快取，跟 `WorkspaceReplica.commitSnapshot` 一樣）、路由的 recovery 要求（真的 latch 函式）、真的 `createWorkspaceLayoutStore`（持久化、hydrate、`reconcileTabs`），以及真的 `subscribeToNotificationTaps`。等待規則用真的 `isAgentOpenIntentWaitingForWorkspace`；T1 S3 的 harness 也改用它，不再轉寫路由那一行。
+  - `navigation/woowtech-notification-response.test.ts`（11 個）：啟動的點擊只送一次、listener 再送一次不重複、處理後清掉原生那份、remount 不重播（F-Droid stub 清不掉也不重播）、之後的點擊照常、取消訂閱、沒有 data；identifier 相同的不同送達：同一個 agent 的新通知、B→C→B、remount 後同一個 agent 的新通知都照常開。
+  - 守門：`woowtech/workspace-open-intent.test.mjs` 多一個，看 `isOpenIntentWaitingForWorkspace` 是 `isAgentOpenIntentWaitingForWorkspace({ openIntent, workspaceExists })`、`workspaceExists` 來自 `useWorkspaceExists`，`hasHydratedWorkspaces` 只出現在 latch 的兩個函式和 effect 的依賴；另一個看 latch 在消費意圖的 effect 裡設、`WorkspaceDeck` 收到 `{isAgentOpenIntent || isRecoveryLatchHeld}`。新的 `woowtech/notification-taps.test.mjs`：`PushNotificationRouter` 的 effect 回傳 `subscribeToNotificationTaps(Notifications, openNotification)`，自己不讀 `getLastNotificationResponseAsync`、不加 listener；F-Droid stub 有那三個函式。把 `index.tsx` 或 `_layout.tsx` 改回上游時，紅的是守門。
   - 紅綠與突變：修之前，新的 vitest 檔載入失敗（還沒有 fork 的函式和模組），三個新守門紅、舊的那個綠；同樣的斷言換成上游的等待規則和 router 時 9/14 紅，畫面是 `wks_w/agent-a`、`wks_w2/agent-c`。修後 vitest 33/33、守門 4/4。六個突變都 exit 1：規則一律等、規則從不等、不清原生那份、每次訂閱各自去重、路由改回上游那行、router 自己讀 `getLastNotificationResponseAsync`。
+- 審查找到的兩個問題（2026-10-01 修，第二個 commit）：
+  - 去重只看 identifier：iOS 上同一個 agent 的通知 identifier 都是 agent ID（`apns-collapse-id`），點過一次之後，同一個 agent 的新通知整個行程都不開，B→C→B 的第三下也不開（上游只漏連續兩次同一個）。改成 identifier 加 date。Android 的 identifier 是 FCM message ID（relay 把 tag 放在 `android.notification`，不在 data），本來就不撞。
+  - 提早消費意圖拿掉了上游 #2002 的封存 recovery：快取還列著、live 目錄已經沒有的工作區，`open` 清掉後 `recoveryRequested` 變 false，live 目錄到了只顯示「Workspace unavailable」。所有 `?open=agent` 的入口都會碰到（通知、網頁 deep link、重新整理後的 History），例如 e2e `worktree-restore.spec.ts` 封存後立刻帶 `?open=agent:` 重新載入、刪除還沒寫進 IndexedDB 時。原本寫「熱啟動點通知本來就這樣」不對：live 目錄之後的熱啟動點擊找不到封存的工作區，會延後成 `?open`、等、然後 recovery。改成上面的 latch。
+  - 突變：去重改回只看 identifier 時新的 vitest 3 個紅；latch 永遠不設時 3 個紅（兩個封存案例和主機連不上那個）；`WorkspaceDeck` 改回 `{isAgentOpenIntent}`、或等待加回 `!hasHydratedWorkspaces` 時守門紅。
 - 還沒處理的：
-  - 快取裡的工作區其實已經封存：意圖馬上消費，`recoveryRequested` 跟著 `open` 清掉，live 目錄到了只顯示「工作區不可用」，不做 recovery inspect。熱啟動點通知本來就這樣。
+  - live 目錄之前的熱啟動點擊（例如重連時 store 還留著已封存的工作區）：`navigateToWorkspace` 直接開分頁，不帶 `?open`，所以不要 recovery。這是上游的行為，跟這次的修改無關。
   - Android 從「最近使用」重開被系統殺掉的行程：新行程從啟動 intent 的 extras 重建那次點擊（`ExpoNotificationLifecycleListener`），行程內的去重擋不到，會再開一次那個 agent。要擋得跨行程記住 identifier。
 - 裝置驗收：還沒做，見「接下來」。實機上要確認是上面這條時序，不是點擊沒帶 ID（`apns.payload.body`）或沒送到 JS。
 - 合併上游：上游改成快取到了就消費 agent 意圖，或自己清掉最後一次點擊時，先確認新測試仍綠，再拿掉 fork 的函式、模組和守門。
@@ -2174,7 +2179,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - 通知權限只在連上 woowtech smart 的 daemon 時才問。
     - 從相同 bundle ID、呼叫過 `getExpoPushTokenAsync` 的舊測試版升級：驗證 iOS 原生寫入 disabled 成功、下次啟動與 APNs token 事件維持停用；另驗證首次 import 已讀到 enabled、仍等待 token 或已開始上傳的競速。原生字串 adapter 不取消這些工作，尚不能宣稱升級首次啟動零 Expo 請求。移除 App 也不能當成清除 Keychain 登記的可靠方式。
     - 打一次真正的 iOS bundle，確認裡面沒有 `@firebase/app`，並量 IPA 大小的差距。
-    - RC-I-21c（第 16 節）：iPad 和 POCO 各自先在 main 重現，再換修正版。App 被滑掉後點通知，同一個工作區、跨工作區、點之前讓主機連不上各 3 次，B 聚焦後不再跳回 A；開到 B 後切到 A，在 Debug 版 Reload，不會被拉回 B。
+    - RC-I-21c（第 16 節）：iPad 和 POCO 各自先在 main 重現，再換修正版。App 被滑掉後點通知，同一個工作區、跨工作區、點之前讓主機連不上各 3 次，B 聚焦後不再跳回 A；開到 B 後切到 A，在 Debug 版 Reload，不會被拉回 B；開到 B 後讓 B 再完成一次，點新的通知仍開 B（iOS 同一個 agent 的 identifier 相同）；App 被滑掉時在桌面版封存工作區 W，再點 W 裡 agent 的舊通知，要顯示 Restore。
   - 待決定：
     - 手動分兩步跑 prebuild 和 `pod install` 時，要不要讓 `react-native.config.js` 也看 prebuild 產生的 `ios/` 裡有沒有 plist，而不只看環境變數。
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。

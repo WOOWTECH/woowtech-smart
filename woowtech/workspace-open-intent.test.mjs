@@ -108,10 +108,75 @@ test("an agent intent waits only while the store does not know its workspace (RC
     "useWorkspaceExists(serverId, workspaceId)",
     "workspaceExists must be the store's answer, cached directory included",
   );
-  assert.equal(
-    findAll(content, (node) => ts.isIdentifier(node) && node.text === "useHasHydratedWorkspaces")
-      .length,
-    0,
-    "the route must not wait for the live directory",
+  // hasHydratedWorkspaces only feeds the recovery latch below, never the wait.
+  const latchCalls = new Set(["shouldLatchWorkspaceRecovery", "isWorkspaceRecoveryLatchHeld"]);
+  for (const use of findAll(
+    content,
+    (node) => ts.isIdentifier(node) && node.text === "hasHydratedWorkspaces",
+  )) {
+    if (ts.isVariableDeclaration(use.parent) && use.parent.name === use) continue;
+    if (ts.isArrayLiteralExpression(use.parent)) continue; // an effect's dependency list
+    let ancestor = use.parent;
+    while (ancestor && !ts.isCallExpression(ancestor)) ancestor = ancestor.parent;
+    assert.ok(
+      ancestor && latchCalls.has(ancestor.expression.getText(tree)),
+      `the route must not wait for the live directory: ${use.parent.getText(tree)}`,
+    );
+  }
+});
+
+test("an agent intent consumed before the live directory keeps recovery requested (RC-I-21c)", () => {
+  const tree = source(routeFile);
+  const imports = findAll(
+    tree,
+    (node) =>
+      ts.isImportDeclaration(node) &&
+      node.moduleSpecifier.text === "@/navigation/woowtech-workspace-open-intent",
   );
+  const imported = imports[0].importClause.getText(tree);
+  assert.match(imported, /\bshouldLatchWorkspaceRecovery\b/);
+  assert.match(imported, /\bisWorkspaceRecoveryLatchHeld\b/);
+
+  const [content] = findAll(
+    tree,
+    (node) => ts.isFunctionDeclaration(node) && node.name?.text === "HostWorkspaceRouteContent",
+  );
+  assert.ok(content, "HostWorkspaceRouteContent not found");
+  // Upstream #2002 requested recovery while ?open=agent waited for the live directory. The intent
+  // is now consumed against the cached directory, so without the latch a workspace archived while
+  // the app was killed showed 「Workspace unavailable」 instead of Restore.
+  const held = variable(content, "isRecoveryLatchHeld", tree).initializer;
+  assert.ok(held && ts.isCallExpression(held));
+  assert.equal(held.expression.getText(tree), "isWorkspaceRecoveryLatchHeld");
+
+  const latches = findAll(
+    content,
+    (node) =>
+      ts.isCallExpression(node) && node.expression.getText(tree) === "shouldLatchWorkspaceRecovery",
+  );
+  assert.equal(latches.length, 1);
+  const latch = latches[0];
+  assert.ok(ts.isIfStatement(latch.parent), "the latch is set where the intent is consumed");
+  assert.match(latch.parent.thenStatement.getText(tree), /\bsetRecoveryLatchKey\(/);
+  let effect = latch.parent;
+  while (
+    effect &&
+    !(ts.isCallExpression(effect) && effect.expression.getText(tree) === "useEffect")
+  ) {
+    effect = effect.parent;
+  }
+  assert.ok(effect, "the latch is set in the open-intent effect");
+  assert.match(effect.getText(tree), /\bprepareWorkspaceTab\(/);
+
+  const decks = findAll(
+    content,
+    (node) =>
+      (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
+      node.tagName.getText(tree) === "WorkspaceDeck",
+  );
+  assert.equal(decks.length, 1);
+  const requested = decks[0].attributes.properties.find(
+    (attribute) => attribute.name?.getText(tree) === "recoveryRequested",
+  );
+  assert.equal(requested?.initializer?.getText(tree), "{isAgentOpenIntent || isRecoveryLatchHeld}");
 });

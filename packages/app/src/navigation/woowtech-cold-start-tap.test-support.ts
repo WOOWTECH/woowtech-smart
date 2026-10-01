@@ -7,7 +7,8 @@
 // Real: resolveNotificationTarget / buildNotificationRoute, resolveNavigateToAgent,
 // navigateToWorkspace, navigateToHostWorkspaceRoute, prepareWorkspaceTab, resolveStartupRoute /
 // resolveHostIndexRoute / resolveWorkspaceSelectionStatus, readWorkspaceRouteOpenParam,
-// isAgentOpenIntentWaitingForWorkspace, subscribeToNotificationTaps, createWorkspaceLayoutStore
+// isAgentOpenIntentWaitingForWorkspace, shouldLatchWorkspaceRecovery / isWorkspaceRecoveryLatchHeld,
+// subscribeToNotificationTaps, createWorkspaceLayoutStore
 // (openTab, reconcileTabs, persist merge), React Navigation's StackRouter and expo-router's route
 // tree from the src/app file names.
 // Transcribed from expo-router 6.0.23 as in the T1 S3 harness: linkTo's findDivergentState and
@@ -38,7 +39,9 @@ import {
 } from "@/navigation/host-runtime-bootstrap";
 import {
   isAgentOpenIntentWaitingForWorkspace,
+  isWorkspaceRecoveryLatchHeld,
   readWorkspaceRouteOpenParam,
+  shouldLatchWorkspaceRecovery,
 } from "@/navigation/woowtech-workspace-open-intent";
 import {
   navigateToHostWorkspaceRoute,
@@ -393,10 +396,12 @@ export class NativeNotificationEmitter implements NotificationResponseSource {
   lastResponse: Response | null = null;
   clearCalls = 0;
   private readonly listeners = new Set<(response: Response) => void>();
+  private deliveryClock = 1_700_000_000;
 
   tap(identifier: string, data: Record<string, string> | null): void {
+    this.deliveryClock += 1;
     const response: Response = {
-      notification: { request: { identifier, content: { data } } },
+      notification: { date: this.deliveryClock, request: { identifier, content: { data } } },
     };
     this.lastResponse = response;
     for (const listener of this.listeners) {
@@ -465,7 +470,11 @@ export interface ColdStartScenario {
   hostRegistryLoads(): void;
   /** DirectorySync.restoreCachedDirectory lands, right after the registry (host-runtime.ts). */
   cacheRestores(content: DirectoryContent): void;
-  /** The first live directory snapshot lands: hasHydratedWorkspaces / hasHydratedAgents. */
+  /**
+   * The first live directory snapshot lands: hasHydratedWorkspaces / hasHydratedAgents. It
+   * replaces the cached workspaces (WorkspaceReplica.commitSnapshot), so one archived meanwhile
+   * is gone.
+   */
   liveDirectoryArrives(content: DirectoryContent): void;
   /** A tap while the app runs (listener delivery). */
   tapWhileRunning(identifier: string, data: Record<string, string> | null): void;
@@ -474,6 +483,12 @@ export interface ColdStartScenario {
   /** Keeps the host index mounted and focused without redirecting yet (Redirect's extra commit). */
   setHoldHostIndexRedirect(hold: boolean): void;
   visible(): string;
+  /**
+   * What the focused workspace route passes as WorkspaceDeck's recoveryRequested, and whether
+   * WorkspaceScreen would inspect recovery (shouldInspectWorkspaceRecovery in workspace-screen.tsx):
+   * requested, the live directory in and the workspace missing.
+   */
+  recovery(): { requested: boolean; inspects: boolean } | null;
   openTabCalls: { workspaceKey: string; agentId: string | null; pin: boolean; hydrated: boolean }[];
   rootStack(): string[];
   dispose(): void;
@@ -516,10 +531,11 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
   let rememberedBeforeHydration: { serverId: string; workspaceId: string } | null = null;
   let cached: DirectoryContent | null = null;
   let live: DirectoryContent | null = null;
-  // Per mounted workspace route (HostWorkspaceRouteContent): consumedIntentRef, intentConsumed.
+  // Per mounted workspace route (HostWorkspaceRouteContent): consumedIntentRef, intentConsumed,
+  // recoveryLatchKey.
   const routeStateByKey = new Map<
     string,
-    { consumedKey: string | null; intentConsumed: boolean }
+    { consumedKey: string | null; intentConsumed: boolean; recoveryLatchKey: string | null }
   >();
   let unmountCurrentRouter: (() => void) | null = null;
   let holdHostIndex = false;
@@ -550,7 +566,8 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
   } as unknown as NavigationContainerRefWithCurrent<ReactNavigation.RootParamList>);
 
   function sessionWorkspaceIds(): Set<string> {
-    return new Set([...(cached?.workspaceIds ?? []), ...(live?.workspaceIds ?? [])]);
+    // WorkspaceReplica: the live snapshot replaces what the cache committed.
+    return new Set(live ? live.workspaceIds : (cached?.workspaceIds ?? []));
   }
 
   function sessionAgents(): { id: string; workspaceId: string }[] {
@@ -730,12 +747,18 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
     }
     let routeState = routeStateByKey.get(route.key);
     if (!routeState) {
-      routeState = { consumedKey: null, intentConsumed: false };
+      routeState = { consumedKey: null, intentConsumed: false, recoveryLatchKey: null };
       routeStateByKey.set(route.key, routeState);
     }
     const consumptionKey = `${routeServerId}:${workspaceId}:${openValue}`;
     if (routeState.consumedKey !== consumptionKey) {
       routeState.consumedKey = consumptionKey;
+      if (
+        input.waitRule === "app" &&
+        shouldLatchWorkspaceRecovery({ openIntent, hasHydratedWorkspaces: live !== null })
+      ) {
+        routeState.recoveryLatchKey = `${routeServerId}:${workspaceId}`;
+      }
       if (openIntent) {
         prepareWorkspaceTab(
           {
@@ -755,6 +778,32 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
     });
     routeState.intentConsumed = true;
     return true;
+  }
+
+  // HostWorkspaceRouteContent's recovery request and the effect that releases its latch.
+  function workspaceRouteRecovery(): { requested: boolean; inspects: boolean } | null {
+    const { route } = focusedRouteIn(container);
+    if (route.name !== WORKSPACE_ROUTE_NAME || !registryLoaded) {
+      return null;
+    }
+    const params = (route.params ?? {}) as Params;
+    const workspaceId = decodeWorkspaceIdFromPathSegment(paramValue(params.workspaceId)) ?? "";
+    const routeKey = `${paramValue(params.serverId)}:${workspaceId}`;
+    const routeState = routeStateByKey.get(route.key);
+    const exists = workspaceExists(workspaceId);
+    const held = isWorkspaceRecoveryLatchHeld({
+      latchedRouteKey: routeState?.recoveryLatchKey ?? null,
+      routeKey,
+      hasHydratedWorkspaces: live !== null,
+      workspaceExists: exists,
+    });
+    if (routeState && routeState.recoveryLatchKey !== null && !held) {
+      routeState.recoveryLatchKey = null;
+    }
+    const isAgentOpenIntent =
+      parseWorkspaceOpenIntent(readWorkspaceRouteOpenParam(params))?.kind === "agent";
+    const requested = isAgentOpenIntent || held;
+    return { requested, inspects: requested && live !== null && !exists };
   }
 
   function focusedAgentIn(workspaceId: string): string | null {
@@ -813,6 +862,7 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
   function render(): void {
     for (let pass = 0; pass < 12; pass += 1) {
       const changed = runRootIndexRedirect() || runHostIndexRedirect() || runWorkspaceRouteEffect();
+      workspaceRouteRecovery();
       runWorkspaceScreenReconcile();
       if (!changed) {
         return;
@@ -911,6 +961,7 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
       record(hold ? "host index redirect held" : "host index redirect released");
     },
     visible,
+    recovery: workspaceRouteRecovery,
     rootStack() {
       const rootStack = container.routes[container.index].state as StackState;
       return rootStack.routes.map((route, index) =>

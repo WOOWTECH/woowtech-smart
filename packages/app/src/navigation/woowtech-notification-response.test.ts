@@ -6,11 +6,15 @@ import {
   type NotificationResponseSource,
 } from "./woowtech-notification-response";
 
+// Each delivery gets its own date, as UNNotification.date and the FCM sent time do.
+let deliveryClock = 1_700_000_000;
+
 function tapResponse(
   identifier: string,
   data: Record<string, unknown> | null = { agentId: identifier },
+  date: number = (deliveryClock += 1),
 ): NotificationResponseLike {
-  return { notification: { request: { identifier, content: { data } } } };
+  return { notification: { date, request: { identifier, content: { data } } } };
 }
 
 interface EmitterOptions {
@@ -118,6 +122,41 @@ describe("notification taps reach the router once per app process (RC-I-21c)", (
     emitter.tap(tapResponse("second"));
 
     expect(opened).toEqual([{ agentId: "launch" }, { agentId: "second" }]);
+  });
+
+  // The relay sets apns-collapse-id to the agent id and iOS uses it as the request identifier, so
+  // every notification for one agent arrives with the same identifier.
+  it("routes a new notification for an agent already tapped", () => {
+    const emitter = createEmitter(tapResponse("agent-b", { agentId: "B" }));
+    const { opened, open } = recordOpens();
+    subscribeToNotificationTaps(emitter.source, open);
+
+    emitter.tap(tapResponse("agent-b", { agentId: "B" }));
+
+    expect(opened).toEqual([{ agentId: "B" }, { agentId: "B" }]);
+  });
+
+  it("routes B, C and then B again", () => {
+    const emitter = createEmitter(null);
+    const { opened, open } = recordOpens();
+    subscribeToNotificationTaps(emitter.source, open);
+
+    emitter.tap(tapResponse("agent-b", { agentId: "B" }));
+    emitter.tap(tapResponse("agent-c", { agentId: "C" }));
+    emitter.tap(tapResponse("agent-b", { agentId: "B" }));
+
+    expect(opened).toEqual([{ agentId: "B" }, { agentId: "C" }, { agentId: "B" }]);
+  });
+
+  it("routes a new notification for the launch agent after a remount", () => {
+    const emitter = createEmitter(tapResponse("agent-b", { agentId: "B" }), { clears: false });
+    const { opened, open } = recordOpens();
+    subscribeToNotificationTaps(emitter.source, open)();
+    subscribeToNotificationTaps(emitter.source, open);
+
+    emitter.tap(tapResponse("agent-b", { agentId: "B" }));
+
+    expect(opened).toEqual([{ agentId: "B" }, { agentId: "B" }]);
   });
 
   it("stops listening when unsubscribed", () => {
