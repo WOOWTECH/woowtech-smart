@@ -719,7 +719,7 @@ node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/woowtech-push.test.ts src/messages.test.ts --bail=1)
 (cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts --bail=1)
 (cd packages/app && npx vitest run plugins/woowtech-ios-firebase.test.ts plugins/with-woowtech-push.test.ts plugins/woowtech-metro-resolver.test.ts src/push-notifications src/utils/notification-routing.woowtech-push.test.ts --bail=1)
-(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts src/navigation/woowtech-welcome-host-online.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1、T1 S3 和「配對後第一次點通知」小節
+(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts src/navigation/woowtech-welcome-host-online.test.ts src/navigation/woowtech-cold-start-tap.test.ts src/navigation/woowtech-notification-response.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1、T1 S3、「配對後第一次點通知」和 RC-I-21c 小節
 ```
 
 - 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛和 `expo-build-properties` 的 `ios`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
@@ -780,6 +780,30 @@ node --test woowtech/*.test.mjs
   - 守門 `woowtech/welcome-host-online.test.mjs` 只看原始碼：`isFocused` 來自 `useIsFocused`，`WelcomeScreen` 裡唯一會轉頁的 effect 第一行問 `shouldWelcomeMoveOnToHost({ anyOnlineServerId, isFocused })`，依賴有這兩個。vitest 的歡迎頁 effect 照這幾行寫，所以把 `welcome-screen.tsx` 改回上游時，紅的是守門。
   - 紅綠與突變：修之前主案例的焦點是 `open-project`、設定那個案例也紅，修後 4/4；拿掉修法時 vitest 2 個紅、守門紅，依賴拿掉 `isFocused` 時守門紅。Android 模擬器複驗見 `logs/fix-first-tap.md`。
 - 合併上游：上游改成只在 focused 時轉頁，或拿掉這個 effect 時，先確認新測試仍綠，再拿掉 fork 的判斷和守門。
+
+#### RC-I-21c：冷啟動點通知，工作區對了，聚焦的卻是上次記住的 agent
+
+- iOS（2026-09-30 上架候選驗收，舊 Mac 的 `rc0930-ios.md`，`33f2fa8ac`）：App 被滑掉後點 agent B 的通知，開到對的工作區，聚焦的卻是之前記住的 agent A。點到別的工作區時，聚焦那個工作區上次的 agent。同一條 JS 路徑 Android 也走。
+- 原因在上游，跟 fork 的推播無關，是兩條上游規則疊在一起：
+  - 冷啟動時 `PushNotificationRouter` 在根 layout 第一次 commit 就讀啟動的那次點擊，那時主機清單還沒載入、沒有 session。`navigateToWorkspace` 認不得工作區，把 agent 延後成 `?open=agent:B`。
+  - 工作區路由在 `hasHydratedWorkspaces` 之前不消費 agent 意圖（上游 `5da6548af`，#2002，2026-07-16，給封存工作區的 recovery 用）。這個旗標只有 live 目錄的 snapshot 會設。後來加的目錄快取（#4421，2026-09-07）在主機清單載入後就讓工作區存在，但不設這個旗標。
+  - 等的期間路由照樣畫工作區，分頁和聚焦來自持久化的 layout，所以是 A。live snapshot 到了才換成 B，主機連不上時一直停在 A。熱啟動不等：工作區已經在 store，`navigateToWorkspace` 直接開分頁。
+  - 一起修的另一個上游缺口：`expo-notifications` 的原生模組一直留著最後一次點擊，App 從不清掉，`PushNotificationRouter` 用 `useRef` 去重，remount 就重置。根 error boundary 的 Reload 或 Fast Refresh 之後會重播那次點擊，把使用者拉回已經離開的 agent。真正的冷啟動碰不到這條。
+- 修法：
+  - fork 的 `navigation/woowtech-workspace-open-intent.ts` 加 `isAgentOpenIntentWaitingForWorkspace`：agent 意圖只在 store 不認得工作區時等，快取來的也算認得。工作區路由 `index.tsx` 改用它（+10／−5 行，註解 `woowtech smart:`）。沒見過的工作區照舊等，T1 的目錄 demand 和 recovery 不變；這跟熱啟動點通知的行為一樣。
+  - fork 的 `navigation/woowtech-notification-response.ts`（`subscribeToNotificationTaps`）：處理過的通知 identifier 記在模組層，整個 App 行程有效（最多 32 個），處理後呼叫 `clearLastNotificationResponse()`。`_layout.tsx` 的 effect 改成回傳它（+4／−27 行）。F-Droid 的 `expo-notifications` stub 加上 `getLastNotificationResponse` 和 `clearLastNotificationResponse`。
+  - 沒採用：等 live 目錄時畫空白，不畫記住的 agent。主機連不上時會一直空白。
+- 測試：
+  - `navigation/woowtech-cold-start-tap.test.ts`（14 個）：同一個工作區、跨工作區，快取到了就聚焦 B，live 目錄晚到或不來（主機連不上）都一樣；沒見過的工作區等 live 目錄（T1）；啟動還原在程式允許的五種順序下都不蓋掉點擊；點擊比快取晚到時走熱啟動的路；layout hydrate 之前不開分頁；router remount 後不重播、之後的點擊照常。見證：上游的等待規則在 live 目錄之前顯示 A（跨工作區是 C），上游的 router remount 後把人拉回 B，沒帶 ID 的點擊回到記住的工作區（iOS 的 ID 不在 `userInfo["body"]` 時就是這樣）。
+  - `navigation/woowtech-cold-start-tap.test-support.ts`：延伸 T1 S3 的 harness，加上根 index 和主機 index 的啟動還原、比 live 早到的目錄快取、真的 `createWorkspaceLayoutStore`（持久化、hydrate、`reconcileTabs`），以及真的 `subscribeToNotificationTaps`。等待規則用真的 `isAgentOpenIntentWaitingForWorkspace`；T1 S3 的 harness 也改用它，不再轉寫路由那一行。
+  - `navigation/woowtech-notification-response.test.ts`（8 個）：啟動的點擊只送一次、listener 再送一次不重複、處理後清掉原生那份、remount 不重播（F-Droid stub 清不掉也不重播）、之後的點擊照常、取消訂閱、沒有 data。
+  - 守門：`woowtech/workspace-open-intent.test.mjs` 多一個，看 `isOpenIntentWaitingForWorkspace` 是 `isAgentOpenIntentWaitingForWorkspace({ openIntent, workspaceExists })`、`workspaceExists` 來自 `useWorkspaceExists`，路由本體不用 `useHasHydratedWorkspaces`。新的 `woowtech/notification-taps.test.mjs`：`PushNotificationRouter` 的 effect 回傳 `subscribeToNotificationTaps(Notifications, openNotification)`，自己不讀 `getLastNotificationResponseAsync`、不加 listener；F-Droid stub 有那三個函式。把 `index.tsx` 或 `_layout.tsx` 改回上游時，紅的是守門。
+  - 紅綠與突變：修之前，新的 vitest 檔載入失敗（還沒有 fork 的函式和模組），三個新守門紅、舊的那個綠；同樣的斷言換成上游的等待規則和 router 時 9/14 紅，畫面是 `wks_w/agent-a`、`wks_w2/agent-c`。修後 vitest 33/33、守門 4/4。六個突變都 exit 1：規則一律等、規則從不等、不清原生那份、每次訂閱各自去重、路由改回上游那行、router 自己讀 `getLastNotificationResponseAsync`。
+- 還沒處理的：
+  - 快取裡的工作區其實已經封存：意圖馬上消費，`recoveryRequested` 跟著 `open` 清掉，live 目錄到了只顯示「工作區不可用」，不做 recovery inspect。熱啟動點通知本來就這樣。
+  - Android 從「最近使用」重開被系統殺掉的行程：新行程從啟動 intent 的 extras 重建那次點擊（`ExpoNotificationLifecycleListener`），行程內的去重擋不到，會再開一次那個 agent。要擋得跨行程記住 identifier。
+- 裝置驗收：還沒做，見「接下來」。實機上要確認是上面這條時序，不是點擊沒帶 ID（`apns.payload.body`）或沒送到 JS。
+- 合併上游：上游改成快取到了就消費 agent 意圖，或自己清掉最後一次點擊時，先確認新測試仍綠，再拿掉 fork 的函式、模組和守門。
 
 #### 桌面通知的回饋
 
@@ -2150,6 +2174,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - 通知權限只在連上 woowtech smart 的 daemon 時才問。
     - 從相同 bundle ID、呼叫過 `getExpoPushTokenAsync` 的舊測試版升級：驗證 iOS 原生寫入 disabled 成功、下次啟動與 APNs token 事件維持停用；另驗證首次 import 已讀到 enabled、仍等待 token 或已開始上傳的競速。原生字串 adapter 不取消這些工作，尚不能宣稱升級首次啟動零 Expo 請求。移除 App 也不能當成清除 Keychain 登記的可靠方式。
     - 打一次真正的 iOS bundle，確認裡面沒有 `@firebase/app`，並量 IPA 大小的差距。
+    - RC-I-21c（第 16 節）：iPad 和 POCO 各自先在 main 重現，再換修正版。App 被滑掉後點通知，同一個工作區、跨工作區、點之前讓主機連不上各 3 次，B 聚焦後不再跳回 A；開到 B 後切到 A，在 Debug 版 Reload，不會被拉回 B。
   - 待決定：
     - 手動分兩步跑 prebuild 和 `pod install` 時，要不要讓 `react-native.config.js` 也看 prebuild 產生的 `ios/` 裡有沒有 plist，而不只看環境變數。
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。

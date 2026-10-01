@@ -1,5 +1,6 @@
 // Source wiring only. The navigation behavior, including the Android S2 -> S3 sequence, is covered
-// by packages/app/src/navigation/woowtech-workspace-open-intent.test.ts.
+// by packages/app/src/navigation/woowtech-workspace-open-intent.test.ts, the RC-I-21c cold start by
+// packages/app/src/navigation/woowtech-cold-start-tap.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -69,5 +70,48 @@ test("the workspace route reads the open intent from its own route params", () =
     params.expression.getText(tree),
     "useLocalSearchParams",
     `${paramsName} must be the route's own params`,
+  );
+});
+
+test("an agent intent waits only while the store does not know its workspace (RC-I-21c)", () => {
+  const tree = source(routeFile);
+  const imports = findAll(
+    tree,
+    (node) =>
+      ts.isImportDeclaration(node) &&
+      node.moduleSpecifier.text === "@/navigation/woowtech-workspace-open-intent",
+  );
+  assert.match(imports[0].importClause.getText(tree), /\bisAgentOpenIntentWaitingForWorkspace\b/);
+
+  const [content] = findAll(
+    tree,
+    (node) => ts.isFunctionDeclaration(node) && node.name?.text === "HostWorkspaceRouteContent",
+  );
+  assert.ok(content, "HostWorkspaceRouteContent not found");
+  // Waiting for the live directory (hasHydratedWorkspaces) kept the remembered agent on screen
+  // after a cold-start tap, though the cached directory already knew the workspace. The vitest
+  // harnesses call isAgentOpenIntentWaitingForWorkspace the way this line does, so putting the
+  // upstream line back turns this guard red.
+  const waiting = variable(content, "isOpenIntentWaitingForWorkspace", tree).initializer;
+  assert.ok(waiting && ts.isCallExpression(waiting));
+  assert.equal(waiting.expression.getText(tree), "isAgentOpenIntentWaitingForWorkspace");
+  assert.equal(waiting.arguments.length, 1);
+  const [argument] = waiting.arguments;
+  assert.ok(ts.isObjectLiteralExpression(argument));
+  assert.deepEqual(
+    argument.properties.map((property) => property.getText(tree)),
+    ["openIntent", "workspaceExists"],
+  );
+  const workspaceExists = variable(content, "workspaceExists", tree).initializer;
+  assert.equal(
+    workspaceExists?.getText(tree),
+    "useWorkspaceExists(serverId, workspaceId)",
+    "workspaceExists must be the store's answer, cached directory included",
+  );
+  assert.equal(
+    findAll(content, (node) => ts.isIdentifier(node) && node.text === "useHasHydratedWorkspaces")
+      .length,
+    0,
+    "the route must not wait for the live directory",
   );
 });

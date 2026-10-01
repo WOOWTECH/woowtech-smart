@@ -34,7 +34,10 @@ import {
   stripHostWorkspaceRouteEchoSearchFromBrowserUrlAfterCommit,
 } from "@/utils/host-route-browser";
 import { prepareWorkspaceTab } from "@/utils/workspace-navigation";
-import { readWorkspaceRouteOpenParam } from "@/navigation/woowtech-workspace-open-intent";
+import {
+  isAgentOpenIntentWaitingForWorkspace,
+  readWorkspaceRouteOpenParam,
+} from "@/navigation/woowtech-workspace-open-intent";
 import { isNative, isWeb } from "@/constants/platform";
 import { RenderProfile } from "@/utils/render-profiler";
 
@@ -112,13 +115,15 @@ function HostWorkspaceRouteContent() {
     : "";
   // woowtech smart: only this route's own open param (navigation/woowtech-workspace-open-intent.ts).
   const openValue = readWorkspaceRouteOpenParam(params);
-  const hasHydratedWorkspaces = useHasHydratedWorkspaces(serverId);
   const workspaceExists = useWorkspaceExists(serverId, workspaceId);
   const openIntent = useMemo(() => parseWorkspaceOpenIntent(openValue), [openValue]);
   const isAgentOpenIntent = openIntent?.kind === "agent";
-  const isOpenIntentWaitingForWorkspace = Boolean(
-    isAgentOpenIntent && (!hasHydratedWorkspaces || !workspaceExists),
-  );
+  // woowtech smart: wait only while the store does not know the workspace, cached directory
+  // included (RC-I-21c, navigation/woowtech-workspace-open-intent.ts).
+  const isOpenIntentWaitingForWorkspace = isAgentOpenIntentWaitingForWorkspace({
+    openIntent,
+    workspaceExists,
+  });
   useEffect(() => {
     if (!serverId || !workspaceId) {
       return;
