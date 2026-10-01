@@ -130,6 +130,7 @@ import {
   parseServerIdFromPathname,
 } from "@/utils/host-routes";
 import { buildNotificationRoute, resolveNotificationTarget } from "@/utils/notification-routing";
+import { takePendingDesktopNotificationClick } from "@/utils/woowtech-notification-click";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { PluginCatalogSync } from "@/plugins";
 import {
@@ -205,6 +206,11 @@ function PushNotificationRouter() {
             return;
           }
           removeDesktopNotificationListener = unlisten;
+          // woowtech smart: a click that reopened this window waited for this listener.
+          void takePendingDesktopNotificationClick(getDesktopHost()?.notification).then((data) => {
+            if (!cancelled && data) openNotification(data);
+            return;
+          });
           return;
         });
       }

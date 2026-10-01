@@ -789,7 +789,12 @@ node --test woowtech/*.test.mjs
 - 三態只新增桌面內部 `sendNotificationWithResult` bridge／IPC，接點另有 `preload.ts` 與 App `desktop/host.ts`；沒有修改網路 protocol。App 與 Electron 各自宣告三態 union，由守門核對一致，不跨套件引用 sibling `src`。一般 `sendOsNotification` 與既有 `sendNotification` IPC 仍回布林，僅 show 為 true。舊 bridge 仍能傳送測試，但舊布林不能證明是否收到 show，畫面一律回報未確認；不以重送來猜測結果。相容接點帶 `COMPAT(notificationDeliveryResult)` 標記。
 - Renderer 接點是 `desktop-permissions.ts`、`use-desktop-permissions.ts`、`desktop-notifications-section.tsx`；測試狀態放 fork helper，文案放 `i18n/woowtech-copy.ts`，繁中以外先沿用英文。合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，再跑同名 fork helper 與 permission 的定向 Vitest。沒有變更手機推播。
 - Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；翻譯函式存入 ref 並在 render 同步更新，通知 callback 只依賴 `serverId`，避免切換語言使 `observeEvents` 拆掉再訂閱；送出時仍讀最新翻譯。
-- 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。
+- 通知圖示：上游從 `dist/features` 找 `../assets`，指到從來不會產生的 `dist/assets`，所以圖示一直是空的（macOS 仍用 App 圖示，Windows 與 Linux 橫幅沒有圖示）。改由 `features/woowtech-notification-icon.ts` 決定：打包版讀 resources 的 `icon.png`，開發版讀 `packages/desktop/assets`。`electron-builder.yml` 原本只有 mac 複製 `icon.png`，現在 linux 與 win 也複製；main.ts 打包版的視窗圖示本來就找這個檔，Linux 視窗因此也有圖示。
+- 沒有視窗時點通知：macOS 關掉所有視窗後 App 仍在，上游點擊只送給既有視窗，所以沒反應。`features/woowtech-notification-click.ts` 先找發出通知的視窗，再找任何視窗；都沒有時呼叫 `desktopWindowOwner.restoreWhenActivated()` 重開主視窗。目標先排隊，等該視窗 renderer 的 `PushNotificationRouter` 訂閱點擊後，以 `woowtech:notification:takePendingClick` 取走，再走原本的 `openNotification`（agent 或 `buildNotificationRoute`）。視窗重新載入時回到未就緒，關閉時丟棄。macOS 的 activate 與點擊可能同時要求視窗，所以 `restoreWhenActivated` 共用同一次開窗。上游接點：`notifications.ts`、`main.ts`、`preload.ts`、`window/desktop-window-owner.ts`、App 的 `desktop/host.ts` 與 `app/_layout.tsx`（取件放 `utils/woowtech-notification-click.ts`）。
+- App 結束後從通知中心點舊通知（冷啟動、macOS `launchInfo`／`getHistory`、Windows `handleActivation`）仍不導頁：通知資料只存在記憶體，要支援得另存 id 對應資料，且只能在簽章產物上驗證，先不做。
+- Windows：`features/woowtech-app-user-model-id.ts` 在 `app.setName` 後、whenReady 前呼叫 `app.setAppUserModelId`。打包版用 `io.woowtech.smart.desktop`（與 `electron-builder.yml` 的 appId 一致，NSIS 捷徑用的就是它，守門核對），未打包用 `process.execPath`；macOS 與 Linux 不做事。
+- 合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，以及 desktop 的 `woowtech-notification-{icon,click}.test.ts`、`woowtech-app-user-model-id.test.ts`、`window/desktop-window-owner.test.ts` 與 App 的 `utils/woowtech-notification-click.test.ts`。
+- 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。圖示、關窗後點擊與 Windows AppUserModelID 也只有單元測試與守門，實機驗證待做：macOS 要簽章的打包版；Windows 與 Linux 的圖示和點擊要各自的打包版與機器。
 
 ### 17. daemon 自己的訊息用 woowtech smart
 

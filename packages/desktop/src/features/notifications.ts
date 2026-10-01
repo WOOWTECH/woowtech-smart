@@ -1,20 +1,20 @@
-import path from "node:path";
 import { existsSync } from "node:fs";
-import { app, BrowserWindow, Notification, ipcMain, nativeImage } from "electron";
+import { app, BrowserWindow, Notification, ipcMain, nativeImage, webContents } from "electron";
 import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
+import {
+  createNotificationClickRouter,
+  type NotificationClickWindow,
+} from "./woowtech-notification-click.js";
 import {
   showNotificationWithDelivery,
   type NotificationDeliveryResult,
 } from "./woowtech-notification-delivery.js";
+import { notificationIconCandidates } from "./woowtech-notification-icon.js";
 
 interface NotificationInput {
   title?: unknown;
   body?: unknown;
   data?: unknown;
-}
-
-interface NotificationClickPayload {
-  data?: Record<string, unknown>;
 }
 
 const activeNotifications = new Set<Notification>();
@@ -34,11 +34,11 @@ function toRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 function getNotificationIcon(): Electron.NativeImage | null {
-  const candidates = [
-    path.resolve(__dirname, "../assets/icon.png"),
-    path.resolve(__dirname, "../assets/64x64.png"),
-    path.resolve(__dirname, "../assets/128x128.png"),
-  ];
+  const candidates = notificationIconCandidates({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    moduleDir: __dirname,
+  });
 
   for (const iconPath of candidates) {
     if (!existsSync(iconPath)) {
@@ -53,17 +53,19 @@ function getNotificationIcon(): Electron.NativeImage | null {
   return null;
 }
 
-function focusSenderWindow(sender: Electron.WebContents): BrowserWindow | null {
-  const win = BrowserWindow.fromWebContents(sender) ?? BrowserWindow.getAllWindows()[0] ?? null;
+function toClickWindow(win: BrowserWindow | null | undefined): NotificationClickWindow | null {
   if (!win || win.isDestroyed()) {
     return null;
   }
-  win.show();
-  if (win.isMinimized()) {
-    win.restore();
-  }
-  win.focus();
-  return win;
+  return {
+    webContentsId: win.webContents.id,
+    isDestroyed: () => win.isDestroyed(),
+    isMinimized: () => win.isMinimized(),
+    restore: () => win.restore(),
+    show: () => win.show(),
+    focus: () => win.focus(),
+    sendClick: (payload) => win.webContents.send("paseo:event:notification-click", payload),
+  };
 }
 
 /** Best-effort registration probe; support does not establish system authorization. */
@@ -93,9 +95,41 @@ export function ensureNotificationCenterRegistration(): void {
   }
 }
 
-export function registerNotificationHandlers(): void {
+export function registerNotificationHandlers(options: {
+  /** Reopens the main window when every window is closed (macOS keeps the app running). */
+  ensureWindow: () => Promise<void>;
+}): void {
+  const clickRouter = createNotificationClickRouter({
+    windowForWebContents: (id) => {
+      const contents = webContents.fromId(id);
+      return contents && !contents.isDestroyed()
+        ? toClickWindow(BrowserWindow.fromWebContents(contents))
+        : null;
+    },
+    anyWindow: () => toClickWindow(BrowserWindow.getAllWindows()[0]),
+    ensureWindow: options.ensureWindow,
+  });
+  const trackedRenderers = new Set<number>();
+
   ipcMain.handle("paseo:notification:isSupported", () => {
     return Notification.isSupported();
+  });
+
+  // The renderer's PushNotificationRouter calls this after it subscribes to clicks.
+  ipcMain.handle("woowtech:notification:takePendingClick", (event) => {
+    const contents = event.sender;
+    const id = contents.id;
+    if (!trackedRenderers.has(id)) {
+      trackedRenderers.add(id);
+      contents.on("did-start-navigation", (_event, _url, isSameDocument, isMainFrame) => {
+        if (isMainFrame && !isSameDocument) clickRouter.windowLoading(id);
+      });
+      contents.once("destroyed", () => {
+        trackedRenderers.delete(id);
+        clickRouter.removeWindow(id);
+      });
+    }
+    return clickRouter.rendererReady(id);
   });
 
   async function sendWithResult(
@@ -113,6 +147,7 @@ export function registerNotificationHandlers(): void {
 
     const body = toTrimmedString(rawInput?.body) ?? undefined;
     const data = toRecord(rawInput?.data);
+    const senderWebContentsId = event.sender.id;
     const icon = getNotificationIcon();
     const settings = await getDesktopSettingsStore().get();
     const notification = new Notification({
@@ -127,11 +162,9 @@ export function registerNotificationHandlers(): void {
     return showNotificationWithDelivery({
       notification,
       onClick: () => {
-        const win = focusSenderWindow(event.sender);
-        if (win && data && Object.keys(data).length > 0) {
-          const payload: NotificationClickPayload = { data };
-          win.webContents.send("paseo:event:notification-click", payload);
-        }
+        void clickRouter.routeClick(senderWebContentsId, data).catch((error) => {
+          console.warn("[Notifications] Click could not be routed", error);
+        });
       },
       release: () => {
         activeNotifications.delete(notification);

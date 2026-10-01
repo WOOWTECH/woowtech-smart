@@ -5,7 +5,7 @@ interface Target {
   id: string;
 }
 
-function harness() {
+function harness(options: { beforeCreate?: () => Promise<void> } = {}) {
   const windows: OwnedDesktopWindow<Target>[] = [];
   const launches: Array<{ initialRoute: string | null; restoreWindowState: boolean }> = [];
   const sent: Target[] = [];
@@ -14,6 +14,7 @@ function harness() {
   let closeWindow = (_id: number) => {};
   const owner = createDesktopWindowOwner<Target>({
     async create(input) {
+      await options.beforeCreate?.();
       launches.push({
         initialRoute: input.initialRoute,
         restoreWindowState: input.restoreWindowState,
@@ -71,6 +72,17 @@ describe("desktop window owner", () => {
     await h.owner.openOrFocusAgent({ id: "agent-7" });
     expect(h.launches).toHaveLength(1);
     expect(h.sent).toEqual([{ id: "agent-7" }]);
+  });
+
+  // woowtech smart: a notification click and macOS activation can both ask for the
+  // main window while every window is closed; they must share one launch.
+  it("shares one primary launch between concurrent activation restores", async () => {
+    // Electron creates the BrowserWindow only after async icon and window-state reads.
+    const h = harness({ beforeCreate: () => new Promise((resolve) => setTimeout(resolve, 0)) });
+    await Promise.all([h.owner.restoreWhenActivated(), h.owner.restoreWhenActivated()]);
+    expect(h.launches).toEqual([{ initialRoute: null, restoreWindowState: true }]);
+    await h.owner.restoreWhenActivated();
+    expect(h.launches).toHaveLength(1);
   });
 
   it("removes pending routing state when a window closes", async () => {

@@ -75,6 +75,9 @@ linux:
       to: bin/paseo
     - from: bin/paseo
       to: bin/woowtech-smart
+    # woowtech smart: notification banner and window icon (README §16 桌面通知).
+    - from: assets/icon.png
+      to: icon.png
   target:
     - AppImage
     - deb
@@ -101,6 +104,9 @@ win:
       to: bin/paseo.cmd
     - from: bin/paseo.cmd
       to: bin/woowtech-smart.cmd
+    # woowtech smart: notification toast icon (README §16 桌面通知).
+    - from: assets/icon.png
+      to: icon.png
   target:
     - target: nsis
       arch:

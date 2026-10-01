@@ -125,3 +125,70 @@ test("renderer owns its delivery result union and agrees with Electron without s
   assert.deepEqual(values(renderer), ["failed", "shown", "unconfirmed"]);
   assert.deepEqual(values(renderer), values(desktop));
 });
+
+test("notification icon ships with every packaged desktop and is resolved from resources", () => {
+  const main = source("packages/desktop/src/features/notifications.ts");
+  assert.doesNotMatch(main, /path\.resolve\(__dirname, "\.\.\/assets\//);
+  assert.match(
+    main,
+    /notificationIconCandidates\(\{\s*isPackaged: app.isPackaged,\s*resourcesPath: process.resourcesPath,\s*moduleDir: __dirname,?\s*\}\)/,
+  );
+  const builder = source("packages/desktop/electron-builder.yml");
+  for (const platform of ["mac", "linux", "win"]) {
+    const start = builder.search(new RegExp(`^${platform}:$`, "m"));
+    assert.notEqual(start, -1, platform);
+    const rest = builder.slice(builder.indexOf("\n", start) + 1);
+    const end = rest.search(/^\S/m);
+    const block = end === -1 ? rest : rest.slice(0, end);
+    assert.match(
+      block,
+      /- from: assets\/icon\.png\n\s+to: icon\.png/,
+      `${platform} ships icon.png`,
+    );
+  }
+});
+
+test("notification clicks reopen a window and wait for the renderer's PushNotificationRouter", () => {
+  const main = source("packages/desktop/src/features/notifications.ts");
+  assert.match(main, /createNotificationClickRouter\(\{/);
+  assert.match(main, /void clickRouter\.routeClick\(senderWebContentsId, data\)/);
+  assert.match(main, /win.webContents.send\("paseo:event:notification-click", payload\)/);
+  assert.match(main, /ipcMain.handle\("woowtech:notification:takePendingClick"/);
+  const desktopMain = source("packages/desktop/src/main.ts");
+  assert.match(
+    desktopMain,
+    /registerNotificationHandlers\(\{\s*ensureWindow: \(\) => desktopWindowOwner.restoreWhenActivated\(\),?\s*\}\)/,
+  );
+  const owner = source("packages/desktop/src/window/desktop-window-owner.ts");
+  assert.match(owner, /restoreCreation/);
+  const preload = source("packages/desktop/src/preload.ts");
+  assert.match(
+    preload,
+    /takePendingClick:[\s\S]*?ipcRenderer.invoke\("woowtech:notification:takePendingClick"\)/,
+  );
+  const host = source("packages/app/src/desktop/host.ts");
+  assert.match(host, /takePendingClick\?: \(\) => Promise</);
+  const layout = source("packages/app/src/app/_layout.tsx");
+  const router = layout.slice(layout.indexOf("function PushNotificationRouter()"));
+  const subscribe = router.indexOf("removeDesktopNotificationListener = unlisten;");
+  const take = router.indexOf("takePendingDesktopNotificationClick(");
+  assert.notEqual(subscribe, -1);
+  assert.ok(take > subscribe, "pending click is taken only after the click listener exists");
+  assert.match(router.slice(take), /openNotification\(data\)/);
+});
+
+test("Windows gets the electron-builder appId as AppUserModelID before the app is ready", () => {
+  const desktopMain = source("packages/desktop/src/main.ts");
+  const call = desktopMain.indexOf("applyWindowsAppUserModelId({");
+  assert.notEqual(call, -1);
+  assert.ok(call < desktopMain.indexOf("await app.whenReady()"));
+  assert.match(
+    desktopMain,
+    /applyWindowsAppUserModelId\(\{\s*platform: process.platform,\s*isPackaged: app.isPackaged,\s*execPath: process.execPath,\s*setAppUserModelId: \(id\) => app.setAppUserModelId\(id\),?\s*\}\)/,
+  );
+  const helper = source("packages/desktop/src/features/woowtech-app-user-model-id.ts");
+  const builder = source("packages/desktop/electron-builder.yml");
+  const appId = builder.match(/^appId: (\S+)$/m)?.[1];
+  assert.ok(appId);
+  assert.ok(helper.includes(`WOOWTECH_DESKTOP_APP_ID = "${appId}"`));
+});
