@@ -74,3 +74,21 @@ test("process trees are killed through the hidden taskkill wrapper", () => {
   );
   assert.match(wrapper, /\["\/pid", String\(pid\), "\/T", "\/F"\],\s*\{ windowsHide: true \}/);
 });
+
+test("the Windows app moves its daemon off a reserved default port (G12)", () => {
+  const read = (file) => readFileSync(join(root, file), "utf8");
+  const fallback = read("packages/desktop/src/daemon/woowtech-listen-fallback.ts");
+  const serverPort = read("packages/server/src/server/config.ts").match(
+    /const DEFAULT_PORT = (\d+);/,
+  )?.[1];
+  assert.ok(serverPort);
+  assert.ok(fallback.includes(`WOOWTECH_DAEMON_DEFAULT_PORT = ${serverPort};`));
+  const manager = read("packages/desktop/src/daemon/daemon-manager.ts");
+  assert.match(manager, /const listenOverride = await desktopDaemonListenOverride\(home\);/);
+  assert.match(manager, /\.\.\.\(listenOverride \? \{ PASEO_LISTEN: listenOverride \} : \{\}\)/);
+  const start = read("packages/app/src/runtime/daemon-start-service.ts");
+  assert.match(start, /if \(moved && localDaemonAddressMoved\(existing, moved\)\)/);
+  const supervisor = read("packages/server/scripts/supervisor.ts");
+  assert.match(supervisor, /crashBackoff.nextDelayMs\(Date.now\(\) - workerStartedAt\)/);
+  assert.match(supervisor, /if \(crashRestartTimer\) \{\s*clearTimeout\(crashRestartTimer\);/);
+});

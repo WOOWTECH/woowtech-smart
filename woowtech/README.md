@@ -1361,9 +1361,17 @@ daemon 不跳主控台視窗（G11）：
 - 開瀏覽器（`rundll32`）和開編輯器的程序不加 `windowsHide`：它會把對方要開的視窗一起藏起來。
 - 守門 `woowtech/windows-daemon.test.mjs`：daemon 新增的 `fork()`、直接 `spawn()` 沒有隱藏視窗，或有程式直接引用 tree-kill，就會失敗。
 
+daemon 的埠被保留或占用（G12）：
+
+- Windows 可能把預設埠 6770 劃進 Hyper-V 或 WSL 的保留範圍（`netsh interface ipv4 show excludedportrange protocol=tcp`），或被別的程式占用，內建 daemon 就啟動不了（上游 #1552、#3333，都還沒修）。
+- Windows 版啟動內建 daemon 前，先試著綁定 127.0.0.1:6770。遇到 EACCES 或 EADDRINUSE 時，依序試 16770、26770、36770、46770，都不行就用系統分配的埠，以 `PASEO_LISTEN` 傳給 daemon，並寫進 main.log（`default listen address unavailable, using a fallback`）。App 和 CLI 都從 daemon 的執行紀錄（`paseo.pid`）讀位址，會跟著換。政策在 `daemon/woowtech-listen-fallback.ts`。
+- 使用者自己設的位址不換：`PASEO_LISTEN`，或 config.json 裡不是預設值的 `daemon.listen`。新 home 的 config.json 本來就寫著 `127.0.0.1:6770`，所以這個值算預設。從終端機用 CLI 啟動的 daemon 不在這個範圍。
+- 保留範圍可能在重開機後改變，所以備用埠不寫回設定。存著 localhost 連線的主機遇到 daemon 換埠時，App 把新位址加進這台主機（`runtime/woowtech-local-daemon-address.ts`），主機會探測每個位址；只靠 relay 的主機照上游，不加 localhost。
+- worker 啟動後連續當掉時，supervisor 改成等 1、2、4 秒……最多 30 秒再重開；跑滿 60 秒就重新計算，第一次當掉仍然馬上重開（`utils/woowtech-crash-backoff.ts`）。所有平台都適用，只影響連續當掉的情況。
+
 驗證：
 
-- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機還沒做：Windows 要在 Windows 電腦上用打包版測；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）

@@ -36,6 +36,13 @@ import {
   closeLocalTransportSession,
 } from "./local-transport.js";
 import { createNodeEntrypointInvocation, resolveDaemonRunnerEntrypoint } from "./runtime-paths.js";
+import {
+  WOOWTECH_DAEMON_DEFAULT_PORT,
+  allocateTcpPort,
+  chooseDesktopDaemonListen,
+  probeTcpPort,
+  readConfiguredListen,
+} from "./woowtech-listen-fallback.js";
 import { runExternalCliJsonCommand, runExternalCliTextCommand } from "./cli/external.js";
 import {
   createDesktopSettingsCommandHandlers,
@@ -275,6 +282,29 @@ function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
   }
 }
 
+// woowtech smart: a free address when Windows reserved the default port (README §25, G12).
+async function desktopDaemonListenOverride(home: string): Promise<string | null> {
+  const decision = await chooseDesktopDaemonListen({
+    platform: process.platform,
+    envListen: process.env.PASEO_LISTEN,
+    configListen: readConfiguredListen(home),
+    defaultPort: WOOWTECH_DAEMON_DEFAULT_PORT,
+    probe: probeTcpPort,
+    allocatePort: allocateTcpPort,
+  });
+  if (decision.kind === "fallback") {
+    logDesktopDaemonLifecycle("default listen address unavailable, using a fallback", {
+      code: decision.code,
+      listen: decision.listen,
+    });
+    return decision.listen;
+  }
+  if (process.platform === "win32") {
+    logDesktopDaemonLifecycle("listen address check", { ...decision });
+  }
+  return null;
+}
+
 async function startDaemon(): Promise<DesktopDaemonStatus> {
   assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
 
@@ -306,12 +336,17 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     args: [],
     baseEnv: process.env,
   });
+  const listenOverride = await desktopDaemonListenOverride(home);
   try {
     await startDaemonInstance({
       home,
       timeoutMs: 30_000,
       ...invocation,
-      env: { ...invocation.env, PASEO_CLI: getBundledCliShimPath() },
+      env: {
+        ...invocation.env,
+        PASEO_CLI: getBundledCliShimPath(),
+        ...(listenOverride ? { PASEO_LISTEN: listenOverride } : {}),
+      },
       mode: "managed",
       desktopManaged: true,
       onAcquired: (instance) => {
