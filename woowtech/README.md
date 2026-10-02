@@ -1369,9 +1369,22 @@ daemon 的埠被保留或占用（G12）：
 - 保留範圍可能在重開機後改變，所以備用埠不寫回設定。存著 localhost 連線的主機遇到 daemon 換埠時，App 把新位址加進這台主機（`runtime/woowtech-local-daemon-address.ts`），主機會探測每個位址；只靠 relay 的主機照上游，不加 localhost。
 - worker 啟動後連續當掉時，supervisor 改成等 1、2、4 秒……最多 30 秒再重開；跑滿 60 秒就重新計算，第一次當掉仍然馬上重開（`utils/woowtech-crash-backoff.ts`）。所有平台都適用，只影響連續當掉的情況。
 
+測試專用建置（G26）：
+
+- 實測桌面通知和「關窗後推播」時，內建 daemon 要有 mock provider，才不用花真的 agent 額度。打包版的內建 daemon 固定是正式模式，沒有 mock。
+- 建置時加 `-c.extraMetadata.woowtechTestBuild=true`，例如：
+
+  ```bash
+  npm run build:desktop -- --win --x64 --publish never -c.extraMetadata.woowtechTestBuild=true -c.win.artifactName='woowtech-smart-TEST-Setup-${version}-${arch}.${ext}'
+  ```
+
+  electron-builder 把欄位寫進打包後的 package.json。打包版讀到它，啟動 daemon 和 CLI 時用開發模式，在 daemon 裡只會多出 mock provider（`features/woowtech-test-build.ts`、`daemon/node-entrypoint-launcher.ts`）。正式建置沒有這個欄位，環境變數也打不開。main.log 的 `[desktop] app startup` 會記 `testBuild`。
+
+- 守門：`.github/workflows/` 裡不能出現 `woowtechTestBuild`。
+
 驗證：
 
-- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機還沒做：Windows 要在 Windows 電腦上用打包版測；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）

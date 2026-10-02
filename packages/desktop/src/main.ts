@@ -111,6 +111,7 @@ import {
   stopDesktopManagedDaemonOnQuitIfNeeded,
 } from "./daemon/quit-lifecycle.js";
 import { runDesktopStartup } from "./desktop-startup.js";
+import { isWoowtechTestBuild } from "./daemon/runtime-paths.js";
 import { registerBrowserAutomationIpc } from "./features/browser-automation/ipc.js";
 import { BrowserKeyboard } from "./features/browser-keyboard/index.js";
 import { installAppUpdateOnQuit } from "./features/auto-updater.js";
@@ -159,6 +160,7 @@ log.info("[desktop] app startup", {
   platform: process.platform,
   arch: process.arch,
   isPackaged: app.isPackaged,
+  testBuild: isWoowtechTestBuild(),
 });
 
 interface AttachedBrowserInput {

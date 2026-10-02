@@ -2,7 +2,7 @@
 // protocol toasts, launch-link redaction and the macOS Notification Center relaunch. The
 // policies have unit tests in packages/desktop/src/features/woowtech-*.test.ts.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
 function source(path) {
@@ -77,4 +77,19 @@ test("macOS reopens the agent of a Notification Center click that relaunched the
   assert.notEqual(ready, -1);
   assert.ok(ready < main.indexOf("void runDesktopStartup({"), "registered before startup runs");
   assert.match(main.slice(ready), /agentTargetFromLaunchInfo\(launchInfo\)/);
+});
+
+test("only a packaged test build runs the built-in daemon with mock providers (G26)", () => {
+  const launcher = source("packages/desktop/src/daemon/node-entrypoint-launcher.ts");
+  assert.match(
+    launcher,
+    /const production = options\?\.isPackaged === true && options\.testBuild !== true;/,
+  );
+  const runtimePaths = source("packages/desktop/src/daemon/runtime-paths.ts");
+  assert.match(runtimePaths, /testBuild: isWoowtechTestBuild\(\),/);
+  assert.match(runtimePaths, /readWoowtechTestBuild\(\{\s*isPackaged: app.isPackaged,/);
+  // Release workflows must never package a test build.
+  for (const workflow of readdirSync(new URL("../.github/workflows/", import.meta.url))) {
+    assert.doesNotMatch(source(`.github/workflows/${workflow}`), /woowtechTestBuild/, workflow);
+  }
 });
