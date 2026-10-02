@@ -1354,9 +1354,16 @@ owner 的決定（2026-10-02）：Windows 版跟 Mac 版的定位和使用效果
 - 不是 agent 的 woowtech-smart: 連結（例如配對連結）只把現有視窗帶到前面，不多開視窗。冷啟動帶這種連結時一律當成開 App，不會被當成 CLI 參數執行（`hasPendingGuiLaunchRequest`）。
 - main.log 的觀察點：`[launch] agent link via …`（argv、second-instance、open-url、notification center、notification-click）、`[launch] agent link protocol registered`、`[tray] created`、`[notification] posting／show／failed／click／close`（帶 kind：protocol 或 default，以及 close 的 reason）。
 
+daemon 不跳主控台視窗（G11）：
+
+- daemon 自己沒有主控台。在 Windows 上，它啟動的主控台程式沒加 `windowsHide` 就會各自跳出一個黑色視窗。大部分指令走 `utils/spawn.ts`，本來就隱藏；這次補上 supervisor 的 worker、終端機 worker、外掛 runtime 和本地語音 worker。`fork()` 的型別沒有 `windowsHide`（執行時 Node 會照用），所以經 `utils/woowtech-hidden-fork.ts`。
+- tree-kill 1.2.2 在 Windows 透過 cmd.exe 執行 `taskkill`，不隱藏視窗。改由 `utils/woowtech-process-tree-kill.ts` 直接執行 System32 的 `taskkill.exe`，並隱藏視窗。跟 tree-kill 一樣強制結束整棵程序樹，不看 signal。
+- 開瀏覽器（`rundll32`）和開編輯器的程序不加 `windowsHide`：它會把對方要開的視窗一起藏起來。
+- 守門 `woowtech/windows-daemon.test.mjs`：daemon 新增的 `fork()`、直接 `spawn()` 沒有隱藏視窗，或有程式直接引用 tree-kill，就會失敗。
+
 驗證：
 
-- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`。守門：`woowtech/windows-desktop.test.mjs`。
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機還沒做：Windows 要在 Windows 電腦上用打包版測；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）

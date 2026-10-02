@@ -5,6 +5,7 @@ import {
   type RotatingFileStream,
 } from "rotating-file-stream";
 import { signalProcessTree } from "../src/utils/tree-kill.js";
+import { withHiddenWindow } from "../src/utils/woowtech-hidden-fork.js";
 
 const WORKER_HEARTBEAT_INTERVAL_MS = 1_000;
 const WORKER_TERMINATION_GRACE_MS = 10_000;
@@ -279,13 +280,18 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
       child = spawn(spawnSpec.command, spawnSpec.args, {
         stdio: ["inherit", "pipe", "pipe", "ipc"],
         env: spawnSpec.env ?? workerEnv,
+        windowsHide: true,
       });
     } else {
-      child = fork(workerEntry, workerArgs, {
-        stdio: ["inherit", "pipe", "pipe", "ipc"],
-        env: workerEnv,
-        execArgv: workerExecArgv,
-      });
+      child = fork(
+        workerEntry,
+        workerArgs,
+        withHiddenWindow({
+          stdio: ["inherit", "pipe", "pipe", "ipc"],
+          env: workerEnv,
+          execArgv: workerExecArgv,
+        }),
+      );
     }
 
     const currentChild = child;

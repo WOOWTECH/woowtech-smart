@@ -1,4 +1,4 @@
-import treeKill from "tree-kill";
+import { killProcessTree } from "./woowtech-process-tree-kill.js";
 
 export interface TreeKillTarget {
   pid?: number;
@@ -53,25 +53,24 @@ export async function terminateWithTreeKill(
     : "kill-timeout";
 }
 
-export function signalProcessTree(child: TreeKillTarget, signal: NodeJS.Signals): Promise<void> {
+export async function signalProcessTree(
+  child: TreeKillTarget,
+  signal: NodeJS.Signals,
+): Promise<void> {
   if (isProcessExited(child)) {
-    return Promise.resolve();
+    return;
   }
 
   const pid = child.pid;
   if (typeof pid !== "number" || pid <= 0) {
     signalDirectChild(child, signal);
-    return Promise.resolve();
+    return;
   }
 
-  return new Promise((resolve) => {
-    treeKill(pid, signal, (error) => {
-      if (error) {
-        signalDirectChild(child, signal);
-      }
-      resolve();
-    });
-  });
+  const error = await killProcessTree(pid, signal);
+  if (error) {
+    signalDirectChild(child, signal);
+  }
 }
 
 function signalDirectChild(child: TreeKillTarget, signal: NodeJS.Signals): void {

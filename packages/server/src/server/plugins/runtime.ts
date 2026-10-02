@@ -1,6 +1,7 @@
 import type { PluginBeforeRequests, PluginLifecycleEvents } from "@getpaseo/plugin/server";
 import { validateBeforeRequest, validateBeforeResult } from "./lifecycle/index.js";
 import { fork } from "node:child_process";
+import { withHiddenWindow } from "../../utils/woowtech-hidden-fork.js";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -221,11 +222,15 @@ function resolveWorkerExecArgv(): string[] {
 }
 
 function spawnPluginChild(): PluginChild {
-  return fork(fileURLToPath(resolveWorkerUrl()), [], {
-    execArgv: resolveWorkerExecArgv(),
-    serialization: "advanced",
-    stdio: ["ignore", "pipe", "pipe", "ipc"],
-  }) as PluginChild;
+  return fork(
+    fileURLToPath(resolveWorkerUrl()),
+    [],
+    withHiddenWindow({
+      execArgv: resolveWorkerExecArgv(),
+      serialization: "advanced",
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    }),
+  ) as PluginChild;
 }
 
 function terminatePluginChild(child: PluginChild): void {
