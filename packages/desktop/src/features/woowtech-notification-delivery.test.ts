@@ -60,6 +60,56 @@ describe("woowtech notification delivery", () => {
     expect(f.notification.eventNames()).toEqual([]);
   });
 
+  it("keeps a Windows toast that timed out into Action Center clickable", async () => {
+    const f = fixture();
+    const result = showNotificationWithDelivery({ ...f.input, keepAfterTimedOutClose: true });
+    f.notification.emit("show");
+    f.notification.emit("close", { reason: "timedOut" });
+    expect(await result).toBe("shown");
+    expect(f.releases()).toBe(0);
+    expect(f.notification.listenerCount("click")).toBe(1);
+    f.notification.emit("click");
+    expect(f.clicks()).toBe(1);
+    expect(f.releases()).toBe(1);
+    expect(f.notification.eventNames()).toEqual([]);
+  });
+
+  it("releases a Windows toast the user dismissed or the app hid", async () => {
+    for (const reason of ["userCanceled", "applicationHidden", undefined]) {
+      const f = fixture();
+      const result = showNotificationWithDelivery({ ...f.input, keepAfterTimedOutClose: true });
+      f.notification.emit("show");
+      f.notification.emit("close", reason ? { reason } : undefined);
+      expect(await result).toBe("shown");
+      expect(f.releases()).toBe(1);
+      expect(f.notification.eventNames()).toEqual([]);
+    }
+  });
+
+  it("releases on a timed-out close where Action Center does not apply", async () => {
+    const f = fixture();
+    const result = showNotificationWithDelivery(f.input);
+    f.notification.emit("show");
+    f.notification.emit("close", { reason: "timedOut" });
+    expect(await result).toBe("shown");
+    expect(f.releases()).toBe(1);
+  });
+
+  it("traces each native event once, with the close reason", async () => {
+    const f = fixture();
+    const events: string[] = [];
+    const result = showNotificationWithDelivery({
+      ...f.input,
+      keepAfterTimedOutClose: true,
+      trace: (event, reason) => events.push(reason ? `${event}:${reason}` : event),
+    });
+    f.notification.emit("show");
+    f.notification.emit("close", { reason: "timedOut" });
+    f.notification.emit("click");
+    await result;
+    expect(events).toEqual(["show", "close:timedOut", "click"]);
+  });
+
   it("releases shown notifications on close or subsequent native failure", async () => {
     for (const event of ["close", "failed"]) {
       const f = fixture();

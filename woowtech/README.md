@@ -2,7 +2,7 @@
 
 這個 repo 是 [getpaseo/paseo](https://github.com/getpaseo/paseo)（Apache-2.0）的商用 fork。
 運作方式跟 Home Assistant Core 加 HA App 一樣：使用者在自己的電腦上跑 daemon，App 只連自己的 daemon。
-v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
+v1 平台是 iOS、Android、macOS 桌面版和 CLI。Windows 桌面版照 Mac 版的行為移植中（第 25 節），還沒在 Windows 實機驗證。
 
 `woowtech/` 放 fork 專屬的東西。上游的檔案盡量不動，之後合併上游才不會一直衝突。
 
@@ -791,9 +791,9 @@ node --test woowtech/*.test.mjs
 - Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；翻譯函式存入 ref 並在 render 同步更新，通知 callback 只依賴 `serverId`，避免切換語言使 `observeEvents` 拆掉再訂閱；送出時仍讀最新翻譯。
 - 通知圖示：上游從 `dist/features` 找 `../assets`，指到從來不會產生的 `dist/assets`，所以圖示一直是空的（macOS 仍用 App 圖示，Windows 與 Linux 橫幅沒有圖示）。改由 `features/woowtech-notification-icon.ts` 決定：打包版讀 resources 的 `icon.png`，開發版讀 `packages/desktop/assets`。`electron-builder.yml` 原本只有 mac 複製 `icon.png`，現在 linux 與 win 也複製；main.ts 打包版的視窗圖示本來就找這個檔，因此 Linux 視窗，以及 Windows 打包版（之前 `icon.ico`、`icon.png` 都沒有出貨）的視窗也會有圖示。macOS 不給通知圖示（`notificationIconCandidates` 對 darwin 回空清單）：橫幅本來就顯示 App 圖示，Electron 在 macOS 會把另外給的圖示畫成右側的內容圖片，等於多出第二個圖示，所以 macOS 維持修正前的外觀。
 - 沒有視窗時點通知：macOS 關掉所有視窗後 App 仍在，上游點擊只送給既有視窗，所以沒反應。`features/woowtech-notification-click.ts` 先找發出通知的視窗，再找任何視窗；都沒有時呼叫 `desktopWindowOwner.restoreWhenActivated()` 重開主視窗。目標先排隊，等該視窗 renderer 的 `PushNotificationRouter` 訂閱點擊後，以 `woowtech:notification:takePendingClick` 取走，再走原本的 `openNotification`（agent 或 `buildNotificationRoute`）。視窗重新載入時回到未就緒，關閉時丟棄。macOS 的 activate 與點擊可能同時要求視窗，所以 `restoreWhenActivated` 共用同一次開窗。上游接點：`notifications.ts`、`main.ts`、`preload.ts`、`window/desktop-window-owner.ts`、App 的 `desktop/host.ts` 與 `app/_layout.tsx`（取件放 `utils/woowtech-notification-click.ts`）。
-- App 結束後從通知中心點舊通知（冷啟動、macOS `launchInfo`／`getHistory`、Windows `handleActivation`）仍不導頁：通知資料只存在記憶體，要支援得另存 id 對應資料，且只能在簽章產物上驗證，先不做。
-- Windows：`features/woowtech-app-user-model-id.ts` 在 `app.setName` 後、whenReady 前呼叫 `app.setAppUserModelId`。打包版用 `io.woowtech.smart.desktop`（與 `electron-builder.yml` 的 appId 一致，NSIS 捷徑用的就是它，守門核對），未打包用 `process.execPath`；macOS 與 Linux 不做事。
-- 合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，以及 desktop 的 `woowtech-notification-{icon,click}.test.ts`、`woowtech-app-user-model-id.test.ts`、`window/desktop-window-owner.test.ts` 與 App 的 `utils/woowtech-notification-click.test.ts`。
+- App 結束後從通知中心點舊通知（冷啟動）：macOS 從 `ready` 的 `launchInfo` 讀回通知 id，Windows 用協定 toast，都開到那個 agent（第 25 節）。App 開著時點上一次執行留下的舊通知，macOS 仍只把 App 帶到前面。
+- Windows：`features/woowtech-app-user-model-id.ts` 在 `app.setName` 後、whenReady 前呼叫 `app.setAppUserModelId` 和 `app.setToastActivatorCLSID`。打包版用 `io.woowtech.smart.desktop`（與 `electron-builder.yml` 的 appId 一致，NSIS 捷徑用的就是它，守門核對），未打包用 `io.woowtech.smart.desktop.dev`（第 25 節）；macOS 與 Linux 不做事。
+- 合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs woowtech/windows-desktop.test.mjs`，以及 desktop 的 `woowtech-notification-{icon,click,delivery}.test.ts`、`woowtech-app-user-model-id.test.ts`、`window/desktop-window-owner.test.ts`、第 25 節列的測試與 App 的 `utils/woowtech-notification-click.test.ts`。
 - 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。圖示、關窗後點擊與 Windows AppUserModelID 也只有單元測試與守門，實機驗證待做：macOS 要簽章的打包版；Windows 與 Linux 的圖示和點擊要各自的打包版與機器。
 
 ### 17. daemon 自己的訊息用 woowtech smart
@@ -1324,6 +1324,40 @@ node --test woowtech/*.test.mjs
   - GitHub 標誌的路徑資料來源不明（上游 `1a01e836b` 加入，沒寫出處），沒有核對是不是官方 Invertocat 原檔；研究的條件是官方原檔、不改形。要換官方檔，由能下載品牌檔的步驟處理。
   - Codeberg 官方 logo 包是藍色和白色兩版；淺色主題畫黑色是照研究「黑或白」的條件。
   - App 沒有開放原始碼授權頁：上游 Paseo（Apache-2.0）和打包進去的 npm 套件的授權聲明，手機版和桌面版都沒有地方顯示。
+
+### 25. Windows 桌面版：跟 Mac 版一樣
+
+owner 的決定（2026-10-02）：Windows 版跟 Mac 版的定位和使用效果一樣，只是換作業系統實作。缺口編號（G1–G27）沿用 Windows 規劃書。
+
+關窗與系統匣（G1）：
+
+- 關掉最後一個視窗，App 留在通知區域（系統匣），跟 macOS 留在 Dock 一樣：daemon 和 agent 繼續跑；沒有畫面就不算在場，agent 完成時推到手機。
+- 點系統匣圖示，或從開始功能表再開一次：有視窗就叫到前面，沒有才開主視窗（`desktopWindowOwner.showOrOpenPrimary`）。上游在 Windows 再開一次會多開一個視窗。帶專案路徑的重開（CLI `woowtech-smart <path>`）照舊開新視窗；Linux 維持上游。
+- 系統匣選單的「結束」等於 Cmd+Q，daemon 要不要一起停照 `keepRunningAfterQuit`。沒有開機自動啟動，跟 Mac 一樣。
+- 選單文字看系統語言：繁中是「開啟 woowtech smart」「結束」，其他（含簡中）用英文。主程序讀不到 App 裡的語言設定。
+- 建不出系統匣圖示（找不到圖示檔）時，關窗照上游結束 App，免得留下看不到的程序。圖示是 resources 的 `icon.ico`（16–256 px），由 `electron-builder.yml` 的 win `extraResources` 出貨。
+- 政策在 `features/woowtech-windows-shell.ts`，Electron 接點在 `features/woowtech-windows-tray.ts`。上游接點：`main.ts`（`window-all-closed`、`second-instance`、bootstrap）、`window/desktop-window-owner.ts`。
+
+點通知開到 agent（G2–G5，加上 macOS 的冷啟動）：
+
+- Windows 打包版每次啟動呼叫 `app.setAsDefaultProtocolClient("woowtech-smart")`，寫在 HKCU。electron-builder 的 NSIS 範本只登記檔案關聯，不登記協定。開發版不登記，免得把協定指到開發用的 Electron。
+- Windows 打包版的 agent 通知用自己組的 `toastXml`（`features/woowtech-windows-toast.ts`）：`activationType="protocol"`，`launch` 是 `woowtech-smart://h/<server>/agent/<agent>`。點通知時 Windows 執行 `"woowtech smart.exe" "<連結>"`：App 在跑（含縮在系統匣）走 `second-instance`，沒在跑走 argv 冷啟動，兩條都是原本的 agent 連結處理。通知滑進通知中心、App 結束過、電腦重開過都有效，不依賴記憶體裡的通知物件。協定登記失敗、開發版、終端機通知（沒有 agentId）仍用 Electron 預設的 toast。
+- App 開著時，協定 toast 也可能觸發 Electron 的 `click`。兩條路都走 `openOrFocusAgent`，導到同一個 agent 沒有副作用。
+- `toastXml` 會取代 title、body、icon 和 silent，所以 XML 自己帶文字、圖示（`appLogoOverride`）和靜音。XML 1.0 不允許的字元先拿掉，不然整則通知會被拒。
+- Windows 的 toast 在橫幅結束、滑進通知中心時觸發 `close`（reason 是 `timedOut`），之後還能點。`keepAfterTimedOutClose` 讓它保留監聽和引用，點擊或使用者關掉時才釋放。引用最多 50 則，超過先丟最舊的；丟掉的協定 toast 仍能開到 agent。
+- AUMID 與 toast activator：打包版用 `io.woowtech.smart.desktop` 加固定的 CLSID；開發版改用 `io.woowtech.smart.desktop.dev` 和另一個固定 CLSID（原本是執行檔路徑，含空白和反斜線）。Electron 40.5 起，第一次發通知時會自己寫開始功能表捷徑和 HKCU 的 CLSID，沒固定的話每次執行都換。兩組分開，開發用的 Electron 才不會改寫安裝版的登記。
+- macOS：agent 通知的 id 是 `woowtech-agent:<uuid>:<agent 連結>`（`features/woowtech-launch-links.ts`）。App 結束後從通知中心點舊通知，macOS 重開 App，並在 `ready` 事件的 `launchInfo` 帶回這個 id；主程序在 bootstrap 開第一個視窗前讀出 agent。uuid 讓同一個 agent 的兩則通知不會互相取代。
+
+連結與 log（G24、G25）：
+
+- 第二個實例的命令列，以及 `PASEO_DEBUG` 的 argv，寫進 log 前先遮蔽：woowtech-smart: 連結只留 `?`、`#` 之前的部分，其他參數從 `offer=` 起拿掉。協定登記後，配對連結（第 19 節）也會出現在命令列，不遮蔽的話密鑰會留在 main.log。
+- 不是 agent 的 woowtech-smart: 連結（例如配對連結）只把現有視窗帶到前面，不多開視窗。冷啟動帶這種連結時一律當成開 App，不會被當成 CLI 參數執行（`hasPendingGuiLaunchRequest`）。
+- main.log 的觀察點：`[launch] agent link via …`（argv、second-instance、open-url、notification center、notification-click）、`[launch] agent link protocol registered`、`[tray] created`、`[notification] posting／show／failed／click／close`（帶 kind：protocol 或 default，以及 close 的 reason）。
+
+驗證：
+
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`。守門：`woowtech/windows-desktop.test.mjs`。
+- 實機還沒做：Windows 要在 Windows 電腦上用打包版測；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 

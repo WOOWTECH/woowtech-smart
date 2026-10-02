@@ -160,7 +160,7 @@ test("notification clicks reopen a window and wait for the renderer's PushNotifi
   const desktopMain = source("packages/desktop/src/main.ts");
   assert.match(
     desktopMain,
-    /registerNotificationHandlers\(\{\s*ensureWindow: \(\) => desktopWindowOwner.restoreWhenActivated\(\),?\s*\}\)/,
+    /registerNotificationHandlers\(\{\s*ensureWindow: \(\) => desktopWindowOwner.restoreWhenActivated\(\),\s*openAgent: receiveAgentTarget,\s*protocolRegistered: \(\) => agentLinkProtocolRegistered,?\s*\}\)/,
   );
   const owner = source("packages/desktop/src/window/desktop-window-owner.ts");
   assert.match(owner, /restoreCreation/);
@@ -187,7 +187,7 @@ test("Windows gets the electron-builder appId as AppUserModelID before the app i
   assert.ok(call < desktopMain.indexOf("await app.whenReady()"));
   assert.match(
     desktopMain,
-    /applyWindowsAppUserModelId\(\{\s*platform: process.platform,\s*isPackaged: app.isPackaged,\s*execPath: process.execPath,\s*setAppUserModelId: \(id\) => app.setAppUserModelId\(id\),?\s*\}\)/,
+    /applyWindowsAppUserModelId\(\{\s*platform: process.platform,\s*isPackaged: app.isPackaged,\s*setAppUserModelId: \(id\) => app.setAppUserModelId\(id\),\s*setToastActivatorCLSID: \(clsid\) => app.setToastActivatorCLSID\(clsid\),?\s*\}\)/,
   );
   const helper = source("packages/desktop/src/features/woowtech-app-user-model-id.ts");
   const builder = source("packages/desktop/electron-builder.yml");

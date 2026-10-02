@@ -1,0 +1,117 @@
+import { describe, expect, it } from "vitest";
+import {
+  quitWhenAllWindowsClosed,
+  registerAgentLinkProtocol,
+  relaunchAction,
+  trayLabels,
+} from "./woowtech-windows-shell.js";
+
+describe("agent link protocol registration", () => {
+  it("registers only from the packaged Windows app", () => {
+    const calls: string[] = [];
+    const set = (scheme: string) => {
+      calls.push(scheme);
+      return true;
+    };
+    expect(
+      registerAgentLinkProtocol({
+        platform: "win32",
+        isPackaged: true,
+        scheme: "woowtech-smart",
+        setAsDefaultProtocolClient: set,
+      }),
+    ).toBe(true);
+    expect(calls).toEqual(["woowtech-smart"]);
+    for (const input of [
+      { platform: "win32" as const, isPackaged: false },
+      { platform: "darwin" as const, isPackaged: true },
+      { platform: "linux" as const, isPackaged: true },
+    ]) {
+      expect(
+        registerAgentLinkProtocol({
+          ...input,
+          scheme: "woowtech-smart",
+          setAsDefaultProtocolClient: set,
+        }),
+      ).toBe(false);
+    }
+    expect(calls).toEqual(["woowtech-smart"]);
+  });
+
+  it("reports a failed or throwing registration as not registered", () => {
+    const base = { platform: "win32" as const, isPackaged: true, scheme: "woowtech-smart" };
+    expect(registerAgentLinkProtocol({ ...base, setAsDefaultProtocolClient: () => false })).toBe(
+      false,
+    );
+    expect(
+      registerAgentLinkProtocol({
+        ...base,
+        setAsDefaultProtocolClient: () => {
+          throw new Error("registry denied");
+        },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("tray labels", () => {
+  it("uses Traditional Chinese for Traditional Chinese systems", () => {
+    for (const language of ["zh-Hant-TW", "zh-TW", "zh-HK", "zh-Hant"]) {
+      expect(trayLabels({ appName: "woowtech smart", preferredLanguages: [language] })).toEqual({
+        tooltip: "woowtech smart",
+        open: "開啟 woowtech smart",
+        quit: "結束",
+      });
+    }
+  });
+
+  it("keeps English elsewhere, Simplified Chinese included", () => {
+    for (const languages of [["en-US"], ["zh-Hans-CN"], ["zh-CN"], ["ja-JP", "zh-TW"], []]) {
+      expect(trayLabels({ appName: "woowtech smart", preferredLanguages: languages })).toEqual({
+        tooltip: "woowtech smart",
+        open: "Open woowtech smart",
+        quit: "Quit",
+      });
+    }
+  });
+});
+
+describe("closing the last window", () => {
+  it("keeps the app running on macOS and in the Windows tray", () => {
+    expect(quitWhenAllWindowsClosed({ platform: "darwin", trayActive: false })).toBe(false);
+    expect(quitWhenAllWindowsClosed({ platform: "win32", trayActive: true })).toBe(false);
+  });
+
+  it("quits when Windows has no tray icon and on Linux", () => {
+    expect(quitWhenAllWindowsClosed({ platform: "win32", trayActive: false })).toBe(true);
+    expect(quitWhenAllWindowsClosed({ platform: "linux", trayActive: true })).toBe(true);
+  });
+});
+
+describe("second launch", () => {
+  it("brings back the existing window on Windows, like a Dock click", () => {
+    expect(relaunchAction({ platform: "win32", hasAppLink: false, openProjectPath: null })).toBe(
+      "focus",
+    );
+  });
+
+  it("opens a window for a project path everywhere", () => {
+    for (const platform of ["win32", "linux"] as const) {
+      expect(relaunchAction({ platform, hasAppLink: false, openProjectPath: "D:\\repo" })).toBe(
+        "open-window",
+      );
+    }
+  });
+
+  it("only focuses for non-agent app links such as pairing links", () => {
+    for (const platform of ["win32", "linux"] as const) {
+      expect(relaunchAction({ platform, hasAppLink: true, openProjectPath: null })).toBe("focus");
+    }
+  });
+
+  it("keeps upstream's new window on Linux", () => {
+    expect(relaunchAction({ platform: "linux", hasAppLink: false, openProjectPath: null })).toBe(
+      "open-window",
+    );
+  });
+});

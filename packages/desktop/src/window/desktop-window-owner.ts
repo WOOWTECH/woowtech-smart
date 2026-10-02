@@ -32,6 +32,8 @@ export interface DesktopWindowOwner<TAgentTarget> {
   openAdditional(input?: { pendingProjectPath?: string | null }): Promise<void>;
   openOrFocusAgent(target: TAgentTarget): Promise<void>;
   restoreWhenActivated(): Promise<void>;
+  /** woowtech smart: tray click or a second launch on Windows, like a Dock click on macOS. */
+  showOrOpenPrimary(): Promise<void>;
   takePendingProject(webContentsId: number): string | null;
 }
 
@@ -100,6 +102,18 @@ export function createDesktopWindowOwner<TAgentTarget>(
         restoreCreation = null;
       });
       return restoreCreation;
+    },
+    async showOrOpenPrimary() {
+      const windows = port.windows().filter((candidate) => !candidate.isDestroyed());
+      const window =
+        port.focusedWindow() ?? windows.find((candidate) => candidate.isVisible()) ?? windows[0];
+      if (!window || window.isDestroyed()) {
+        await owner.restoreWhenActivated();
+        return;
+      }
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
     },
     takePendingProject: (webContentsId) => pendingProjects.take(webContentsId),
   };

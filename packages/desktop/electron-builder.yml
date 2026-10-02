@@ -107,6 +107,9 @@ win:
     # woowtech smart: notification toast icon (README §16 桌面通知).
     - from: assets/icon.png
       to: icon.png
+    # woowtech smart: notification-area and window icon, 16–256 px (README §25).
+    - from: assets/icon.ico
+      to: icon.ico
   target:
     - target: nsis
       arch:
