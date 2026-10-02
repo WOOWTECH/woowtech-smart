@@ -1382,6 +1382,13 @@ daemon 的埠被保留或占用（G12）：
 
 - 守門：`.github/workflows/` 裡不能出現 `woowtechTestBuild`。
 
+Electron 與 electron-builder（G7、G8）：
+
+- Electron 44.2.0 升到 44.5.1：44.4.1 修了通知物件的生命週期問題。在 macOS 用 dev 模式測通知時，換版後要用 Apple Development 身分重新簽 `node_modules/electron/dist/Electron.app`（`codesign --force --deep --sign <身分>`），未簽的 Electron 發通知會失敗。
+- electron-builder 26.8.1 升到 26.17.0：26.8.1 的 NSIS 首次安裝可能當掉、更新時會殺掉 daemon、遇到中文使用者名稱可能卡住（上游 PR #5481、#5663）。26.15.0–26.15.5 的安裝檔是壞的，不要用；npm 的 `latest` 標籤目前停在 26.15.3。
+- 新版的相依套件不再提升到根目錄，`app-builder-lib` 留在 `packages/desktop/node_modules`，守門 `claude-sdk.test.mjs` 改從 desktop 解析。
+- lockfile 只收這次升級的變動。這台的 npm 10.9.9 重新整理 lockfile 時會順手刪掉 35 個選用的 peer（`@react-native/metro-config` 一系），跟升級無關，沒有收進來。
+
 驗證：
 
 - 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。

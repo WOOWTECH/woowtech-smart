@@ -1,8 +1,10 @@
 // node --test woowtech/claude-sdk.test.mjs
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import { sdkName, runtimePath, sdkValueImports } from "./claude-sdk-imports.mjs";
 import { repoRoot, shippedSourceFiles } from "./shipped-sources.mjs";
 
@@ -78,8 +80,16 @@ test("shipped sources have no SDK values except the loader's literal dynamic imp
 
 test("electron-builder's production collector includes undici and excludes the proprietary SDK", async () => {
   // Pure dependency collection only: no app build, package manager command or asar creation.
-  const { TraversalNodeModulesCollector } =
-    await import("app-builder-lib/out/node-module-collector/traversalNodeModulesCollector.js");
+  // electron-builder is a desktop devDependency; since 26.17 npm keeps its app-builder-lib under
+  // packages/desktop/node_modules instead of hoisting it.
+  const desktopRequire = createRequire(path.join(repoRoot, "packages/desktop/package.json"));
+  const { TraversalNodeModulesCollector } = await import(
+    pathToFileURL(
+      desktopRequire.resolve(
+        "app-builder-lib/out/node-module-collector/traversalNodeModulesCollector.js",
+      ),
+    ).href
+  );
   const collector = new TraversalNodeModulesCollector(path.join(repoRoot, "packages/desktop"), {
     getTempFile() {
       throw new Error("Dependency check must not invoke a package manager");
