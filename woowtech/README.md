@@ -1408,6 +1408,7 @@ App 開著時才裝的工具（G29）：
 - App 和 daemon 一直用啟動時 Explorer 給的 PATH。App 常駐系統匣（G1），這個 PATH 可能是好幾天前的；安裝程式把新資料夾寫進登錄裡的 PATH（npm、WinGet 的 Links、GitHub CLI、Claude 的 `.local\bin`），App 看不到。macOS 只在啟動時讀一次登入 shell 的 PATH（`login-shell-env.ts`）。
 - daemon 在 Windows 找程式（`findExecutable`）找不到時，用 Windows PowerShell 讀一次登錄裡電腦和使用者的 PATH，把目前沒有的資料夾接在後面，再找一次（`utils/woowtech-windows-registry-path.ts`）。不刪、不重排；還含 `%變數%` 的項目跳過。
 - 最多每 10 秒讀一次，同時發生的查詢共用一次讀取。讀不到（PowerShell 被擋、逾時）只記一次 log，PATH 不變。改的是 daemon 自己的 `process.env`，之後啟動的 agent 和終端機都會繼承。
+- 桌面 App 在 Windows 不讀登入 shell（Windows 沒有），main.log 只記一行 `[login-shell-env] skipped on Windows`，不再每次啟動都記一筆失敗。
 - 找到新資料夾時 log 一行 `[woowtech] PATH refreshed from registry`。所以裝完 CLI 後，到「供應商」按重新整理就找得到，不用從系統匣結束 App。
 - 守門：`woowtech/windows-daemon.test.mjs`。實機：WT-6。
 
@@ -1452,7 +1453,7 @@ daemon 的埠被保留或占用（G12）：
   npm run build:desktop -- --win --x64 --publish never -c.extraMetadata.woowtechTestBuild=true -c.win.artifactName='woowtech-smart-TEST-Setup-${version}-${arch}.${ext}'
   ```
 
-  electron-builder 把欄位寫進打包後的 package.json。打包版讀到它，啟動 daemon 和 CLI 時用開發模式，在 daemon 裡只會多出 mock provider（`features/woowtech-test-build.ts`、`daemon/node-entrypoint-launcher.ts`）。正式建置沒有這個欄位，環境變數也打不開。main.log 的 `[desktop] app startup` 會記 `testBuild`。
+  electron-builder 把欄位寫進打包後的 package.json。打包版讀到它，啟動 daemon 和 CLI 時用開發模式，在 daemon 裡只會多出 mock provider（`features/woowtech-test-build.ts`、`daemon/node-entrypoint-launcher.ts`）。正式建置沒有這個欄位，環境變數也打不開。main.log 的 `[desktop] app startup` 會記 `testBuild`。Windows 的系統匣提示寫「woowtech smart（測試版）」（英文系統是 `(test build)`），裝好後也分得出來。
 
 - 守門：`.github/workflows/` 裡不能出現 `woowtechTestBuild`。
 

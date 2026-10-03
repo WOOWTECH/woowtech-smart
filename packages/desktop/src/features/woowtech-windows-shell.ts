@@ -50,12 +50,16 @@ const TRADITIONAL_CHINESE = /^zh-(hant|tw|hk|mo)(-|$)/;
 export function trayLabels(input: {
   appName: string;
   preferredLanguages: readonly string[];
+  /** A test build (G26) says so in the tooltip, so testers can tell it from a release. */
+  testBuild?: boolean;
 }): TrayLabels {
   const language = (input.preferredLanguages[0] ?? "").toLowerCase();
   if (TRADITIONAL_CHINESE.test(language)) {
-    return { tooltip: input.appName, open: `開啟 ${input.appName}`, quit: "結束" };
+    const tooltip = input.testBuild ? `${input.appName}（測試版）` : input.appName;
+    return { tooltip, open: `開啟 ${input.appName}`, quit: "結束" };
   }
-  return { tooltip: input.appName, open: `Open ${input.appName}`, quit: "Quit" };
+  const tooltip = input.testBuild ? `${input.appName} (test build)` : input.appName;
+  return { tooltip, open: `Open ${input.appName}`, quit: "Quit" };
 }
 
 export interface TrayHintText {

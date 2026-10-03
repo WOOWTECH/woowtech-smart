@@ -132,6 +132,17 @@ describe("tray labels", () => {
       });
     }
   });
+
+  it("marks a test build in the tooltip", () => {
+    expect(
+      trayLabels({ appName: "woowtech smart", preferredLanguages: ["zh-TW"], testBuild: true })
+        .tooltip,
+    ).toBe("woowtech smart（測試版）");
+    expect(
+      trayLabels({ appName: "woowtech smart", preferredLanguages: ["en-US"], testBuild: true })
+        .tooltip,
+    ).toBe("woowtech smart (test build)");
+  });
 });
 
 describe("first-close hint", () => {

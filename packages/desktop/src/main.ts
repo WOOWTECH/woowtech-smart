@@ -1051,6 +1051,7 @@ async function bootstrap(): Promise<void> {
       labels: trayLabels({
         appName: APP_NAME,
         preferredLanguages: app.getPreferredSystemLanguages(),
+        testBuild: isWoowtechTestBuild(),
       }),
       onOpen: () => {
         void desktopWindowOwner.showOrOpenPrimary().catch((error) => {
