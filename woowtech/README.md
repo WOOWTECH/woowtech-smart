@@ -1458,7 +1458,7 @@ daemon 的埠被保留或占用（G12）：
 - 使用者資料保留，跟把 Mac 版丟進垃圾桶一樣：`%APPDATA%\woowtech smart`（設定、log）和 `%USERPROFILE%\.woowtech-smart`（agent、配對金鑰、可能有沒 commit 內容的 worktree）。`.local\bin` 和使用者 PATH 也不動，Claude Code 的 `claude.exe` 裝在那裡。要連設定和 log 一起刪，用 `"Uninstall woowtech smart.exe" /S --delete-app-data`；`.woowtech-smart` 仍會保留。
 - 每次更新和重新安裝，新的安裝程式都會帶 `--updated` 執行舊版的解除安裝程式。清理全部包在 `${ifNot} ${isUpdated}` 裡，所以更新時什麼都不刪。這段程式會留在已安裝的版本裡，直到那一版更新，所以只做盡力而為：不中止、不跳對話框。
 - electron-builder 自動帶入 `build/installer.nsh`，用 `makensis -WX` 編譯兩次（解除安裝程式、安裝程式），任何警告都會讓建置失敗，所以裡面不宣告變數、不寫函式。不要改成完整的 `nsis.script`：那樣 electron-builder 就不簽解除安裝程式。根目錄的 `.gitignore` 忽略 `build/`，這個檔案（跟 entitlements 一樣）是用 `git add -f` 加進來的。
-- 在 Mac 上建 Windows 安裝檔可以確認 NSIS 編譯得過，但產出的解除安裝程式是壞的（electron-builder #10258），不能拿去測或發佈。
+- 在 Mac 上建 Windows 安裝檔可以確認 NSIS 編譯得過，但產出的解除安裝程式是壞的（electron-builder #10258），不能拿去測或發佈。10/3 在 Mac 上用 `--win nsis --x64 -c.win.signAndEditExecutable=false` 編過一次：兩次編譯都過；electron-builder 的 makensis 3.04 比對巨集名稱不分大小寫，範本檢查的 `customInstallmode` 也認得我們的 `customInstallMode`。
 - 安裝資料夾目前仍可以選（D19 待決定）。
 
 Electron 與 electron-builder（G7、G8）：
