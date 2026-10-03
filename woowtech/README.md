@@ -1387,8 +1387,19 @@ daemon 不跳主控台視窗（G11）：
 - Windows 找沒寫路徑的指令時，會先找目前的資料夾。daemon 在使用者的專案資料夾裡執行 `git`，也用名稱啟動 Copilot、Pi，專案裡放一個 `git.exe` 或 `copilot.cmd` 就會被執行。
 - supervisor 啟動 worker 前，在 worker 的環境設 `NoDefaultCurrentDirectoryInExePath=1`（`utils/woowtech-windows-exe-search.ts`）。libuv 1.48 起和 cmd.exe 都會因此跳過目前的資料夾；agent 和它們的子程序也會繼承。
 - App 內的終端機把它拿掉，使用者的 shell 照 Windows 原本的行為找指令。只拿掉我們自己設的（另記一個標記變數），使用者自己設過就保留。
-- 之後的第二批（G17、G30）再把指令都換成完整路徑，這個設定當成第二道防線。
+- 第二批的 G17、G30 讓 daemon 用完整路徑啟動程式（見下一段），這個設定留作第二道防線。
 - 守門 `woowtech/windows-daemon.test.mjs`：daemon 新增的 `fork()`、直接 `spawn()` 沒有隱藏視窗，或有程式直接引用 tree-kill，就會失敗。
+
+Windows 怎麼啟動程式（G17、G30）：
+
+- 上游在 Windows 把 `.cmd`、`.bat` 和沒寫副檔名的指令都交給 cmd.exe。cmd.exe 會先找目前資料夾，重新解析每個參數（`"fix (wip)"` 會變成 `fix ^(wip^)`），遇到換行就把參數截斷。
+- daemon 的 `spawnProcess`、`execCommand` 在 Windows 先經過 `utils/woowtech-windows-spawn.ts` 規劃：
+  - 沒寫路徑的指令照 PATH 和 PATHEXT 找，不找目前資料夾，也跳過相對路徑的 PATH 項目（`woowtech-windows-path-search.ts`）。
+  - 找到 `.exe`、`.com` 就直接執行，參數原樣送到。
+  - npm 產生的 `.cmd`（npm 7 以後的 cmd-shim 範本，例如用 npm 裝的 Claude、Codex）改成直接執行它背後的程式：`node.exe` 加腳本，或它包裝的 exe（`woowtech-npm-cmd-shim.ts`）。node 跟 shim 一樣，先找 shim 旁邊的 `node.exe`，再找 PATH。會設環境變數或用其他直譯器的 shim 不算，照舊經 cmd.exe。
+  - 其他 `.cmd`、`.bat` 仍經 cmd.exe，參數用跟終端機同一套的跳脫，另加 `/d /v:off`（`woowtech-cmd-escape.ts`）。參數有換行時直接報錯（D18），不默默截斷。
+  - 呼叫端自己要求 shell（`shell: true` 或指定 shell）、找不到程式，或設了環境變數 `WOOWTECH_LEGACY_WINDOWS_SPAWN=1` 時，照上游的方式。
+- 守門 `woowtech/windows-daemon.test.mjs` 確認兩個函式都先經過規劃。實機：WT-3（npm 裝的 agent 能啟動）、WT-4（路徑有空白、中文、`&`、`%`）、WT-7（GitHub PR 狀態，`gh` 的多行 GraphQL）。
 
 daemon 的埠被保留或占用（G12）：
 
@@ -1435,7 +1446,7 @@ Electron 與 electron-builder（G7、G8）：
 
 驗證：
 
-- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機還沒做：Windows 要在 Windows 電腦上用打包版測；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）

@@ -8,6 +8,7 @@ import {
   quoteWindowsArgument,
   quoteWindowsCommand,
 } from "./windows-command.js";
+import { planDirectWindowsSpawn, type DirectWindowsSpawn } from "./woowtech-windows-spawn.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -81,6 +82,24 @@ export function spawnProcess(
           resolvedBaseEnv,
           ...(envOverlay ? [envOverlay] : []),
         );
+  // woowtech smart: Windows starts programs without cmd.exe when it can (README §25, plan G17).
+  const windowsPlan = planDirectWindowsSpawn({
+    platform: process.platform,
+    command,
+    args,
+    requestedShell: spawnOptions.shell,
+    env: childEnv,
+  });
+  if (windowsPlan) {
+    return spawn(windowsPlan.command, windowsPlan.args, {
+      ...spawnOptions,
+      env: childEnv,
+      shell: false,
+      windowsVerbatimArguments: windowsPlan.windowsVerbatimArguments,
+      signal: options?.signal,
+      windowsHide: true,
+    });
+  }
 
   return spawn(resolvedCommand, resolvedArgs, {
     ...spawnOptions,
@@ -111,6 +130,17 @@ export async function execCommand(
           resolvedBaseEnv,
           ...(envOverlay ? [envOverlay] : []),
         );
+  // woowtech smart: Windows starts programs without cmd.exe when it can (README §25, plan G17).
+  const windowsPlan = planDirectWindowsSpawn({
+    platform: process.platform,
+    command,
+    args,
+    requestedShell: options?.shell,
+    env: childEnv,
+  });
+  if (windowsPlan) {
+    return execWindowsPlan({ plan: windowsPlan, env: childEnv, options });
+  }
 
   return execFileAsync(resolvedCommand, resolvedArgs, {
     cwd: options?.cwd,
@@ -120,6 +150,28 @@ export async function execCommand(
     timeout: options?.timeout,
     maxBuffer: options?.maxBuffer,
     shell,
+    windowsHide: true,
+  }) as Promise<ExecCommandResult>;
+}
+
+interface WindowsPlanExec {
+  plan: DirectWindowsSpawn;
+  env: NodeJS.ProcessEnv;
+  options?: ExecCommandOptions;
+}
+
+// woowtech smart: execCommand for a planned Windows start (plan G17).
+function execWindowsPlan(input: WindowsPlanExec): Promise<ExecCommandResult> {
+  const { plan, env, options } = input;
+  return execFileAsync(plan.command, plan.args, {
+    cwd: options?.cwd,
+    env,
+    encoding: options?.encoding ?? "utf8",
+    killSignal: options?.killSignal,
+    timeout: options?.timeout,
+    maxBuffer: options?.maxBuffer,
+    shell: false,
+    windowsVerbatimArguments: plan.windowsVerbatimArguments,
     windowsHide: true,
   }) as Promise<ExecCommandResult>;
 }

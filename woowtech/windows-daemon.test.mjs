@@ -137,3 +137,23 @@ test("Windows hosts do not install terminal agent hooks and say so in settings (
   assert.match(page, /disabled=\{!hooksSupported\}/);
   assert.match(page, /t\("woowtech.settings.terminalAgents.hooks.unsupportedHost"\)/);
 });
+
+test("Windows starts programs without cmd.exe when it can (G17, G30)", () => {
+  const spawnTs = readFileSync(join(root, "packages/server/src/utils/spawn.ts"), "utf8");
+  const spawnProcess = spawnTs.indexOf("export function spawnProcess(");
+  const execCommand = spawnTs.indexOf("export async function execCommand(");
+  assert.ok(spawnProcess !== -1 && execCommand > spawnProcess);
+  for (const [body, upstreamCall] of [
+    [spawnTs.slice(spawnProcess, execCommand), "return spawn(resolvedCommand"],
+    [spawnTs.slice(execCommand), "return execFileAsync(resolvedCommand"],
+  ]) {
+    assert.match(
+      body,
+      /planDirectWindowsSpawn\(\{\s*platform: process.platform,\s*command,\s*args,\s*requestedShell: [^,]+,\s*env: childEnv,\s*\}\)/,
+    );
+    const plan = body.indexOf("planDirectWindowsSpawn(");
+    assert.ok(plan < body.indexOf(upstreamCall), "the plan comes before upstream's cmd.exe path");
+  }
+  assert.match(spawnTs, /windowsVerbatimArguments: windowsPlan.windowsVerbatimArguments,/);
+  assert.match(spawnTs, /windowsVerbatimArguments: plan.windowsVerbatimArguments,/);
+});
