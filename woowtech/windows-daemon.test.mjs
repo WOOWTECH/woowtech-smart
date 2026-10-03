@@ -189,3 +189,12 @@ test("Windows detection knows WinGet's Codex name and never trusts a silent prob
   );
   assert.match(windows, /const exeNames = wingetCommandFileNames\(name\);/);
 });
+
+test("a new Windows terminal opens PowerShell, like Windows Terminal (G27, D16)", () => {
+  const terminal = readFileSync(join(root, "packages/server/src/terminal/terminal.ts"), "utf8");
+  assert.match(
+    terminal,
+    /\? await resolveTerminalSpawnCommand\(command, args\)\s*: await prepareWoowtechDefaultShell\(\{ shell, upstreamDefault: resolveDefaultTerminalShell \}\);/,
+  );
+  assert.doesNotMatch(terminal, /shell \?\? resolveDefaultTerminalShell\(\)/);
+});

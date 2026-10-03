@@ -1417,6 +1417,14 @@ Windows 偵測 agent（G14 第一部分）：
 - Windows 上 `--version` 逾時不算找到（上游算找到）：舊版 Claude Desktop 的 alias 會開視窗，不會回答。逾時至少 10 秒，讓 Defender 第一次掃描大檔案也來得及（`executable-resolution/woowtech-windows-probe.ts`）。macOS 照上游。
 - 還沒做：Copilot、OpenCode、Pi、omp 的 Windows 安裝位置，以及檢查 `--version` 的輸出含 `(Claude Code)`。等實機（WT-3）看到真的安裝結果再補。
 
+終端機的預設 shell（G27、D16）：
+
+- macOS 開使用者的 `$SHELL`。上游在 Windows 開 cmd.exe；Windows Terminal 開 PowerShell，上游的工作區 setup 指令本來也在 Windows PowerShell 跑。所以 Windows 的新終端機依序用：環境變數 `WOOWTECH_TERMINAL_SHELL`（等於 Mac 的 `$SHELL`）→ PATH 上的 `pwsh` → `%ProgramFiles%\PowerShell\7\pwsh.exe` → Microsoft Store 版的 `pwsh` → Windows PowerShell → cmd.exe（`terminal/woowtech-default-shell.ts`）。
+- PowerShell 加 `-NoLogo`，不印開頭的 4 行說明（手機畫面很小）；使用者的 profile 照樣載入。
+- 工作區腳本也在這個終端機跑。`a && b` 要 PowerShell 7 才支援（`winget install Microsoft.PowerShell`），或設 `WOOWTECH_TERMINAL_SHELL=cmd.exe` 改回 cmd。
+- 開新終端機前先重讀一次登錄裡的 PATH（最多等 2 秒，見 G29），跟 Windows Terminal 開新分頁一樣，看得到 daemon 啟動後才裝的工具。
+- 指定了 profile 指令的終端機（claude、codex 等）不受影響。守門：`woowtech/windows-daemon.test.mjs`。實機：WT-1。
+
 daemon 的埠被保留或占用（G12）：
 
 - Windows 可能把預設埠 6770 劃進 Hyper-V 或 WSL 的保留範圍（`netsh interface ipv4 show excludedportrange protocol=tcp`），或被別的程式占用，內建 daemon 就啟動不了（上游 #1552、#3333，都還沒修）。
@@ -1462,7 +1470,7 @@ Electron 與 electron-builder（G7、G8）：
 
 驗證：
 
-- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`、`terminal/woowtech-default-shell`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機還沒做：Windows 要在 Windows 電腦上用打包版測；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
