@@ -110,6 +110,7 @@ import {
   sendBoundedPhysicalFrame,
   sendBoundedPhysicalFrameAndWait,
 } from "./websocket/physical-socket.js";
+import { terminalAgentHooksSupported } from "../terminal/agent-hooks/woowtech-hook-platform.js";
 
 const WS_CLOSE_DAEMON_AUTH_FAILED = 4401;
 
@@ -1720,6 +1721,8 @@ export class VoiceAssistantWebSocketServer {
         pushTokenRevocation: true,
         // woowtech smart: pushes go through WoowTech's push relay (push/woowtech-relay.ts).
         woowtechPush: true,
+        // woowtech smart: Windows hosts do not install terminal agent hooks yet (plan G9).
+        woowtechTerminalAgentHooks: terminalAgentHooksSupported(),
         // COMPAT(plugins): added in v0.3.0, remove gate after 2027-08-07.
         plugins: true,
         pluginManagement: true,

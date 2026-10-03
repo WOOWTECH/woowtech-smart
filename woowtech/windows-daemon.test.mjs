@@ -121,3 +121,19 @@ test("a Windows terminal's pseudoconsole is closed once (G10, node-pty #983)", (
   );
   assert.match(terminal, /\.\.\.woowtechConptyOptions\(process.platform, process.env\),/);
 });
+
+test("Windows hosts do not install terminal agent hooks and say so in settings (G9 v1)", () => {
+  const read = (file) => readFileSync(join(root, file), "utf8");
+  const setting = read("packages/server/src/terminal/agent-hooks/terminal-agent-hook-setting.ts");
+  assert.match(setting, /const supported = terminalAgentHooksSupported\(options.platform\);/);
+  assert.match(
+    setting,
+    /if \(!supported\) \{[\s\S]*?return;\s*\}\s*installRegisteredAgentHooks\(installOptions\);/,
+  );
+  const server = read("packages/server/src/server/websocket-server.ts");
+  assert.match(server, /woowtechTerminalAgentHooks: terminalAgentHooksSupported\(\),/);
+  const page = read("packages/app/src/screens/settings/host-page.tsx");
+  assert.match(page, /features\?\.woowtechTerminalAgentHooks !== false/);
+  assert.match(page, /disabled=\{!hooksSupported\}/);
+  assert.match(page, /t\("woowtech.settings.terminalAgents.hooks.unsupportedHost"\)/);
+});

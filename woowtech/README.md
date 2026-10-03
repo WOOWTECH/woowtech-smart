@@ -1372,6 +1372,12 @@ daemon 不跳主控台視窗（G11）：
 - `terminal/woowtech-pty-kill.ts`：Windows 只呼叫一次 `kill()`；之後的 SIGKILL 改用隱藏的 taskkill 結束 shell 的整棵程序樹，不再碰 pseudoconsole。macOS、Linux 照上游傳 signal。
 - node-pty 自帶的 `conpty.dll`＋`OpenConsole.exe`（#965，可能減少 conhost 外洩）先用 `WOOWTECH_CONPTY_DLL=1` 才開；#983 正是在它開著時重現的，要等實機 WT-2 的數字再決定預設。
 
+終端機 agent hook（G9 v1）：
+
+- Windows 主機一律不裝 hook（`terminal/agent-hooks/woowtech-hook-platform.ts`）：Claude 會拿到 PowerShell 跑不動的 POSIX 指令，Codex 的 hook 會在這台電腦的每個 Codex 工作階段失敗（上游 #3632）。設定打開時只記一行 log；關掉時照樣清掉舊版本裝過的 hook。
+- daemon 用 fork 自己的 `server_info.features.woowtechTerminalAgentHooks` 告訴 App。設定頁看的是主機的系統，不是 App 的：Windows 主機的開關變灰，說明改成「Windows 主機尚未支援」；手機或 Windows 桌面連到 Mac 主機時照常可以開。舊 daemon 沒有這個欄位，當成支援。
+- v1.1 再把上游 #3877、#4591 合成一個 PowerShell `-EncodedCommand` helper 移植過來（兩者會互相衝突）。
+
 不執行專案帶來的程式（G28）：
 
 - Windows 找沒寫路徑的指令時，會先找目前的資料夾。daemon 在使用者的專案資料夾裡執行 `git`，也用名稱啟動 Copilot、Pi，專案裡放一個 `git.exe` 或 `copilot.cmd` 就會被執行。

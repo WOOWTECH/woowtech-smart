@@ -941,6 +941,10 @@ function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
+  // woowtech smart: Windows hosts do not install terminal agent hooks yet (plan G9).
+  const hooksSupported = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.woowtechTerminalAgentHooks !== false,
+  );
 
   const handleValueChange = useCallback(
     (next: boolean) => {
@@ -965,12 +969,15 @@ function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
             {t("woowtech.settings.terminalAgents.hooks.title")}
           </Text>
           <Text style={settingsStyles.rowHint}>
-            {t("woowtech.settings.terminalAgents.hooks.hint")}
+            {hooksSupported
+              ? t("woowtech.settings.terminalAgents.hooks.hint")
+              : t("woowtech.settings.terminalAgents.hooks.unsupportedHost")}
           </Text>
         </View>
         <Switch
-          value={config?.enableTerminalAgentHooks === true}
+          value={hooksSupported && config?.enableTerminalAgentHooks === true}
           onValueChange={handleValueChange}
+          disabled={!hooksSupported}
           accessibilityLabel={t("woowtech.settings.terminalAgents.hooks.title")}
           testID="host-page-terminal-agent-hooks-switch"
         />
