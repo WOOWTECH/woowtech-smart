@@ -1889,6 +1889,7 @@ Electron 與 electron-builder（G7、G8）：
 | #5845（上游 issue，還沒修）                      | Claude Code 的 Notification hook 把原因放在 `notification_type`，原本只看 `matcher`／`reason`，「需要你的注意」永遠不會觸發（Mac 也一樣）。改成也認 `notification_type` 的 `idle_prompt`、`permission_prompt`（`terminal/agent-hooks/claude/claude.ts`） |
 | #1987（`cf4509631`，boudra）                     | Windows 的檔案連結提示改成顯示相對於工作區的路徑（原本是完整的 `C:\…` 路徑），開檔時也用同一套路徑判斷。上游已合併，diff 原樣套用                                                                                                                        |
 | #3891（未合併，head `16dc251d2`，kueronya）      | Windows 的 Git 狀態用 `C:\repo`、工作區用 `C:/repo`，兩個快取鍵對不上，標題列停在舊的「Push」（上游 #4028）。daemon 推來和抓回來的狀態都先統一路徑格式。`checkout-status-cache.ts` 在 fork 裡多了上游後來的分支切換處理，所以手動移植                    |
+| #5198 的 Windows 片段（`c906c2f4a`，boudra）     | 新版 OpenCode 的 npm 套件把 `opencode.exe` 放在平台套件 `opencode-windows-<arch>`，原本只找舊的 `opencode-ai/bin/opencode.exe`，找不到就退回 `opencode.cmd`。只搬 `resolveOpenCodeBinary` 這一段；整個 PR（OpenCode v2）不搬                             |
 
 ## Mac 開發環境
 
