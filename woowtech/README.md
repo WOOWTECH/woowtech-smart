@@ -2132,6 +2132,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   - 重建 server 的 dist，跑 CLI 的 e2e（`tests/17-onboard.test.ts`、`03-daemon.test.ts`）和桌面版打包後的 smoke。`src/commands/daemon/lifecycle.e2e.test.ts` 已在 `woowtech/services` 跑過（驗證紀錄）。
   - 在桌面版實際按「安裝 CLI」和安裝技能（用測試帳號或暫存 HOME），確認 `~/.local/bin` 和三個技能資料夾只多出 `woowtech-smart*`，設定的命令列那一列顯示 `woowtech-smart`。
 - iOS 權限提示（第 6 節）已改成品牌名加繁中、簡中；要在模擬器或實機上各看一次三個提示的實際文字（英文、繁中、簡中）。
+- 附件檔名含 `#`、`?`、`%`（第 21 節）：RC 的原始報告在舊 Mac 上，修正是從程式找到的原因。要在桌面版附加 `shot#1.png`、`what?.png`、`100%.png` 各一次，確認預覽和送出都正常，也在手機上附加一次。
 - 盤點設定頁以外上游寫死的英文，照第 14 節的做法一頁一頁處理。
 - 用詞待決定：
   - 已處理：原本「28 處主機／87 處 Host」的混用已統一為「主機」（C-007）；由產生器來源修正並重生繁中，Agent 保留英文。
