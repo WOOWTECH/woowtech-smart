@@ -49,6 +49,26 @@ export function agentTargetForNotificationData(
   return serverId && agentId ? { serverId, agentId } : null;
 }
 
+/**
+ * A Windows protocol toast can deliver one click twice: Electron's `click` and the protocol
+ * relaunch (plan B8, H5 F7). Opening the same agent again within the window is dropped.
+ */
+export function createDuplicateLaunchFilter(
+  windowMs = 2_000,
+  now: () => number = () => Date.now(),
+): (target: AgentDeepLinkTarget) => boolean {
+  let last: { key: string; at: number } | null = null;
+  return (target) => {
+    const key = `${target.serverId}\n${target.agentId}`;
+    const at = now();
+    if (last && last.key === key && at - last.at < windowMs) {
+      return false;
+    }
+    last = { key, at };
+    return true;
+  };
+}
+
 // macOS returns the identifier of the notification that launched the app in the ready
 // event's launchInfo. The unique part keeps two notifications for one agent from replacing
 // each other in Notification Center.

@@ -1340,9 +1340,10 @@ owner 的決定（2026-10-02）：Windows 版跟 Mac 版的定位和使用效果
 
 點通知開到 agent（G2–G5，加上 macOS 的冷啟動）：
 
-- Windows 打包版每次啟動呼叫 `app.setAsDefaultProtocolClient("woowtech-smart")`，寫在 HKCU。electron-builder 的 NSIS 範本只登記檔案關聯，不登記協定。開發版不登記，免得把協定指到開發用的 Electron。
+- Windows 打包版每次啟動呼叫 `app.setAsDefaultProtocolClient("woowtech-smart")`，寫在 HKCU。electron-builder 的 NSIS 範本只登記檔案關聯，不登記協定。只有安裝程式放好的那一份會登記（執行檔旁邊有 `Uninstall woowtech smart.exe`）；開發版、解壓出來的那一份都不登記，免得把協定指到別的副本。Windows 也不再出 zip：解壓出來的副本會把協定、開始功能表捷徑和通知啟動器都搶過去。
+- Windows 啟動時先建立通知元件（`Notification.isSupported()`）。Electron 這時就把通知啟動器寫進開始功能表捷徑，不必等第一則通知；通知中心只保留捷徑帶有啟動器的通知。
 - Windows 打包版的 agent 通知用自己組的 `toastXml`（`features/woowtech-windows-toast.ts`）：`activationType="protocol"`，`launch` 是 `woowtech-smart://h/<server>/agent/<agent>`。點通知時 Windows 執行 `"woowtech smart.exe" "<連結>"`：App 在跑（含縮在系統匣）走 `second-instance`，沒在跑走 argv 冷啟動，兩條都是原本的 agent 連結處理。通知滑進通知中心、App 結束過、電腦重開過都有效，不依賴記憶體裡的通知物件。協定登記失敗、開發版、終端機通知（沒有 agentId）仍用 Electron 預設的 toast。
-- App 開著時，協定 toast 也可能觸發 Electron 的 `click`。兩條路都走 `openOrFocusAgent`，導到同一個 agent 沒有副作用。
+- App 開著時，協定 toast 也可能觸發 Electron 的 `click`。兩條路都走 `receiveAgentTarget`，2 秒內同一個 agent 只開一次（second-instance 收到的 agent 連結也走這裡）。
 - `toastXml` 會取代 title、body、icon 和 silent，所以 XML 自己帶文字、圖示（`appLogoOverride`）和靜音。XML 1.0 不允許的字元先拿掉，不然整則通知會被拒。
 - Windows 的 toast 在橫幅結束、滑進通知中心時觸發 `close`（reason 是 `timedOut`），之後還能點。`keepAfterTimedOutClose` 讓它保留監聽和引用，點擊或使用者關掉時才釋放。引用最多 50 則，超過先丟最舊的；丟掉的協定 toast 仍能開到 agent。
 - AUMID 與 toast activator：打包版用 `io.woowtech.smart.desktop` 加固定的 CLSID；開發版改用 `io.woowtech.smart.desktop.dev` 和另一個固定 CLSID（原本是執行檔路徑，含空白和反斜線）。Electron 40.5 起，第一次發通知時會自己寫開始功能表捷徑和 HKCU 的 CLSID，沒固定的話每次執行都換。兩組分開，開發用的 Electron 才不會改寫安裝版的登記。
@@ -1352,7 +1353,9 @@ owner 的決定（2026-10-02）：Windows 版跟 Mac 版的定位和使用效果
 
 - 第二個實例的命令列，以及 `PASEO_DEBUG` 的 argv，寫進 log 前先遮蔽：woowtech-smart: 連結只留 `?`、`#` 之前的部分，其他參數從 `offer=` 起拿掉。協定登記後，配對連結（第 19 節）也會出現在命令列，不遮蔽的話密鑰會留在 main.log。
 - 不是 agent 的 woowtech-smart: 連結（例如配對連結）只把現有視窗帶到前面，不多開視窗。冷啟動帶這種連結時一律當成開 App，不會被當成 CLI 參數執行（`hasPendingGuiLaunchRequest`）。
-- main.log 的觀察點：`[launch] agent link via …`（argv、second-instance、open-url、notification center、notification-click）、`[launch] agent link protocol registered`、`[tray] created`、`[notification] posting／show／failed／click／close`（帶 kind：protocol 或 default，以及 close 的 reason）。
+- Windows 自己加的啟動參數也一樣當成開 App：更新後安裝程式用 `--updated` 重開 App；App 結束後點一般通知，COM 用 `-Embedding` 啟動（路徑沒加引號，資料夾名稱還會被切成好幾個參數）。原本這兩種都會被當成 CLI 參數，執行完 App 就結束，更新後的 App 打不開。
+- 拿不到單一實例鎖的第二個實例交出參數後用 `app.exit(0)` 結束，不跑第一個實例的結束流程。
+- main.log 的觀察點：`[launch] agent link via …`（argv、second-instance、open-url、notification center、notification-click）、`[launch] duplicate agent link … ignored`、`[launch] agent link protocol registered`（含 `isDefault`）和 `protocol handler`、`[tray] created`、`[notification] presenter`、`[notification] posting／show／failed／click／close`（帶 kind：protocol 或 default，以及 close 的 reason）。
 
 daemon 不跳主控台視窗（G11）：
 

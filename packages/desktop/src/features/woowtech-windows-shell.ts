@@ -4,19 +4,30 @@
 // the phones. Quit from the tray menu is Cmd+Q. Opening the app again brings back the
 // existing window instead of adding one.
 
+import path from "node:path";
+
+/** electron-builder names the NSIS uninstaller after productName, next to the app's exe. */
+export const WINDOWS_UNINSTALLER_NAME = "Uninstall woowtech smart.exe";
+
+export function windowsUninstallerPath(execPath: string): string {
+  return path.win32.join(path.win32.dirname(execPath), WINDOWS_UNINSTALLER_NAME);
+}
+
 /**
  * macOS registers the scheme from Info.plist at build time. electron-builder's NSIS template
  * only registers file associations, so the packaged Windows app writes
- * HKCU\Software\Classes\<scheme> itself on every start. An unpackaged run would point the
- * scheme at a dev Electron, so it skips this.
+ * HKCU\Software\Classes\<scheme> itself on every start. Only the copy the installer put in
+ * place does this: an unpackaged run, or a portable or unpacked copy, would point the scheme
+ * at itself (plan B5).
  */
 export function registerAgentLinkProtocol(input: {
   platform: NodeJS.Platform;
   isPackaged: boolean;
+  isInstalledCopy: () => boolean;
   scheme: string;
   setAsDefaultProtocolClient: (scheme: string) => boolean;
 }): boolean {
-  if (input.platform !== "win32" || !input.isPackaged) {
+  if (input.platform !== "win32" || !input.isPackaged || !input.isInstalledCopy()) {
     return false;
   }
   try {
@@ -56,6 +67,16 @@ export function quitWhenAllWindowsClosed(input: {
   }
   // Without a tray icon there would be no way back to a running app, so quit as upstream does.
   return !(input.platform === "win32" && input.trayActive);
+}
+
+// Windows adds launch flags of its own: the NSIS installer relaunches an updated app with
+// `--updated`, and COM starts the app for a default toast clicked after it quit with
+// `-Embedding`, from an unquoted path whose folder name can split into extra arguments. Each
+// means "open the app", never CLI arguments (plan B1, B2).
+const WINDOWS_LAUNCH_FLAGS = new Set(["--updated", "-embedding", "/embedding"]);
+
+export function hasWindowsLaunchFlag(argv: readonly string[]): boolean {
+  return argv.some((arg) => WINDOWS_LAUNCH_FLAGS.has(arg.trim().toLowerCase()));
 }
 
 export type RelaunchAction = "focus" | "open-window";

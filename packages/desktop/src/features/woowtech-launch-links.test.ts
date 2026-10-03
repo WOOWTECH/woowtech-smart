@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agentNotificationId,
+  createDuplicateLaunchFilter,
   agentTargetForNotificationData,
   agentTargetFromLaunchInfo,
   agentTargetFromNotificationId,
@@ -82,5 +83,20 @@ describe("notification targets", () => {
     expect(agentTargetFromLaunchInfo({ identifier: "5B6F1B0C-ELECTRON-RANDOM" })).toBeNull();
     expect(agentTargetFromNotificationId("woowtech-agent:no-separator")).toBeNull();
     expect(agentTargetFromNotificationId("woowtech-agent:u:woowtech-smart:///#offer=x")).toBeNull();
+  });
+});
+
+describe("duplicate agent launches", () => {
+  it("drops the same agent again within the window and lets others through", () => {
+    let clock = 1_000;
+    const isNew = createDuplicateLaunchFilter(2_000, () => clock);
+    const a = { serverId: "srv", agentId: "a" };
+    expect(isNew(a)).toBe(true);
+    clock += 500;
+    expect(isNew(a)).toBe(false);
+    expect(isNew({ serverId: "srv", agentId: "b" })).toBe(true);
+    expect(isNew(a)).toBe(true);
+    clock += 2_500;
+    expect(isNew(a)).toBe(true);
   });
 });

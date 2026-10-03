@@ -37,8 +37,11 @@ test("a second launch on Windows brings back the window and never logs a pairing
   assert.match(main, /log.info\("\[open-project\] argv:", redactLaunchArguments\(process.argv\)\)/);
   assert.match(
     main,
-    /hasPendingGuiLaunchRequest: Boolean\(\s*pendingOpenProjectPath \|\| pendingAgentNavigation \|\| hasAppSchemeLink\(process.argv\),?\s*\)/,
+    /hasPendingGuiLaunchRequest: Boolean\(\s*pendingOpenProjectPath \|\|\s*pendingAgentNavigation \|\|\s*hasAppSchemeLink\(process.argv\) \|\|\s*hasWindowsLaunchFlag\(process.argv\),?\s*\)/,
   );
+  // The second instance only hands over argv; it must not run the first instance's quit work.
+  assert.match(main, /if \(!gotLock\) \{[\s\S]*?app.exit\(0\);\s*return false;/);
+  assert.match(handler, /receiveAgentTarget\(agentTarget, "second-instance"\)/);
 });
 
 test("the packaged Windows app registers woowtech-smart: before notifications are posted", () => {
@@ -50,11 +53,22 @@ test("the packaged Windows app registers woowtech-smart: before notifications ar
     main,
     /setAsDefaultProtocolClient: \(scheme\) => app.setAsDefaultProtocolClient\(scheme\)/,
   );
+  assert.match(
+    main,
+    /isInstalledCopy: \(\) => existsSync\(windowsUninstallerPath\(process.execPath\)\)/,
+  );
+  const notifications = source("packages/desktop/src/features/notifications.ts");
+  assert.match(
+    notifications,
+    /if \(process.platform === "win32"\) \{\s*log.info\("\[notification\] presenter", \{ supported: Notification.isSupported\(\) \}\);/,
+  );
   const builder = source("packages/desktop/electron-builder.yml");
   assert.match(builder, /protocols:\s*\n\s*- name: [^\n]+\n\s*schemes:\s*\n\s*- woowtech-smart/);
   // Electron's own Start Menu link and the NSIS one must be the same file (README §25).
   assert.doesNotMatch(builder, /shortcutName:/);
   assert.match(builder, /- from: assets\/icon.ico\s*\n\s*to: icon.ico/);
+  const winSection = builder.slice(builder.indexOf("\nwin:"), builder.indexOf("\nnsis:"));
+  assert.doesNotMatch(winSection, /target: zip/, "a portable copy would take over the scheme");
 });
 
 test("Windows agent notifications are protocol toasts kept clickable in Action Center", () => {

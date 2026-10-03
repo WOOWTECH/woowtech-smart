@@ -91,6 +91,13 @@ function toClickWindow(win: BrowserWindow | null | undefined): NotificationClick
 
 /** Best-effort registration probe; support does not establish system authorization. */
 export function ensureNotificationCenterRegistration(): void {
+  // woowtech smart: on Windows, creating the presenter makes Electron write the toast activator
+  // into the Start Menu shortcut now, not at the first toast; Notification Center keeps a toast
+  // only when the shortcut has one (plan B3).
+  if (process.platform === "win32") {
+    log.info("[notification] presenter", { supported: Notification.isSupported() });
+    return;
+  }
   if (process.platform !== "darwin" || !Notification.isSupported()) {
     return;
   }

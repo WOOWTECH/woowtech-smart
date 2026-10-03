@@ -57,14 +57,17 @@ import { resolveAppIconPath } from "./features/stamped-icon.js";
 import { applyWindowsAppUserModelId } from "./features/woowtech-app-user-model-id.js";
 import {
   agentTargetFromLaunchInfo,
+  createDuplicateLaunchFilter,
   hasAppSchemeLink,
   redactLaunchArguments,
 } from "./features/woowtech-launch-links.js";
 import {
+  hasWindowsLaunchFlag,
   quitWhenAllWindowsClosed,
   registerAgentLinkProtocol,
   relaunchAction,
   trayLabels,
+  windowsUninstallerPath,
 } from "./features/woowtech-windows-shell.js";
 import { createWindowsTray } from "./features/woowtech-windows-tray.js";
 import { setupApplicationMenu } from "./features/menu.js";
@@ -876,7 +879,13 @@ function receiveAgentDeepLink(input: string): void {
   receiveAgentTarget(target, "open-url");
 }
 
+const isNewAgentLaunch = createDuplicateLaunchFilter();
+
 function receiveAgentTarget(target: AgentDeepLinkTarget, via: string): void {
+  if (!isNewAgentLaunch(target)) {
+    log.info(`[launch] duplicate agent link via ${via} ignored`, target);
+    return;
+  }
   log.info(`[launch] agent link via ${via}`, target);
   if (bootstrapIsComplete) {
     void desktopWindowOwner
@@ -911,17 +920,15 @@ function setupSingleInstanceLock(): boolean {
 
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {
-    app.quit();
+    // woowtech smart: the first instance owns quit handling; this one only hands over argv.
+    app.exit(0);
     return false;
   }
 
   app.on("second-instance", (_event, commandLine) => {
     const agentTarget = parseAgentDeepLinkFromArgv(commandLine);
     if (agentTarget) {
-      log.info("[launch] agent link via second-instance", agentTarget);
-      void bootstrapComplete
-        .then(() => desktopWindowOwner.openOrFocusAgent(agentTarget))
-        .catch((error) => log.error("[window] failed to route second-instance agent link", error));
+      receiveAgentTarget(agentTarget, "second-instance");
       return;
     }
 
@@ -984,11 +991,18 @@ async function bootstrap(): Promise<void> {
   agentLinkProtocolRegistered = registerAgentLinkProtocol({
     platform: process.platform,
     isPackaged: app.isPackaged,
+    isInstalledCopy: () => existsSync(windowsUninstallerPath(process.execPath)),
     scheme: APP_SCHEME,
     setAsDefaultProtocolClient: (scheme) => app.setAsDefaultProtocolClient(scheme),
   });
   if (process.platform === "win32") {
-    log.info("[launch] agent link protocol registered:", agentLinkProtocolRegistered);
+    log.info("[launch] agent link protocol registered:", agentLinkProtocolRegistered, {
+      isDefault: app.isDefaultProtocolClient(APP_SCHEME),
+    });
+    void app
+      .getApplicationInfoForProtocol(`${APP_SCHEME}://`)
+      .then((handler) => log.info("[launch] agent link protocol handler:", handler.path))
+      .catch(() => log.info("[launch] agent link protocol handler: none"));
   }
 
   const appDistDir = getAppDistDir();
@@ -1098,7 +1112,10 @@ async function bootstrap(): Promise<void> {
 void runDesktopStartup({
   // woowtech smart: any woowtech-smart: link is a GUI launch, never CLI arguments.
   hasPendingGuiLaunchRequest: Boolean(
-    pendingOpenProjectPath || pendingAgentNavigation || hasAppSchemeLink(process.argv),
+    pendingOpenProjectPath ||
+    pendingAgentNavigation ||
+    hasAppSchemeLink(process.argv) ||
+    hasWindowsLaunchFlag(process.argv),
   ),
   runCliPassthroughIfRequested,
   inheritLoginShellEnv,

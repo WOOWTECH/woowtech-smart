@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  hasWindowsLaunchFlag,
   quitWhenAllWindowsClosed,
   registerAgentLinkProtocol,
   relaunchAction,
   trayLabels,
+  windowsUninstallerPath,
 } from "./woowtech-windows-shell.js";
 
 describe("agent link protocol registration", () => {
@@ -17,6 +19,7 @@ describe("agent link protocol registration", () => {
       registerAgentLinkProtocol({
         platform: "win32",
         isPackaged: true,
+        isInstalledCopy: () => true,
         scheme: "woowtech-smart",
         setAsDefaultProtocolClient: set,
       }),
@@ -30,6 +33,7 @@ describe("agent link protocol registration", () => {
       expect(
         registerAgentLinkProtocol({
           ...input,
+          isInstalledCopy: () => true,
           scheme: "woowtech-smart",
           setAsDefaultProtocolClient: set,
         }),
@@ -39,7 +43,12 @@ describe("agent link protocol registration", () => {
   });
 
   it("reports a failed or throwing registration as not registered", () => {
-    const base = { platform: "win32" as const, isPackaged: true, scheme: "woowtech-smart" };
+    const base = {
+      platform: "win32" as const,
+      isPackaged: true,
+      isInstalledCopy: () => true,
+      scheme: "woowtech-smart",
+    };
     expect(registerAgentLinkProtocol({ ...base, setAsDefaultProtocolClient: () => false })).toBe(
       false,
     );
@@ -51,6 +60,54 @@ describe("agent link protocol registration", () => {
         },
       }),
     ).toBe(false);
+  });
+});
+
+describe("installed copies", () => {
+  it("never lets a portable or unpacked copy take over the scheme", () => {
+    const calls: string[] = [];
+    expect(
+      registerAgentLinkProtocol({
+        platform: "win32",
+        isPackaged: true,
+        isInstalledCopy: () => false,
+        scheme: "woowtech-smart",
+        setAsDefaultProtocolClient: (scheme) => {
+          calls.push(scheme);
+          return true;
+        },
+      }),
+    ).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it("looks for the NSIS uninstaller next to the executable", () => {
+    expect(
+      windowsUninstallerPath(
+        "C:\\Users\\a\\AppData\\Local\\Programs\\woowtech smart\\woowtech smart.exe",
+      ),
+    ).toBe("C:\\Users\\a\\AppData\\Local\\Programs\\woowtech smart\\Uninstall woowtech smart.exe");
+  });
+});
+
+describe("Windows launch flags", () => {
+  it("treats an update relaunch and a COM toast activation as opening the app", () => {
+    expect(hasWindowsLaunchFlag(["C:\\app\\woowtech smart.exe", "--updated"])).toBe(true);
+    // LocalServer32 is unquoted, so the folder name splits into extra arguments.
+    expect(
+      hasWindowsLaunchFlag([
+        "C:\\Users\\a\\woowtech",
+        "smart\\woowtech",
+        "smart.exe",
+        "-Embedding",
+      ]),
+    ).toBe(true);
+    expect(hasWindowsLaunchFlag(["app.exe", "/Embedding"])).toBe(true);
+  });
+
+  it("leaves CLI arguments alone", () => {
+    expect(hasWindowsLaunchFlag(["app.exe", "ls", "--json"])).toBe(false);
+    expect(hasWindowsLaunchFlag(["app.exe", "--updated-at", "now"])).toBe(false);
   });
 });
 

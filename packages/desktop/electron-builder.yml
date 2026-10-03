@@ -110,12 +110,11 @@ win:
     # woowtech smart: notification-area and window icon, 16–256 px (README §25).
     - from: assets/icon.ico
       to: icon.ico
+  # woowtech smart: no Windows zip. electron-updater uses the NSIS installer, and an extracted
+  # copy would take the woowtech-smart: scheme, the Start menu link and the toast activator
+  # for itself (README §25, plan B5/D17).
   target:
     - target: nsis
-      arch:
-        - x64
-        - arm64
-    - target: zip
       arch:
         - x64
         - arm64
