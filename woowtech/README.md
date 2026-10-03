@@ -1401,6 +1401,14 @@ Windows 怎麼啟動程式（G17、G30）：
   - 呼叫端自己要求 shell（`shell: true` 或指定 shell）、找不到程式，或設了環境變數 `WOOWTECH_LEGACY_WINDOWS_SPAWN=1` 時，照上游的方式。
 - 守門 `woowtech/windows-daemon.test.mjs` 確認兩個函式都先經過規劃。實機：WT-3（npm 裝的 agent 能啟動）、WT-4（路徑有空白、中文、`&`、`%`）、WT-7（GitHub PR 狀態，`gh` 的多行 GraphQL）。
 
+App 開著時才裝的工具（G29）：
+
+- App 和 daemon 一直用啟動時 Explorer 給的 PATH。App 常駐系統匣（G1），這個 PATH 可能是好幾天前的；安裝程式把新資料夾寫進登錄裡的 PATH（npm、WinGet 的 Links、GitHub CLI、Claude 的 `.local\bin`），App 看不到。macOS 只在啟動時讀一次登入 shell 的 PATH（`login-shell-env.ts`）。
+- daemon 在 Windows 找程式（`findExecutable`）找不到時，用 Windows PowerShell 讀一次登錄裡電腦和使用者的 PATH，把目前沒有的資料夾接在後面，再找一次（`utils/woowtech-windows-registry-path.ts`）。不刪、不重排；還含 `%變數%` 的項目跳過。
+- 最多每 10 秒讀一次，同時發生的查詢共用一次讀取。讀不到（PowerShell 被擋、逾時）只記一次 log，PATH 不變。改的是 daemon 自己的 `process.env`，之後啟動的 agent 和終端機都會繼承。
+- 找到新資料夾時 log 一行 `[woowtech] PATH refreshed from registry`。所以裝完 CLI 後，到「供應商」按重新整理就找得到，不用從系統匣結束 App。
+- 守門：`woowtech/windows-daemon.test.mjs`。實機：WT-6。
+
 daemon 的埠被保留或占用（G12）：
 
 - Windows 可能把預設埠 6770 劃進 Hyper-V 或 WSL 的保留範圍（`netsh interface ipv4 show excludedportrange protocol=tcp`），或被別的程式占用，內建 daemon 就啟動不了（上游 #1552、#3333，都還沒修）。
@@ -1446,7 +1454,7 @@ Electron 與 electron-builder（G7、G8）：
 
 驗證：
 
-- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機還沒做：Windows 要在 Windows 電腦上用打包版測；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）

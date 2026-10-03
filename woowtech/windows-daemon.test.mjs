@@ -157,3 +157,19 @@ test("Windows starts programs without cmd.exe when it can (G17, G30)", () => {
   assert.match(spawnTs, /windowsVerbatimArguments: windowsPlan.windowsVerbatimArguments,/);
   assert.match(spawnTs, /windowsVerbatimArguments: plan.windowsVerbatimArguments,/);
 });
+
+test("Windows re-reads the saved PATH when a program is not found (G29)", () => {
+  const resolution = readFileSync(
+    join(root, "packages/server/src/executable-resolution/executable-resolution.ts"),
+    "utf8",
+  );
+  assert.match(
+    resolution,
+    /if \(process.platform === "win32"\) \{[\s\S]*?return findWithWindowsPathRefresh\(\{\s*lookup: \(\) =>\s*windowsExecutableResolution.find\(trimmed,/,
+  );
+  const refresh = readFileSync(
+    join(root, "packages/server/src/utils/woowtech-windows-registry-path.ts"),
+    "utf8",
+  );
+  assert.match(refresh, /\{\s*windowsHide: true,\s*timeout: deps.timeoutMs \?\? 5000,/);
+});

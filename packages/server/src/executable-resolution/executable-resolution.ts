@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { execCommand } from "../utils/spawn.js";
 import { isWindowsCommandScript } from "../utils/windows-command.js";
 import { windowsExecutableResolution } from "./windows.js";
+import { findWithWindowsPathRefresh } from "../utils/woowtech-windows-registry-path.js";
 
 export { quoteWindowsArgument, quoteWindowsCommand } from "../utils/windows-command.js";
 
@@ -120,11 +121,16 @@ export async function findExecutable(
   }
 
   if (process.platform === "win32") {
-    return windowsExecutableResolution.find(trimmed, {
-      enumeratePathCandidates: enumerateCandidates,
-      probeExecutable,
-      exists: existsSync,
-      probeTimeoutMs,
+    // woowtech smart: a program installed while the app runs is found after re-reading the saved
+    // PATH (README §25, plan G29).
+    return findWithWindowsPathRefresh({
+      lookup: () =>
+        windowsExecutableResolution.find(trimmed, {
+          enumeratePathCandidates: enumerateCandidates,
+          probeExecutable,
+          exists: existsSync,
+          probeTimeoutMs,
+        }),
     });
   }
 
