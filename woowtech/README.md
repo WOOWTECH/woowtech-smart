@@ -1425,6 +1425,15 @@ Windows 偵測 agent（G14 第一部分）：
 - 開新終端機前先重讀一次登錄裡的 PATH（最多等 2 秒，見 G29），跟 Windows Terminal 開新分頁一樣，看得到 daemon 啟動後才裝的工具。
 - 指定了 profile 指令的終端機（claude、codex 等）不受影響。守門：`woowtech/windows-daemon.test.mjs`。實機：WT-1。
 
+Windows 的 CLI 安裝（G16）：
+
+- 設定頁的「安裝 CLI」在 Windows 寫 `%USERPROFILE%\.local\bin\woowtech-smart.cmd`。cmd.exe 用主控台的字碼頁（繁中 Windows 是 950）讀批次檔，原本把安裝路徑原樣寫進 UTF-8 檔案，使用者名稱有中文時就讀成亂碼，CLI 找不到（上游 #4684）。
+- 現在移植上游 PR #4696（還沒合併）：路徑改寫成 `%LOCALAPPDATA%` 等變數開頭，檔案只有 ASCII、CRLF；安裝在這些位置以外、路徑又有中文時，只有那一行切到 UTF-8（`chcp 65001`）讀（`cli-install/woowtech-windows-cli-shim.ts`）。
+- 跟 #4696 不同的地方：第二行是解除安裝要認的標記；`setlocal`，變數不留在使用者的主控台；訊息裡的路徑加引號（`Program Files (x86)` 的 `)` 會提早結束區塊）；最後直接跳到內附的 CLI，不用 `call`，參數裡的 `%` 和 `^` 不會再被展開一次。
+- 同時把 `%USERPROFILE%\.local\bin` 加進使用者 PATH，等於 Mac 在 shell rc 加的那一行（`cli-install/woowtech-windows-user-path.ts`）：已經在使用者或電腦的 PATH 裡就不動；保留登錄值原本的型別（`REG_EXPAND_SZ` 寫 `%USERPROFILE%\.local\bin`），不用 `setx`（會改成 `REG_SZ`、還可能截斷）；寫完廣播設定變更，新開的終端機就看得到。失敗只記 log，安裝照樣成功。
+- 設定頁的「已安裝」也認新寫法（`ownership.ts`）。`.gitattributes` 讓 `*.cmd`、`*.bat` 一律 CRLF，送到 Windows 電腦的 `git archive` 也是。
+- 守門：`woowtech/windows-desktop.test.mjs`。實機：WI-9（含中文帳號 WI-7）。
+
 daemon 的埠被保留或占用（G12）：
 
 - Windows 可能把預設埠 6770 劃進 Hyper-V 或 WSL 的保留範圍（`netsh interface ipv4 show excludedportrange protocol=tcp`），或被別的程式占用，內建 daemon 就啟動不了（上游 #1552、#3333，都還沒修）。
@@ -1470,7 +1479,7 @@ Electron 與 electron-builder（G7、G8）：
 
 驗證：
 
-- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`、`terminal/woowtech-default-shell`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`、`terminal/woowtech-default-shell`；desktop 的 `cli-install/woowtech-windows-cli-shim`、`cli-install/woowtech-windows-user-path`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機還沒做：Windows 要在 Windows 電腦上用打包版測；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）

@@ -158,9 +158,18 @@ test("a real Windows uninstall removes the app's registrations and keeps user da
     builder.match(/^appId: (\S+)$/m)[1],
     ids.match(/WOOWTECH_DESKTOP_APP_ID = "([^"]+)"/)[1],
   );
+  // Install CLI writes the trampoline whose second line the uninstaller checks (G16).
+  const shim = source("packages/desktop/src/integrations/cli-install/woowtech-windows-cli-shim.ts");
+  assert.equal(
+    shim.match(/export const WINDOWS_CLI_MARKER = "([^"]+)";/)?.[1],
+    define("WOOWTECH_CLI_MARKER"),
+  );
+  assert.match(shim, /return \[\s*"@echo off",\s*MARKER_LINE,/);
   const install = source("packages/desktop/src/integrations/cli-install/install.ts");
-  const trampoline = install.match(/"@echo off",\s*(?:\/\/[^\n]*\n\s*)*"([^"]+)",/);
-  assert.ok(trampoline?.[1].startsWith(define("WOOWTECH_CLI_MARKER")), "marker on line 2");
+  assert.match(
+    install,
+    /await fs.writeFile\(targetPath, renderWindowsCliTrampoline\(\{ shimPath \}\)\);/,
+  );
 
   const start = code.indexOf("!macro customUnInstall");
   const uninstall = code.slice(start, code.indexOf("!macroend", start));
@@ -179,4 +188,19 @@ test("a real Windows uninstall removes the app's registrations and keeps user da
   // stop it from signing the uninstaller.
   assert.doesNotMatch(builder.slice(builder.indexOf("\nnsis:")), /^\s+(include|script):/m);
   assert.doesNotMatch(builder, /buildResources:/);
+});
+
+test("Install CLI on Windows survives a Chinese user name and reaches PATH (G16)", () => {
+  const install = source("packages/desktop/src/integrations/cli-install/install.ts");
+  const windows = install.slice(install.indexOf('if (process.platform === "win32") {'));
+  assert.match(windows, /renderWindowsCliTrampoline\(\{ shimPath \}\)/);
+  assert.match(windows, /const userPath = await ensureWindowsUserPathEntry\(\);/);
+  const ownership = source("packages/desktop/src/integrations/cli-install/ownership.ts");
+  assert.match(
+    ownership,
+    /windowsShimPathExpression\(\{ shimPath: input.cliPath, env: process.env \}\)/,
+  );
+  // cmd.exe needs CRLF batch files; the Windows build gets them from git archive.
+  assert.match(source(".gitattributes"), /^\*\.cmd text eol=crlf$/m);
+  assert.match(source(".gitattributes"), /^\*\.bat text eol=crlf$/m);
 });

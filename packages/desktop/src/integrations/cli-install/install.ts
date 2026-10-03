@@ -5,6 +5,8 @@ import { commandRunsCli } from "./ownership.js";
 import { resolveCliInstallSourcePath } from "./path.js";
 import { getBundledCliShimPath, getCliTargetPath, getLocalBinDir } from "./paths.js";
 import { ensurePathInShellRc } from "./shell-rc.js";
+import { renderWindowsCliTrampoline } from "./woowtech-windows-cli-shim.js";
+import { ensureWindowsUserPathEntry } from "./woowtech-windows-user-path.js";
 
 interface InstallStatus {
   installed: boolean;
@@ -44,20 +46,15 @@ export async function installCli(): Promise<InstallStatus> {
     // Generate a thin .cmd trampoline that delegates to the bundled shim.
     // Only the app install path is baked in — internal details (asar layout,
     // entrypoint scripts) live in the bundled shim and update with the app.
-    const cmdContent = [
-      "@echo off",
-      // woowtech smart: the uninstaller deletes this file only when its second line starts
-      // with "rem woowtech-smart CLI trampoline" (build/installer.nsh, README §25).
-      "rem woowtech-smart CLI trampoline: written by woowtech smart, removed by its uninstaller",
-      `set "BUNDLED_CLI=${shimPath}"`,
-      `if not exist "%BUNDLED_CLI%" (`,
-      `  echo woowtech smart CLI not found at %BUNDLED_CLI% — is woowtech smart installed? 1>&2`,
-      `  exit /b 1`,
-      `)`,
-      `call "%BUNDLED_CLI%" %*`,
-      `exit /b %errorlevel%`,
-    ].join("\r\n");
-    await fs.writeFile(targetPath, cmdContent, "utf-8");
+    // woowtech smart: an ASCII trampoline cmd.exe reads under any code page, and the user PATH
+    // gets .local\bin like the Mac's shell rc (README §25, plan G16, upstream #4696).
+    await fs.writeFile(targetPath, renderWindowsCliTrampoline({ shimPath }));
+    const userPath = await ensureWindowsUserPathEntry();
+    if (userPath.error) {
+      log.warn("[integrations] Could not add .local\\bin to the user PATH", userPath.error);
+    } else if (userPath.changed) {
+      log.info("[integrations] Added .local\\bin to the user PATH");
+    }
   } else {
     if (await pathOrSymlinkExists(targetPath)) {
       await fs.unlink(targetPath);

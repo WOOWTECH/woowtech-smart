@@ -1,0 +1,3 @@
+# woowtech smart: cmd.exe reads batch files with CRLF line ends (README §25, plan G16).
+*.cmd text eol=crlf
+*.bat text eol=crlf
