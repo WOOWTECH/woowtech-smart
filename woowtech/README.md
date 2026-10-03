@@ -1366,6 +1366,12 @@ daemon 不跳主控台視窗（G11）：
 - 開瀏覽器（`rundll32`）和開編輯器的程序不加 `windowsHide`：它會把對方要開的視窗一起藏起來。
 - 工作區的 setup、teardown 指令（`utils/worktree.ts`）在 Windows 用 PowerShell 執行，也要隱藏視窗。它用 `execFile`，守門的 `fork()`／`spawn()` 掃描抓不到，另有一條守門。
 
+關閉終端機（G10）：
+
+- node-pty 在 Windows 的 `kill()` 會關掉 pseudoconsole；再呼叫一次會重複關閉、弄壞記憶體（node-pty #983），終端機 worker 和所有終端機一起掛掉，worker 也不會重開。上游的關閉流程在 Windows 最多會呼叫三次。
+- `terminal/woowtech-pty-kill.ts`：Windows 只呼叫一次 `kill()`；之後的 SIGKILL 改用隱藏的 taskkill 結束 shell 的整棵程序樹，不再碰 pseudoconsole。macOS、Linux 照上游傳 signal。
+- node-pty 自帶的 `conpty.dll`＋`OpenConsole.exe`（#965，可能減少 conhost 外洩）先用 `WOOWTECH_CONPTY_DLL=1` 才開；#983 正是在它開著時重現的，要等實機 WT-2 的數字再決定預設。
+
 不執行專案帶來的程式（G28）：
 
 - Windows 找沒寫路徑的指令時，會先找目前的資料夾。daemon 在使用者的專案資料夾裡執行 `git`，也用名稱啟動 Copilot、Pi，專案裡放一個 `git.exe` 或 `copilot.cmd` 就會被執行。

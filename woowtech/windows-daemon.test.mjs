@@ -107,3 +107,17 @@ test("the Windows daemon never runs an executable a project carries (G28)", () =
     /execFileAsync\(shellInvocation.shell, shellInvocation.args, \{[\s\S]*?windowsHide: true,/,
   );
 });
+
+test("a Windows terminal's pseudoconsole is closed once (G10, node-pty #983)", () => {
+  const terminal = readFileSync(join(root, "packages/server/src/terminal/terminal.ts"), "utf8");
+  assert.doesNotMatch(terminal, /ptyProcess\.kill\(/);
+  assert.match(
+    terminal,
+    /function killPtyProcess\(signal\?: NodeJS.Signals\): void \{\s*ptyKiller.kill\(signal\);/,
+  );
+  assert.match(
+    terminal,
+    /const ptyKiller = createPtyKiller\(\{ pty: ptyProcess, platform: process.platform \}\);/,
+  );
+  assert.match(terminal, /\.\.\.woowtechConptyOptions\(process.platform, process.env\),/);
+});

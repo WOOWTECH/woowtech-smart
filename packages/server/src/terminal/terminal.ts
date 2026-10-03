@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createExternalProcessEnv } from "../server/paseo-env.js";
 import { withCurrentFolderExeSearch } from "../utils/woowtech-windows-exe-search.js";
+import { createPtyKiller, woowtechConptyOptions } from "./woowtech-pty-kill.js";
 import { withoutClaudeCodeSession } from "../server/agent/parent-claude-session-env.js";
 import { writePrivateFileAtomicSync } from "../server/private-files.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
@@ -961,7 +962,10 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
         PASEO_WORKSPACE_ID: workspaceId,
       },
     }),
+    ...woowtechConptyOptions(process.platform, process.env),
   });
+  // woowtech smart: one native kill per pty on Windows (node-pty #983, plan G10).
+  const ptyKiller = createPtyKiller({ pty: ptyProcess, platform: process.platform });
 
   function emitTitleChange(nextTitle: string | undefined): void {
     if (title === nextTitle) {
@@ -1472,11 +1476,7 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
   }
 
   function killPtyProcess(signal?: NodeJS.Signals): void {
-    if (process.platform === "win32") {
-      ptyProcess.kill();
-      return;
-    }
-    ptyProcess.kill(signal);
+    ptyKiller.kill(signal);
   }
 
   function waitForProcessExit(timeoutMs: number): Promise<boolean> {
