@@ -7,6 +7,7 @@ import { basename, delimiter, dirname, extname, join, resolve as resolvePath } f
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createExternalProcessEnv } from "../server/paseo-env.js";
+import { withCurrentFolderExeSearch } from "../utils/woowtech-windows-exe-search.js";
 import { withoutClaudeCodeSession } from "../server/agent/parent-claude-session-env.js";
 import { writePrivateFileAtomicSync } from "../server/private-files.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
@@ -493,11 +494,14 @@ function prepareZshShellIntegrationRuntimeDir(sourceDir = resolveZshShellIntegra
 export function buildTerminalEnvironment(
   input: BuildTerminalEnvironmentInput,
 ): Record<string, string> {
-  const baseEnv: Record<string, string> = withoutClaudeCodeSession(
-    createExternalProcessEnv(process.env, input.env, {
-      TERM: "xterm-256color",
-      TERM_PROGRAM: "kitty",
-    }),
+  // woowtech smart: the user's shell keeps Windows' current-folder command search (plan G28).
+  const baseEnv: Record<string, string> = withCurrentFolderExeSearch(
+    withoutClaudeCodeSession(
+      createExternalProcessEnv(process.env, input.env, {
+        TERM: "xterm-256color",
+        TERM_PROGRAM: "kitty",
+      }),
+    ),
   );
   const envWithAgentHooks = prependPaseoCliToPath(
     baseEnv,

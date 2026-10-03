@@ -1364,6 +1364,14 @@ daemon 不跳主控台視窗（G11）：
 - daemon 自己沒有主控台。在 Windows 上，它啟動的主控台程式沒加 `windowsHide` 就會各自跳出一個黑色視窗。大部分指令走 `utils/spawn.ts`，本來就隱藏；這次補上 supervisor 的 worker、終端機 worker、外掛 runtime 和本地語音 worker。`fork()` 的型別沒有 `windowsHide`（執行時 Node 會照用），所以經 `utils/woowtech-hidden-fork.ts`。
 - tree-kill 1.2.2 在 Windows 透過 cmd.exe 執行 `taskkill`，不隱藏視窗。改由 `utils/woowtech-process-tree-kill.ts` 直接執行 System32 的 `taskkill.exe`，並隱藏視窗。跟 tree-kill 一樣強制結束整棵程序樹，不看 signal。
 - 開瀏覽器（`rundll32`）和開編輯器的程序不加 `windowsHide`：它會把對方要開的視窗一起藏起來。
+- 工作區的 setup、teardown 指令（`utils/worktree.ts`）在 Windows 用 PowerShell 執行，也要隱藏視窗。它用 `execFile`，守門的 `fork()`／`spawn()` 掃描抓不到，另有一條守門。
+
+不執行專案帶來的程式（G28）：
+
+- Windows 找沒寫路徑的指令時，會先找目前的資料夾。daemon 在使用者的專案資料夾裡執行 `git`，也用名稱啟動 Copilot、Pi，專案裡放一個 `git.exe` 或 `copilot.cmd` 就會被執行。
+- supervisor 啟動 worker 前，在 worker 的環境設 `NoDefaultCurrentDirectoryInExePath=1`（`utils/woowtech-windows-exe-search.ts`）。libuv 1.48 起和 cmd.exe 都會因此跳過目前的資料夾；agent 和它們的子程序也會繼承。
+- App 內的終端機把它拿掉，使用者的 shell 照 Windows 原本的行為找指令。只拿掉我們自己設的（另記一個標記變數），使用者自己設過就保留。
+- 之後的第二批（G17、G30）再把指令都換成完整路徑，這個設定當成第二道防線。
 - 守門 `woowtech/windows-daemon.test.mjs`：daemon 新增的 `fork()`、直接 `spawn()` 沒有隱藏視窗，或有程式直接引用 tree-kill，就會失敗。
 
 daemon 的埠被保留或占用（G12）：

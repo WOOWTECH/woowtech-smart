@@ -92,3 +92,18 @@ test("the Windows app moves its daemon off a reserved default port (G12)", () =>
   assert.match(supervisor, /crashBackoff.nextDelayMs\(Date.now\(\) - workerStartedAt\)/);
   assert.match(supervisor, /if \(crashRestartTimer\) \{\s*clearTimeout\(crashRestartTimer\);/);
 });
+
+test("the Windows daemon never runs an executable a project carries (G28)", () => {
+  const read = (file) => readFileSync(join(root, file), "utf8");
+  const entry = read("packages/server/scripts/supervisor-entrypoint.ts");
+  const block = entry.indexOf("blockCurrentFolderExeSearch(workerEnv, process.platform);");
+  assert.notEqual(block, -1);
+  assert.ok(block < entry.indexOf("runSupervisor({"), "set before the worker starts");
+  const terminal = read("packages/server/src/terminal/terminal.ts");
+  assert.match(terminal, /const baseEnv: Record<string, string> = withCurrentFolderExeSearch\(/);
+  const worktree = read("packages/server/src/utils/worktree.ts");
+  assert.match(
+    worktree,
+    /execFileAsync\(shellInvocation.shell, shellInvocation.args, \{[\s\S]*?windowsHide: true,/,
+  );
+});
