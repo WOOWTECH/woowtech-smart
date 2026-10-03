@@ -629,7 +629,8 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
   }
 
   // Upstream's PushNotificationRouter (getpaseo/paseo, app/_layout.tsx): a per-mount useRef
-  // de-dupe and getLastNotificationResponseAsync, nothing cleared.
+  // de-dupe and getLastNotificationResponseAsync, nothing cleared. The async getter reads the last
+  // response at once and hands it over one microtask later.
   function mountRouterLikeUpstream(): () => void {
     let lastHandledId: string | null = null;
     const openFromResponse = (response: Response) => {
@@ -645,9 +646,11 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
     };
     const subscription = native.addNotificationResponseReceivedListener(openFromResponse);
     const last = native.getLastNotificationResponse();
-    if (last) {
-      openFromResponse(last);
-    }
+    queueMicrotask(() => {
+      if (last) {
+        openFromResponse(last);
+      }
+    });
     return () => subscription.remove();
   }
 
@@ -898,6 +901,8 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
       unmountCurrentRouter =
         input.router === "upstream" ? mountRouterLikeUpstream() : mountRouterLikeApp();
       render();
+      // Both routers hand the launch tap over one microtask after the mounting commit.
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
       record("router mounted");
     },
     unmountRouter() {

@@ -17,6 +17,14 @@
 // an identifier; keyed on it alone, a second notification for an agent already tapped was dropped.
 // The date (UNNotification.date on iOS, the FCM sent time on Android, EXNotificationSerializer.m
 // and NotificationSerializer.java) tells a new notification from the same one delivered twice.
+//
+// The tap that launched the app is handed over after the effects of the commit that mounted the
+// router, one microtask later, as upstream's getLastNotificationResponseAsync().then did. Handed
+// over inside the effect, its intent was pending before WorkspaceRouteNavigationBridge registered
+// later in the same commit; the bridge flushed it on registration, where isReady() is already true
+// but the root stack has not reached the container's state yet, and the router.dismissTo it
+// queued never showed up in the navigation state. Startup restore then opened the remembered
+// agent (Android cold start, logcat trace 2026-10-03, woowtech/README.md section 16).
 
 export interface NotificationResponseLike {
   notification: {
@@ -91,10 +99,19 @@ export function subscribeToNotificationTaps(
 
   const subscription = source.addNotificationResponseReceivedListener(handle);
   const launchTap = source.getLastNotificationResponse();
+  let subscribed = true;
   if (launchTap) {
-    handle(launchTap);
+    // A router unmounted before the hand-over leaves the tap uncleared for the next mount.
+    queueMicrotask(() => {
+      if (subscribed) {
+        handle(launchTap);
+      }
+    });
   }
-  return () => subscription.remove();
+  return () => {
+    subscribed = false;
+    subscription.remove();
+  };
 }
 
 /** Test seam: the handled deliveries are process state on purpose. */
