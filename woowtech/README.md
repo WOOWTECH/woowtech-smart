@@ -1372,6 +1372,10 @@ daemon 不跳主控台視窗（G11）：
 - `terminal/woowtech-pty-kill.ts`：Windows 只呼叫一次 `kill()`；之後的 SIGKILL 改用隱藏的 taskkill 結束 shell 的整棵程序樹，不再碰 pseudoconsole。macOS、Linux 照上游傳 signal。
 - node-pty 自帶的 `conpty.dll`＋`OpenConsole.exe`（#965，可能減少 conhost 外洩）先用 `WOOWTECH_CONPTY_DLL=1` 才開；#983 正是在它開著時重現的，要等實機 WT-2 的數字再決定預設。
 
+通知測試的說明（G19）：
+
+- 測試通知失敗或無法確認時，Windows 版改成指向「設定 › 系統 › 通知」，並提醒「請勿打擾」會擋橫幅、Smart App Control 可能擋未簽章的測試版（`desktop/permissions/woowtech-notification-help.ts`，依桌面 App 回報的 `platform` 決定）。macOS、Linux 維持原本的「系統設定 → 通知」。
+
 終端機 agent hook（G9 v1）：
 
 - Windows 主機一律不裝 hook（`terminal/agent-hooks/woowtech-hook-platform.ts`）：Claude 會拿到 PowerShell 跑不動的 POSIX 指令，Codex 的 hook 會在這台電腦的每個 Codex 工作階段失敗（上游 #3632）。設定打開時只記一行 log；關掉時照樣清掉舊版本裝過的 hook。

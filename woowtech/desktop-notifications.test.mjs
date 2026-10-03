@@ -60,8 +60,13 @@ test("renderer uses unknown permission, test policy and visible translated resul
   assert.match(section, /testNotificationState.status === "success"[\s\S]*?variant="success"/);
   const hook = source("packages/app/src/desktop/permissions/use-desktop-permissions.ts");
   assert.match(hook, /await runNotificationTest\(\{/);
-  assert.match(hook, /failureMessage: t\("woowtech.desktopNotifications.failed"\)/);
-  assert.match(hook, /unconfirmedMessage: t\("woowtech.desktopNotifications.unconfirmed"\)/);
+  // woowtech smart: Windows gets its own settings path (README §25, G19).
+  assert.match(
+    hook,
+    /const helpKeys = desktopNotificationHelpKeys\(getDesktopHost\(\)\?\.platform\);/,
+  );
+  assert.match(hook, /failureMessage: t\(helpKeys.failed\)/);
+  assert.match(hook, /unconfirmedMessage: t\(helpKeys.unconfirmed\)/);
   assert.match(
     hook,
     /sendDesktopTestNotification\(\{\s*bridge: getDesktopHost\(\)\?\.notification,/,

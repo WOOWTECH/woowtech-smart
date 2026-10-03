@@ -651,6 +651,10 @@ const DESKTOP_NOTIFICATIONS_ENGLISH = {
     "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
   failed:
     "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+  unconfirmedWindows:
+    "Check Settings › System › Notifications and make sure woowtech smart is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
+  failedWindows:
+    "Check Settings › System › Notifications and make sure woowtech smart is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
 };
 
 const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
@@ -664,6 +668,10 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
   unconfirmedTitle: "無法確認通知是否顯示",
   unconfirmed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
   failed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+  unconfirmedWindows:
+    "請到「設定 › 系統 › 通知」確認 woowtech smart 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
+  failedWindows:
+    "請到「設定 › 系統 › 通知」確認 woowtech smart 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
 };
 
 const AGENT_NOTIFICATION_TITLES_ENGLISH = {
