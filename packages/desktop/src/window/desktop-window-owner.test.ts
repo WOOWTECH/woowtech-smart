@@ -104,6 +104,25 @@ describe("desktop window owner", () => {
     expect(h.launches).toEqual([]);
   });
 
+  it("lets a Windows window raise itself instead of being shown again", async () => {
+    const h = harness();
+    const calls: string[] = [];
+    h.windows.push({
+      webContentsId: 9,
+      isDestroyed: () => false,
+      isVisible: () => true,
+      isMinimized: () => false,
+      restore: () => calls.push("restore"),
+      show: () => calls.push("show"),
+      focus: () => calls.push("focus"),
+      raise: () => calls.push("raise"),
+      sendAgent: () => calls.push("sendAgent"),
+    });
+    await h.owner.showOrOpenPrimary();
+    await h.owner.openOrFocusAgent({ id: "agent-1" });
+    expect(calls).toEqual(["raise", "raise", "sendAgent"]);
+  });
+
   it("opens one primary window when a tray click and a relaunch arrive with none open", async () => {
     const h = harness({ beforeCreate: () => new Promise((resolve) => setTimeout(resolve, 0)) });
     await Promise.all([h.owner.showOrOpenPrimary(), h.owner.showOrOpenPrimary()]);

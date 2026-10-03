@@ -107,3 +107,27 @@ test("only a packaged test build runs the built-in daemon with mock providers (G
     assert.doesNotMatch(source(`.github/workflows/${workflow}`), /woowtechTestBuild/, workflow);
   }
 });
+
+test("Windows windows come to the front and the first close explains the tray (plan B4)", () => {
+  const main = source("packages/desktop/src/main.ts");
+  assert.match(
+    main,
+    /once\("ready-to-show", \(\) => \{[\s\S]*?if \(process.platform === "win32"\) raiseWindowsWindow\(mainWindow\);\s*else mainWindow.show\(\);/,
+  );
+  assert.match(
+    main,
+    /process.platform === "win32" \? \{ raise: \(\) => raiseWindowsWindow\(win\) \} : \{\}/,
+  );
+  assert.match(main, /if \(windowsTray\) \{\s*showTrayHintOnce\(\{/);
+  const notifications = source("packages/desktop/src/features/notifications.ts");
+  assert.match(
+    notifications,
+    /process.platform === "win32" \? \{ raise: \(\) => raiseWindowsWindow\(win\) \} : \{\}/,
+  );
+  const focus = source("packages/desktop/src/features/woowtech-windows-focus.ts");
+  assert.match(focus, /if \(!win.isVisible\(\)\) \{\s*win.show\(\);/);
+  assert.match(
+    focus,
+    /win.setAlwaysOnTop\(true\);\s*win.focus\(\);\s*win.setAlwaysOnTop\(false\);/,
+  );
+});

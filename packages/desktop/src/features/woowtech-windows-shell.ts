@@ -58,6 +58,33 @@ export function trayLabels(input: {
   return { tooltip: input.appName, open: `Open ${input.appName}`, quit: "Quit" };
 }
 
+export interface TrayHintText {
+  title: string;
+  body: string;
+}
+
+/**
+ * Windows 11 puts a new tray icon in the hidden overflow and an app cannot move it out, so
+ * after the first close the app looks gone while macOS keeps showing it in the Dock. One toast
+ * on the first close says where it went (plan B8, H1 §Q7).
+ */
+export function trayHintText(input: {
+  appName: string;
+  preferredLanguages: readonly string[];
+}): TrayHintText {
+  const language = (input.preferredLanguages[0] ?? "").toLowerCase();
+  if (TRADITIONAL_CHINESE.test(language)) {
+    return {
+      title: `${input.appName} 仍在執行`,
+      body: "視窗關掉後，App 留在右下角的系統匣，agent 繼續跑。點工作列上的 ^ 可以找到圖示，也可以從開始功能表再開一次。",
+    };
+  }
+  return {
+    title: `${input.appName} is still running`,
+    body: "Closing the window keeps the app in the notification area and your agents keep running. Click ^ on the taskbar to find the icon, or open it again from the Start menu.",
+  };
+}
+
 export function quitWhenAllWindowsClosed(input: {
   platform: NodeJS.Platform;
   trayActive: boolean;

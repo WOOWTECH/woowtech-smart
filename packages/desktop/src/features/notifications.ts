@@ -14,6 +14,7 @@ import {
   type NotificationDeliveryResult,
 } from "./woowtech-notification-delivery.js";
 import { notificationIconCandidates } from "./woowtech-notification-icon.js";
+import { raiseWindowsWindow } from "./woowtech-windows-focus.js";
 import { agentNotificationId, agentTargetForNotificationData } from "./woowtech-launch-links.js";
 import { buildProtocolToastXml, shouldUseProtocolToast } from "./woowtech-windows-toast.js";
 
@@ -85,6 +86,7 @@ function toClickWindow(win: BrowserWindow | null | undefined): NotificationClick
     restore: () => win.restore(),
     show: () => win.show(),
     focus: () => win.focus(),
+    ...(process.platform === "win32" ? { raise: () => raiseWindowsWindow(win) } : {}),
     sendClick: (payload) => win.webContents.send("paseo:event:notification-click", payload),
   };
 }

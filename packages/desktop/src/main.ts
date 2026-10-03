@@ -66,10 +66,12 @@ import {
   quitWhenAllWindowsClosed,
   registerAgentLinkProtocol,
   relaunchAction,
+  trayHintText,
   trayLabels,
   windowsUninstallerPath,
 } from "./features/woowtech-windows-shell.js";
-import { createWindowsTray } from "./features/woowtech-windows-tray.js";
+import { createWindowsTray, showTrayHintOnce } from "./features/woowtech-windows-tray.js";
+import { raiseWindowsWindow } from "./features/woowtech-windows-focus.js";
 import { setupApplicationMenu } from "./features/menu.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
@@ -816,7 +818,9 @@ async function createWindow(
   });
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+    // woowtech smart: a window created late (tray click, relaunch) may open behind others (B4).
+    if (process.platform === "win32") raiseWindowsWindow(mainWindow);
+    else mainWindow.show();
   });
 
   if (!app.isPackaged) {
@@ -842,6 +846,7 @@ function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AgentDeepLin
     restore: () => win.restore(),
     show: () => win.show(),
     focus: () => win.focus(),
+    ...(process.platform === "win32" ? { raise: () => raiseWindowsWindow(win) } : {}),
     sendAgent: (target) => win.webContents.send("paseo:event:open-agent", target),
   };
 }
@@ -1171,5 +1176,20 @@ app.on("window-all-closed", () => {
   // woowtech smart: Windows stays in the tray the way macOS stays in the Dock (README §25).
   if (quitWhenAllWindowsClosed({ platform: process.platform, trayActive: windowsTray !== null })) {
     app.quit();
+    return;
+  }
+  if (windowsTray) {
+    showTrayHintOnce({
+      markerPath: path.join(app.getPath("userData"), "woowtech-tray-hint-shown"),
+      text: trayHintText({
+        appName: APP_NAME,
+        preferredLanguages: app.getPreferredSystemLanguages(),
+      }),
+      onClick: () => {
+        void desktopWindowOwner.showOrOpenPrimary().catch((error) => {
+          log.error("[tray] failed to show a window from the hint", error);
+        });
+      },
+    });
   }
 });

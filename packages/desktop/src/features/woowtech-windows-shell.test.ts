@@ -4,6 +4,7 @@ import {
   quitWhenAllWindowsClosed,
   registerAgentLinkProtocol,
   relaunchAction,
+  trayHintText,
   trayLabels,
   windowsUninstallerPath,
 } from "./woowtech-windows-shell.js";
@@ -130,6 +131,17 @@ describe("tray labels", () => {
         quit: "Quit",
       });
     }
+  });
+});
+
+describe("first-close hint", () => {
+  it("says where the app went in the system's language", () => {
+    expect(trayHintText({ appName: "woowtech smart", preferredLanguages: ["zh-TW"] }).title).toBe(
+      "woowtech smart 仍在執行",
+    );
+    const english = trayHintText({ appName: "woowtech smart", preferredLanguages: ["en-US"] });
+    expect(english.title).toBe("woowtech smart is still running");
+    expect(english.body).toContain("notification area");
   });
 });
 

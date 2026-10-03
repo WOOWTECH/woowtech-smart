@@ -8,7 +8,19 @@ export interface OwnedDesktopWindow<TAgentTarget> {
   restore(): void;
   show(): void;
   focus(): void;
+  /** woowtech smart: Windows replacement for restore/show/focus (plan B4). */
+  raise?(): void;
   sendAgent(target: TAgentTarget): void;
+}
+
+function bringToFront<TAgentTarget>(window: OwnedDesktopWindow<TAgentTarget>): void {
+  if (window.raise) {
+    window.raise();
+    return;
+  }
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
 }
 
 interface DesktopWindowOwnerPort<TAgentTarget> {
@@ -89,9 +101,7 @@ export function createDesktopWindowOwner<TAgentTarget>(
         await owner.openOrFocusAgent(target);
         return;
       }
-      if (window.isMinimized()) window.restore();
-      window.show();
-      window.focus();
+      bringToFront(window);
       const deliverable = port.deliverAgent(window.webContentsId, target);
       if (deliverable) window.sendAgent(deliverable);
     },
@@ -111,9 +121,7 @@ export function createDesktopWindowOwner<TAgentTarget>(
         await owner.restoreWhenActivated();
         return;
       }
-      if (window.isMinimized()) window.restore();
-      window.show();
-      window.focus();
+      bringToFront(window);
     },
     takePendingProject: (webContentsId) => pendingProjects.take(webContentsId),
   };

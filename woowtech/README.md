@@ -1335,7 +1335,9 @@ owner 的決定（2026-10-02）：Windows 版跟 Mac 版的定位和使用效果
 - 點系統匣圖示，或從開始功能表再開一次：有視窗就叫到前面，沒有才開主視窗（`desktopWindowOwner.showOrOpenPrimary`）。上游在 Windows 再開一次會多開一個視窗。帶專案路徑的重開（CLI `woowtech-smart <path>`）照舊開新視窗；Linux 維持上游。
 - 系統匣選單的「結束」等於 Cmd+Q，daemon 要不要一起停照 `keepRunningAfterQuit`。沒有開機自動啟動，跟 Mac 一樣。
 - 選單文字看系統語言：繁中是「開啟 woowtech smart」「結束」，其他（含簡中）用英文。主程序讀不到 App 裡的語言設定。
-- 建不出系統匣圖示（找不到圖示檔）時，關窗照上游結束 App，免得留下看不到的程序。圖示是 resources 的 `icon.ico`（16–256 px），由 `electron-builder.yml` 的 win `extraResources` 出貨。
+- 建不出系統匣圖示（找不到圖示檔）時，關窗照上游結束 App，免得留下看不到的程序。圖示是 resources 的 `icon.ico`（16–256 px，含 125%、175%、200% 縮放用的 20、28、36、40 px），由 `electron-builder.yml` 的 win `extraResources` 出貨。
+- Windows 11 把新的系統匣圖示放在「隱藏的圖示」裡，App 不能自己移出來。第一次關窗時跳一則提示（`showTrayHintOnce`，userData 裡的 `woowtech-tray-hint-shown` 記錄已經提示過），說明圖示在 ^ 裡，點提示會叫回視窗。
+- 把視窗帶到前面（`features/woowtech-windows-focus.ts`）：Windows 不讓背景程式搶前景，從通知啟動時第二個實例交出的前景權限也常常失效。所以先切一次「永遠在最上層」再 focus，這是 Signal Desktop 用的作法；已經顯示的視窗不再呼叫 `show()`，以免移動貼齊的視窗。用在點通知、second-instance、系統匣，以及晚建立的視窗第一次顯示時。實機用 `GetForegroundWindow` 判定（WD-14），不夠的話改成送一次無害的按鍵。
 - 政策在 `features/woowtech-windows-shell.ts`，Electron 接點在 `features/woowtech-windows-tray.ts`。上游接點：`main.ts`（`window-all-closed`、`second-instance`、bootstrap）、`window/desktop-window-owner.ts`。
 
 點通知開到 agent（G2–G5，加上 macOS 的冷啟動）：
