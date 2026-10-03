@@ -56,6 +56,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI。Windows 桌面版照 Mac �
   1. node_modules 裡有就直接用。開發機會有，因為它是 devDependency。
   2. 否則讀 `$PASEO_HOME/runtime-deps/claude-agent-sdk-<版本>.json` 指向的同版本 generation；沒有 pointer 時仍相容舊的 `claude-agent-sdk-<版本>/` 目錄。
   3. 沒有可載入副本，才從 npm registry 或鏡像下載；sha512 對不上就拒絕。下載約 1.33 MB，解壓後約 4.6 MB；首次等待時間取決於網路。
+     解壓用 JS（`woowtech-npm-tarball.ts`），不呼叫 PATH 上的 `tar`：Windows 上它可能是 Git 的 GNU tar，會把 `C:\…` 當成「主機:路徑」（plan G15）。只收一般檔案和資料夾、路徑都在 `package/` 底下、不含 Windows 會另作解釋的名稱（`..`、磁碟代號、`:`、結尾的點或空白、`CON` 這類裝置名稱），大小和數量有上限，整份驗過才開始寫；結果跟系統 `tar` 解開的逐檔相同。Windows 上解壓後的改名，遇到 Defender 暫時鎖檔（EPERM、EACCES、EBUSY）會等一下重試（`utils/woowtech-rename-retry.ts`）。
 - 受管理副本缺檔、語法錯誤或初始化失敗時，只把選中的副本移到同層 quarantine，重新下載一次。新副本用獨立實體 generation 目錄，完整性驗證與真正 import 成功後才原子更新 pointer，避免 Node 把舊 entry／相對依賴的失敗快取帶回來。local/dev SDK 的其他載入錯誤不自動修復。
 - pointer 只接受同版本、合法 UUID 的 basename；格式錯誤、越界或含符號連結的路徑安全拒絕。失敗時清自己的 partial／未發布副本，不刪其他 generation 或整個 runtime-deps；舊副本與 quarantine 不自動回收。這是路徑檢查，不是防同權限惡意程序競態的檔案系統沙箱。
 - `claudeQuery()` 必須立刻回傳 Query，所以 SDK 還沒載入時，它會先回傳 `DeferredQuery`（`deferred-query.ts`）。

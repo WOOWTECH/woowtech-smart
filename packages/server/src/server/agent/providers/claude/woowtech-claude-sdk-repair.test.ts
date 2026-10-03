@@ -28,8 +28,9 @@ async function tarball(files: Record<string, string>) {
   for (const [file, text] of Object.entries(files))
     await writeFile(path.join(source, "package", file), text);
   const archive = path.join(source, "sdk.tgz");
+  // COPYFILE_DISABLE: no AppleDouble ._ entries from macOS tar (woowtech-npm-tarball.ts).
   execFileSync("tar", ["-czf", archive, "-C", source, "package"], {
-    env: { PATH: "/usr/bin:/bin", HOME: root },
+    env: { PATH: "/usr/bin:/bin", HOME: root, COPYFILE_DISABLE: "1" },
   });
   const bytes = new Uint8Array(await readFile(archive));
   return { bytes, integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}` };

@@ -111,3 +111,24 @@ test("electron-builder's production collector includes undici and excludes the p
   assert.ok(entries.some((entry) => entry.name === "undici" && entry.version === "7.24.8"));
   assert.ok(entries.some((entry) => entry.name === "@getpaseo/server"));
 });
+
+test("the SDK tarball is unpacked in JS, not by the tar on PATH (G15)", () => {
+  const runtime = readFileSync(
+    path.join(
+      repoRoot,
+      "packages/server/src/server/agent/providers/claude/claude-agent-sdk-runtime.ts",
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(runtime, /execCommand\("tar"/);
+  assert.match(runtime, /await extractNpmTarball\(\{ bytes, destination: scratch \}\);/);
+  assert.match(runtime, /await renameWithRetry\(\{ from: scratch, to: installDir \}\);/);
+  const installation = readFileSync(
+    path.join(
+      repoRoot,
+      "packages/server/src/server/agent/providers/claude/claude-agent-sdk-installation.ts",
+    ),
+    "utf8",
+  );
+  assert.doesNotMatch(installation, /\bawait rename\(/);
+});
