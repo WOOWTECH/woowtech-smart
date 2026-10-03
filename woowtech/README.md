@@ -1887,6 +1887,7 @@ Electron 與 electron-builder（G7、G8）：
 | #5636（`87818812a`，paseo-bot）                  | 沒有本機 daemon 時，桌面版的狀態輪詢在主程序直接回「已停止」，不再每秒啟動一次 CLI（Windows 上游標一直轉圈，#4805）。測試對 `daemon-control` 的 mock 改成保留原本的匯出，跟上游一樣                                                                      |
 | #5560（未合併就關閉，head `fb2d13a86`，wonfeel） | cmd.exe 逐行解析命令列，含換行的參數會被截斷：`gh api graphql` 的查詢在 Windows 全壞，PR 狀態一直重試。有換行的參數改成不經 shell 直接執行，GraphQL 查詢也先把換行換成空白。上游的新貢獻規則預設關閉社群 PR，所以由我們維護                              |
 | #5845（上游 issue，還沒修）                      | Claude Code 的 Notification hook 把原因放在 `notification_type`，原本只看 `matcher`／`reason`，「需要你的注意」永遠不會觸發（Mac 也一樣）。改成也認 `notification_type` 的 `idle_prompt`、`permission_prompt`（`terminal/agent-hooks/claude/claude.ts`） |
+| #1987（`cf4509631`，boudra）                     | Windows 的檔案連結提示改成顯示相對於工作區的路徑（原本是完整的 `C:\…` 路徑），開檔時也用同一套路徑判斷。上游已合併，diff 原樣套用                                                                                                                        |
 
 ## Mac 開發環境
 
