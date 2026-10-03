@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { isPlatform } from "../../../test-utils/platform.js";
 import { buildTerminalEnvironment } from "../../terminal.js";
 import { buildAgentHookShellCommand } from "../agent-hook-installer.js";
+import { claudeAgentHookProvider } from "./claude.js";
 import {
   AGENT_HOOK_PROVIDERS,
   installRegisteredAgentHooks,
@@ -198,5 +199,27 @@ describe("Claude terminal agent hooks", () => {
     });
 
     expect(env.PATH?.split(delimiter)).toEqual(["/usr/bin", "/bin"]);
+  });
+});
+
+// woowtech smart: upstream #5845, Claude Code reports the reason in `notification_type`.
+describe("Claude notification hook", () => {
+  async function activity(payload: unknown) {
+    return claudeAgentHookProvider.resolveActivity({
+      event: "Notification",
+      input: { isTTY: false, read: async () => JSON.stringify(payload) },
+    } as Parameters<typeof claudeAgentHookProvider.resolveActivity>[0]);
+  }
+
+  it("treats idle and permission prompts as needing input", async () => {
+    expect(await activity({ notification_type: "idle_prompt" })).toBe("needs-input");
+    expect(await activity({ notification_type: "permission_prompt" })).toBe("needs-input");
+    expect(await activity({ matcher: "idle_prompt" })).toBe("needs-input");
+    expect(await activity({ reason: "idle_prompt" })).toBe("needs-input");
+  });
+
+  it("ignores other notifications", async () => {
+    expect(await activity({ notification_type: "auth_success" })).toBeNull();
+    expect(await activity({})).toBeNull();
   });
 });

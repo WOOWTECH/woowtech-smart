@@ -40,8 +40,20 @@ function isIdlePrompt(raw: string | null): boolean {
   try {
     const notification = JSON.parse(raw) as unknown;
     if (!notification || typeof notification !== "object") return false;
-    const payload = notification as { matcher?: unknown; reason?: unknown };
-    return payload.matcher === "idle_prompt" || payload.reason === "idle_prompt";
+    const payload = notification as {
+      matcher?: unknown;
+      reason?: unknown;
+      notification_type?: unknown;
+    };
+    // woowtech smart: Claude Code sends `notification_type` (upstream #5845, open), so "needs
+    // input" never fired; `matcher`/`reason` stay for older versions. A permission prompt also
+    // waits for the user.
+    return (
+      payload.notification_type === "idle_prompt" ||
+      payload.notification_type === "permission_prompt" ||
+      payload.matcher === "idle_prompt" ||
+      payload.reason === "idle_prompt"
+    );
   } catch {
     return false;
   }
