@@ -1433,6 +1433,7 @@ Windows 的 CLI 安裝（G16）：
 - 現在移植上游 PR #4696（還沒合併）：路徑改寫成 `%LOCALAPPDATA%` 等變數開頭，檔案只有 ASCII、CRLF；安裝在這些位置以外、路徑又有中文時，只有那一行切到 UTF-8（`chcp 65001`）讀（`cli-install/woowtech-windows-cli-shim.ts`）。
 - 跟 #4696 不同的地方：第二行是解除安裝要認的標記；`setlocal`，變數不留在使用者的主控台；訊息裡的路徑加引號（`Program Files (x86)` 的 `)` 會提早結束區塊）；最後直接跳到內附的 CLI，不用 `call`，參數裡的 `%` 和 `^` 不會再被展開一次。
 - 同時把 `%USERPROFILE%\.local\bin` 加進使用者 PATH，等於 Mac 在 shell rc 加的那一行（`cli-install/woowtech-windows-user-path.ts`）：已經在使用者或電腦的 PATH 裡就不動；保留登錄值原本的型別（`REG_EXPAND_SZ` 寫 `%USERPROFILE%\.local\bin`），不用 `setx`（會改成 `REG_SZ`、還可能截斷）；寫完廣播設定變更，新開的終端機就看得到。失敗只記 log，安裝照樣成功。
+- `woowtech-smart open <路徑>` 在 Windows：內附的 CLI 是在 App 自己的 exe 裡跑的，所以直接開那個 exe，裝在自訂資料夾也找得到；啟動時不隱藏視窗（`spawnProcess` 會把子程序的視窗都藏起來，Windows 會套用到 App 的第一個視窗），App 沒開時也看得到視窗（`cli/src/commands/woowtech-windows-desktop-app.ts`，H5 F4）。
 - 設定頁的「已安裝」也認新寫法（`ownership.ts`）。`.gitattributes` 讓 `*.cmd`、`*.bat` 一律 CRLF，送到 Windows 電腦的 `git archive` 也是。
 - 守門：`woowtech/windows-desktop.test.mjs`。實機：WI-9（含中文帳號 WI-7）。
 
