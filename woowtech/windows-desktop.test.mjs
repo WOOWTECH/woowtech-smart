@@ -204,3 +204,13 @@ test("Install CLI on Windows survives a Chinese user name and reaches PATH (G16)
   assert.match(source(".gitattributes"), /^\*\.cmd text eol=crlf$/m);
   assert.match(source(".gitattributes"), /^\*\.bat text eol=crlf$/m);
 });
+
+test("Windows installs an update only from a silent restart, never at quit (G37, D20)", () => {
+  const updater = source("packages/desktop/src/features/auto-updater.ts");
+  assert.match(updater, /!installsUpdateOnQuit\(process.platform\)/);
+  assert.match(
+    updater,
+    /const \{ isSilent, isForceRunAfter \} = updateInstallMode\(\{\s*platform: process.platform,\s*\.\.\.requested,\s*\}\);/,
+  );
+  assert.match(updater, /autoUpdater.quitAndInstall\(isSilent, isForceRunAfter\);/);
+});

@@ -1437,6 +1437,13 @@ Windows 的 CLI 安裝（G16）：
 - 設定頁的「已安裝」也認新寫法（`ownership.ts`）。`.gitattributes` 讓 `*.cmd`、`*.bat` 一律 CRLF，送到 Windows 電腦的 `git archive` 也是。
 - 守門：`woowtech/windows-desktop.test.mjs`。實機：WI-9（含中文帳號 WI-7）。
 
+Windows 的更新（G37、D20）：
+
+- Windows 不在結束 App 時安裝下載好的更新：結束後馬上關機，Windows 會把正在跑的靜默安裝程式砍掉，App 就變成沒安裝（electron-builder #7807）；App 常駐系統匣，結束後常常就是關機。
+- 只在使用者按「重新啟動以更新」時安裝，而且安裝程式靜默執行，跟 Mac 的重新啟動一樣，不再跳出安裝精靈。裝完 App 會帶 `--updated` 自己重開（B1 已經把它當成開 App）。
+- 政策在 `features/woowtech-windows-update.ts`，接點是 `auto-updater.ts` 的 `installAppUpdateOnQuit` 和 `quitAndInstall`。macOS、Linux 照上游。
+- 還沒做：下次啟動時自動安裝已下載的更新、更新前一律正常停掉 daemon（不管是誰啟動的）、系統匣的「重新啟動以更新」選項。等 WI-6 在實機上看過更新流程再做。
+
 daemon 的埠被保留或占用（G12）：
 
 - Windows 可能把預設埠 6770 劃進 Hyper-V 或 WSL 的保留範圍（`netsh interface ipv4 show excludedportrange protocol=tcp`），或被別的程式占用，內建 daemon 就啟動不了（上游 #1552、#3333，都還沒修）。
