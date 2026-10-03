@@ -173,3 +173,19 @@ test("Windows re-reads the saved PATH when a program is not found (G29)", () => 
   );
   assert.match(refresh, /\{\s*windowsHide: true,\s*timeout: deps.timeoutMs \?\? 5000,/);
 });
+
+test("Windows detection knows WinGet's Codex name and never trusts a silent probe (G14)", () => {
+  const resolution = readFileSync(
+    join(root, "packages/server/src/executable-resolution/executable-resolution.ts"),
+    "utf8",
+  );
+  const windowsBranch = resolution.slice(
+    resolution.indexOf('if (process.platform === "win32") {\n    // woowtech'),
+  );
+  assert.match(windowsBranch, /probeExecutable: probeWindowsExecutable,/);
+  const windows = readFileSync(
+    join(root, "packages/server/src/executable-resolution/windows.ts"),
+    "utf8",
+  );
+  assert.match(windows, /const exeNames = wingetCommandFileNames\(name\);/);
+});

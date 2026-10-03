@@ -4,6 +4,7 @@ import { execCommand } from "../utils/spawn.js";
 import { isWindowsCommandScript } from "../utils/windows-command.js";
 import { windowsExecutableResolution } from "./windows.js";
 import { findWithWindowsPathRefresh } from "../utils/woowtech-windows-registry-path.js";
+import { probeWindowsExecutable } from "./woowtech-windows-probe.js";
 
 export { quoteWindowsArgument, quoteWindowsCommand } from "../utils/windows-command.js";
 
@@ -127,7 +128,8 @@ export async function findExecutable(
       lookup: () =>
         windowsExecutableResolution.find(trimmed, {
           enumeratePathCandidates: enumerateCandidates,
-          probeExecutable,
+          // woowtech smart: a probe that times out is a miss on Windows (plan G14).
+          probeExecutable: probeWindowsExecutable,
           exists: existsSync,
           probeTimeoutMs,
         }),
