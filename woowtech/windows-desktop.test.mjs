@@ -131,3 +131,52 @@ test("Windows windows come to the front and the first close explains the tray (p
     /win.setAlwaysOnTop\(true\);\s*win.focus\(\);\s*win.setAlwaysOnTop\(false\);/,
   );
 });
+
+test("a real Windows uninstall removes the app's registrations and keeps user data (G6)", () => {
+  const nsh = source("packages/desktop/build/installer.nsh");
+  const code = nsh
+    .split("\n")
+    .filter((line) => !line.trim().startsWith(";"))
+    .join("\n");
+  const define = (name) => nsh.match(new RegExp(`^!define ${name} "([^"]+)"$`, "m"))?.[1];
+  const ids = source("packages/desktop/src/features/woowtech-app-user-model-id.ts");
+  assert.equal(
+    define("WOOWTECH_TOAST_CLSID"),
+    ids.match(/WOOWTECH_TOAST_ACTIVATOR_CLSID = "([^"]+)"/)[1],
+  );
+  assert.doesNotMatch(
+    nsh,
+    new RegExp(ids.match(/WOOWTECH_DEV_TOAST_ACTIVATOR_CLSID = "\{([^}]+)\}"/)[1]),
+  );
+  const builder = source("packages/desktop/electron-builder.yml");
+  assert.equal(define("WOOWTECH_SCHEME"), builder.match(/schemes:\s*\n\s*- (\S+)/)[1]);
+  // electron-updater names its cache after the sanitized package name, lower-cased.
+  const packageName = builder.match(/extraMetadata:\s*\n\s*name: (\S+)/)[1];
+  assert.equal(define("WOOWTECH_UPDATER_CACHE"), `${packageName.toLowerCase()}-updater`);
+  // ${APP_ID} names Windows' notification settings key, which belongs to the AUMID.
+  assert.equal(
+    builder.match(/^appId: (\S+)$/m)[1],
+    ids.match(/WOOWTECH_DESKTOP_APP_ID = "([^"]+)"/)[1],
+  );
+  const install = source("packages/desktop/src/integrations/cli-install/install.ts");
+  const trampoline = install.match(/"@echo off",\s*(?:\/\/[^\n]*\n\s*)*"([^"]+)",/);
+  assert.ok(trampoline?.[1].startsWith(define("WOOWTECH_CLI_MARKER")), "marker on line 2");
+
+  const start = code.indexOf("!macro customUnInstall");
+  const uninstall = code.slice(start, code.indexOf("!macroend", start));
+  // Updates and reinstalls run the old uninstaller with --updated; they must keep everything.
+  assert.match(uninstall, /^!macro customUnInstall\n\s*\$\{ifNot\} \$\{isUpdated\}\n/);
+  assert.match(uninstall, /\$\{endIf\}\n$/);
+  assert.match(uninstall, /== '"\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}" "%1"'/);
+  assert.match(uninstall, /== "\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}"/);
+  // User data stays, like moving the Mac app to the Trash (D15).
+  assert.doesNotMatch(uninstall, /\$APPDATA|\.woowtech-smart|\.local\\bin"/);
+  // A failing old uninstaller aborts the update; -WX fails on a Var or Function one pass leaves unused.
+  assert.doesNotMatch(code, /^\s*(Abort|Quit|MessageBox|Var|Function)\b/m);
+  // Per-user only (D14).
+  assert.match(code, /!macro customInstallMode\n\s*StrCpy \$isForceCurrentInstall "1"\n!macroend/);
+  // electron-builder includes build/installer.nsh only by default; a custom script would also
+  // stop it from signing the uninstaller.
+  assert.doesNotMatch(builder.slice(builder.indexOf("\nnsis:")), /^\s+(include|script):/m);
+  assert.doesNotMatch(builder, /buildResources:/);
+});

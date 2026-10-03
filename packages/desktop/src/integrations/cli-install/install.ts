@@ -46,6 +46,9 @@ export async function installCli(): Promise<InstallStatus> {
     // entrypoint scripts) live in the bundled shim and update with the app.
     const cmdContent = [
       "@echo off",
+      // woowtech smart: the uninstaller deletes this file only when its second line starts
+      // with "rem woowtech-smart CLI trampoline" (build/installer.nsh, README §25).
+      "rem woowtech-smart CLI trampoline: written by woowtech smart, removed by its uninstaller",
       `set "BUNDLED_CLI=${shimPath}"`,
       `if not exist "%BUNDLED_CLI%" (`,
       `  echo woowtech smart CLI not found at %BUNDLED_CLI% — is woowtech smart installed? 1>&2`,

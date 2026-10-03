@@ -1411,6 +1411,21 @@ daemon 的埠被保留或占用（G12）：
 
 - 守門：`.github/workflows/` 裡不能出現 `woowtechTestBuild`。
 
+安裝與解除安裝（G6、D14、D15）：
+
+- 安裝程式只裝給目前的使用者（`build/installer.nsh` 的 `customInstallMode`）。Electron 的通知啟動器、開始功能表捷徑和協定本來就只登記給目前的使用者。不再出現「所有使用者」那一頁，也不用系統管理員權限，非靜默的更新也一樣。
+- 解除安裝時清掉 Windows 還指向 App 的東西：
+  - `woowtech-smart:` 協定和通知啟動器的 CLSID，都只在還指向這一份時才刪。開發版的 CLSID 不碰。
+  - Windows 對這個 App 的通知設定（`Notifications\Settings\io.woowtech.smart.desktop`）。
+  - 「安裝 CLI」寫的 `%USERPROFILE%\.local\bin\woowtech-smart.cmd`，第二行是我們的標記（`rem woowtech-smart CLI trampoline`）才刪。
+  - electron-updater 的下載快取 `%LOCALAPPDATA%\io.woowtech.smart.desktop-updater`。
+  - 開始功能表捷徑由範本刪。Electron 寫的是同一個檔案。
+- 使用者資料保留，跟把 Mac 版丟進垃圾桶一樣：`%APPDATA%\woowtech smart`（設定、log）和 `%USERPROFILE%\.woowtech-smart`（agent、配對金鑰、可能有沒 commit 內容的 worktree）。`.local\bin` 和使用者 PATH 也不動，Claude Code 的 `claude.exe` 裝在那裡。要連設定和 log 一起刪，用 `"Uninstall woowtech smart.exe" /S --delete-app-data`；`.woowtech-smart` 仍會保留。
+- 每次更新和重新安裝，新的安裝程式都會帶 `--updated` 執行舊版的解除安裝程式。清理全部包在 `${ifNot} ${isUpdated}` 裡，所以更新時什麼都不刪。這段程式會留在已安裝的版本裡，直到那一版更新，所以只做盡力而為：不中止、不跳對話框。
+- electron-builder 自動帶入 `build/installer.nsh`，用 `makensis -WX` 編譯兩次（解除安裝程式、安裝程式），任何警告都會讓建置失敗，所以裡面不宣告變數、不寫函式。不要改成完整的 `nsis.script`：那樣 electron-builder 就不簽解除安裝程式。根目錄的 `.gitignore` 忽略 `build/`，這個檔案（跟 entitlements 一樣）是用 `git add -f` 加進來的。
+- 在 Mac 上建 Windows 安裝檔可以確認 NSIS 編譯得過，但產出的解除安裝程式是壞的（electron-builder #10258），不能拿去測或發佈。
+- 安裝資料夾目前仍可以選（D19 待決定）。
+
 Electron 與 electron-builder（G7、G8）：
 
 - Electron 44.2.0 升到 44.5.1：44.4.1 修了通知物件的生命週期問題。在 macOS 用 dev 模式測通知時，換版後要用 Apple Development 身分重新簽 `node_modules/electron/dist/Electron.app`（`codesign --force --deep --sign <身分>`），未簽的 Electron 發通知會失敗。
