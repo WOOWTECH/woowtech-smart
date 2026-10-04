@@ -1485,10 +1485,11 @@ daemon 的埠被保留或占用（G12）：
 - 憑證是 SSL.com 的 OV 程式碼簽章憑證，私鑰在 SSL.com 的 eSigner 雲端，發行流程用 jsign 7.5 簽。憑證最長 460 天，大約每 12–15 個月續一次；續約不要換公司名稱或 CA，SmartScreen 的信譽會重新累積。
 - `electron-builder.yml` 的 `win.signtoolOptions.sign` 指到 `scripts/woowtech-sign-windows.js`。只有發行流程設 `WOOWTECH_SIGN=1` 才簽，其他建置（含測試版）都不簽。只簽 SHA-256，時間戳用 RFC 3161（`ts.ssl.com`，連不上改用 DigiCert 的），憑證到期後簽章仍有效。
 - Smart App Control 檢查每個載入的模組，只簽安裝程式不夠，所以 `signExts` 把每個 `.dll`、`.node` 都交給簽章函式。已經有簽章的檔案保留原簽章：Electron 的 `d3dcompiler_47.dll`、`dxil.dll` 和 node-pty 的 `conpty.dll`、`OpenConsole.exe` 是微軟簽的，都有時間戳。x64 一版要簽 10 個檔案：App 執行檔、`dxcompiler.dll`、`ffmpeg.dll`、`vk_swiftshader.dll`、`vulkan-1.dll`、兩個 `conpty*.node`、`esbuild.exe`、解除安裝程式和安裝程式。
-- 發行流程的 secrets：`ESIGNER_STOREPASS`（`<SSL.com 帳號>|<密碼>`）、`ESIGNER_CREDENTIAL_ID`、`ESIGNER_TOTP_SECRET`（啟用 eSigner 自動簽章時 QR code 旁的 base64 secret）。`JSIGN_JAR` 指到下載後比對過 SHA-256 的 `jsign-7.5.jar`（`602a51c3545a6dc4fb99bd2ea7152b26d1345916d0c93ddfbd5936cb735af91c`，GitHub release 和 Maven Central 相同）。jsign 用 `env:` 前綴從環境變數讀密碼和 TOTP，不會出現在 log 或程序清單。少一個變數就讓建置失敗：有自訂簽章函式時，`win.forceCodeSigning` 不會擋未簽的建置。
-- `publisherName` 不寫在設定檔，由發行流程用 `-c.win.signtoolOptions.publisherName=...` 帶入憑證的 DN，例如 `CN="WOOW TECH CO., LTD.", O="WOOW TECH CO., LTD.", C=TW`（值裡有逗號要加引號）。沒有它，electron-updater 不驗更新檔的簽章；測試版帶了它，會拒絕自己未簽的更新。
-- 建完跑 `scripts/woowtech-windows-signatures.ps1 -Path packages\desktop\release -RequireSigned -Publisher '<憑證的 CN>'`：列出每個 `.exe`、`.dll`、`.node` 的簽章，有任何一個不是有效簽章加時間戳，或簽署者不是我們也不是微軟，就失敗。在測試電腦上不加 `-RequireSigned`、指向安裝好的資料夾，可以看 Smart App Control 會看到什麼。
-- 10/4 在 Mac 上用 jsign 7.5 和拋棄式的本機金鑰實簽過 `esbuild.exe`、`conpty.node`，確認參數、`.node` 簽得了、SSL.com 時間戳拿得到；檢查腳本用 Mac 的 pwsh 換上假的 `Get-AuthenticodeSignature` 測過全簽、缺簽、缺時間戳、簽署者不符四種結果。真的 eSigner 簽章要等憑證核發。
+- 發行流程（`desktop-release.yml` 的 Windows job）每次都簽，只出 x64：裝 Java 21，下載 jsign 7.5 並比對 SHA-256（GitHub release 和 Maven Central 的檔案相同）。要在 GitHub 設的 secrets：`ESIGNER_STOREPASS`（`<SSL.com 帳號>|<密碼>`）、`ESIGNER_CREDENTIAL_ID`、`ESIGNER_TOTP_SECRET`（啟用 eSigner 自動簽章時 QR code 旁的 base64 secret）；變數 `WIN_PUBLISHER_DN`。jsign 用 `env:` 前綴從環境變數讀密碼和 TOTP，不會出現在 log 或程序清單。少任何一個，建置就失敗：有自訂簽章函式時，`win.forceCodeSigning` 擋不住未簽的建置。
+- `WIN_PUBLISHER_DN` 是憑證的 Subject，例如 `CN="WOOW TECH CO., LTD.", O="WOOW TECH CO., LTD.", C=TW`（值裡有逗號要加引號），由發行流程用 `-c.win.signtoolOptions.publisherName` 帶入；electron-updater 只接受這個發行者簽的更新。不寫在設定檔：沒有它，electron-updater 不驗更新檔的簽章；測試版帶了它，會拒絕自己未簽的更新。
+- `scripts/woowtech-windows-signatures.ps1` 列出每個 `.exe`、`.dll`、`.node` 的簽章；加 `-RequireSigned -Publisher '<憑證的 CN>'` 時，有任何一個不是有效簽章加時間戳，或簽署者不是我們也不是微軟，就失敗。發行流程建完先檢查 release 資料夾，再靜默安裝、檢查安裝好的資料夾（解除安裝程式只在安裝程式裡，要裝了才看得到），最後解除安裝。在測試電腦上不加 `-RequireSigned`、指向安裝好的資料夾，可以看 Smart App Control 會看到什麼。
+- 手動執行發行流程、`platform=windows`、`publish=false`，就是一個已簽章的測試版（workflow 的 artifact），可以拿去 Smart App Control 開著的電腦測。eSigner 前 30 天不限簽章次數。
+- 10/4 在 Mac 上用 jsign 7.5 和拋棄式的本機金鑰實簽過 `esbuild.exe`、`conpty.node`，確認參數、`.node` 簽得了、SSL.com 時間戳拿得到；檢查腳本用 Mac 的 pwsh 換上假的 `Get-AuthenticodeSignature` 測過全簽、缺簽、缺時間戳、簽署者不符四種結果；workflow 用 actionlint 1.7.12 檢查過，裡面的 PowerShell 用 pwsh 剖析過。真的 eSigner 簽章和 runner 上的安裝、解除安裝，要等憑證核發後第一次執行。
 
 Electron 與 electron-builder（G7、G8）：
 

@@ -369,6 +369,35 @@ jobs:
           fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
           NODE
 
+      # woowtech smart: every Windows build of this job is signed (README §25, plan D8), so a
+      # missing secret or variable fails it instead of shipping an unsigned build.
+      - name: Check Windows signing settings
+        shell: bash
+        env:
+          WIN_PUBLISHER_DN: ${{ vars.WIN_PUBLISHER_DN }}
+        run: |
+          if [[ "$WIN_PUBLISHER_DN" != *CN=* ]]; then
+            echo "::error::Set the WIN_PUBLISHER_DN variable to the signing certificate's subject (README §25)"
+            exit 1
+          fi
+
+      - name: Setup Java for jsign
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Fetch jsign
+        shell: pwsh
+        run: |
+          $jar = Join-Path $env:RUNNER_TEMP 'jsign-7.5.jar'
+          Invoke-WebRequest -Uri 'https://github.com/ebourg/jsign/releases/download/7.5/jsign-7.5.jar' -OutFile $jar
+          $hash = (Get-FileHash -LiteralPath $jar -Algorithm SHA256).Hash
+          if ($hash -ne '602a51c3545a6dc4fb99bd2ea7152b26d1345916d0c93ddfbd5936cb735af91c') {
+            throw "jsign-7.5.jar has SHA-256 $hash"
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "JSIGN_JAR=$jar"
+
       - name: Build desktop release
         shell: bash
         env:
@@ -376,12 +405,40 @@ jobs:
           EP_GH_IGNORE_TIME: true
           PASEO_DESKTOP_SMOKE: "1"
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
+          WOOWTECH_SIGN: "1"
+          ESIGNER_STOREPASS: ${{ secrets.ESIGNER_STOREPASS }}
+          ESIGNER_CREDENTIAL_ID: ${{ secrets.ESIGNER_CREDENTIAL_ID }}
+          ESIGNER_TOTP_SECRET: ${{ secrets.ESIGNER_TOTP_SECRET }}
+          WIN_PUBLISHER_DN: ${{ vars.WIN_PUBLISHER_DN }}
         run: |
           set -euo pipefail
-          build_args=(-- --publish never --win --x64 --arm64)
+          # woowtech smart: x64 only for v1 (plan §4.9). publisherName makes electron-updater
+          # accept only updates signed by our certificate.
+          build_args=(-- --publish never --win --x64)
           build_args+=("-c.publish.releaseType=$RELEASE_TYPE")
           build_args+=("-c.publish.channel=$RELEASE_CHANNEL")
+          build_args+=("-c.win.signtoolOptions.publisherName=$WIN_PUBLISHER_DN")
           npm run build:desktop "${build_args[@]}"
+
+      # The uninstaller is only inside the installer, so its signature is checked after installing.
+      - name: Check signatures, install and uninstall
+        shell: pwsh
+        env:
+          WIN_PUBLISHER_DN: ${{ vars.WIN_PUBLISHER_DN }}
+        run: |
+          if ($env:WIN_PUBLISHER_DN -notmatch 'CN=(?:"([^"]+)"|([^,]+))') { throw 'WIN_PUBLISHER_DN has no CN' }
+          $publisher = if ($Matches[1]) { $Matches[1] } else { $Matches[2].Trim() }
+          $check = Join-Path $env:DESKTOP_PACKAGE_PATH 'scripts/woowtech-windows-signatures.ps1'
+          $release = Join-Path $env:DESKTOP_PACKAGE_PATH 'release'
+          & $check -Path $release -RequireSigned -Publisher $publisher
+          $setup = Get-ChildItem -LiteralPath $release -Filter 'woowtech-smart-Setup-*-x64.exe' | Select-Object -First 1
+          if (-not $setup) { throw "No x64 installer in $release" }
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\woowtech smart'
+          & $check -Path $dir -RequireSigned -Publisher $publisher
+          # _?= keeps the uninstaller where it is, so -Wait waits for it; it must come last.
+          Start-Process -FilePath (Join-Path $dir 'Uninstall woowtech smart.exe') -ArgumentList "/currentuser /S _?=$dir" -Wait
+          if (Test-Path -LiteralPath (Join-Path $dir 'woowtech smart.exe')) { throw 'Uninstalling left the app behind' }
 
       - name: Upload packaged smoke diagnostics
         if: failure()

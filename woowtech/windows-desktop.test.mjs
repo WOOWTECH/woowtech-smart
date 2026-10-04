@@ -229,6 +229,26 @@ test("only the release job signs Windows builds, every PE file, SHA-256 only (D8
   assert.match(hook, /"--alg",\s*"SHA-256",[\s\S]*"--tsmode",\s*"RFC3161",/);
   // electron-builder would call an export named "sign" instead of the default one.
   assert.doesNotMatch(hook, /exports\.sign\b/);
+
+  const release = source(".github/workflows/desktop-release.yml");
+  const windowsJob = release.slice(
+    release.indexOf("\n  publish-windows:"),
+    release.indexOf("\n  finalize-rollout:"),
+  );
+  assert.match(windowsJob, /build_args=\(-- --publish never --win --x64\)/);
+  assert.doesNotMatch(windowsJob, /--arm64/, "v1 is x64 only (plan §4.9)");
+  assert.match(windowsJob, /WOOWTECH_SIGN: "1"/);
+  for (const name of ["ESIGNER_STOREPASS", "ESIGNER_CREDENTIAL_ID", "ESIGNER_TOTP_SECRET"]) {
+    assert.match(windowsJob, new RegExp(`${name}: \\$\\{\\{ secrets\\.${name} \\}\\}`));
+  }
+  assert.match(
+    windowsJob,
+    /jsign-7\.5\.jar' -OutFile \$jar\n[\s\S]*?if \(\$hash -ne '[0-9a-f]{64}'\)/,
+  );
+  assert.match(windowsJob, /"-c\.win\.signtoolOptions\.publisherName=\$WIN_PUBLISHER_DN"/);
+  // Built files, then the installed app with its uninstaller, must all be signed.
+  assert.match(windowsJob, /& \$check -Path \$release -RequireSigned -Publisher \$publisher/);
+  assert.match(windowsJob, /& \$check -Path \$dir -RequireSigned -Publisher \$publisher/);
 });
 
 test("Windows installs an update only from a silent restart, never at quit (G37, D20)", () => {
