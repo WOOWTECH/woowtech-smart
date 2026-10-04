@@ -205,6 +205,32 @@ test("Install CLI on Windows survives a Chinese user name and reaches PATH (G16)
   assert.match(source(".gitattributes"), /^\*\.bat text eol=crlf$/m);
 });
 
+test("only the release job signs Windows builds, every PE file, SHA-256 only (D8)", () => {
+  const builder = source("packages/desktop/electron-builder.yml");
+  const winSection = builder.slice(builder.indexOf("\nwin:"), builder.indexOf("\nnsis:"));
+  assert.match(
+    winSection,
+    /signtoolOptions:\s*\n\s*sign: \.\/scripts\/woowtech-sign-windows\.js\s*\n\s*signingHashAlgorithms: \["sha256"\]\n/,
+  );
+  // Smart App Control checks every module that loads; the hook keeps Microsoft's signatures.
+  assert.match(winSection, /signExts: \["\.dll", "\.node"\]/);
+  // An unsigned test build carrying publisherName would refuse its own updates; the release job
+  // passes it. A certificate here would make electron-builder sign without the hook's gate.
+  assert.doesNotMatch(
+    builder,
+    /^\s*(publisherName|certificate(File|Password|SubjectName|Sha1)|azureSignOptions|forceCodeSigning):/m,
+  );
+  const hook = source("packages/desktop/scripts/woowtech-sign-windows.js");
+  assert.match(hook, /if \(env.WOOWTECH_SIGN !== "1"\) \{\s*return \{ action: "skip"/);
+  // jsign reads the eSigner password and TOTP secret from the environment, never from argv.
+  assert.match(hook, /"--storepass",\s*"env:ESIGNER_STOREPASS",/);
+  assert.match(hook, /"--keypass",\s*"env:ESIGNER_TOTP_SECRET",/);
+  assert.doesNotMatch(hook, /env\.ESIGNER_(STOREPASS|TOTP_SECRET)/);
+  assert.match(hook, /"--alg",\s*"SHA-256",[\s\S]*"--tsmode",\s*"RFC3161",/);
+  // electron-builder would call an export named "sign" instead of the default one.
+  assert.doesNotMatch(hook, /exports\.sign\b/);
+});
+
 test("Windows installs an update only from a silent restart, never at quit (G37, D20)", () => {
   const updater = source("packages/desktop/src/features/auto-updater.ts");
   assert.match(updater, /!installsUpdateOnQuit\(process.platform\)/);

@@ -99,6 +99,15 @@ appImage:
 win:
   artifactName: "woowtech-smart-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
+  # woowtech smart: the hook signs only in the release job (WOOWTECH_SIGN=1), SHA-256 only; other
+  # builds stay unsigned (README §25, plan D8). The release job passes publisherName: an unsigned
+  # test build that carried it would refuse its own unsigned updates.
+  signtoolOptions:
+    sign: ./scripts/woowtech-sign-windows.js
+    signingHashAlgorithms: ["sha256"]
+  # Smart App Control checks every module that loads, so every .dll and .node file goes to the
+  # hook too. The hook keeps a signature a file already has (Microsoft's) and signs the rest.
+  signExts: [".dll", ".node"]
   extraResources:
     - from: bin/paseo.cmd
       to: bin/paseo.cmd
