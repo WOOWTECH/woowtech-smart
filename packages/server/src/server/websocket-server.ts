@@ -555,7 +555,9 @@ export class VoiceAssistantWebSocketServer {
   private readonly pushNotifications: PushNotifications;
   private readonly pushNotificationSender: PushNotificationSender;
   // woowtech smart: pushes a notice the picked client could not show (woowtech-attention-fallback.ts).
-  private readonly woowtechAttentionFallback = new WoowtechAttentionFallback();
+  private readonly woowtechAttentionFallback = new WoowtechAttentionFallback({
+    hasPushTargets: () => this.pushNotifications.hasActiveTokens(),
+  });
   private readonly mcpBaseUrl: string | null;
   private speech!: SpeechService | null;
   private terminalManager!: TerminalManager | null;

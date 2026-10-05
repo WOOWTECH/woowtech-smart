@@ -9,12 +9,19 @@ import {
 function createLedger() {
   let nowMs = 1_000_000;
   const pushed: string[] = [];
-  const ledger = new WoowtechAttentionFallback(() => nowMs);
+  let phones = 1;
+  const ledger = new WoowtechAttentionFallback({
+    now: () => nowMs,
+    hasPushTargets: () => phones > 0,
+  });
   return {
     ledger,
     pushed,
     advance(ms: number) {
       nowMs += ms;
+    },
+    removeAllPhones() {
+      phones = 0;
     },
     pushFor(label: string) {
       return () => {
@@ -60,6 +67,15 @@ describe("a notice the picked client could not show", () => {
     const otherDelivery = { ...agentNotice, timestamp: "2026-10-05T05:00:09.000Z" };
     expect(ledger.report({ target: otherDelivery, reporter: desktop })).toBe("unknown");
 
+    expect(pushed).toEqual([]);
+  });
+
+  it("is not pushed, and says so, when no phone has a push token", () => {
+    const { ledger, pushed, pushFor, removeAllPhones } = createLedger();
+    ledger.remember({ target: agentNotice, recipient: desktop, push: pushFor("B finished") });
+    removeAllPhones();
+
+    expect(ledger.report({ target: agentNotice, reporter: desktop })).toBe("no_device");
     expect(pushed).toEqual([]);
   });
 

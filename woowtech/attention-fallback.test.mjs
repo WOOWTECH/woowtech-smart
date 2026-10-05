@@ -66,6 +66,11 @@ test("the daemon remembers each notice it hands to a client instead of a push", 
   assert.match(read(serverFile), /woowtechAttentionFallback: true,/);
   assert.match(
     read(serverFile),
+    /new WoowtechAttentionFallback\(\{\s*hasPushTargets: \(\) => this\.pushNotifications\.hasActiveTokens\(\),/,
+    "a report with no phone to push to must answer no_device",
+  );
+  assert.match(
+    read(serverFile),
     /woowtechAttentionFallback: this\.woowtechAttentionFallback,/,
     "createSession must pass the ledger to each Session",
   );

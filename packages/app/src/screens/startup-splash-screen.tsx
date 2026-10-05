@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { getDesktopDaemonLogs, type DesktopDaemonLogs } from "@/desktop/daemon/desktop-daemon";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { isNative, isWeb } from "@/constants/platform";
+import { BRAND_BLUE } from "@/styles/brand";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 
 interface StartupSplashScreenProps {
@@ -80,14 +81,14 @@ function ensureWebSplashShimmerKeyframes() {
   webSplashShimmerRegistered = true;
 }
 
+// woowtech smart: the WOOW symbol is a brand mark, so the splash draws it in the brand blue in
+// every theme (README section 9). PaseoLogo already ignores the color on native.
 function LogoShimmer() {
-  const { theme } = useUnistyles();
-
   if (isWeb) {
-    return <WebLogoShimmer color={theme.colors.foreground} />;
+    return <WebLogoShimmer color={BRAND_BLUE} />;
   }
 
-  return <NativeLogoShimmer color={theme.colors.foreground} />;
+  return <NativeLogoShimmer color={BRAND_BLUE} />;
 }
 
 function WebLogoShimmer({ color }: { color: string }) {
