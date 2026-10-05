@@ -143,6 +143,20 @@ test("the app's logo component draws the WOOW symbol from woowtech/brand", () =>
   }
 });
 
+test("the startup splash draws the WOOW symbol in the brand blue", () => {
+  // Upstream fills the web and desktop splash mask with the theme's foreground: white or black.
+  const splash = readFileSync(
+    repoPath("packages/app/src/screens/startup-splash-screen.tsx"),
+    "utf8",
+  );
+  const start = splash.indexOf("function LogoShimmer()");
+  const end = splash.indexOf("function WebLogoShimmer(");
+  assert.ok(start !== -1 && end > start, "the splash no longer has LogoShimmer");
+  const shimmer = splash.slice(start, end);
+  assert.match(shimmer, /<WebLogoShimmer color=\{BRAND_BLUE\} \/>/);
+  assert.match(shimmer, /<NativeLogoShimmer color=\{BRAND_BLUE\} \/>/);
+});
+
 test("nothing that ships draws upstream Paseo's butterfly mark", () => {
   // Upstream's logo component, favicons and web splash mask all drew this path. The web splash
   // kept it after the logo component changed, until the 2026-09-29 fix (README section 8).

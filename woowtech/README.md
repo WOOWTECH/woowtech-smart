@@ -282,6 +282,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 尺寸和格式。
   - Android 的底色和通知的強調色。
   - logo 元件跟品牌檔一致。
+  - 啟動畫面的標誌用品牌藍。
   - 出貨的檔案裡沒有上游 Paseo 蝴蝶的路徑資料（App、網頁、桌面版、server、CLI）。
 - 換 logo 的步驟：
   1. 更新 `woowtech/brand` 裡的來源檔。
@@ -303,6 +304,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 網頁版的鍵盤焦點框。桌面版載入的是同一份網頁，所以也一起改了。寫在 `packages/app/public/index.html` 的 `*:focus-visible`。
 - 有意義的綠色維持上游原樣，色值也跟品牌綠不同：成功狀態、diff 的新增行、健康檢查通過的執行中腳本、自動接受模式（快速模式是黃色、規劃模式是藍色）、終端機的 ANSI 綠。
 - logo 元件不管呼叫端傳什麼顏色，一律畫品牌藍，因為品牌標誌不應該跟著主題變色。
+  - 啟動畫面也一樣。網頁版和桌面版的標誌是 CSS 遮罩，不經過 logo 元件（第 8 節），上游填的是主題的前景色，深色主題是白色、淺色主題是黑色。2026-10-05 起改成品牌藍，跟手機版一致。
 - 測試：
   - `styles/theme.test.ts` 檢查品牌色和中性背景，`components/icons/paseo-logo.test.tsx` 檢查 logo 一律是品牌藍。
   - `woowtech/brand-colors.test.mjs` 掃描出貨的 App、網頁和桌面版檔案，連同 `app.config.js` 和 `electron-builder.yml`，不准出現上游的品牌綠。
