@@ -1,6 +1,7 @@
 // Merge guards for the Windows desktop seams (README §25): tray parity with the macOS Dock,
-// protocol toasts, launch-link redaction and the macOS Notification Center relaunch. The
-// policies have unit tests in packages/desktop/src/features/woowtech-*.test.ts.
+// protocol toasts and launch-link redaction. The macOS Notification Center relaunch has its own
+// guard (desktop-notification-launch.test.mjs). The policies have unit tests in
+// packages/desktop/src/features/woowtech-*.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
@@ -78,19 +79,6 @@ test("Windows agent notifications are protocol toasts kept clickable in Action C
   assert.match(notifications, /keepAfterTimedOutClose: process.platform === "win32"/);
   assert.match(notifications, /options.openAgent\(agent, "notification-click"\)/);
   assert.match(notifications, /trackNotification\(notification\)/);
-});
-
-test("macOS reopens the agent of a Notification Center click that relaunched the app", () => {
-  const notifications = source("packages/desktop/src/features/notifications.ts");
-  assert.match(
-    notifications,
-    /agent && process.platform === "darwin" \? agentNotificationId\(agent, randomUUID\(\)\) : null/,
-  );
-  const main = source("packages/desktop/src/main.ts");
-  const ready = main.indexOf('app.once("ready", (_event, launchInfo) => {');
-  assert.notEqual(ready, -1);
-  assert.ok(ready < main.indexOf("void runDesktopStartup({"), "registered before startup runs");
-  assert.match(main.slice(ready), /agentTargetFromLaunchInfo\(launchInfo\)/);
 });
 
 test("only a packaged test build runs the built-in daemon with mock providers (G26)", () => {

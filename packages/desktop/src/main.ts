@@ -56,7 +56,6 @@ import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
 import { resolveAppIconPath } from "./features/stamped-icon.js";
 import { applyWindowsAppUserModelId } from "./features/woowtech-app-user-model-id.js";
 import {
-  agentTargetFromLaunchInfo,
   createDuplicateLaunchFilter,
   hasAppSchemeLink,
   redactLaunchArguments,
@@ -73,6 +72,7 @@ import {
 import { createWindowsTray, showTrayHintOnce } from "./features/woowtech-windows-tray.js";
 import { raiseWindowsWindow } from "./features/woowtech-windows-focus.js";
 import { woowtechAboutPanelOptions } from "./features/woowtech-about-panel.js";
+import { agentTargetFromLaunchInfo } from "./features/woowtech-notification-launch.js";
 import { setupApplicationMenu } from "./features/menu.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
@@ -395,7 +395,7 @@ if (pendingAgentNavigation) {
 }
 
 // woowtech smart: a Notification Center click after the app quit relaunches it on macOS with
-// that notification's id in launchInfo; the id carries the agent (README §25).
+// that notification's id in launchInfo; the id carries the agent (woowtech-notification-launch.ts).
 app.once("ready", (_event, launchInfo) => {
   const target = agentTargetFromLaunchInfo(launchInfo);
   if (!target || pendingAgentNavigation) {

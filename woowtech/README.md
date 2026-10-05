@@ -874,6 +874,14 @@ node --test woowtech/*.test.mjs
   - 還要實機：iPad 和 POCO 照「接下來」的 RC-I-21c 那條做（真的 FCM／APNs 點擊、iOS 啟動點擊的送達時機、Reload、重複通知、封存工作區）。
 - 合併上游：上游改成快取到了就消費 agent 意圖，或自己清掉最後一次點擊時，先確認新測試仍綠，再拿掉 fork 的函式、模組和守門。
 
+#### Mac：App 結束後從通知中心點通知，開到那個 agent（D2a）
+
+- owner 2026-10-02 決定 Mac 和 Windows 都要開到那個 agent（D2 選 a）；2026-10-05 決定 Mac 不等 Windows 分支，自己先做。
+- macOS 在 App 結束後點通知中心的舊通知時，重新啟動 App，把那則通知的 identifier 放在 Electron `ready` 事件的 launchInfo。`features/notifications.ts` 在 macOS 建 agent 通知時給 `id`：`woowtech-agent:<uuid>:<agent 連結>`（`features/woowtech-notification-launch.ts`，uuid 讓同一個 agent 的兩則通知不互相取代）；`main.ts` 在 `app.whenReady()` 之前掛 `app.once("ready")`，讀回 agent，交給第一個視窗開啟（跟 argv 的 agent 連結同一條路）。沒有 agent 的通知（terminal）照舊只打開 App。
+- Windows 不用這個 id：agent 通知是協定 toast，自己帶 agent 連結（第 25 節）。這些函式只在這個檔；Windows 分支原本在 `features/woowtech-launch-links.ts` 的同一份，10/5 合併 main 時拿掉了。
+- 接點：`notifications.ts`（import 和 `id`，+11 行）、`main.ts`（import 和 ready listener，+12 行）。測試 `woowtech-notification-launch.test.ts`，守門 `woowtech/desktop-notification-launch.test.mjs`。
+- 要實機：簽章的打包版，App 結束後從通知中心點舊的 agent 通知，要直接開到那個 agent；點 terminal 通知只打開 App。
+
 #### 桌面通知的回饋
 
 - Electron 的通知支援不代表系統已授權；設定頁顯示尚未確認，仍可按「傳送測試通知」。不拿瀏覽器的授權值冒充原生通知授權。
@@ -1448,7 +1456,7 @@ owner 的決定（2026-10-02）：Windows 版跟 Mac 版的定位和使用效果
 - `toastXml` 會取代 title、body、icon 和 silent，所以 XML 自己帶文字、圖示（`appLogoOverride`）和靜音。XML 1.0 不允許的字元先拿掉，不然整則通知會被拒。
 - Windows 的 toast 在橫幅結束、滑進通知中心時觸發 `close`（reason 是 `timedOut`），之後還能點。`keepAfterTimedOutClose` 讓它保留監聽和引用，點擊或使用者關掉時才釋放。引用最多 50 則，超過先丟最舊的；丟掉的協定 toast 仍能開到 agent。
 - AUMID 與 toast activator：打包版用 `io.woowtech.smart.desktop` 加固定的 CLSID；開發版改用 `io.woowtech.smart.desktop.dev` 和另一個固定 CLSID（原本是執行檔路徑，含空白和反斜線）。Electron 40.5 起，第一次發通知時會自己寫開始功能表捷徑和 HKCU 的 CLSID，沒固定的話每次執行都換。兩組分開，開發用的 Electron 才不會改寫安裝版的登記。
-- macOS：agent 通知的 id 是 `woowtech-agent:<uuid>:<agent 連結>`（`features/woowtech-launch-links.ts`）。App 結束後從通知中心點舊通知，macOS 重開 App，並在 `ready` 事件的 `launchInfo` 帶回這個 id；主程序在 bootstrap 開第一個視窗前讀出 agent。uuid 讓同一個 agent 的兩則通知不會互相取代。
+- macOS：agent 通知的 id 是 `woowtech-agent:<uuid>:<agent 連結>`（`features/woowtech-notification-launch.ts`，第 16 節）。App 結束後從通知中心點舊通知，macOS 重開 App，並在 `ready` 事件的 `launchInfo` 帶回這個 id；主程序在 bootstrap 開第一個視窗前讀出 agent。uuid 讓同一個 agent 的兩則通知不會互相取代。
 
 連結與 log（G24、G25）：
 

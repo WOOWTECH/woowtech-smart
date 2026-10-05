@@ -15,9 +15,12 @@ import {
 } from "./woowtech-notification-delivery.js";
 import { notificationIconCandidates } from "./woowtech-notification-icon.js";
 import { raiseWindowsWindow } from "./woowtech-windows-focus.js";
-import { agentNotificationId, agentTargetForNotificationData } from "./woowtech-launch-links.js";
 import { buildProtocolToastXml, shouldUseProtocolToast } from "./woowtech-windows-toast.js";
 import { openSystemNotificationSettings } from "./woowtech-notification-settings.js";
+import {
+  agentNotificationId,
+  agentTargetForNotificationData,
+} from "./woowtech-notification-launch.js";
 
 interface NotificationInput {
   title?: unknown;
@@ -188,8 +191,9 @@ export function registerNotificationHandlers(options: {
     const silent = !settings.notifications.playSound;
     const agent = agentTargetForNotificationData(data);
     // Windows: the toast launches woowtech-smart://…/agent/… itself, so a click from Action
-    // Center, or after the app quit, opens the agent. macOS: the id carries the agent so a
-    // Notification Center click that relaunches the app finds it in launchInfo (README §25).
+    // Center, or after the app quit, opens the agent (README §25). macOS: the id carries the
+    // agent, so a Notification Center click that relaunches the quit app finds it in launchInfo
+    // (woowtech-notification-launch.ts).
     const protocolToast =
       agent &&
       shouldUseProtocolToast({
