@@ -71,7 +71,10 @@ import {
   isPushEligibleAttentionReason,
   type ClientPresenceState,
 } from "./agent-attention-policy.js";
-import { woowtechClientPresenceState } from "./woowtech-attention-presence.js";
+import {
+  woowtechClientPresenceState,
+  woowtechNotificationPlanWhileStopping,
+} from "./woowtech-attention-presence.js";
 import {
   buildAgentAttentionNotificationPayload,
   findLatestPermissionRequest,
@@ -2480,6 +2483,8 @@ export class VoiceAssistantWebSocketServer {
     provider: AgentProvider;
     reason: "finished" | "error" | "permission";
   }): Promise<void> {
+    // woowtech smart: read before any await; attention caused by shutdown notifies nobody.
+    const woowtechStopping = this.connectionLifecycle === "stopping";
     const agent = this.agentManager.getAgent(params.agentId);
     if (!agent?.workspaceId) {
       return;
@@ -2517,12 +2522,15 @@ export class VoiceAssistantWebSocketServer {
       permissionRequest: findLatestPermissionRequest(agent.pendingPermissions),
     });
 
-    const plan = computeNotificationPlan({
-      allStates,
-      focusTarget: { kind: "agent", id: params.agentId },
-      pushEligible: isPushEligibleAttentionReason(params.reason),
-      nowMs,
-    });
+    const plan = woowtechNotificationPlanWhileStopping(
+      computeNotificationPlan({
+        allStates,
+        focusTarget: { kind: "agent", id: params.agentId },
+        pushEligible: isPushEligibleAttentionReason(params.reason),
+        nowMs,
+      }),
+      woowtechStopping,
+    );
 
     if (plan.shouldPush) {
       void this.pushNotificationSender.send(notification).catch((err) => {
@@ -2580,6 +2588,8 @@ export class VoiceAssistantWebSocketServer {
     terminalName: string;
     reason: TerminalAttentionReason;
   }): Promise<void> {
+    // woowtech smart: read before any await; attention caused by shutdown notifies nobody.
+    const woowtechStopping = this.connectionLifecycle === "stopping";
     const clientEntries: Array<{
       ws: WebSocketLike;
       state: ClientPresenceState;
@@ -2612,12 +2622,15 @@ export class VoiceAssistantWebSocketServer {
     const nowMs = Date.now();
     const workspaceId = params.workspaceId;
 
-    const plan = computeNotificationPlan({
-      allStates,
-      focusTarget: { kind: "terminal", id: params.terminalId },
-      pushEligible: true,
-      nowMs,
-    });
+    const plan = woowtechNotificationPlanWhileStopping(
+      computeNotificationPlan({
+        allStates,
+        focusTarget: { kind: "terminal", id: params.terminalId },
+        pushEligible: true,
+        nowMs,
+      }),
+      woowtechStopping,
+    );
 
     const title = terminalAttentionTitle(params.reason);
     const body = params.terminalName;

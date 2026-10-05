@@ -42,3 +42,31 @@ test("the daemon maps client activity through woowtechClientPresenceState", () =
   assert.match(body, /return woowtechClientPresenceState\(activity\);/);
   assert.doesNotMatch(body, /lastActivityAtMs: activity\.lastActivityAt\.getTime\(\)/);
 });
+
+// PROPOSAL 2: the flag is read before the first await, and the daemon raises it before it
+// closes agents.
+test("attention raised while the daemon stops notifies nobody", () => {
+  const tree = source(serverFile);
+  for (const name of ["broadcastAgentAttention", "broadcastTerminalAttention"]) {
+    const statements = method(tree, name).body.statements;
+    assert.match(
+      statements[0].getText(tree),
+      /^const woowtechStopping = this\.connectionLifecycle === "stopping";$/,
+      `${name} must read the stopping flag first`,
+    );
+    assert.match(
+      method(tree, name).body.getText(tree),
+      /const plan = woowtechNotificationPlanWhileStopping\(\s*computeNotificationPlan\(/,
+      `${name} must pass its plan through woowtechNotificationPlanWhileStopping`,
+    );
+  }
+
+  const bootstrap = readFileSync(
+    new URL("../packages/server/src/server/bootstrap.ts", import.meta.url),
+    "utf8",
+  );
+  const prepare = bootstrap.indexOf("wsServer?.prepareForShutdown();");
+  const close = bootstrap.indexOf("await closeAllAgents(logger, agentManager);");
+  assert.ok(prepare !== -1 && close !== -1, "bootstrap stop() no longer has the expected steps");
+  assert.ok(prepare < close, "bootstrap must stop the WebSocket server before closing agents");
+});

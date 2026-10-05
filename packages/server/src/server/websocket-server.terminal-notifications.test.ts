@@ -502,6 +502,29 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
     });
   });
 
+  // woowtech smart (PROPOSAL 2): terminal attention raised while the daemon stops is not pushed.
+  it("does not push terminal attention raised while the daemon is stopping", async () => {
+    const { manager, emit } = createTerminalManager();
+    const { server, pushNotifications } = createServer(
+      manager,
+      createWorkspaceRegistry([workspaceRecord()]),
+    );
+    server.prepareForShutdown();
+
+    emit(
+      transition({
+        previousState: "working",
+        previousChangedAt: 0,
+        state: "idle",
+        changedAt: 15000,
+      }),
+    );
+
+    await flushAsync();
+
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
   // woowtech smart: the push relay picks its sentence from the reason (push/woowtech-relay.ts),
   // so a finished terminal must not read "needs your attention".
   it.each([

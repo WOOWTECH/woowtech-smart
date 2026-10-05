@@ -1,6 +1,6 @@
 // woowtech smart: fork-owned rules on top of agent-attention-policy.ts.
 // PROPOSAL (not merged): see ~/.local/share/woowtech-smart/proposals/push-behaviour.md.
-import type { ClientPresenceState } from "./agent-attention-policy.js";
+import type { ClientPresenceState, NotificationPlan } from "./agent-attention-policy.js";
 
 export interface WoowtechClientActivity {
   deviceType: "web" | "mobile";
@@ -26,4 +26,20 @@ export function woowtechClientPresenceState(activity: WoowtechClientActivity): C
     focusedTerminalId: activity.focusedTerminalId,
     lastActivityAtMs: hiddenPhone ? null : activity.lastActivityAt.getTime(),
   };
+}
+
+/**
+ * Proposal 2. Once the daemon is stopping, closing agents interrupts their runs, and the
+ * running -> idle edge reads as "finished". Nothing finished, so nobody is notified: no push
+ * and no in-app/OS notice. The attention event itself is still delivered to connected
+ * clients, so their agent list stays consistent.
+ */
+export function woowtechNotificationPlanWhileStopping(
+  plan: NotificationPlan,
+  stopping: boolean,
+): NotificationPlan {
+  if (!stopping) {
+    return plan;
+  }
+  return { inAppRecipientIndex: null, shouldPush: false };
 }

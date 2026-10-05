@@ -364,6 +364,41 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     expect(pushNotifications.sent).toHaveLength(1);
   });
 
+  // woowtech smart (PROPOSAL 2): closing agents on shutdown interrupts their runs; the
+  // resulting "finished" must not notify anyone.
+  it("notifies nobody about attention raised while the daemon is stopping", async () => {
+    const { server, pushNotifications } = createServer();
+    const desktopWs = connectClient(server, {
+      deviceType: "web",
+      appVisible: false,
+      focusedAgentId: null,
+      lastActivityAt: new Date(),
+    });
+    server.prepareForShutdown();
+
+    await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+      agentId: "agent-X",
+      provider: "claude",
+      reason: "finished",
+    });
+
+    expect(readAttentionRequiredMessage(desktopWs).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
+  it("does not push attention raised while the daemon is stopping with nobody present", async () => {
+    const { server, pushNotifications } = createServer();
+    server.prepareForShutdown();
+
+    await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+      agentId: "agent-X",
+      provider: "claude",
+      reason: "finished",
+    });
+
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
   it("pushes non-error attention when the only connected client has never sent a heartbeat", async () => {
     const { server, pushNotifications } = createServer();
     const ws = connectClient(server, null);

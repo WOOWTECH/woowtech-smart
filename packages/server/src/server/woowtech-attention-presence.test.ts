@@ -4,6 +4,7 @@ import { computeNotificationPlan, PRESENCE_THRESHOLD_MS } from "./agent-attentio
 import {
   type WoowtechClientActivity,
   woowtechClientPresenceState,
+  woowtechNotificationPlanWhileStopping,
 } from "./woowtech-attention-presence.js";
 
 const nowMs = Date.parse("2026-10-01T12:00:00.000Z");
@@ -90,5 +91,25 @@ describe("woowtechClientPresenceState (proposal 1)", () => {
         }),
       ]),
     ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+  });
+});
+
+describe("woowtechNotificationPlanWhileStopping (proposal 2)", () => {
+  it("keeps the plan while the daemon runs", () => {
+    expect(
+      woowtechNotificationPlanWhileStopping({ inAppRecipientIndex: null, shouldPush: true }, false),
+    ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+    expect(
+      woowtechNotificationPlanWhileStopping({ inAppRecipientIndex: 2, shouldPush: false }, false),
+    ).toEqual({ inAppRecipientIndex: 2, shouldPush: false });
+  });
+
+  it("notifies nobody once the daemon is stopping", () => {
+    expect(
+      woowtechNotificationPlanWhileStopping({ inAppRecipientIndex: null, shouldPush: true }, true),
+    ).toEqual({ inAppRecipientIndex: null, shouldPush: false });
+    expect(
+      woowtechNotificationPlanWhileStopping({ inAppRecipientIndex: 0, shouldPush: false }, true),
+    ).toEqual({ inAppRecipientIndex: null, shouldPush: false });
   });
 });
