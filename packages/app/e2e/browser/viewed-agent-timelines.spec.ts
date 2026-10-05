@@ -125,9 +125,8 @@ async function expectForkFailureWithoutOverlappingStatus(page: Page) {
   const expectContinuousToast = await observeToastReplacement(page);
   await page.getByRole("button", { name: "Fork chat from here" }).last().click();
   await page.getByRole("menuitem", { name: "Fork in a new tab", exact: true }).click();
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Transport not connected" }),
-  ).toBeVisible();
+  // woowtech smart: connection errors read "Host is not connected" (utils/error-messages.ts).
+  await expect(page.getByRole("alert").filter({ hasText: "Host is not connected" })).toBeVisible();
   await expectReconnectingToastGone(page, { timeout: 100 });
   await expectReconnectingToastVisible(page);
   await expectContinuousToast();

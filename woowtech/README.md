@@ -204,7 +204,10 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 設「渥屋智能」。這次只更正說明，不改顯示名稱、Xcode 的 `PRODUCT_NAME`、執行檔或 `.app` 名稱。
   - iOS 26.5 英文模擬器驗收：Debug 產物的 `CFBundleDisplayName` 已是「woowtech smart Debug」、`CFBundleName` 已是「woowtech smart」，主畫面仍顯示「woowtechsmart…」，「設定 → App」則顯示完整名稱。短名設定沒有修好主畫面標籤；需再確認 SpringBoard 的空白與截斷行為。正式版顯示名稱較短，但主畫面結果尚未驗證，不宣稱兩版相同。中文 Debug 主畫面已觀察到「渥屋智能 Debug」。
   - 已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
-  - 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`，而且只有英文，見「接下來」。
+  - iOS 的相機、麥克風、照片權限提示（`app.config.js` 的 `iosPermissionText`）：寫出 App 名稱和用途，跟著手機語言顯示英文、繁中或簡中。原本是 `$(PRODUCT_NAME)`（Debug 版顯示成 woowtechsmartDebug）加只有英文，照片那句還沒說用途；Apple 曾因權限說明退件渥屋的 App（App Store 審查準則 5.1.1）。
+    - 繁中、簡中寫在 `locales` 的 `ios` 底下，進 `InfoPlist.strings`。那裡不會展開 `$(PRODUCT_NAME)`，所以名稱直接寫「渥屋智能」。`android` 底下仍只有 `app_name`。
+    - 英文寫在 `ios.infoPlist`；相機那句同時給 `expo-camera` 的 `cameraPermission`，照片那句會蓋過 `expo-image-picker` 的預設文字。
+    - 守門 `woowtech/ios-permissions.test.mjs` 用 `expo config` 查兩個版本。prebuild 驗過：`zh-Hans.lproj`、`zh-Hant.lproj` 的 `InfoPlist.strings` 都有三句。已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
 - App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
 - `woowtech/names.test.mjs` 檢查安裝檔名稱與下載連結一致、App 裡寫死的文字、agent 看到的名稱，並用 `expo config` 檢查手機 App 的實際設定。
   - iOS 短名稱查兩處，也查不超過 15 字：`expo config --type prebuild` 裡 `app.config.js` 自己設的 `ios.infoPlist.CFBundleName`；`expo config --type introspect`（`woowtech/expo-config.mjs` 的 `expoIntrospectedConfig`）算出的 Info.plist，和 zh-Hans／zh-Hant 的 `ios.CFBundleName`。
@@ -719,7 +722,7 @@ node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/woowtech-push.test.ts src/messages.test.ts --bail=1)
 (cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts --bail=1)
 (cd packages/app && npx vitest run plugins/woowtech-ios-firebase.test.ts plugins/with-woowtech-push.test.ts plugins/woowtech-metro-resolver.test.ts src/push-notifications src/utils/notification-routing.woowtech-push.test.ts --bail=1)
-(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts src/navigation/woowtech-welcome-host-online.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1、T1 S3 和「配對後第一次點通知」小節
+(cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts src/navigation/woowtech-welcome-host-online.test.ts src/navigation/woowtech-cold-start-tap.test.ts src/navigation/woowtech-notification-response.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1、T1 S3、「配對後第一次點通知」和 RC-I-21c 小節
 ```
 
 - 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛和 `expo-build-properties` 的 `ios`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
@@ -781,6 +784,42 @@ node --test woowtech/*.test.mjs
   - 紅綠與突變：修之前主案例的焦點是 `open-project`、設定那個案例也紅，修後 4/4；拿掉修法時 vitest 2 個紅、守門紅，依賴拿掉 `isFocused` 時守門紅。Android 模擬器複驗見 `logs/fix-first-tap.md`。
 - 合併上游：上游改成只在 focused 時轉頁，或拿掉這個 effect 時，先確認新測試仍綠，再拿掉 fork 的判斷和守門。
 
+#### RC-I-21c：冷啟動點通知，工作區對了，聚焦的卻是上次記住的 agent
+
+- iOS（2026-09-30 上架候選驗收，舊 Mac 的 `rc0930-ios.md`，`33f2fa8ac`）：App 被滑掉後點 agent B 的通知，開到對的工作區，聚焦的卻是之前記住的 agent A。點到別的工作區時，聚焦那個工作區上次的 agent。同一條 JS 路徑 Android 也走。
+- 原因在上游，跟 fork 的推播無關，是兩條上游規則疊在一起：
+  - 冷啟動時 `PushNotificationRouter` 在根 layout 第一次 commit 就讀啟動的那次點擊，那時主機清單還沒載入、沒有 session。`navigateToWorkspace` 認不得工作區，把 agent 延後成 `?open=agent:B`。
+  - 工作區路由在 `hasHydratedWorkspaces` 之前不消費 agent 意圖（上游 `5da6548af`，#2002，2026-07-16，給封存工作區的 recovery 用）。這個旗標只有 live 目錄的 snapshot 會設。後來加的目錄快取（`workspace-replica.ts` 的 `commitCached`／`commitCachedWorkspace`：上游 #3907 加入，之後經 #3975、#4160、#4421 和撤回 #4421 的 #4436 調整）在主機清單載入後就讓工作區存在，但不設這個旗標。
+  - 等的期間路由照樣畫工作區，分頁和聚焦來自持久化的 layout，所以是 A。live snapshot 到了才換成 B，主機連不上時一直停在 A。熱啟動不等：工作區已經在 store，`navigateToWorkspace` 直接開分頁。
+  - 一起修的另一個上游缺口：`expo-notifications` 的原生模組一直留著最後一次點擊，App 從不清掉，`PushNotificationRouter` 用 `useRef` 去重，remount 就重置。根 error boundary 的 Reload 或 Fast Refresh 之後會重播那次點擊，把使用者拉回已經離開的 agent。真正的冷啟動碰不到這條。
+- 修法：
+  - fork 的 `navigation/woowtech-workspace-open-intent.ts` 加 `isAgentOpenIntentWaitingForWorkspace`：agent 意圖只在 store 不認得工作區時等，快取來的也算認得。工作區路由 `index.tsx` 改用它（註解 `woowtech smart:`）。沒見過的工作區照舊等，T1 的目錄 demand 和 recovery 不變；這跟熱啟動點通知的行為一樣。
+  - 同一個檔案的 `shouldLatchWorkspaceRecovery`、`isWorkspaceRecoveryLatchHeld`：在 live 目錄之前消費的 agent 意圖，路由記住那個工作區，`WorkspaceDeck` 的 `recoveryRequested` 一直帶著，直到 live 目錄裡有這個工作區（上游消費意圖、不再要 recovery 的那一刻）。live 目錄沒有它（App 被滑掉時封存了）時照上游 #2002 顯示「Workspace archived」和 Restore。換工作區時放掉。路由合計 +32／−5 行。
+  - fork 的 `navigation/woowtech-notification-response.ts`（`subscribeToNotificationTaps`）：處理過的那次送達（通知 identifier 加上 `notification.date`）記在模組層，整個 App 行程有效（最多 32 個），處理後呼叫 `clearLastNotificationResponse()`。只用 identifier 不行：relay 把 `apns-collapse-id` 設成 agent ID，iOS 拿它當 request identifier，同一個 agent 的每則通知 identifier 都一樣；date 是那次送達的時間（iOS 的 `UNNotification.date`、Android 的 FCM sent time），listener 和 `getLastNotificationResponse` 送的同一次點擊 date 相同。啟動的那次點擊在掛載 router 的那次 commit 跑完 effect 之後才交出去（下一個 microtask，跟上游 `getLastNotificationResponseAsync().then` 同一個時機）；交出之前 router 就卸載的話，不清原生那份，留給下一次掛載。`_layout.tsx` 的 effect 改成回傳它（+4／−27 行）。F-Droid 的 `expo-notifications` stub 加上 `getLastNotificationResponse` 和 `clearLastNotificationResponse`。
+  - 沒採用：等 live 目錄時畫空白，不畫記住的 agent。主機連不上時會一直空白。
+- 測試：
+  - `navigation/woowtech-cold-start-tap.test.ts`（21 個）：同一個工作區、跨工作區，快取到了就聚焦 B，live 目錄晚到或不來（主機連不上）都一樣；沒見過的工作區等 live 目錄（T1）；啟動還原在程式允許的五種順序下都不蓋掉點擊；點擊比快取晚到時走熱啟動的路；layout hydrate 之前不開分頁；router remount 後不重播、之後的點擊照常。見證：上游的等待規則在 live 目錄之前顯示 A（跨工作區是 C），上游的 router remount 後把人拉回 B，沒帶 ID 的點擊回到記住的工作區（iOS 的 ID 不在 `userInfo["body"]` 時就是這樣）。recovery（7 個）：快取有、live 目錄沒有的工作區（同一個、跨工作區）在 live 目錄到之前就要 recovery、到了之後 inspect；live 目錄有它時放掉，之後再封存也不要；主機連不上時一直要但不 inspect；live 目錄之後的點擊不記住。見證：上游的等待規則在同樣情況也 inspect。
+  - `navigation/woowtech-cold-start-tap.test-support.ts`：延伸 T1 S3 的 harness，加上根 index 和主機 index 的啟動還原、比 live 早到的目錄快取（live snapshot 取代快取，跟 `WorkspaceReplica.commitSnapshot` 一樣）、路由的 recovery 要求（真的 latch 函式）、真的 `createWorkspaceLayoutStore`（持久化、hydrate、`reconcileTabs`），以及真的 `subscribeToNotificationTaps`。等待規則用真的 `isAgentOpenIntentWaitingForWorkspace`；T1 S3 的 harness 也改用它，不再轉寫路由那一行。
+  - `navigation/woowtech-notification-response.test.ts`（13 個）：啟動的點擊在掛載的那次 commit 之後才送、交出前卸載就留給下一次掛載、只送一次、listener 再送一次不重複、處理後清掉原生那份、remount 不重播（F-Droid stub 清不掉也不重播）、之後的點擊照常、取消訂閱、沒有 data；identifier 相同的不同送達：同一個 agent 的新通知、B→C→B、remount 後同一個 agent 的新通知都照常開。
+  - 守門：`woowtech/workspace-open-intent.test.mjs` 多一個，看 `isOpenIntentWaitingForWorkspace` 是 `isAgentOpenIntentWaitingForWorkspace({ openIntent, workspaceExists })`、`workspaceExists` 來自 `useWorkspaceExists`，`hasHydratedWorkspaces` 只出現在 latch 的兩個函式和 effect 的依賴；另一個看 latch 在消費意圖的 effect 裡設、`WorkspaceDeck` 收到 `{isAgentOpenIntent || isRecoveryLatchHeld}`。新的 `woowtech/notification-taps.test.mjs`：`PushNotificationRouter` 的 effect 回傳 `subscribeToNotificationTaps(Notifications, openNotification)`，自己不讀 `getLastNotificationResponseAsync`、不加 listener；F-Droid stub 有那三個函式。把 `index.tsx` 或 `_layout.tsx` 改回上游時，紅的是守門。
+  - 紅綠與突變：修之前，新的 vitest 檔載入失敗（還沒有 fork 的函式和模組），三個新守門紅、舊的那個綠；同樣的斷言換成上游的等待規則和 router 時 9/14 紅，畫面是 `wks_w/agent-a`、`wks_w2/agent-c`。修後 vitest 33/33、守門 4/4。六個突變都 exit 1：規則一律等、規則從不等、不清原生那份、每次訂閱各自去重、路由改回上游那行、router 自己讀 `getLastNotificationResponseAsync`。`b1628889`（啟動點擊的時機）之後 vitest 34/34：改回在 effect 裡直接交出時 2 個紅，拿掉卸載的檢查時 1 個紅。harness 的兩種 router 都在下一個 microtask 交出啟動的點擊（上游原本就是），harness 的 container 一直是 ready，所以重現不了下面這個退步，要靠模擬器。
+- 審查找到的兩個問題（2026-10-01 修，第二個 commit）：
+  - 去重只看 identifier：iOS 上同一個 agent 的通知 identifier 都是 agent ID（`apns-collapse-id`），點過一次之後，同一個 agent 的新通知整個行程都不開，B→C→B 的第三下也不開（上游只漏連續兩次同一個）。改成 identifier 加 date。Android 的 identifier 是 FCM message ID（relay 把 tag 放在 `android.notification`，不在 data），本來就不撞。
+  - 提早消費意圖拿掉了上游 #2002 的封存 recovery：快取還列著、live 目錄已經沒有的工作區，`open` 清掉後 `recoveryRequested` 變 false，live 目錄到了只顯示「Workspace unavailable」。所有 `?open=agent` 的入口都會碰到（通知、網頁 deep link、重新整理後的 History），例如 e2e `worktree-restore.spec.ts` 封存後立刻帶 `?open=agent:` 重新載入、刪除還沒寫進 IndexedDB 時。原本寫「熱啟動點通知本來就這樣」不對：live 目錄之後的熱啟動點擊找不到封存的工作區，會延後成 `?open`、等、然後 recovery。改成上面的 latch。
+  - 突變：去重改回只看 identifier 時新的 vitest 3 個紅；latch 永遠不設時 3 個紅（兩個封存案例和主機連不上那個）；`WorkspaceDeck` 改回 `{isAgentOpenIntent}`、或等待加回 `!hasHydratedWorkspaces` 時守門紅。
+- 還沒處理的：
+  - live 目錄之前的熱啟動點擊（例如重連時 store 還留著已封存的工作區）：`navigateToWorkspace` 直接開分頁，不帶 `?open`，所以不要 recovery。這是上游的行為，跟這次的修改無關。
+  - Android 從「最近使用」重開被系統殺掉的行程：新行程從啟動 intent 的 extras 重建那次點擊（`ExpoNotificationLifecycleListener`），行程內的去重擋不到，會再開一次那個 agent。要擋得跨行程記住 identifier。
+  - 上游 `navigation/workspace-route-navigation.ts`：bridge 註冊時只看 `isReady()` 就 flush 掛著的意圖。同一次 commit 裡比 bridge 先掛的意圖會被吃掉（上面的退步）。上游自己沒有在這個時間點導頁的地方，所以沒改它；在掛載的 effect 裡導頁的新程式要晚一個 microtask。
+- Android 模擬器驗收（2026-10-03，release-dev APK：JS 內嵌、沒有 dev launcher；測試 daemon 只有 mock agent、推播擋掉）：
+  - 做法：先在 App 裡開記住的 agent，`am force-stop`，再冷啟動。點通知用 FCM 點擊會送的同一個 intent（MAIN／LAUNCHER 到 `.MainActivity`，relay 的 data 當 string extras，`google.sent_time` 是 long）；deep link 用 `woowtech-smart:///h/<srv>/workspace/<wks>?open=agent:<id>`。30 秒內一直讀標題。工作區 W1 有 A、B，W2 有 C、D。
+  - main：同一個工作區，點通知和 deep link 各 3 次都是先 A 再 B；跨工作區先 D（W2 記住的）再 C，點通知 1/3、deep link 2/3；點之前讓主機連不上，點通知 3/3 一直停在 A。
+  - 修正版第一版（`32fda709`）：deep link 3/3 直接 B；點通知 3/3 停在 A，30 秒內都沒到 B，比 main 還差。
+  - 原因（logcat 追蹤，只在本機的除錯分支）：`subscribeToNotificationTaps` 在 router 的 effect 裡直接交出啟動的點擊，`navigateToWorkspace` 掛起 `?open=agent:B` 的意圖時 `WorkspaceRouteNavigationBridge` 還沒註冊。bridge 在同一次 commit 稍後註冊、當場 flush，這時 `isReady()` 已經是 true，但根 stack 還沒進 container 的 state（root state 只有 `__root`，沒有巢狀的 state）。expo-router 據此排了一個對 `__root` 的 `POP_TO`，React Navigation 有處理（不是 noop），根 stack 卻照樣從 `index` 開始，`?open` 從沒出現在導覽 state 裡；接著啟動還原把人帶到記住的工作區，顯示 A。上游用 `.then` 晚一個 microtask，那時整個 commit 的 effect 都跑完了，所以沒事。同一個除錯 APK 改回在 effect 裡交出就重現，在 microtask 交出就直接開到 B。
+  - 修正版（`b1628889`）：同一個工作區點通知 3/3、deep link 3/3 直接 B；跨工作區點通知 3/3 直接 C；主機連不上時點通知 3/3 直接 B、跨工作區 3/3 直接 C。都沒有先出現記住的 agent。跨工作區 deep link 8 次都開到 C，第 1 次在 C 之前讀到約 3 秒的 A（W1 記住的 agent），之後 7 次（其中 5 次每次換標題都截圖）沒再出現；帶追蹤的除錯 APK 另跑 3 次，導覽都直接到 W2。那一次的原因沒查到。
+  - 還要實機：iPad 和 POCO 照「接下來」的 RC-I-21c 那條做（真的 FCM／APNs 點擊、iOS 啟動點擊的送達時機、Reload、重複通知、封存工作區）。
+- 合併上游：上游改成快取到了就消費 agent 意圖，或自己清掉最後一次點擊時，先確認新測試仍綠，再拿掉 fork 的函式、模組和守門。
+
 #### 桌面通知的回饋
 
 - Electron 的通知支援不代表系統已授權；設定頁顯示尚未確認，仍可按「傳送測試通知」。不拿瀏覽器的授權值冒充原生通知授權。
@@ -789,7 +828,12 @@ node --test woowtech/*.test.mjs
 - 三態只新增桌面內部 `sendNotificationWithResult` bridge／IPC，接點另有 `preload.ts` 與 App `desktop/host.ts`；沒有修改網路 protocol。App 與 Electron 各自宣告三態 union，由守門核對一致，不跨套件引用 sibling `src`。一般 `sendOsNotification` 與既有 `sendNotification` IPC 仍回布林，僅 show 為 true。舊 bridge 仍能傳送測試，但舊布林不能證明是否收到 show，畫面一律回報未確認；不以重送來猜測結果。相容接點帶 `COMPAT(notificationDeliveryResult)` 標記。
 - Renderer 接點是 `desktop-permissions.ts`、`use-desktop-permissions.ts`、`desktop-notifications-section.tsx`；測試狀態放 fork helper，文案放 `i18n/woowtech-copy.ts`，繁中以外先沿用英文。合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，再跑同名 fork helper 與 permission 的定向 Vitest。沒有變更手機推播。
 - Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；翻譯函式存入 ref 並在 render 同步更新，通知 callback 只依賴 `serverId`，避免切換語言使 `observeEvents` 拆掉再訂閱；送出時仍讀最新翻譯。
-- 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。
+- 通知圖示：上游從 `dist/features` 找 `../assets`，指到從來不會產生的 `dist/assets`，所以圖示一直是空的（macOS 仍用 App 圖示，Windows 與 Linux 橫幅沒有圖示）。改由 `features/woowtech-notification-icon.ts` 決定：打包版讀 resources 的 `icon.png`，開發版讀 `packages/desktop/assets`。`electron-builder.yml` 原本只有 mac 複製 `icon.png`，現在 linux 與 win 也複製；main.ts 打包版的視窗圖示本來就找這個檔，因此 Linux 視窗，以及 Windows 打包版（之前 `icon.ico`、`icon.png` 都沒有出貨）的視窗也會有圖示。macOS 不給通知圖示（`notificationIconCandidates` 對 darwin 回空清單）：橫幅本來就顯示 App 圖示，Electron 在 macOS 會把另外給的圖示畫成右側的內容圖片，等於多出第二個圖示，所以 macOS 維持修正前的外觀。
+- 沒有視窗時點通知：macOS 關掉所有視窗後 App 仍在，上游點擊只送給既有視窗，所以沒反應。`features/woowtech-notification-click.ts` 先找發出通知的視窗，再找任何視窗；都沒有時呼叫 `desktopWindowOwner.restoreWhenActivated()` 重開主視窗。目標先排隊，等該視窗 renderer 的 `PushNotificationRouter` 訂閱點擊後，以 `woowtech:notification:takePendingClick` 取走，再走原本的 `openNotification`（agent 或 `buildNotificationRoute`）。視窗重新載入時回到未就緒，關閉時丟棄。macOS 的 activate 與點擊可能同時要求視窗，所以 `restoreWhenActivated` 共用同一次開窗。上游接點：`notifications.ts`、`main.ts`、`preload.ts`、`window/desktop-window-owner.ts`、App 的 `desktop/host.ts` 與 `app/_layout.tsx`（取件放 `utils/woowtech-notification-click.ts`）。
+- App 結束後從通知中心點舊通知（冷啟動、macOS `launchInfo`／`getHistory`、Windows `handleActivation`）仍不導頁：通知資料只存在記憶體，要支援得另存 id 對應資料，且只能在簽章產物上驗證，先不做。
+- Windows：`features/woowtech-app-user-model-id.ts` 在 `app.setName` 後、whenReady 前呼叫 `app.setAppUserModelId`。打包版用 `io.woowtech.smart.desktop`（與 `electron-builder.yml` 的 appId 一致，NSIS 捷徑用的就是它，守門核對），未打包用 `process.execPath`；macOS 與 Linux 不做事。
+- 合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，以及 desktop 的 `woowtech-notification-{icon,click}.test.ts`、`woowtech-app-user-model-id.test.ts`、`window/desktop-window-owner.test.ts` 與 App 的 `utils/woowtech-notification-click.test.ts`。
+- 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。圖示、關窗後點擊與 Windows AppUserModelID 也只有單元測試與守門，實機驗證待做：macOS 要簽章的打包版；Windows 與 Linux 的圖示和點擊要各自的打包版與機器。
 
 ### 17. daemon 自己的訊息用 woowtech smart
 
@@ -1104,6 +1148,7 @@ node --test woowtech/*.test.mjs
   - App：`composer/woowtech-upload-reconnect.ts`。上傳因為連線中斷（`DAEMON_CONNECTION_LOST`、「Transport not connected」或 socket 已關的「WebSocket not open」）失敗時，附件留在上傳中，等這台主機的 client 重新連上（同一個 client 自己重連，或 host runtime 換成新的 client，最多等 60 秒）再重送，一個檔案最多送 3 次。其他錯誤、逾時和等不到主機照舊失敗。接點是 `composer/actions.ts` 的 `uploadFileAttachments`（多一個 `reconnect` 參數）和 `composer/index.tsx` 的 `uploadSelectedFiles`。
   - 最後還是失敗時，連線中斷的錯誤改顯示「與主機的連線中斷，檔案沒有上傳。主機連回來後請再加入一次。」（`woowtech.composer.uploadConnectionLost`，只有繁中和英文）。
   - 順手修上游的 key：composer 在 client 不在時 toast `composer.errors.daemonClientDisconnected`，但這個 key 不存在，畫面會顯示 key 本身；改用 `common.errors.daemonClientDisconnected`。
+- 檔名含 `#`、`?`、`%` 的附件（RC 驗收發現）：上游的 `pathToFileUri` 直接把路徑接成 `file://…`，解析網址的地方（`URL`、fetch、expo-file-system）會把 `shot#1.png` 讀成 `shot`，`100%.png` 直接出錯，`a%20b.png` 被當成 `a b.png`。現在這三個字元先做百分比編碼，`fileUriToPath` 照舊解回來；其他路徑的 URI 不變（`attachments/utils.ts`）。手機版附件的預覽網址原本自己接 `file://`，改用同一個函式（`native-file-attachment-store.ts`）。
 - 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
 - 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送在定向輪（integration-0928）驗過，見「驗證紀錄」。
 
@@ -2127,7 +2172,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - CLI 改名合回 main 之後：
   - 重建 server 的 dist，跑 CLI 的 e2e（`tests/17-onboard.test.ts`、`03-daemon.test.ts`）和桌面版打包後的 smoke。`src/commands/daemon/lifecycle.e2e.test.ts` 已在 `woowtech/services` 跑過（驗證紀錄）。
   - 在桌面版實際按「安裝 CLI」和安裝技能（用測試帳號或暫存 HOME），確認 `~/.local/bin` 和三個技能資料夾只多出 `woowtech-smart*`，設定的命令列那一列顯示 `woowtech-smart`。
-- iOS 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`（Debug 版顯示成 woowtechsmartDebug），而且只有英文。要不要改成品牌名並加上中文，還沒決定。
+- iOS 權限提示（第 6 節）已改成品牌名加繁中、簡中；要在模擬器或實機上各看一次三個提示的實際文字（英文、繁中、簡中）。
+- 附件檔名含 `#`、`?`、`%`（第 21 節）：RC 的原始報告在舊 Mac 上，修正是從程式找到的原因。要在桌面版附加 `shot#1.png`、`what?.png`、`100%.png` 各一次，確認預覽和送出都正常，也在手機上附加一次。
 - 盤點設定頁以外上游寫死的英文，照第 14 節的做法一頁一頁處理。
 - 用詞待決定：
   - 已處理：原本「28 處主機／87 處 Host」的混用已統一為「主機」（C-007）；由產生器來源修正並重生繁中，Agent 保留英文。
@@ -2150,6 +2196,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
     - 通知權限只在連上 woowtech smart 的 daemon 時才問。
     - 從相同 bundle ID、呼叫過 `getExpoPushTokenAsync` 的舊測試版升級：驗證 iOS 原生寫入 disabled 成功、下次啟動與 APNs token 事件維持停用；另驗證首次 import 已讀到 enabled、仍等待 token 或已開始上傳的競速。原生字串 adapter 不取消這些工作，尚不能宣稱升級首次啟動零 Expo 請求。移除 App 也不能當成清除 Keychain 登記的可靠方式。
     - 打一次真正的 iOS bundle，確認裡面沒有 `@firebase/app`，並量 IPA 大小的差距。
+    - RC-I-21c（第 16 節）：iPad 和 POCO 各自先在 main 重現，再換修正版。App 被滑掉後點通知，同一個工作區、跨工作區、點之前讓主機連不上各 3 次，B 聚焦後不再跳回 A；開到 B 後切到 A，在 Debug 版 Reload，不會被拉回 B；開到 B 後讓 B 再完成一次，點新的通知仍開 B（iOS 同一個 agent 的 identifier 相同）；App 被滑掉時在桌面版封存工作區 W，再點 W 裡 agent 的舊通知，要顯示 Restore。
   - 待決定：
     - 手動分兩步跑 prebuild 和 `pod install` 時，要不要讓 `react-native.config.js` 也看 prebuild 產生的 `ios/` 裡有沒有 plist，而不只看環境變數。
     - F-Droid 版的 `expo-notifications` stub 要不要補上 `setAutoServerRegistrationEnabledAsync`、`getDevicePushTokenAsync`、`addPushTokenListener`。程式已經能處理沒有它們的情況（記 warn 或拿不到 token）。

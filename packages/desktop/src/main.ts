@@ -53,6 +53,7 @@ import { createExternalUrlOpener } from "./features/opener.js";
 import { createBrowserCaptureService } from "./features/browser-capture.js";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
 import { resolveAppIconPath } from "./features/stamped-icon.js";
+import { applyWindowsAppUserModelId } from "./features/woowtech-app-user-model-id.js";
 import { setupApplicationMenu } from "./features/menu.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
@@ -131,6 +132,12 @@ const bootstrapComplete = new Promise<void>((resolve) => {
 let bootstrapIsComplete = false;
 
 app.setName(APP_NAME);
+applyWindowsAppUserModelId({
+  platform: process.platform,
+  isPackaged: app.isPackaged,
+  execPath: process.execPath,
+  setAppUserModelId: (id) => app.setAppUserModelId(id),
+});
 log.info("[desktop] app startup", {
   version: app.getVersion(),
   platform: process.platform,
@@ -964,7 +971,9 @@ async function bootstrap(): Promise<void> {
   registerDaemonManager();
   registerWindowManager({ mode: DESKTOP_WINDOW_CHROME_MODE });
   registerDialogHandlers();
-  registerNotificationHandlers();
+  registerNotificationHandlers({
+    ensureWindow: () => desktopWindowOwner.restoreWhenActivated(),
+  });
   const openExternalUrl = createExternalUrlOpener({ open: shell.openExternal });
   ipcMain.handle("paseo:opener:openUrl", (_event, value: unknown) => openExternalUrl(value));
   registerEditorTargetHandlers();

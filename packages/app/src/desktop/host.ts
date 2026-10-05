@@ -60,6 +60,8 @@ export interface DesktopNotificationBridge {
     payload: Parameters<NonNullable<DesktopNotificationBridge["sendNotification"]>>[0],
   ) => Promise<NotificationDeliveryResult>;
   isSupported?: () => Promise<boolean>;
+  // woowtech smart: a click that reopened this window before its router subscribed.
+  takePendingClick?: () => Promise<{ data: Record<string, unknown> } | null>;
   sendNotification?: (
     payload: string | { title: string; body?: string; data?: Record<string, unknown> },
   ) => Promise<boolean>;

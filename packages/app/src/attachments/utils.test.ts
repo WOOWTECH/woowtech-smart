@@ -29,6 +29,29 @@ describe("pathToFileUri", () => {
   it("passes through relative paths unchanged", () => {
     expect(pathToFileUri("relative/path")).toBe("relative/path");
   });
+
+  // woowtech smart: a name with #, ? or % stays whole for whatever parses the URI.
+  it("percent-encodes the characters a URL parser would cut at or misread", () => {
+    expect(pathToFileUri("/Users/a/shot#1.png")).toBe("file:///Users/a/shot%231.png");
+    expect(pathToFileUri("/Users/a/what?.png")).toBe("file:///Users/a/what%3F.png");
+    expect(pathToFileUri("/Users/a/100%.png")).toBe("file:///Users/a/100%25.png");
+    expect(pathToFileUri("C:\\Users\\a\\shot#1.png")).toBe("file:///C:/Users/a/shot%231.png");
+    expect(pathToFileUri("\\\\server\\share\\shot#1.png")).toBe("file://server/share/shot%231.png");
+  });
+
+  it("round-trips through fileUriToPath and through URL parsing", () => {
+    for (const path of [
+      "/Users/a/shot#1.png",
+      "/Users/a/what?.png",
+      "/Users/a/100%.png",
+      "/Users/a/a%20b.png",
+      "/Users/a/中文 檔名.png",
+    ]) {
+      const uri = pathToFileUri(path);
+      expect(fileUriToPath(uri)).toBe(path);
+      expect(decodeURIComponent(new URL(uri).pathname)).toBe(path);
+    }
+  });
 });
 
 describe("fileUriToPath", () => {

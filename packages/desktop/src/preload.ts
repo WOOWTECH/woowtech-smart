@@ -93,6 +93,11 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       data?: Record<string, unknown>;
     }) => ipcRenderer.invoke("woowtech:notification:sendWithResult", payload),
     isSupported: () => ipcRenderer.invoke("paseo:notification:isSupported"),
+    // woowtech smart: PushNotificationRouter calls this once it listens for clicks.
+    takePendingClick: () =>
+      ipcRenderer.invoke("woowtech:notification:takePendingClick") as Promise<{
+        data: Record<string, unknown>;
+      } | null>,
     sendNotification: (payload: { title: string; body?: string; data?: Record<string, unknown> }) =>
       ipcRenderer.invoke("paseo:notification:send", payload),
   },
