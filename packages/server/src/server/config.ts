@@ -22,6 +22,7 @@ import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
 import { DEFAULT_RELAY_ENDPOINT } from "@getpaseo/protocol/daemon-endpoints";
 import { appBaseUrlFromConfig } from "./app-base-url.js";
+import { withoutUpstreamWebApp } from "./woowtech-cors-origins.js";
 import { hashDaemonPassword } from "./auth.js";
 import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
@@ -428,8 +429,9 @@ function resolveCorsAllowedOrigins(
     ? env.PASEO_CORS_ORIGINS.split(",").map((s) => s.trim())
     : [];
   const persistedCorsOrigins = persisted.daemon?.cors?.allowedOrigins ?? [];
-  return Array.from(
-    new Set([...persistedCorsOrigins, ...envCorsOrigins].filter((s) => s.length > 0)),
+  // woowtech smart: upstream's hosted web app never gets in (woowtech-cors-origins.ts).
+  return withoutUpstreamWebApp(
+    Array.from(new Set([...persistedCorsOrigins, ...envCorsOrigins].filter((s) => s.length > 0))),
   );
 }
 

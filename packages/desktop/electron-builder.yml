@@ -2,6 +2,11 @@ npmRebuild: false
 appId: io.woowtech.smart.desktop
 productName: woowtech smart
 executableName: woowtech smart
+# woowtech smart: the Mac app's NSHumanReadableCopyright (Finder's Get Info, the About window)
+# and the Windows executable's copyright. Unset, electron-builder writes "Copyright © <year>
+# <package.json author>", which is upstream's author. Keep it equal to WOOWTECH_COPYRIGHT in
+# src/features/woowtech-about-panel.ts (woowtech/desktop-about.test.mjs checks both).
+copyright: "© 2026 WOOW TECH CO., LTD."
 # woowtech smart: electron-builder names electron-updater's download cache after the
 # package name, and @getpaseo/desktop gives the official Paseo's @getpaseodesktop-updater.
 # package.json's desktopName is Paseo's desktop entry; Linux names ours after executableName.
@@ -54,6 +59,11 @@ mac:
   notarize: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
+  # woowtech smart: the purpose string macOS shows when the app asks for the microphone
+  # (dictation), naming the app instead of Electron's "This app needs access to the
+  # microphone". The Chinese ones are the InfoPlist.strings copied below.
+  extendInfo:
+    NSMicrophoneUsageDescription: "Allow woowtech smart to use the microphone so you can dictate messages to your agents."
   extraResources:
     - from: bin/paseo
       to: bin/paseo
@@ -61,6 +71,12 @@ mac:
       to: bin/woowtech-smart
     - from: assets/icon.png
       to: icon.png
+    # woowtech smart: Traditional and Simplified Chinese permission prompts, into the
+    # zh_TW.lproj and zh_CN.lproj folders Electron's bundle already has in Resources.
+    - from: assets/lproj/zh_TW.lproj
+      to: zh_TW.lproj
+    - from: assets/lproj/zh_CN.lproj
+      to: zh_CN.lproj
   target:
     - dmg
     - zip

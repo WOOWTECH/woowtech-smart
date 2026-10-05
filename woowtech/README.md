@@ -208,6 +208,19 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
     - 繁中、簡中寫在 `locales` 的 `ios` 底下，進 `InfoPlist.strings`。那裡不會展開 `$(PRODUCT_NAME)`，所以名稱直接寫「渥屋智能」。`android` 底下仍只有 `app_name`。
     - 英文寫在 `ios.infoPlist`；相機那句同時給 `expo-camera` 的 `cameraPermission`，照片那句會蓋過 `expo-image-picker` 的預設文字。
     - 守門 `woowtech/ios-permissions.test.mjs` 用 `expo config` 查兩個版本。prebuild 驗過：`zh-Hans.lproj`、`zh-Hant.lproj` 的 `InfoPlist.strings` 都有三句。已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
+- 桌面版（macOS）的「關於」視窗和 Finder 的「取得資訊」：版權是 `© 2026 WOOW TECH CO., LTD.`，「關於」視窗另外顯示官網 `https://aiot.woowtech.io/`。原本 electron-builder 用 `package.json` 的 author 產生「Copyright © 2026 Mohamed Boudra」，那是上游作者。
+  - `electron-builder.yml` 的 `copyright` 寫進 Info.plist 的 `NSHumanReadableCopyright`，Windows 執行檔的版權欄也用它。
+  - `main.ts` 在 `app.setName` 後面呼叫 `app.setAboutPanelOptions(woowtechAboutPanelOptions())`（+3 行）。內容在 fork 的 `src/features/woowtech-about-panel.ts`：同一行版權，官網放在 `credits`，因為 macOS 不顯示 `website`（Linux 才顯示）。官網取自 `BRAND_LINKS.website`。App 名稱和版本照預設，從 Info.plist 讀。沒打包的開發版也顯示同樣的版權和官網。
+  - 選單的「關於 woowtech smart」是 Electron 原生的 `role: "about"`，顯示的就是這些設定。
+  - 不改 `packages/desktop/package.json` 的 `homepage`、`author`：`scripts/sync-workspace-versions.mjs` 同步版本時會從根目錄的 `package.json` 蓋回上游的值，macOS 版也用不到它們（見「接下來」）。
+  - 測試 `src/features/woowtech-about-panel.test.ts`。守門 `woowtech/desktop-about.test.mjs`：請 electron-builder 算出寫進 Info.plist 的版權；從原始碼跑 `woowtechAboutPanelOptions`，版權要跟它相同、官網在 `credits`；`main.ts` 在 `app.whenReady()` 之前呼叫一次，沒有別的地方改「關於」的設定；選單仍是 `role: "about"`。
+- 桌面版（macOS）的麥克風權限提示（聽寫用）：寫出 App 名稱和用途，跟著系統語言顯示英文、繁中或簡中，句子跟 iOS 相同。原本是 Electron 的「This app needs access to the microphone」。
+  - 英文寫在 `electron-builder.yml` 的 `mac.extendInfo`。繁中、簡中是 `packages/desktop/assets/lproj/zh_TW.lproj`、`zh_CN.lproj` 裡的 `InfoPlist.strings`，由 `mac.extraResources` 複製到 App 的 `Contents/Resources/` 同名資料夾。electron-builder 沒有放 `InfoPlist.strings` 的專用設定。
+  - 資料夾用 Electron（Chromium）本來就有的 `zh_TW.lproj`、`zh_CN.lproj`，Chrome 也放在這兩個。另外加 `zh-Hant.lproj` 的話，App 會有兩個繁中語系。CoreFoundation 把 zh-Hant-TW、zh-Hant-HK 對到 `zh_TW`，zh-Hans-CN、zh-Hans-SG 對到 `zh_CN`。
+  - `electronLanguages` 沒設。設了的話，electron-builder 先刪掉不要的語系資料夾，再複製 `extraResources`，這兩個檔案照樣會放進去。
+  - 只加麥克風：桌面版只用到它（`getUserMedia` 只要聲音，`entitlements.mac.plist` 也只有 `audio-input`）。Electron 預設的相機、藍牙、系統聲音擷取說明不動，用不到。
+  - 檔案放 `assets/`，不放 `build/`：根目錄的 `.gitignore` 忽略 `build/`，新檔案容易漏加。
+  - 守門 `woowtech/desktop-permissions.test.mjs`：請 electron-builder 讀設定，檢查英文句子、兩個 `InfoPlist.strings` 的鍵和開頭（在 macOS 上另外用 `plutil` 讀一次）、`extraResources` 的對應，以及 Electron 有這兩個資料夾。
 - App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
 - `woowtech/names.test.mjs` 檢查安裝檔名稱與下載連結一致、App 裡寫死的文字、agent 看到的名稱，並用 `expo config` 檢查手機 App 的實際設定。
   - iOS 短名稱查兩處，也查不超過 15 字：`expo config --type prebuild` 裡 `app.config.js` 自己設的 `ios.infoPlist.CFBundleName`；`expo config --type introspect`（`woowtech/expo-config.mjs` 的 `expoIntrospectedConfig`）算出的 Info.plist，和 zh-Hans／zh-Hant 的 `ios.CFBundleName`。
@@ -383,7 +396,7 @@ daemon 的預設：
 - 先部署 relay，再發佈這一版：relay.woowtech.io 還沒有 DNS 時，daemon 連不上，每 1～30 秒重試一次，log 裡一直有連線錯誤。
 - 直接連線不受影響：daemon 預設只監聽 `127.0.0.1:6770`。要讓手機直接連，把 `daemon.listen` 改成區網或 Tailscale 的位址，並用 `woowtech-smart daemon set-password` 設密碼。
 
-配對連結的主機：owner 決定直接叫起 App，配對連結和 QR Code 改成 `woowtech-smart:///#offer=…`，新 home 的 CORS 白名單也拿掉上游的網頁版，見第 19 節。當時比較過的其他做法也記在那裡。
+配對連結的主機：owner 決定直接叫起 App，配對連結和 QR Code 改成 `woowtech-smart:///#offer=…`，CORS 白名單也不再放行上游的網頁版（新 home 不寫，舊 home 解析時拿掉），見第 19 節。當時比較過的其他做法也記在那裡。
 
 測試：
 
@@ -1112,7 +1125,9 @@ CORS：
 
 - 新 home 的 `daemon.cors.allowedOrigins` 改成空的，不再放行 `https://app.paseo.sh`。原本上游網站上的程式可以從使用者的瀏覽器直接連本機的 daemon（HTTP 和 WebSocket 都看這份白名單），而 daemon 預設沒有密碼。
 - daemon 自己固定放行的照舊（`bootstrap.ts`）：桌面版的 `woowtech-smart://app`、daemon 自己的位址（`http://127.0.0.1:<port>`、`http://localhost:<port>`），WebSocket 另外接受同源。開發用的也照舊：`scripts/dev-home.sh` 寫的 `"*"`、`scripts/dev-daemon.sh` 的 `PASEO_CORS_ORIGINS`。
-- 已存在的 home 不動：內部測試版建立的 `config.json` 還列著 `https://app.paseo.sh`，要自己拿掉，例如 `woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`。要不要自動拿掉還沒決定（接下來）。
+- 已存在的 home：內部測試版建立的 `config.json` 還列著 `https://app.paseo.sh`。daemon 解析設定時，`daemon.cors.allowedOrigins` 和 `PASEO_CORS_ORIGINS` 裡正好是這個網址的來源（有沒有結尾斜線都算）都拿掉。其他來源照用，包括 app.paseo.sh 的其他寫法（http、別的 port、子網域）。`"*"` 也照用，仍然放行所有來源，只有開發用的 home 會寫。
+  - 寫在 fork 的 `packages/server/src/server/woowtech-cors-origins.ts`（`withoutUpstreamWebApp`），網址用 `app-base-url.ts` 匯出的 `UPSTREAM_DEFAULT_APP_BASE_URL`，不另外寫一次。`config.ts` 的 `resolveCorsAllowedOrigins` 把回傳值交給它。daemon 啟動、重新載入設定（例如 `daemon config set` 之後）都走這裡。
+  - 跟 `app.baseUrl` 一樣不改寫 `config.json`：`woowtech-smart daemon config get daemon.cors.allowedOrigins` 仍顯示檔案裡的上游網址。要從檔案清掉，執行 `woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`。
 
 文案：
 
@@ -1127,25 +1142,27 @@ CORS：
   - 在 app.woowtech.io 自架網頁版：要多維運一個能操作使用者 daemon 的網頁 App，每次發版都要更新。
   - 維持 app.paseo.sh：上游隨時可能改或停掉那個網站。
 
-接點（上游的檔）：`persisted-config.ts`（4 行）、`config.ts`（3 行）、`pairing-offer.ts`（2 行）、`bootstrap.ts`（4 行，熱檔）、`protocol/src/connection-offer.ts`（1 行註解）、`cli/src/commands/onboard.ts`（4 行）、`app/src/components/pair-link-modal.tsx`（2 行）、`app/src/app/_layout.tsx`（`OfferLinkListener` 的 `handleUrl` 改成呼叫 `handlePairingLink`，加 1 行 import，熱檔），以及上游測試 `app/src/runtime/host-runtime.test.ts` 加的 1 個測試。F6 補名另在 `app/src/runtime/host-runtime.ts` 加 43 行，政策及整合測試留 fork 自有檔。
+接點（上游的檔）：`persisted-config.ts`（4 行）、`config.ts`（配對 3 行；CORS 在 `resolveCorsAllowedOrigins`，+4／-2 行）、`pairing-offer.ts`（2 行）、`bootstrap.ts`（4 行，熱檔）、`protocol/src/connection-offer.ts`（1 行註解）、`cli/src/commands/onboard.ts`（4 行）、`app/src/components/pair-link-modal.tsx`（2 行）、`app/src/app/_layout.tsx`（`OfferLinkListener` 的 `handleUrl` 改成呼叫 `handlePairingLink`，加 1 行 import，熱檔），以及上游測試 `app/src/runtime/host-runtime.test.ts` 加的 1 個測試。F6 補名另在 `app/src/runtime/host-runtime.ts` 加 43 行，政策及整合測試留 fork 自有檔。
 
 測試：
 
 - server `pairing-link.test.ts`：新 home 的連結（整段比對 offer）；沒給 `app.baseUrl` 的連結；上游預設兩種寫法的遷移；自己設的值不動（daemon 的網頁版、自己的網站、app.paseo.sh 底下的路徑）；`PASEO_APP_BASE_URL` 優先；`daemon config set` 後重新載入。
 - server `cors-defaults.test.ts`：新 home 沒有 web origin、dev 的 `"*"` 和 `PASEO_CORS_ORIGINS` 照舊；實際起 daemon，上游網頁版的 HTTP 拿不到 CORS 標頭、WebSocket 回 403，桌面版和 daemon 自己的網頁版照樣連得上。
+- server `woowtech-cors-origins.test.ts`：上游網頁版兩種寫法都拿掉，其他來源照原本的順序留下（含 `"*"` 和 app.paseo.sh 的 http、別的 port、子網域、路徑）；內部測試版的 home 解析後沒有上游網頁版，`config.json` 不變；`PASEO_CORS_ORIGINS` 給的也拿掉；`daemon config set` 後重新載入也一樣；實際起 daemon，這種 home 對上游網頁版不回 CORS 標頭、WebSocket 回 403，留下的來源照樣連得上。
 - CLI `commands/daemon/pair.app-link.test.ts`：新 home 和寫著上游預設的 home，`daemon pair` 的連結都是 `woowtech-smart:///`。`utils/daemon-target.app-link.test.ts`：`--host` 帶配對連結時，訊息裡的 offer 會遮掉。
 - App：`runtime/woowtech-pairing-link.test.ts` 是 `OfferLinkListener` 收到連結後的每一步：`woowtech-smart:///#offer=` 和帶 offer 的 https 連結都會匯入並轉到「開啟專案」、沒有 offer 的連結不處理、連結不交給 URL 類別、匯入失敗時 warn 不轉頁、監聽已經卸載時不轉頁；用真的 `HostRuntimeStore`（記憶體 storage）照冷啟動的順序先讀連結再 `boot()`，記憶體和存檔都有舊主機和新主機。`host-runtime.test.ts` 的新測試是 `handlePairingLink` 呼叫的匯入（`upsertConnectionFromOfferUrl`）；`components/pair-link-modal.app-link.test.tsx` 和 `components/pair-scan.app-link.test.tsx`（掃描器是 `src/app` 裡的路由，測試放外面，因為 Expo Router 會把 `src/app` 裡的每個檔案當成路由）：貼上和掃描新連結都能配對，範例文字是新連結。三個都把 URL 類別換成會記錄的版本，確認配對連結沒有交給它。
 - protocol `brand-pairing.test.ts`：CLI 的 `--host` 和 daemon 匯出的解析函式讀得到新連結的 offer。
 - App 補名：`runtime/woowtech-host-label.test.ts` 用真實 HostRuntimeStore、controller、DaemonClient，注入記憶體 transport/storage，驗首次補名及存檔／重開、等待期間 rename/remove、身分不符／空 hostname、離線匯入後恢復、同 client 重連、舊連線與移除後重建的 callback、registry hydration 與冷啟動深連結；沒有打網路或假元件測試。
-- 守門 `woowtech/pairing.test.mjs`，7 項：
+- 守門 `woowtech/pairing.test.mjs`，8 項：
   - 從原始碼跑 daemon 的設定和配對：新 home 的連結是 `woowtech-smart:///#offer=`，offer 是這個 home 的；沒給 `app.baseUrl` 也一樣。
   - 用 expo-router 自己的函式（`build/fork/extractPathFromURL`）確認連結落在 index 路由；用 `expo config --type introspect` 確認正式版和 Debug 版在 iOS（`CFBundleURLSchemes`）和 Android（VIEW + BROWSABLE，沒有 host 或路徑限制的 intent filter）都註冊了 `woowtech-smart`。
   - `_layout.tsx` 只掛一個 `OfferLinkListener`，不在任何條件裡；它把 `Linking.getInitialURL()` 和 `url` 事件的連結都交給 `handlePairingLink`，裡面沒有平台判斷（`Platform.`、`isWeb`、`isNative`、`getIsElectron`），也沒有 `new URL(`。上游自己的配對連結只會從網頁版進來，所以這個監聽被限定在網頁或改成讀 https 主機時，只有這一項會失敗。
   - 上游預設的 home 改用 App 連結，自己設的值不動。
   - 新 home 沒有 web origin，CLI 讀的預設（`readPersistedConfig` 的 `defaultsIfMissing`）也沒有。
+  - 內部測試版的 home（CORS 白名單列著上游網頁版的兩種寫法）解析後只剩其他來源，`PASEO_CORS_ORIGINS` 給的也拿掉，`config.json` 不變。
   - 補名用目前 controller 的正常 server_info；保留 request version／client、主機世代、registry ready、重連快取與持久化接點，不另啟動 probe。
-  - 出貨的原始碼不准出現 app.paseo.sh。「出貨的原始碼」是 `shipped-sources.mjs` 的 app、cli、client、desktop、protocol、server 的 `src`（含 App 的翻譯 `src/i18n`），加上 relay、plugin、highlight、expo-two-way-audio 的 `src`（App 和 daemon 相依的套件）、App 的 `plugins/`、`woowtech/skills`，以及 `app.config.js`、`eas.json`、`public/index.html`、`public/manifest.json`、`electron-builder.yml`、`wrangler.woowtech.toml`。不掃：測試、e2e、test-utils，`docs/`、`public-docs/`、`SECURITY.md`、`CHANGELOG.md` 這些說明文件，`scripts/`、`nix/`，以及上游的官網 `packages/website`。唯一的例外是 `app-base-url.ts` 辨認上游預設的那一行，守門也檢查它只有那一行。
-  - 突變都被抓到：新 home 的 `app.baseUrl` 或 CORS 改回、`config.ts` 不遷移、遷移少了結尾斜線那種寫法、`pairing-offer.ts` 或 `bootstrap.ts` 的預設改回、`onboard` 加回 Web app、範例文字改回、`app.config.js` 的 scheme 改掉、`BRAND_PAIRING` 改成有 host 的網址（要重建 protocol 的 dist）、`app-base-url.ts` 多一行提到 app.paseo.sh。
+  - 出貨的原始碼不准出現 app.paseo.sh。「出貨的原始碼」是 `shipped-sources.mjs` 的 app、cli、client、desktop、protocol、server 的 `src`（含 App 的翻譯 `src/i18n`），加上 relay、plugin、highlight、expo-two-way-audio 的 `src`（App 和 daemon 相依的套件）、App 的 `plugins/`、`woowtech/skills`，以及 `app.config.js`、`eas.json`、`public/index.html`、`public/manifest.json`、`electron-builder.yml`、`wrangler.woowtech.toml`。不掃：測試、e2e、test-utils，`docs/`、`public-docs/`、`SECURITY.md`、`CHANGELOG.md` 這些說明文件，`scripts/`、`nix/`，以及上游的官網 `packages/website`。唯一的例外是 `app-base-url.ts` 辨認上游預設的那一行（`woowtech-cors-origins.ts` 從那裡匯入），守門也檢查它只有那一行。
+  - 突變都被抓到：新 home 的 `app.baseUrl` 或 CORS 改回、`config.ts` 不遷移、遷移少了結尾斜線那種寫法、`pairing-offer.ts` 或 `bootstrap.ts` 的預設改回、`onboard` 加回 Web app、範例文字改回、`app.config.js` 的 scheme 改掉、`BRAND_PAIRING` 改成有 host 的網址（要重建 protocol 的 dist）、`app-base-url.ts` 多一行提到 app.paseo.sh。CORS 的 5 種（2026-10-05）：`config.ts` 不再呼叫 `withoutUpstreamWebApp`、只過濾 `config.json` 的（`PASEO_CORS_ORIGINS` 放行）、少了結尾斜線那種寫法、過濾變成什麼都不拿、`woowtech-cors-origins.ts` 寫出 app.paseo.sh。前四種 `woowtech-cors-origins.test.ts` 也會失敗。
 
 上游合併後要再確認：
 
@@ -1153,7 +1170,7 @@ CORS：
 npm run build:server   # 守門從原始碼跑，但跨套件的匯入讀 dist
 node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/brand-pairing.test.ts --bail=1)
-(cd packages/server && npx vitest run src/server/pairing-link.test.ts src/server/cors-defaults.test.ts --bail=1)
+(cd packages/server && npx vitest run src/server/pairing-link.test.ts src/server/cors-defaults.test.ts src/server/woowtech-cors-origins.test.ts --bail=1)
 (cd packages/cli && npx vitest run src/commands/daemon/pair.app-link.test.ts src/utils/daemon-target.app-link.test.ts --bail=1)
 (cd packages/app && npx vitest run src/runtime/woowtech-pairing-link.test.ts src/runtime/host-runtime.test.ts src/components/pair-link-modal.app-link.test.tsx src/components/pair-scan.app-link.test.tsx --bail=1)
 ```
@@ -1164,6 +1181,7 @@ node --test woowtech/*.test.mjs
 - 上游新增 `src/app/+native-intent.tsx`、改了 `src/app/index.tsx`，或把 index 放進 `Stack.Protected`：連結可能不再落在啟動畫面，要在模擬器上用 `xcrun simctl openurl` 和 `adb shell am start` 重新確認。
 - 上游讓掃描器或「貼上配對連結」改用 URL 類別讀 fragment：那兩個 App 測試會失敗，改回字串運算。上游改寫 `OfferLinkListener`（限定平台、改用 URL 類別、不再交給 `handlePairingLink`）：守門的 `OfferLinkListener` 那一項會失敗，照訊息改回交給 `handlePairingLink`。
 - 上游在新 home 的 CORS 預設或 `bootstrap.ts` 的固定清單加回網頁版：`cors-defaults.test.ts` 和守門會失敗。
+- 上游改寫 `resolveCorsAllowedOrigins`（例如多一個來源）：`withoutUpstreamWebApp` 要包住最後的回傳值，接點不見時 `woowtech-cors-origins.test.ts` 和守門的 CORS 那一項會失敗。
 
 ### 20. 暫停工作區自動命名與 Git metadata 生成
 
@@ -1840,6 +1858,14 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 桌面版的「關於」視窗和麥克風權限提示（2026-10-05，分支 `woowtech/desktop-about-cors-1005`，第 6 節）：每次突變只改一個地方，改完用 sha256 確認還原。
+  - 守門 `desktop-about.test.mjs` 先紅（electron-builder 算出「Copyright © 2026 Mohamed Boudra」、`main.ts` 沒有呼叫）後綠 3/3。8 種突變都被抓到：yml 的版權拿掉或改年份、fork 檔的版權或 `credits` 改掉、`main.ts` 的呼叫拿掉、移到 `app.whenReady()` 之後、之後又設別的值、選單的「關於」改成自訂項目。
+  - 守門 `desktop-permissions.test.mjs` 先紅後綠 1/1。10 種突變都被抓到：拿掉 `extendInfo`、英文改回 Electron 的、多一句沒有翻譯的相機說明、少一個 `extraResources`、對到 `zh-Hans.lproj`、繁中改成英文、簡中用 `$(PRODUCT_NAME)`、少分號、清空檔案、鍵拼錯。
+  - 桌面版 `woowtech-about-panel.test.ts` 先紅（yml 沒有 `copyright`）後綠 2/2；`desktop-packaging`、AppUserModelID 的測試照樣全過。全部守門 `node --test woowtech/*.test.mjs` 189/189。
+  - 沒有完整打包（`electron-builder --mac` 太重）。改用 electron-builder 26.8.1 自己的 `createMacApp` 和 extraResources 複製，在去掉 Electron Framework 的 Electron.app 副本上跑：Info.plist 的 `NSHumanReadableCopyright` 是 `© 2026 WOOW TECH CO., LTD.`，`NSMicrophoneUsageDescription` 是新的英文句子，Electron 其他的說明不變；`Contents/Resources/zh_TW.lproj`、`zh_CN.lproj` 各有 `InfoPlist.strings`，沒有多出別的中文語系資料夾。
+  - 再用 CoreFoundation（`CFBundleCopyLocalizationsForPreferences`）查這個副本：zh-Hant-TW、zh-Hant-HK 選 `zh_TW`，zh-Hans-CN、zh-Hans-SG 選 `zh_CN`，讀到的都是我們的句子；英文沒有翻譯檔，用 Info.plist 的句子。`plutil -lint` 兩個檔都過。
+  - 沒看到的：實際的「關於」視窗和權限提示，要在打包、簽章後的 App 上看（接下來）。
+- 舊 home 的 CORS 白名單拿掉上游網頁版（2026-10-05，分支 `woowtech/desktop-about-cors-1005`，第 19 節）：`npm run build:server` 之後，`woowtech-cors-origins.test.ts` 先紅（4 個：解析、`PASEO_CORS_ORIGINS`、重新載入、實際起 daemon，上游網頁版拿到 CORS 標頭）後綠 6/6；`cors-defaults`、`pairing-link` 和 config 相關 6 檔照樣全過。守門 `pairing.test.mjs` 9/9，5 種突變都被抓到（第 19 節），每次只改一個地方，改完用 sha256 確認還原。
 - 第一階段驗收：商標與第三方授權（2026-09-30，分支 `woowtech/logo-compliance-0930` 的 `33f2fa8ac`，第 22、24 節）：main `7aee17b77` 加上第一階段從 `8c19faee0` 起的 11 個 commit（建置 6 個 `85775f63b`～`272aabfa9`、審查後的修正 5 個 `223de0c69`～`a0d8eec29`）和合併 main 的 `33f2fa8ac`，共 12 個 commit，都有 Co-Authored-By。對 main 改 24 檔（+1926／−77，新增 8 檔，沒有刪檔）：App 的 `packages/app/src` 20 檔、`woowtech/` 4 檔（README、`vendor-marks.mjs` 和兩個守門）；沒有 e2e、server、桌面版的檔案，package.json 和 lock 沒有變更，`.github` 跟 main 相同。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/logo-s1-*`（`logo-s1-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/logo-s1-*`，CI 的 API 回應和 job log 在同一個 logs 目錄的 `logo-s1-ci-*`。
   - 為什麼：協調資料夾的逐家研究 `coord/reports/logo-usage-research.md`（不在 repo 裡，不是法律意見），和 owner 在 2026-09-30 的決定：06:5x 同意協調者的四項建議，07:0x 補充「同意前先用徽章，後面可以改版更新再優化，目前以可以先上架為目的」。所以分兩階段：第一階段只做上架前一定要有的，廠商標誌改回是第二階段。
   - 這一輪的內容（細節在第 24 節）：
@@ -2204,8 +2230,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 - 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
   發佈 repo 要放 `CHANGELOG.md`，App 的更新紀錄才讀得到。
-- 桌面版的版權行還是上游作者：electron-builder 預設用 `package.json` 的 author，會出現在 macOS 的「關於」視窗。
-  `author`、`homepage`、`repository` 由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步，發佈前要決定怎麼標示。
+- 桌面版打包進去的 `package.json` 仍是上游的 `author`、`homepage`、`repository`，由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步。macOS 版的版權和「關於」視窗已改用 WOOW TECH（第 6 節）；Windows 執行檔的公司名稱、安裝程式的網址和 Linux 套件的網址還讀這些值，發佈 Windows、Linux 版之前要決定怎麼標示（可以用 `electron-builder.yml` 的 `extraMetadata` 只改打包進去的值）。
+- 桌面版的「關於」視窗和麥克風權限提示（第 6 節）要在打包、簽章後的 App 上看：選單「關於 woowtech smart」顯示 `© 2026 WOOW TECH CO., LTD.` 和 `https://aiot.woowtech.io/`，Finder「取得資訊」的版權也是這一行；系統語言設成繁中、簡中、英文各一次，第一次按聽寫時的提示是對應的句子（重問一次：`tccutil reset Microphone io.woowtech.smart.desktop`）。提示的標題是系統的句子加上 App 名稱 woowtech smart，中文說明裡寫的是「渥屋智能」，看過再決定要不要一致。
 - 品牌識別：CLI（第 12、13 節）和 daemon 自己的訊息（第 17 節）都改完了。刻意保留上游名稱的列在第 17 節；企業版裝回本地語音時，語音模式給 agent 的指示（`voice-config.ts`）要一起改。
 - CLI 改名合回 main 之後：
   - 重建 server 的 dist，跑 CLI 的 e2e（`tests/17-onboard.test.ts`、`03-daemon.test.ts`）和桌面版打包後的 smoke。`src/commands/daemon/lifecycle.e2e.test.ts` 已在 `woowtech/services` 跑過（驗證紀錄）。
@@ -2222,7 +2248,6 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 在模擬器上確認：英文系統的主畫面標籤、「新功能」的空狀態、繁中的設定頁和側欄。
 - 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
 - 配對連結直接叫起 App（第 19 節）的實機驗收：iOS 和 Android 的相機掃 QR Code、`xcrun simctl openurl`、`adb shell am start`，冷啟動和 App 已開著各一次；已經有一台主機、App 關著時掃新的 QR Code，再重開 App，兩台都在；沒裝 App 時掃描的反應；桌面版點連結不會有反應。Android 相機叫不起 App 時，照第 19 節的「取捨」決定要不要改成在我們網域放一頁。
-- 已存在的 home 的 `config.json` 還在 CORS 白名單列著 `https://app.paseo.sh`，要不要自動拿掉，還沒決定（第 19 節）。審查建議比照 `appBaseUrlFromConfig`，在 fork 的檔裡解析時去掉正好等於 `https://app.paseo.sh`（有沒有結尾斜線都算）的來源，`config.ts` 的 `resolveCorsAllowedOrigins` 改 1 行呼叫它；不做的話，第一個對外版本之前要確認內部測試版沒有給過外部使用者。Hub（`hub.paseo.sh`）仍是上游的。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 推播（第 16 節）：protocol、daemon、App 和守門都做完了（分支 `woowtech/push`，2026-09-26 已合進 main），接下來：
   - 中繼的 smart 模式和 push.woowtech.io 已在 2026-09-25 部署（第 16 節）。部署後的檢查：`POST {}` 回 400 `invalid_request`（field `token`）、假的 FCM token 回 410、直接打 run.app 回 403、GET 回 405、其他路徑回 404。
