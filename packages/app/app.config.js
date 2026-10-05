@@ -12,6 +12,34 @@ const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
 
+// Keep CFBundleName independent of Expo's sanitized PRODUCT_NAME. The home-screen
+// display name is CFBundleDisplayName; setting this short name does not guarantee
+// the icon label's spacing or truncation. Debug and Release labels still need validation.
+const shortName = "woowtech smart";
+const chineseShortName = "渥屋智能";
+
+// woowtech smart: the purpose strings iOS shows when it asks for each permission, in the phone's
+// language. Apple has rejected a woowtech app for vague or English-only permission text (App
+// Store guideline 5.1.1). Localized InfoPlist.strings do not expand $(PRODUCT_NAME), so the app
+// name is written out.
+const iosPermissionText = {
+  en: {
+    NSCameraUsageDescription: `Allow ${shortName} to use the camera to scan the QR code that pairs it with your computer.`,
+    NSMicrophoneUsageDescription: `Allow ${shortName} to use the microphone so you can dictate messages to your agents.`,
+    NSPhotoLibraryUsageDescription: `Allow ${shortName} to access your photos so you can attach images to messages to your agents.`,
+  },
+  "zh-Hant": {
+    NSCameraUsageDescription: `允許「${chineseShortName}」使用相機，掃描配對電腦用的 QR Code。`,
+    NSMicrophoneUsageDescription: `允許「${chineseShortName}」使用麥克風，用語音輸入給 Agent 的訊息。`,
+    NSPhotoLibraryUsageDescription: `允許「${chineseShortName}」取用你的照片，把圖片附加到給 Agent 的訊息。`,
+  },
+  "zh-Hans": {
+    NSCameraUsageDescription: `允许“${chineseShortName}”使用相机，扫描配对电脑用的二维码。`,
+    NSMicrophoneUsageDescription: `允许“${chineseShortName}”使用麦克风，用语音输入发给 Agent 的消息。`,
+    NSPhotoLibraryUsageDescription: `允许“${chineseShortName}”访问你的照片，把图片附加到发给 Agent 的消息。`,
+  },
+};
+
 const buildProfile = isFdroidBuild
   ? {
       androidPermissions: [
@@ -35,8 +63,7 @@ const buildProfile = isFdroidBuild
         [
           "expo-camera",
           {
-            cameraPermission:
-              "Allow $(PRODUCT_NAME) to access your camera to scan pairing QR codes.",
+            cameraPermission: iosPermissionText.en.NSCameraUsageDescription,
           },
         ],
       ],
@@ -101,18 +128,19 @@ const variant = variants[appVariant] ?? variants.production;
 const googleServiceInfoPlist = iosGoogleServiceInfoPlist();
 const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 
-// Keep CFBundleName independent of Expo's sanitized PRODUCT_NAME. The home-screen
-// display name is CFBundleDisplayName; setting this short name does not guarantee
-// the icon label's spacing or truncation. Debug and Release labels still need validation.
-const shortName = "woowtech smart";
-const chineseShortName = "渥屋智能";
 // Expo 54 writes every key outside `ios` and `android` into both platforms. On Android an
 // Info.plist key becomes a strings.xml entry the default locale lacks, and release lint fails
 // with ExtraTranslation, so each platform gets only its own name keys.
-const chineseLocale = {
-  ios: { CFBundleDisplayName: variant.chineseName, CFBundleName: chineseShortName },
-  android: { app_name: variant.chineseName },
-};
+function chineseLocale(language) {
+  return {
+    ios: {
+      CFBundleDisplayName: variant.chineseName,
+      CFBundleName: chineseShortName,
+      ...iosPermissionText[language],
+    },
+    android: { app_name: variant.chineseName },
+  };
+}
 
 export default {
   expo: {
@@ -124,8 +152,8 @@ export default {
     scheme: "woowtech-smart",
     // Chinese launchers show the Chinese name.
     locales: {
-      "zh-Hans": chineseLocale,
-      "zh-Hant": chineseLocale,
+      "zh-Hans": chineseLocale("zh-Hans"),
+      "zh-Hant": chineseLocale("zh-Hant"),
     },
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
@@ -133,7 +161,7 @@ export default {
       supportsTablet: true,
       infoPlist: {
         CFBundleName: shortName,
-        NSMicrophoneUsageDescription: "This app needs access to the microphone for voice commands.",
+        ...iosPermissionText.en,
         ITSAppUsesNonExemptEncryption: false,
       },
       bundleIdentifier: variant.packageId,

@@ -204,7 +204,10 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `app.config.js` 的 `ios.infoPlist.CFBundleName` 是「woowtech smart」，`locales` 的 zh-Hans、zh-Hant 設「渥屋智能」。這次只更正說明，不改顯示名稱、Xcode 的 `PRODUCT_NAME`、執行檔或 `.app` 名稱。
   - iOS 26.5 英文模擬器驗收：Debug 產物的 `CFBundleDisplayName` 已是「woowtech smart Debug」、`CFBundleName` 已是「woowtech smart」，主畫面仍顯示「woowtechsmart…」，「設定 → App」則顯示完整名稱。短名設定沒有修好主畫面標籤；需再確認 SpringBoard 的空白與截斷行為。正式版顯示名稱較短，但主畫面結果尚未驗證，不宣稱兩版相同。中文 Debug 主畫面已觀察到「渥屋智能 Debug」。
   - 已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
-  - 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`，而且只有英文，見「接下來」。
+  - iOS 的相機、麥克風、照片權限提示（`app.config.js` 的 `iosPermissionText`）：寫出 App 名稱和用途，跟著手機語言顯示英文、繁中或簡中。原本是 `$(PRODUCT_NAME)`（Debug 版顯示成 woowtechsmartDebug）加只有英文，照片那句還沒說用途；Apple 曾因權限說明退件渥屋的 App（App Store 審查準則 5.1.1）。
+    - 繁中、簡中寫在 `locales` 的 `ios` 底下，進 `InfoPlist.strings`。那裡不會展開 `$(PRODUCT_NAME)`，所以名稱直接寫「渥屋智能」。`android` 底下仍只有 `app_name`。
+    - 英文寫在 `ios.infoPlist`；相機那句同時給 `expo-camera` 的 `cameraPermission`，照片那句會蓋過 `expo-image-picker` 的預設文字。
+    - 守門 `woowtech/ios-permissions.test.mjs` 用 `expo config` 查兩個版本。prebuild 驗過：`zh-Hans.lproj`、`zh-Hant.lproj` 的 `InfoPlist.strings` 都有三句。已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
 - App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
 - `woowtech/names.test.mjs` 檢查安裝檔名稱與下載連結一致、App 裡寫死的文字、agent 看到的名稱，並用 `expo config` 檢查手機 App 的實際設定。
   - iOS 短名稱查兩處，也查不超過 15 字：`expo config --type prebuild` 裡 `app.config.js` 自己設的 `ios.infoPlist.CFBundleName`；`expo config --type introspect`（`woowtech/expo-config.mjs` 的 `expoIntrospectedConfig`）算出的 Info.plist，和 zh-Hans／zh-Hant 的 `ios.CFBundleName`。
@@ -1145,6 +1148,7 @@ node --test woowtech/*.test.mjs
   - App：`composer/woowtech-upload-reconnect.ts`。上傳因為連線中斷（`DAEMON_CONNECTION_LOST`、「Transport not connected」或 socket 已關的「WebSocket not open」）失敗時，附件留在上傳中，等這台主機的 client 重新連上（同一個 client 自己重連，或 host runtime 換成新的 client，最多等 60 秒）再重送，一個檔案最多送 3 次。其他錯誤、逾時和等不到主機照舊失敗。接點是 `composer/actions.ts` 的 `uploadFileAttachments`（多一個 `reconnect` 參數）和 `composer/index.tsx` 的 `uploadSelectedFiles`。
   - 最後還是失敗時，連線中斷的錯誤改顯示「與主機的連線中斷，檔案沒有上傳。主機連回來後請再加入一次。」（`woowtech.composer.uploadConnectionLost`，只有繁中和英文）。
   - 順手修上游的 key：composer 在 client 不在時 toast `composer.errors.daemonClientDisconnected`，但這個 key 不存在，畫面會顯示 key 本身；改用 `common.errors.daemonClientDisconnected`。
+- 檔名含 `#`、`?`、`%` 的附件（RC 驗收發現）：上游的 `pathToFileUri` 直接把路徑接成 `file://…`，解析網址的地方（`URL`、fetch、expo-file-system）會把 `shot#1.png` 讀成 `shot`，`100%.png` 直接出錯，`a%20b.png` 被當成 `a b.png`。現在這三個字元先做百分比編碼，`fileUriToPath` 照舊解回來；其他路徑的 URI 不變（`attachments/utils.ts`）。手機版附件的預覽網址原本自己接 `file://`，改用同一個函式（`native-file-attachment-store.ts`）。
 - 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
 - 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送在定向輪（integration-0928）驗過，見「驗證紀錄」。
 
@@ -2168,7 +2172,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - CLI 改名合回 main 之後：
   - 重建 server 的 dist，跑 CLI 的 e2e（`tests/17-onboard.test.ts`、`03-daemon.test.ts`）和桌面版打包後的 smoke。`src/commands/daemon/lifecycle.e2e.test.ts` 已在 `woowtech/services` 跑過（驗證紀錄）。
   - 在桌面版實際按「安裝 CLI」和安裝技能（用測試帳號或暫存 HOME），確認 `~/.local/bin` 和三個技能資料夾只多出 `woowtech-smart*`，設定的命令列那一列顯示 `woowtech-smart`。
-- iOS 相機、相簿的權限提示仍用 `$(PRODUCT_NAME)`（Debug 版顯示成 woowtechsmartDebug），而且只有英文。要不要改成品牌名並加上中文，還沒決定。
+- iOS 權限提示（第 6 節）已改成品牌名加繁中、簡中；要在模擬器或實機上各看一次三個提示的實際文字（英文、繁中、簡中）。
+- 附件檔名含 `#`、`?`、`%`（第 21 節）：RC 的原始報告在舊 Mac 上，修正是從程式找到的原因。要在桌面版附加 `shot#1.png`、`what?.png`、`100%.png` 各一次，確認預覽和送出都正常，也在手機上附加一次。
 - 盤點設定頁以外上游寫死的英文，照第 14 節的做法一頁一頁處理。
 - 用詞待決定：
   - 已處理：原本「28 處主機／87 處 Host」的混用已統一為「主機」（C-007）；由產生器來源修正並重生繁中，Agent 保留英文。
