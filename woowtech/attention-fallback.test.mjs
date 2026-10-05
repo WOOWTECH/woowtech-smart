@@ -116,6 +116,8 @@ test("the app reports agent and terminal notices the system did not show", () =>
   const context = read("packages/app/src/contexts/session-context.tsx");
   const calls = context.match(/handleOsNotificationResult\(\{/g) ?? [];
   assert.equal(calls.length, 2, "both sendOsNotification calls must hand their result over");
+  const rejections = context.match(/\.catch\(\(\) => false\)\s*\.then\(\(shown\) =>/g) ?? [];
+  assert.equal(rejections.length, 2, "a rejected sendOsNotification counts as not shown");
   assert.match(
     context,
     /target: \{ kind: "agent", agentId: params\.agentId, timestamp: params\.timestamp \}/,
@@ -131,7 +133,8 @@ test("the desktop app opens the system's notification settings from fixed URLs o
   );
   assert.match(
     read("packages/desktop/src/preload.ts"),
-    /openSystemSettings: \(\) =>\s*ipcRenderer\.invoke\("woowtech:notification:openSystemSettings"\)/,
+    /process\.platform === "darwin" \|\| process\.platform === "win32"[\s\S]*?openSystemSettings: \(\) =>\s*ipcRenderer\.invoke\("woowtech:notification:openSystemSettings"\)/,
+    "only macOS and Windows have a notification settings page to open",
   );
   assert.match(
     read("packages/app/src/desktop/host.ts"),
@@ -149,4 +152,14 @@ test("web and desktop report appVisible only while the window has focus", () => 
   assert.match(hook, /window\.addEventListener\("blur", handleVisibilityChange\);/);
   assert.match(hook, /window\.addEventListener\("focus", handleVisibilityChange\);/);
   assert.doesNotMatch(hook, /const visible = document\.visibilityState === "visible";/);
+  assert.match(
+    hook,
+    /if \(changed\) \{\s*tracker\.sendHeartbeat\(\);\s*\}/,
+    "both directions unthrottled",
+  );
+  assert.match(
+    hook,
+    /if \(!isNative\) tracker\.notifyAppVisibility\(getIsAppActivelyVisible\(\)\);\s*tracker\.sendHeartbeat\(\);/,
+    "periodic heartbeats re-read focus",
+  );
 });

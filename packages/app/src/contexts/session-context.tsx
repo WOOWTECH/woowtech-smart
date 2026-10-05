@@ -326,14 +326,16 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           reason: params.reason,
           t: notificationTranslationRef.current,
         }),
-      ).then((shown) =>
-        handleOsNotificationResult({
-          shown,
-          native: isNative,
-          client: notificationClientRef.current,
-          target: { kind: "agent", agentId: params.agentId, timestamp: params.timestamp },
-        }),
-      );
+      )
+        .catch(() => false)
+        .then((shown) =>
+          handleOsNotificationResult({
+            shown,
+            native: isNative,
+            client: notificationClientRef.current,
+            target: { kind: "agent", agentId: params.agentId, timestamp: params.timestamp },
+          }),
+        );
     },
     [serverId],
   );
@@ -715,15 +717,17 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           cwd: message.payload.cwd,
           ...(message.payload.workspaceId ? { workspaceId: message.payload.workspaceId } : {}),
         },
-      }).then((shown) =>
-        // woowtech smart: a notice the system did not show goes to the phone instead.
-        handleOsNotificationResult({
-          shown,
-          native: isNative,
-          client,
-          target: { kind: "terminal", terminalId },
-        }),
-      );
+      })
+        .catch(() => false)
+        .then((shown) =>
+          // woowtech smart: a notice the system did not show goes to the phone instead.
+          handleOsNotificationResult({
+            shown,
+            native: isNative,
+            client,
+            target: { kind: "terminal", terminalId },
+          }),
+        );
     });
 
     return () => {

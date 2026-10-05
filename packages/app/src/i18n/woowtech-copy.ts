@@ -649,14 +649,17 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
 const NOTIFICATION_DISPLAY_ENGLISH = {
   title: "Notifications are not showing",
   description:
-    "The system did not show a woowtech smart notification. Notifications may be turned off or not allowed yet. If your phone has the app, the notification went there instead.",
+    "The system did not show a woowtech smart notification. Notifications may be turned off or not allowed yet.",
+  sentToPhone: "That notification went to your phone instead.",
+  hostTooOld: "This host can't send them to your phone. Update it to the latest woowtech smart.",
   openSettings: "Open notification settings",
 };
 
 const NOTIFICATION_DISPLAY_ZH_TW: typeof NOTIFICATION_DISPLAY_ENGLISH = {
   title: "這台電腦沒有顯示通知",
-  description:
-    "系統沒有顯示 woowtech smart 的通知，可能是通知被關掉，或還沒按「允許」。手機有登入 App 的話，這則通知已改送到手機。",
+  description: "系統沒有顯示 woowtech smart 的通知，可能是通知被關掉，或還沒按「允許」。",
+  sentToPhone: "那則通知已改送到你的手機。",
+  hostTooOld: "這台主機無法改送到手機，請把它更新到最新的 woowtech smart。",
   openSettings: "打開通知設定",
 };
 

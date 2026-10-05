@@ -1,6 +1,6 @@
 // woowtech smart (woowtech/README.md section 16): once per launch, when the system did not show an
-// agent or terminal notice, say so in the sidebar and offer the system's notification settings.
-// The notice itself already went to the phone (utils/woowtech-notification-fallback.ts).
+// agent or terminal notice, say so in the sidebar, say whether the phone got it instead
+// (utils/woowtech-notification-fallback.ts), and offer the system's notification settings.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { SidebarCalloutDescriptionText } from "@/components/sidebar-callout";
@@ -9,19 +9,27 @@ import { useSidebarCallouts } from "@/contexts/sidebar-callout-context";
 import { getDesktopHost } from "@/desktop/host";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import {
-  getNotificationDisplayFailedThisLaunch,
+  getNotificationDisplayFailure,
   subscribeToNotificationDisplayFailure,
+  type NotificationDisplayFailure,
 } from "@/utils/woowtech-notification-fallback";
+
+const PHONE_NOTE_KEYS: Readonly<Record<NotificationDisplayFailure, string | null>> = {
+  none: null,
+  sent_to_phone: "woowtech.notificationDisplay.sentToPhone",
+  not_sent: null,
+  host_too_old: "woowtech.notificationDisplay.hostTooOld",
+};
 
 let dismissedThisLaunch = false;
 
 export function NotificationDisplayCalloutSource() {
   const { t } = useTranslation();
   const callouts = useSidebarCallouts();
-  const displayFailed = useSyncExternalStore(
+  const displayFailure = useSyncExternalStore(
     subscribeToNotificationDisplayFailure,
-    getNotificationDisplayFailedThisLaunch,
-    getNotificationDisplayFailedThisLaunch,
+    getNotificationDisplayFailure,
+    getNotificationDisplayFailure,
   );
   const [dismissed, setDismissed] = useState(dismissedThisLaunch);
   const isElectron = getIsElectron();
@@ -35,9 +43,10 @@ export function NotificationDisplayCalloutSource() {
   });
 
   useEffect(() => {
-    if (!isElectron || !displayFailed || dismissed) {
+    if (!isElectron || displayFailure === "none" || dismissed) {
       return;
     }
+    const phoneNoteKey = PHONE_NOTE_KEYS[displayFailure];
     const canOpenSettings =
       typeof getDesktopHost()?.notification?.openSystemSettings === "function";
     return callouts.show({
@@ -45,9 +54,14 @@ export function NotificationDisplayCalloutSource() {
       priority: 200,
       title: t("woowtech.notificationDisplay.title"),
       description: (
-        <SidebarCalloutDescriptionText>
-          {t("woowtech.notificationDisplay.description")}
-        </SidebarCalloutDescriptionText>
+        <>
+          <SidebarCalloutDescriptionText>
+            {t("woowtech.notificationDisplay.description")}
+          </SidebarCalloutDescriptionText>
+          {phoneNoteKey ? (
+            <SidebarCalloutDescriptionText>{t(phoneNoteKey)}</SidebarCalloutDescriptionText>
+          ) : null}
+        </>
       ),
       dismissible: true,
       onDismiss: rememberDismissal,
@@ -62,7 +76,7 @@ export function NotificationDisplayCalloutSource() {
         : [],
       testID: "notification-display-callout",
     });
-  }, [callouts, dismissed, displayFailed, isElectron, openSettings, rememberDismissal, t]);
+  }, [callouts, dismissed, displayFailure, isElectron, openSettings, rememberDismissal, t]);
 
   return null;
 }

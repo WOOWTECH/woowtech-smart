@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AttentionDisplayFailureTarget } from "@getpaseo/protocol/woowtech-attention-fallback";
 import {
   forgetNotificationDisplayFailureForTest,
-  getNotificationDisplayFailedThisLaunch,
+  getNotificationDisplayFailure,
   handleOsNotificationResult,
   subscribeToNotificationDisplayFailure,
   type AttentionDisplayFailureReporter,
@@ -15,7 +15,7 @@ const target: AttentionDisplayFailureTarget = {
   timestamp: "2026-10-05T05:00:00.000Z",
 };
 
-function createDaemon(options: { supportsFallback: boolean; rejects?: boolean }) {
+function createDaemon(options: { supportsFallback: boolean; outcome?: string; rejects?: boolean }) {
   const reports: AttentionDisplayFailureTarget[] = [];
   const client: AttentionDisplayFailureReporter = {
     supportsAttentionDisplayFallback: () => options.supportsFallback,
@@ -24,7 +24,7 @@ function createDaemon(options: { supportsFallback: boolean; rejects?: boolean })
       if (options.rejects) {
         throw new Error("Transport not connected");
       }
-      return { requestId: "req-1", outcome: "pushed" };
+      return { outcome: options.outcome ?? "pushed" };
     },
   };
   return { client, reports };
@@ -36,13 +36,21 @@ afterEach(() => {
 });
 
 describe("a notice the system did not show", () => {
-  it("is reported to the daemon, which then pushes it", async () => {
-    const { client, reports } = createDaemon({ supportsFallback: true });
+  it("is reported to the daemon, and the callout says the phone got it", async () => {
+    const { client, reports } = createDaemon({ supportsFallback: true, outcome: "pushed" });
 
     await handleOsNotificationResult({ shown: false, native: false, client, target });
 
     expect(reports).toEqual([target]);
-    expect(getNotificationDisplayFailedThisLaunch()).toBe(true);
+    expect(getNotificationDisplayFailure()).toBe("sent_to_phone");
+  });
+
+  it("does not claim the phone got it when the daemon did not push it", async () => {
+    const { client } = createDaemon({ supportsFallback: true, outcome: "unknown" });
+
+    await handleOsNotificationResult({ shown: false, native: false, client, target });
+
+    expect(getNotificationDisplayFailure()).toBe("not_sent");
   });
 
   it("is not reported when the system showed it", async () => {
@@ -51,7 +59,7 @@ describe("a notice the system did not show", () => {
     await handleOsNotificationResult({ shown: true, native: false, client, target });
 
     expect(reports).toEqual([]);
-    expect(getNotificationDisplayFailedThisLaunch()).toBe(false);
+    expect(getNotificationDisplayFailure()).toBe("none");
   });
 
   it("is never reported from a phone, which only shows pushes", async () => {
@@ -60,16 +68,16 @@ describe("a notice the system did not show", () => {
     await handleOsNotificationResult({ shown: false, native: true, client, target });
 
     expect(reports).toEqual([]);
-    expect(getNotificationDisplayFailedThisLaunch()).toBe(false);
+    expect(getNotificationDisplayFailure()).toBe("none");
   });
 
-  it("is not sent to a daemon that does not know the request", async () => {
+  it("is not sent to a daemon that does not know the request, which needs an update", async () => {
     const { client, reports } = createDaemon({ supportsFallback: false });
 
     await handleOsNotificationResult({ shown: false, native: false, client, target });
 
     expect(reports).toEqual([]);
-    expect(getNotificationDisplayFailedThisLaunch()).toBe(true);
+    expect(getNotificationDisplayFailure()).toBe("host_too_old");
   });
 
   it("does not throw when the report cannot reach the daemon", async () => {
@@ -82,18 +90,42 @@ describe("a notice the system did not show", () => {
 
     expect(reports).toEqual([target]);
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(getNotificationDisplayFailure()).toBe("not_sent");
   });
 
-  it("tells the sidebar callout once per launch", async () => {
-    const { client } = createDaemon({ supportsFallback: true });
-    const calls: boolean[] = [];
+  it("keeps saying the phone got one for the rest of the launch", async () => {
+    const pushed = createDaemon({ supportsFallback: true, outcome: "pushed" });
+    const unknown = createDaemon({ supportsFallback: true, outcome: "unknown" });
+    const seen: string[] = [];
     subscribeToNotificationDisplayFailure(() => {
-      calls.push(getNotificationDisplayFailedThisLaunch());
+      seen.push(getNotificationDisplayFailure());
     });
 
-    await handleOsNotificationResult({ shown: false, native: false, client, target });
-    await handleOsNotificationResult({ shown: false, native: false, client, target });
+    await handleOsNotificationResult({
+      shown: false,
+      native: false,
+      client: unknown.client,
+      target,
+    });
+    await handleOsNotificationResult({
+      shown: false,
+      native: false,
+      client: pushed.client,
+      target,
+    });
+    await handleOsNotificationResult({
+      shown: false,
+      native: false,
+      client: unknown.client,
+      target,
+    });
+    await handleOsNotificationResult({
+      shown: false,
+      native: false,
+      client: pushed.client,
+      target,
+    });
 
-    expect(calls).toEqual([true]);
+    expect(seen).toEqual(["not_sent", "sent_to_phone"]);
   });
 });

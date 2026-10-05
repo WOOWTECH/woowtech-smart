@@ -70,13 +70,11 @@ export function useClientActivity({
     };
 
     const handleVisibilityChange = () => {
-      // woowtech smart: visible and focused, and a switch to another app reaches the daemon at
-      // once instead of with the next 15 s heartbeat.
+      // woowtech smart: visible and focused, and a switch away or back reaches the daemon at once
+      // instead of with the next 15 s heartbeat (the activity throttle must not hold it back).
       const visible = getIsAppActivelyVisible();
       const { changed } = tracker.notifyAppVisibility(visible);
-      if (changed && visible) {
-        tracker.maybeSendImmediateHeartbeat();
-      } else if (changed) {
+      if (changed) {
         tracker.sendHeartbeat();
       }
     };
@@ -137,10 +135,17 @@ export function useClientActivity({
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
+    // woowtech smart: on web and desktop, re-read focus before each heartbeat, so a focus change
+    // that happened before the listeners were attached does not stick.
+    const sendHeartbeat = () => {
+      if (!isNative) tracker.notifyAppVisibility(getIsAppActivelyVisible());
+      tracker.sendHeartbeat();
+    };
+
     const start = () => {
       if (intervalId) clearInterval(intervalId);
-      tracker.sendHeartbeat();
-      intervalId = setInterval(() => tracker.sendHeartbeat(), HEARTBEAT_INTERVAL_MS);
+      sendHeartbeat();
+      intervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
     };
 
     const stop = () => {
