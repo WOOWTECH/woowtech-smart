@@ -872,6 +872,14 @@ node --test woowtech/*.test.mjs
   - 還要實機：iPad 和 POCO 照「接下來」的 RC-I-21c 那條做（真的 FCM／APNs 點擊、iOS 啟動點擊的送達時機、Reload、重複通知、封存工作區）。
 - 合併上游：上游改成快取到了就消費 agent 意圖，或自己清掉最後一次點擊時，先確認新測試仍綠，再拿掉 fork 的函式、模組和守門。
 
+#### Mac：App 結束後從通知中心點通知，開到那個 agent（D2a）
+
+- owner 2026-10-02 決定 Mac 和 Windows 都要開到那個 agent（D2 選 a）；2026-10-05 決定 Mac 不等 Windows 分支，自己先做。
+- macOS 在 App 結束後點通知中心的舊通知時，重新啟動 App，把那則通知的 identifier 放在 Electron `ready` 事件的 launchInfo。`features/notifications.ts` 在 macOS 建 agent 通知時給 `id`：`woowtech-agent:<uuid>:<agent 連結>`（`features/woowtech-notification-launch.ts`，uuid 讓同一個 agent 的兩則通知不互相取代）；`main.ts` 在 `app.whenReady()` 之前掛 `app.once("ready")`，讀回 agent，交給第一個視窗開啟（跟 argv 的 agent 連結同一條路）。沒有 agent 的通知（terminal）照舊只打開 App。
+- 同樣的函式也在 Windows 分支的 `features/woowtech-launch-links.ts`（它另外處理 Windows 的 protocol toast）；Windows 分支合進 main 時合成一個檔。
+- 接點：`notifications.ts`（import 和 `id`，+11 行）、`main.ts`（import 和 ready listener，+12 行）。測試 `woowtech-notification-launch.test.ts`，守門 `woowtech/desktop-notification-launch.test.mjs`。
+- 要實機：簽章的打包版，App 結束後從通知中心點舊的 agent 通知，要直接開到那個 agent；點 terminal 通知只打開 App。
+
 #### 桌面通知的回饋
 
 - Electron 的通知支援不代表系統已授權；設定頁顯示尚未確認，仍可按「傳送測試通知」。不拿瀏覽器的授權值冒充原生通知授權。
