@@ -14,7 +14,14 @@ import {
 export const ATTENTION_FALLBACK_WINDOW_MS = 60_000;
 const MAX_REMEMBERED_NOTICES = 64;
 
-export type AttentionDisplayFailureOutcome = "pushed" | "unknown" | "expired";
+/** `no_device`: no phone has a push token, so nothing was sent. */
+export type AttentionDisplayFailureOutcome = "pushed" | "unknown" | "expired" | "no_device";
+
+interface WoowtechAttentionFallbackOptions {
+  now?: () => number;
+  /** Whether a push would reach any phone now; without it, every push counts as sent. */
+  hasPushTargets?: () => boolean;
+}
 
 interface RememberedNotice {
   recipient: object;
@@ -31,7 +38,13 @@ function noticeKey(target: AttentionDisplayFailureTarget): string {
 export class WoowtechAttentionFallback {
   private readonly notices = new Map<string, RememberedNotice>();
 
-  constructor(private readonly now: () => number = Date.now) {}
+  private readonly now: () => number;
+  private readonly hasPushTargets: () => boolean;
+
+  constructor(options: WoowtechAttentionFallbackOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.hasPushTargets = options.hasPushTargets ?? (() => true);
+  }
 
   /**
    * `recipient` (the client's session) was asked to show the notice for `target` instead of a
@@ -65,6 +78,9 @@ export class WoowtechAttentionFallback {
     this.notices.delete(key);
     if (this.now() - notice.rememberedAtMs > ATTENTION_FALLBACK_WINDOW_MS) {
       return "expired";
+    }
+    if (!this.hasPushTargets()) {
+      return "no_device";
     }
     notice.push();
     return "pushed";

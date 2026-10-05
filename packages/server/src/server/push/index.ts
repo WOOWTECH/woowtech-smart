@@ -13,6 +13,8 @@ export interface PushNotifications {
   renew(token: string): void;
   revoke(token: string): void;
   send(payload: PushPayload): Promise<void>;
+  /** woowtech smart: whether any phone would get a push now (woowtech-attention-fallback.ts). */
+  hasActiveTokens(): boolean;
 }
 
 export type PushNotificationSender = Pick<PushNotifications, "send">;
@@ -42,6 +44,9 @@ export function createPushNotifications(options: {
     },
     revoke(token) {
       store.revokeToken(token);
+    },
+    hasActiveTokens() {
+      return store.getActiveTokens().length > 0;
     },
     async send(payload) {
       const tokens = store.getActiveTokens();

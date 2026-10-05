@@ -88,6 +88,8 @@ test("a notice the desktop could not show is pushed once after its report", asyn
     const workspaceId = created.workspace?.id;
     if (!workspaceId) throw new Error(created.error ?? "Expected the workspace to be created");
 
+    // A phone has registered for pushes; without one the daemon answers "no_device".
+    desktop.registerPushToken("wsp1:en:fcm-test-token:APA91bTestTokenForTheFallback");
     // Only the desktop reports presence, so it is the one asked to show the notice.
     const nextNotice = await watchNotices(desktop);
     reportPresentDesktop(desktop);

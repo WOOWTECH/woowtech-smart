@@ -827,7 +827,7 @@ node --test woowtech/*.test.mjs
 - Mac 顯示不出通知時改推手機（提案 4，owner 2026-10-05 同意）：daemon 只交給一個在場的用戶端顯示，不推播；Mac 的通知被關掉、還沒按允許、或 5 秒沒結果時，什麼都不會出現。現在：
   - daemon 交出通知時記下來（`woowtech-attention-fallback.ts`）：agent 用 agent ID 加這則訊息的 `timestamp`，terminal 用 terminal ID（同一個 terminal 只留最新的），也記下交給哪個 session。只記可以推播的（`error` 本來就不推），停止中本來就沒有對象。最多 64 則、60 秒。
   - App 的 `sendOsNotification` 回報沒顯示（桌面版是 `failed` 或 5 秒 `unconfirmed`，丟出錯誤也算）時，`utils/woowtech-notification-fallback.ts` 送 `attention.notification.report_display_failure.request`。手機不送：手機本來就只靠推播。只送給 `server_info.features.woowtechAttentionFallback` 是 true 的 daemon，官方 Paseo 不會有。
-  - daemon 只在回報的是當初那個 session、60 秒內、還沒處理過時推一次，回 `pushed`；否則回 `unknown` 或 `expired`。舊 App 不回報，行為跟以前一樣。
+  - daemon 只在回報的是當初那個 session、60 秒內、還沒處理過時推一次，回 `pushed`；否則回 `unknown` 或 `expired`。沒有任何手機登記推播（`push/index.ts` 的 `hasActiveTokens()`）時不推，回 `no_device`，側欄提示不提手機。舊 App 不回報，行為跟以前一樣。
   - 桌面版同一次啟動第一次沒顯示時，側欄出現提示（`desktop/woowtech-notification-display-callout-source.tsx`，文案在 `i18n/woowtech-copy.ts` 的 `notificationDisplay`，只有繁中和英文）。daemon 回 `pushed` 才說「已改送到你的手機」；daemon 沒有旗標（舊版或官方 Paseo）時說這台主機無法改送、請更新；其他情況不提手機。只要這次啟動有一則改送成功，提示就一直這樣說。按鈕用固定網址開系統的通知設定（`desktop/src/features/woowtech-notification-settings.ts`：macOS 的 `x-apple.systempreferences:com.apple.Notifications-Settings.extension`、Windows 的 `ms-settings:notifications`；preload 只在這兩個平台提供，Linux 沒有按鈕）。一般的 `paseo:opener:openUrl` 仍只開 http(s) 和 mailto。關掉提示只到這次結束。
   - terminal 的通知沒有 timestamp，同一個 terminal 只記最新一則：第一則 5 秒沒結果、第二則 2 秒後已顯示時，第一則的回報會推出第二則的內容。很少見，照設計；要分得清楚，得在上游的 `terminal_attention_required` 加通知 ID。
   - 樣式設成「無」（只進通知中心）或專注模式時，系統回報已顯示，不會補推，這是使用者自己的設定。授權提示還沒按時的回報要在簽章的打包版上確認（10/2 的 dev 版是「as none」但回報 show）。
