@@ -34,7 +34,12 @@ import {
   stripHostWorkspaceRouteEchoSearchFromBrowserUrlAfterCommit,
 } from "@/utils/host-route-browser";
 import { prepareWorkspaceTab } from "@/utils/workspace-navigation";
-import { readWorkspaceRouteOpenParam } from "@/navigation/woowtech-workspace-open-intent";
+import {
+  isAgentOpenIntentWaitingForWorkspace,
+  isWorkspaceRecoveryLatchHeld,
+  readWorkspaceRouteOpenParam,
+  shouldLatchWorkspaceRecovery,
+} from "@/navigation/woowtech-workspace-open-intent";
 import { isNative, isWeb } from "@/constants/platform";
 import { RenderProfile } from "@/utils/render-profiler";
 
@@ -116,9 +121,27 @@ function HostWorkspaceRouteContent() {
   const workspaceExists = useWorkspaceExists(serverId, workspaceId);
   const openIntent = useMemo(() => parseWorkspaceOpenIntent(openValue), [openValue]);
   const isAgentOpenIntent = openIntent?.kind === "agent";
-  const isOpenIntentWaitingForWorkspace = Boolean(
-    isAgentOpenIntent && (!hasHydratedWorkspaces || !workspaceExists),
-  );
+  // woowtech smart: wait only while the store does not know the workspace, cached directory
+  // included (RC-I-21c, navigation/woowtech-workspace-open-intent.ts).
+  const isOpenIntentWaitingForWorkspace = isAgentOpenIntentWaitingForWorkspace({
+    openIntent,
+    workspaceExists,
+  });
+  // woowtech smart: an agent intent consumed before the live directory keeps the recovery request
+  // until the live directory has the workspace, as upstream's wait did (RC-I-21c).
+  const routeKey = `${serverId}:${workspaceId}`;
+  const [recoveryLatchKey, setRecoveryLatchKey] = useState<string | null>(null);
+  const isRecoveryLatchHeld = isWorkspaceRecoveryLatchHeld({
+    latchedRouteKey: recoveryLatchKey,
+    routeKey,
+    hasHydratedWorkspaces,
+    workspaceExists,
+  });
+  useEffect(() => {
+    if (recoveryLatchKey !== null && !isRecoveryLatchHeld) {
+      setRecoveryLatchKey(null);
+    }
+  }, [isRecoveryLatchHeld, recoveryLatchKey]);
   useEffect(() => {
     if (!serverId || !workspaceId) {
       return;
@@ -151,6 +174,9 @@ function HostWorkspaceRouteContent() {
       return;
     }
     consumedIntentRef.current = consumptionKey;
+    if (shouldLatchWorkspaceRecovery({ openIntent, hasHydratedWorkspaces })) {
+      setRecoveryLatchKey(`${serverId}:${workspaceId}`);
+    }
 
     if (openIntent) {
       prepareWorkspaceTab({
@@ -173,6 +199,7 @@ function HostWorkspaceRouteContent() {
     setIntentConsumed(true);
   }, [
     hasHydratedWorkspaceLayoutStore,
+    hasHydratedWorkspaces,
     isOpenIntentWaitingForWorkspace,
     navigation,
     openIntent,
@@ -190,7 +217,7 @@ function HostWorkspaceRouteContent() {
     return null;
   }
 
-  return <WorkspaceDeck recoveryRequested={isAgentOpenIntent} />;
+  return <WorkspaceDeck recoveryRequested={isAgentOpenIntent || isRecoveryLatchHeld} />;
 }
 
 function WorkspaceDeck({ recoveryRequested }: { recoveryRequested: boolean }) {

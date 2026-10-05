@@ -5,8 +5,9 @@
 // our default. Any other value is the user's and stays, as does PASEO_APP_BASE_URL.
 import { BRAND_PAIRING } from "@getpaseo/protocol/brand-pairing";
 
-// The only place shipped code names upstream's web app (woowtech/pairing.test.mjs).
-const UPSTREAM_DEFAULT_APP_BASE_URL = "https://app.paseo.sh";
+// The only place shipped code names upstream's web app (woowtech/pairing.test.mjs). It is
+// also the web app's origin, which woowtech-cors-origins.ts keeps out of CORS.
+export const UPSTREAM_DEFAULT_APP_BASE_URL = "https://app.paseo.sh";
 
 /** The app base URL pairing links use, given config.json's `app.baseUrl`. */
 export function appBaseUrlFromConfig(configured: string | undefined): string {

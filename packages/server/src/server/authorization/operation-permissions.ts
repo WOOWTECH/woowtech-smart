@@ -149,6 +149,8 @@ const INBOUND_PERMISSION = {
   provider_diagnostic_request: "daemon.read",
   pull_request_timeline_request: "workspace.read",
   "push.unregister.request": "workspace.read",
+  // woowtech smart: a notice this client could not show (woowtech-attention-fallback.ts).
+  "attention.notification.report_display_failure.request": "workspace.read",
   read_project_config_request: "workspace.read",
   refresh_agent_request: "workspace.write",
   refresh_providers_snapshot_request: ["daemon.read", "hub.execute"],
@@ -371,6 +373,8 @@ const OUTBOUND_PERMISSION = {
   providers_snapshot_update: ["daemon.read", "hub.execute"],
   pull_request_timeline_response: "workspace.read",
   "push.unregister.response": "workspace.read",
+  // woowtech smart: answer to a notice this client could not show (woowtech-attention-fallback.ts).
+  "attention.notification.report_display_failure.response": "workspace.read",
   read_project_config_response: "workspace.read",
   refresh_providers_snapshot_response: ["daemon.read", "hub.execute"],
   rpc_error: null,

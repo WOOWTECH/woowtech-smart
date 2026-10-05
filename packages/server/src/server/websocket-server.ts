@@ -72,6 +72,11 @@ import {
   type ClientPresenceState,
 } from "./agent-attention-policy.js";
 import {
+  woowtechClientPresenceState,
+  woowtechNotificationPlanWhileStopping,
+} from "./woowtech-attention-presence.js";
+import { WoowtechAttentionFallback } from "./woowtech-attention-fallback.js";
+import {
   buildAgentAttentionNotificationPayload,
   findLatestPermissionRequest,
 } from "@getpaseo/protocol/agent-attention-notification";
@@ -550,6 +555,8 @@ export class VoiceAssistantWebSocketServer {
   private readonly daemonConfigStore: DaemonConfigStore;
   private readonly pushNotifications: PushNotifications;
   private readonly pushNotificationSender: PushNotificationSender;
+  // woowtech smart: pushes a notice the picked client could not show (woowtech-attention-fallback.ts).
+  private readonly woowtechAttentionFallback = new WoowtechAttentionFallback();
   private readonly mcpBaseUrl: string | null;
   private speech!: SpeechService | null;
   private terminalManager!: TerminalManager | null;
@@ -1452,6 +1459,7 @@ export class VoiceAssistantWebSocketServer {
       },
       downloadTokenStore: this.downloadTokenStore,
       pushNotifications: this.pushNotifications,
+      woowtechAttentionFallback: this.woowtechAttentionFallback,
       paseoHome: this.paseoHome,
       worktreesRoot: this.worktreesRoot,
       agentManager: this.agentManager,
@@ -1723,6 +1731,8 @@ export class VoiceAssistantWebSocketServer {
         woowtechPush: true,
         // woowtech smart: Windows hosts do not install terminal agent hooks yet (plan G9).
         woowtechTerminalAgentHooks: terminalAgentHooksSupported(),
+        // woowtech smart: pushes a notice the picked client could not show (woowtech-attention-fallback.ts).
+        woowtechAttentionFallback: true,
         // COMPAT(plugins): added in v0.3.0, remove gate after 2027-08-07.
         plugins: true,
         pluginManagement: true,
@@ -2473,12 +2483,8 @@ export class VoiceAssistantWebSocketServer {
       };
     }
 
-    return {
-      appVisible: activity.appVisible,
-      focusedAgentId: activity.focusedAgentId,
-      focusedTerminalId: activity.focusedTerminalId,
-      lastActivityAtMs: activity.lastActivityAt.getTime(),
-    };
+    // woowtech smart: a backgrounded phone counts as absent (woowtech-attention-presence.ts).
+    return woowtechClientPresenceState(activity);
   }
 
   private async broadcastAgentAttention(params: {
@@ -2486,6 +2492,8 @@ export class VoiceAssistantWebSocketServer {
     provider: AgentProvider;
     reason: "finished" | "error" | "permission";
   }): Promise<void> {
+    // woowtech smart: read before any await; attention caused by shutdown notifies nobody.
+    const woowtechStopping = this.connectionLifecycle === "stopping";
     const agent = this.agentManager.getAgent(params.agentId);
     if (!agent?.workspaceId) {
       return;
@@ -2523,12 +2531,15 @@ export class VoiceAssistantWebSocketServer {
       permissionRequest: findLatestPermissionRequest(agent.pendingPermissions),
     });
 
-    const plan = computeNotificationPlan({
-      allStates,
-      focusTarget: { kind: "agent", id: params.agentId },
-      pushEligible: isPushEligibleAttentionReason(params.reason),
-      nowMs,
-    });
+    const plan = woowtechNotificationPlanWhileStopping(
+      computeNotificationPlan({
+        allStates,
+        focusTarget: { kind: "agent", id: params.agentId },
+        pushEligible: isPushEligibleAttentionReason(params.reason),
+        nowMs,
+      }),
+      woowtechStopping,
+    );
 
     if (plan.shouldPush) {
       void this.pushNotificationSender.send(notification).catch((err) => {
@@ -2542,6 +2553,21 @@ export class VoiceAssistantWebSocketServer {
         notificationEntries[plan.inAppRecipientIndex]?.ws === ws;
       const timestamp = new Date().toISOString();
       const connection = this.sessions.get(ws);
+      if (shouldNotify && connection && isPushEligibleAttentionReason(params.reason)) {
+        // woowtech smart: the push to send if this client's system cannot show the notice.
+        this.woowtechAttentionFallback.remember({
+          target: { kind: "agent", agentId: params.agentId, timestamp },
+          recipient: connection.session,
+          push: () => {
+            void this.pushNotificationSender.send(notification).catch((err) => {
+              this.logger.warn(
+                { err, agentId: params.agentId },
+                "Failed to send push notification",
+              );
+            });
+          },
+        });
+      }
       const attentionPayload = {
         agentId: params.agentId,
         reason: params.reason,
@@ -2586,6 +2612,8 @@ export class VoiceAssistantWebSocketServer {
     terminalName: string;
     reason: TerminalAttentionReason;
   }): Promise<void> {
+    // woowtech smart: read before any await; attention caused by shutdown notifies nobody.
+    const woowtechStopping = this.connectionLifecycle === "stopping";
     const clientEntries: Array<{
       ws: WebSocketLike;
       state: ClientPresenceState;
@@ -2618,17 +2646,20 @@ export class VoiceAssistantWebSocketServer {
     const nowMs = Date.now();
     const workspaceId = params.workspaceId;
 
-    const plan = computeNotificationPlan({
-      allStates,
-      focusTarget: { kind: "terminal", id: params.terminalId },
-      pushEligible: true,
-      nowMs,
-    });
+    const plan = woowtechNotificationPlanWhileStopping(
+      computeNotificationPlan({
+        allStates,
+        focusTarget: { kind: "terminal", id: params.terminalId },
+        pushEligible: true,
+        nowMs,
+      }),
+      woowtechStopping,
+    );
 
     const title = terminalAttentionTitle(params.reason);
     const body = params.terminalName;
-
-    if (plan.shouldPush) {
+    // woowtech smart: one function, so the fallback below sends the same push.
+    const sendPush = () => {
       void this.pushNotificationSender
         .send({
           title,
@@ -2647,12 +2678,25 @@ export class VoiceAssistantWebSocketServer {
             "Failed to send push notification",
           );
         });
+    };
+
+    if (plan.shouldPush) {
+      sendPush();
     }
 
     for (const { ws } of clientEntries) {
       const shouldNotify =
         plan.inAppRecipientIndex !== null &&
         notificationEntries[plan.inAppRecipientIndex]?.ws === ws;
+      const recipient = this.sessions.get(ws)?.session;
+      if (shouldNotify && recipient) {
+        // woowtech smart: the push to send if this client's system cannot show the notice.
+        this.woowtechAttentionFallback.remember({
+          target: { kind: "terminal", terminalId: params.terminalId },
+          recipient,
+          push: sendPush,
+        });
+      }
       const message = wrapSessionMessage({
         type: "terminal_attention_required",
         payload: {

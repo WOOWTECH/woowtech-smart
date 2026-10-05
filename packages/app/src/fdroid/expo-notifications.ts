@@ -11,7 +11,8 @@ export const PermissionStatus = {
   UNDETERMINED: "undetermined",
 } as const;
 
-export const AndroidImportance = { DEFAULT: 3 } as const;
+// woowtech smart: HIGH for the push channels (woowtech-notification-channels.ts).
+export const AndroidImportance = { DEFAULT: 3, HIGH: 4 } as const;
 
 export async function getPermissionsAsync() {
   return DENIED_NOTIFICATION_PERMISSION;
@@ -38,3 +39,9 @@ export function addNotificationResponseReceivedListener() {
 export async function getLastNotificationResponseAsync() {
   return null;
 }
+
+export function getLastNotificationResponse() {
+  return null;
+}
+
+export function clearLastNotificationResponse(): void {}

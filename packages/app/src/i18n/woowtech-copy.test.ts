@@ -111,6 +111,7 @@ describe("woowtech smart's own text", () => {
         // These newer fork surfaces are translated only in Traditional Chinese.
         const traditionalChineseOnly =
           key.startsWith("desktopNotifications.") ||
+          key.startsWith("notificationDisplay.") ||
           key.startsWith("agentNotificationTitles.") ||
           key.startsWith("metadataGeneration.") ||
           key.startsWith("confirmDialog.") ||

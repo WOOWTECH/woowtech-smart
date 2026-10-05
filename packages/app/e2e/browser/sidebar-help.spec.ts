@@ -37,6 +37,19 @@ async function closeSheet(page: Page, testID: string): Promise<void> {
   await expect(sheet).not.toBeVisible();
 }
 
+// woowtech smart: the website answers English browsers with a redirect to /en, so the popup's URL
+// was the website's choice, not the app's. Serve a stub for it and the popup keeps the URL the app
+// opened.
+async function stubWebsite(page: Page): Promise<void> {
+  await page.context().route("https://aiot.woowtech.io/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: "<!doctype html><title>stub</title>",
+    }),
+  );
+}
+
 async function expectExternalPage(
   page: Page,
   actionTestID: string,
@@ -79,6 +92,7 @@ async function expectMailtoLink(
 
 test("opens troubleshooting and support destinations", async ({ page }) => {
   await recordMailtoOpens(page);
+  await stubWebsite(page);
   await gotoAppShell(page);
   await expect(page.getByTestId("sidebar-help")).toBeVisible();
 

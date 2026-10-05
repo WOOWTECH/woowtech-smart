@@ -11,7 +11,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -82,6 +81,7 @@ import { getDesktopHost } from "@/desktop/host";
 import { loadDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { RosettaCalloutSource } from "@/desktop/updates/rosetta-callout-source";
 import { UpdateCalloutSource } from "@/desktop/updates/update-callout-source";
+import { NotificationDisplayCalloutSource } from "@/desktop/woowtech-notification-display-callout-source";
 import { useActiveWorktreeNewAction } from "@/hooks/use-active-worktree-new-action";
 import { useGlobalNewWorkspaceAction } from "@/hooks/use-global-new-workspace-action";
 import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
@@ -132,6 +132,7 @@ import {
 import { buildNotificationRoute, resolveNotificationTarget } from "@/utils/notification-routing";
 import { takePendingDesktopNotificationClick } from "@/utils/woowtech-notification-click";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { subscribeToNotificationTaps } from "@/navigation/woowtech-notification-response";
 import { PluginCatalogSync } from "@/plugins";
 import {
   ensureOsNotificationPermission,
@@ -160,7 +161,6 @@ const HostRuntimeBootstrapContext = createContext<HostRuntimeBootstrapState>({
 
 function PushNotificationRouter() {
   const router = useRouter();
-  const lastHandledIdRef = useRef<string | null>(null);
   const openNotification = useStableEvent((data: Record<string, unknown> | undefined) => {
     const target = resolveNotificationTarget(data);
     const serverId = target.serverId;
@@ -241,31 +241,9 @@ function PushNotificationRouter() {
       }),
     });
 
-    const openFromResponse = (response: Notifications.NotificationResponse) => {
-      const identifier = response.notification.request.identifier;
-      if (lastHandledIdRef.current === identifier) {
-        return;
-      }
-      lastHandledIdRef.current = identifier;
-
-      const data = response.notification.request.content.data as
-        | Record<string, unknown>
-        | undefined;
-      openNotification(data);
-    };
-
-    const subscription = Notifications.addNotificationResponseReceivedListener(openFromResponse);
-
-    void Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) {
-        openFromResponse(response);
-      }
-      return;
-    });
-
-    return () => {
-      subscription.remove();
-    };
+    // woowtech smart: each tap once per app process, and the launch tap cleared once routed, so a
+    // remount of this router does not replay it (RC-I-21c; woowtech-notification-response.ts).
+    return subscribeToNotificationTaps(Notifications, openNotification);
   }, [openNotification]);
 
   return null;
@@ -604,6 +582,8 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <DownloadToast />
         <RosettaCalloutSource />
         <UpdateCalloutSource />
+        {/* woowtech smart: notices the system did not show (woowtech-notification-fallback.ts). */}
+        <NotificationDisplayCalloutSource />
         <LegacyAgentSkillsMigration />
         <WorktreeSetupCalloutSource />
         <CommandCenterRootActions />

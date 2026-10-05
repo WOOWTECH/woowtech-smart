@@ -17,6 +17,7 @@ import { notificationIconCandidates } from "./woowtech-notification-icon.js";
 import { raiseWindowsWindow } from "./woowtech-windows-focus.js";
 import { agentNotificationId, agentTargetForNotificationData } from "./woowtech-launch-links.js";
 import { buildProtocolToastXml, shouldUseProtocolToast } from "./woowtech-windows-toast.js";
+import { openSystemNotificationSettings } from "./woowtech-notification-settings.js";
 
 interface NotificationInput {
   title?: unknown;
@@ -247,4 +248,8 @@ export function registerNotificationHandlers(options: {
     return (await sendWithResult(event, rawInput)) === "shown";
   });
   ipcMain.handle("woowtech:notification:sendWithResult", sendWithResult);
+  // woowtech smart: the callout for notices the system did not show opens its settings.
+  ipcMain.handle("woowtech:notification:openSystemSettings", () =>
+    openSystemNotificationSettings(),
+  );
 }

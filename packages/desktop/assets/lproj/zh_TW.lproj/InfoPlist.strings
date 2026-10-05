@@ -1,0 +1,3 @@
+/* woowtech smart: the macOS permission prompts in Traditional Chinese. English is mac.extendInfo
+   in electron-builder.yml, which also copies this folder into the app's Resources. */
+"NSMicrophoneUsageDescription" = "允許「渥屋智能」使用麥克風，用語音輸入給 Agent 的訊息。";

@@ -3,11 +3,12 @@
 // the app's root URL with the offer in its fragment: woowtech-smart:///#offer=<payload>.
 // A merge can bring upstream's web app back into the daemon's defaults
 // (persisted-config.ts, config.ts, pairing-offer.ts, bootstrap.ts), the CLI's onboarding
-// or the app's paste-a-link field, or drop the rule that moves existing homes off
-// upstream's default. These checks run the daemon's config and pairing code from source
-// through tsx, ask expo-router and Expo's app config how the app takes the link, and scan
-// the shipped sources. The daemon's imports from other packages read their dist (the
-// link's base comes from @getpaseo/protocol), so build them first: npm run build:server.
+// or the app's paste-a-link field, or drop the rules that move existing homes off
+// upstream's web app (app.baseUrl and the CORS allowlist). These checks run the daemon's
+// config and pairing code from source through tsx, ask expo-router and Expo's app config
+// how the app takes the link, and scan the shipped sources. The daemon's imports from
+// other packages read their dist (the link's base comes from @getpaseo/protocol), so
+// build them first: npm run build:server.
 //
 //   node --test woowtech/pairing.test.mjs
 import assert from "node:assert/strict";
@@ -36,7 +37,8 @@ const { parseConnectionOfferFromUrl } = await importSource(
 const APP_SCHEME = "woowtech-smart";
 const APP_LINK_PREFIX = `${APP_SCHEME}:///#offer=`;
 const UPSTREAM_WEB_APP = /app\.paseo\.sh/;
-// The one shipped file that names upstream's web app: it moves homes off its default.
+// The one shipped file that names upstream's web app: it moves homes off its default, and
+// woowtech-cors-origins.ts imports the name from it.
 const MIGRATION_SOURCE = "packages/server/src/server/app-base-url.ts";
 
 const homes = [];
@@ -192,6 +194,28 @@ test("a new home lets no web app origin in", () => {
   assert.doesNotMatch(JSON.stringify(cliDefaults), UPSTREAM_WEB_APP, "the CLI's defaults");
 });
 
+// Internal test builds wrote upstream's web app into config.json's CORS allowlist. The daemon
+// drops it whenever it resolves the config (server/woowtech-cors-origins.ts, called from
+// config.ts's resolveCorsAllowedOrigins); a merge that loses that call lets the site back in.
+test("homes from internal test builds no longer let upstream's web app in", () => {
+  const kept = "http://localhost:8081";
+  const upstreamOrigins = ["https://app.paseo.sh", "https://app.paseo.sh/"];
+  const home = daemonHome({
+    version: 1,
+    daemon: { cors: { allowedOrigins: [upstreamOrigins[0], kept, upstreamOrigins[1]] } },
+  });
+  assert.deepEqual(loadConfig(home, { env: {} }).corsAllowedOrigins, [kept]);
+  const env = { PASEO_CORS_ORIGINS: upstreamOrigins.join(",") };
+  assert.deepEqual(loadConfig(daemonHome(), { env }).corsAllowedOrigins, [], "PASEO_CORS_ORIGINS");
+  // Only the resolved config drops it: config.json keeps what the build wrote.
+  const written = JSON.parse(readFileSync(path.join(home, "config.json"), "utf8"));
+  assert.deepEqual(written.daemon.cors.allowedOrigins, [
+    upstreamOrigins[0],
+    kept,
+    upstreamOrigins[1],
+  ]);
+});
+
 // Shipped: the source folders of every package that goes into the phone app, the
 // desktop app, the daemon, the CLI and the relay Worker (shipped-sources.mjs, plus the
 // relay, plugin, highlight and expo-two-way-audio packages the app and the daemon depend
@@ -231,7 +255,7 @@ test("no shipped source names upstream's web app", () => {
     .split("\n")
     .filter((line) => UPSTREAM_WEB_APP.test(line));
   assert.deepEqual(namedInMigration, [
-    'const UPSTREAM_DEFAULT_APP_BASE_URL = "https://app.paseo.sh";',
+    'export const UPSTREAM_DEFAULT_APP_BASE_URL = "https://app.paseo.sh";',
   ]);
 });
 

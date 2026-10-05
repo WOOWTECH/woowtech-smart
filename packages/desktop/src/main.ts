@@ -72,6 +72,7 @@ import {
 } from "./features/woowtech-windows-shell.js";
 import { createWindowsTray, showTrayHintOnce } from "./features/woowtech-windows-tray.js";
 import { raiseWindowsWindow } from "./features/woowtech-windows-focus.js";
+import { woowtechAboutPanelOptions } from "./features/woowtech-about-panel.js";
 import { setupApplicationMenu } from "./features/menu.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
@@ -154,6 +155,8 @@ let windowsTray: Tray | null = null;
 let agentLinkProtocolRegistered = false;
 
 app.setName(APP_NAME);
+// woowtech smart: WOOW TECH's copyright and website in the About window.
+app.setAboutPanelOptions(woowtechAboutPanelOptions());
 applyWindowsAppUserModelId({
   platform: process.platform,
   isPackaged: app.isPackaged,

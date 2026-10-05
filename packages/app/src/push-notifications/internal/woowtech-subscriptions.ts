@@ -9,6 +9,11 @@ import { readValidatedString } from "@/storage/validated-storage";
 import { fcmTokenSource } from "./fcm-token";
 import type { FcmTokenSource } from "./fcm-token-source";
 import { disableIosExpoRegistration } from "./woowtech-expo-registration";
+import {
+  setAndroidNotificationChannels,
+  woowtechNotificationChannels,
+  type WoowtechNotificationChannel,
+} from "./woowtech-notification-channels";
 
 // woowtech smart push (fork-owned; woowtech/README.md, 16). Replaces upstream's subscriptions.ts,
 // which registered an Expo push token with any daemon: the app registers
@@ -40,8 +45,8 @@ export interface WoowtechPushDependencies {
   storage: PushTokenStorage;
   /** Whether the app may notify. Asks the user only when `mayAsk` and the OS still allows it. */
   notificationPermission(options: { mayAsk: boolean }): Promise<boolean>;
-  /** Android's "default" channel, which the relay's pushes name. Nothing on iOS. */
-  prepareNotificationChannel(): Promise<void>;
+  /** Creates or renames the Android channels the relay's pushes name. Nothing on iOS. */
+  setNotificationChannels(channels: readonly WoowtechNotificationChannel[]): Promise<void>;
   fcmTokens: FcmTokenSource;
   appLanguage: AppLanguage;
   /** Persist disabled Expo registration; iOS requires a non-null native String. */
@@ -131,7 +136,10 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
         await forgetCachedToken(client, key);
         return;
       }
-      await dependencies.prepareNotificationChannel();
+      // Named in the app's language, like the relay's text: a new language renames them.
+      await dependencies.setNotificationChannels(
+        woowtechNotificationChannels(dependencies.appLanguage.current()),
+      );
       const fcmToken = await dependencies.fcmTokens.getToken();
       if (stopped || !fcmToken) return;
       if (!isFcmToken(fcmToken)) {
@@ -212,13 +220,11 @@ const nativeDependencies: WoowtechPushDependencies = {
     const requested = await Notifications.requestPermissionsAsync();
     return requested.status === Notifications.PermissionStatus.GRANTED;
   },
-  async prepareNotificationChannel() {
+  // The first channel, "default", is no longer created and not yet deleted: until the relay names
+  // the new channels, phones that have it keep getting pushes in it (woowtech/README.md, 16).
+  async setNotificationChannels(channels) {
     if (Platform.OS !== "android") return;
-    const Notifications = expoNotifications();
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
+    await setAndroidNotificationChannels(expoNotifications(), channels);
   },
   fcmTokens: fcmTokenSource,
   appLanguage: {

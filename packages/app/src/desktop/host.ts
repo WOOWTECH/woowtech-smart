@@ -62,6 +62,8 @@ export interface DesktopNotificationBridge {
   isSupported?: () => Promise<boolean>;
   // woowtech smart: a click that reopened this window before its router subscribed.
   takePendingClick?: () => Promise<{ data: Record<string, unknown> } | null>;
+  // woowtech smart: opens the system's notification settings; false where there are none.
+  openSystemSettings?: () => Promise<boolean>;
   sendNotification?: (
     payload: string | { title: string; body?: string; data?: Record<string, unknown> },
   ) => Promise<boolean>;

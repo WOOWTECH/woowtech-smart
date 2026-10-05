@@ -121,6 +121,13 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+// woowtech smart: anything that parses the URI (URL, fetch, expo-file-system) reads % as an escape
+// and # or ? as the start of a fragment or query, so "shot#1.png" became "shot". Those three are
+// percent-encoded; fileUriToPath decodes them, and every other path keeps its old URI.
+function encodeFileUriPath(path: string): string {
+  return path.replace(/[%#?]/g, (char) => encodeURIComponent(char));
+}
+
 export function pathToFileUri(path: string): string {
   if (path.startsWith("file://")) {
     return path;
@@ -131,15 +138,15 @@ export function pathToFileUri(path: string): string {
   }
 
   if (path.startsWith("/")) {
-    return `file://${path}`;
+    return `file://${encodeFileUriPath(path)}`;
   }
 
   // UNC paths: \\server\share -> file://server/share
   if (path.startsWith("\\\\")) {
-    return `file:${path.replace(/\\/g, "/")}`;
+    return `file:${encodeFileUriPath(path.replace(/\\/g, "/"))}`;
   }
 
-  return `file:///${path.replace(/\\/g, "/")}`;
+  return `file:///${encodeFileUriPath(path.replace(/\\/g, "/"))}`;
 }
 
 function decodeFilePathSource(source: string): string {
