@@ -208,6 +208,19 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
     - 繁中、簡中寫在 `locales` 的 `ios` 底下，進 `InfoPlist.strings`。那裡不會展開 `$(PRODUCT_NAME)`，所以名稱直接寫「渥屋智能」。`android` 底下仍只有 `app_name`。
     - 英文寫在 `ios.infoPlist`；相機那句同時給 `expo-camera` 的 `cameraPermission`，照片那句會蓋過 `expo-image-picker` 的預設文字。
     - 守門 `woowtech/ios-permissions.test.mjs` 用 `expo config` 查兩個版本。prebuild 驗過：`zh-Hans.lproj`、`zh-Hant.lproj` 的 `InfoPlist.strings` 都有三句。已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
+- 桌面版（macOS）的「關於」視窗和 Finder 的「取得資訊」：版權是 `© 2026 WOOW TECH CO., LTD.`，「關於」視窗另外顯示官網 `https://aiot.woowtech.io/`。原本 electron-builder 用 `package.json` 的 author 產生「Copyright © 2026 Mohamed Boudra」，那是上游作者。
+  - `electron-builder.yml` 的 `copyright` 寫進 Info.plist 的 `NSHumanReadableCopyright`，Windows 執行檔的版權欄也用它。
+  - `main.ts` 在 `app.setName` 後面呼叫 `app.setAboutPanelOptions(woowtechAboutPanelOptions())`（+3 行）。內容在 fork 的 `src/features/woowtech-about-panel.ts`：同一行版權，官網放在 `credits`，因為 macOS 不顯示 `website`（Linux 才顯示）。官網取自 `BRAND_LINKS.website`。App 名稱和版本照預設，從 Info.plist 讀。沒打包的開發版也顯示同樣的版權和官網。
+  - 選單的「關於 woowtech smart」是 Electron 原生的 `role: "about"`，顯示的就是這些設定。
+  - 不改 `packages/desktop/package.json` 的 `homepage`、`author`：`scripts/sync-workspace-versions.mjs` 同步版本時會從根目錄的 `package.json` 蓋回上游的值，macOS 版也用不到它們（見「接下來」）。
+  - 測試 `src/features/woowtech-about-panel.test.ts`。守門 `woowtech/desktop-about.test.mjs`：請 electron-builder 算出寫進 Info.plist 的版權；從原始碼跑 `woowtechAboutPanelOptions`，版權要跟它相同、官網在 `credits`；`main.ts` 在 `app.whenReady()` 之前呼叫一次，沒有別的地方改「關於」的設定；選單仍是 `role: "about"`。
+- 桌面版（macOS）的麥克風權限提示（聽寫用）：寫出 App 名稱和用途，跟著系統語言顯示英文、繁中或簡中，句子跟 iOS 相同。原本是 Electron 的「This app needs access to the microphone」。
+  - 英文寫在 `electron-builder.yml` 的 `mac.extendInfo`。繁中、簡中是 `packages/desktop/assets/lproj/zh_TW.lproj`、`zh_CN.lproj` 裡的 `InfoPlist.strings`，由 `mac.extraResources` 複製到 App 的 `Contents/Resources/` 同名資料夾。electron-builder 沒有放 `InfoPlist.strings` 的專用設定。
+  - 資料夾用 Electron（Chromium）本來就有的 `zh_TW.lproj`、`zh_CN.lproj`，Chrome 也放在這兩個。另外加 `zh-Hant.lproj` 的話，App 會有兩個繁中語系。CoreFoundation 把 zh-Hant-TW、zh-Hant-HK 對到 `zh_TW`，zh-Hans-CN、zh-Hans-SG 對到 `zh_CN`。
+  - `electronLanguages` 沒設。設了的話，electron-builder 先刪掉不要的語系資料夾，再複製 `extraResources`，這兩個檔案照樣會放進去。
+  - 只加麥克風：桌面版只用到它（`getUserMedia` 只要聲音，`entitlements.mac.plist` 也只有 `audio-input`）。Electron 預設的相機、藍牙、系統聲音擷取說明不動，用不到。
+  - 檔案放 `assets/`，不放 `build/`：根目錄的 `.gitignore` 忽略 `build/`，新檔案容易漏加。
+  - 守門 `woowtech/desktop-permissions.test.mjs`：請 electron-builder 讀設定，檢查英文句子、兩個 `InfoPlist.strings` 的鍵和開頭（在 macOS 上另外用 `plutil` 讀一次）、`extraResources` 的對應，以及 Electron 有這兩個資料夾。
 - App 的 vitest 原本只跑 `src/`，`plugins/` 的測試（包含上游的 `with-paste-input.test.ts`）從來沒被執行過，已加進單元測試的 include。
 - `woowtech/names.test.mjs` 檢查安裝檔名稱與下載連結一致、App 裡寫死的文字、agent 看到的名稱，並用 `expo config` 檢查手機 App 的實際設定。
   - iOS 短名稱查兩處，也查不超過 15 字：`expo config --type prebuild` 裡 `app.config.js` 自己設的 `ios.infoPlist.CFBundleName`；`expo config --type introspect`（`woowtech/expo-config.mjs` 的 `expoIntrospectedConfig`）算出的 Info.plist，和 zh-Hans／zh-Hant 的 `ios.CFBundleName`。
@@ -383,7 +396,7 @@ daemon 的預設：
 - 先部署 relay，再發佈這一版：relay.woowtech.io 還沒有 DNS 時，daemon 連不上，每 1～30 秒重試一次，log 裡一直有連線錯誤。
 - 直接連線不受影響：daemon 預設只監聽 `127.0.0.1:6770`。要讓手機直接連，把 `daemon.listen` 改成區網或 Tailscale 的位址，並用 `woowtech-smart daemon set-password` 設密碼。
 
-配對連結的主機：owner 決定直接叫起 App，配對連結和 QR Code 改成 `woowtech-smart:///#offer=…`，新 home 的 CORS 白名單也拿掉上游的網頁版，見第 19 節。當時比較過的其他做法也記在那裡。
+配對連結的主機：owner 決定直接叫起 App，配對連結和 QR Code 改成 `woowtech-smart:///#offer=…`，CORS 白名單也不再放行上游的網頁版（新 home 不寫，舊 home 解析時拿掉），見第 19 節。當時比較過的其他做法也記在那裡。
 
 測試：
 
@@ -577,7 +590,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 4. 有推播時，daemon 對每支手機發一個 `POST https://push.woowtech.io/api/smart/v1/notify`，本文只有 `{ token, locale, reason, target }`。
 5. push.woowtech.io 是 Cloudflare Worker（`smart-push-proxy`）：只放行這條路徑、每個 IP 每分鐘 120 次（Worker 的 `IP_RATE_LIMITER` binding，每個 Cloudflare 據點各自計數，沒有建 WAF 規則），加上 edge key 標頭後轉給 Cloud Run。
 6. Cloud Run 的 `smart-push`（GCP 專案 `woowtech-smart`，asia-east1）跑中繼 repo `woowtech-push-relay` 的 smart 模式（`RELAY_PROFILE=smart`）：驗證格式、查每個 token 的上限（每分鐘 10 則、每天 500 則）、從 `functions/smart-messages.js` 挑句子，用 Cloud Run 的服務帳戶呼叫 FCM。
-7. FCM 送到 Android；iOS 由 FCM 用上傳到 Firebase 的 APNs 金鑰轉給 APNs。
+7. FCM 送到 Android，中繼依原因指定 App 的通知通道（見下面 Android 的「通知通道」）；iOS 由 FCM 用上傳到 Firebase 的 APNs 金鑰轉給 APNs。
 8. 點通知：`expo-notifications` 回報點擊，`notification-routing.ts`（沒改）開到那個 agent 或 terminal。iOS 的 ID 放在 APNs payload 的 `body`（`expo-notifications` 只讀 `userInfo["body"]`），Android 的在 FCM `data`，點下去時成為啟動 intent 的 extras。
 
 中繼的程式、文字和部署步驟在中繼 repo（`WOOWTECH/woowtech-push-relay`，`smart-mode` 分支），這裡只記 smart 這邊。
@@ -633,7 +646,7 @@ daemon：`packages/server/src/server/push/woowtech-relay.ts`
 App：`packages/app/src/push-notifications/internal/woowtech-subscriptions.ts`
 
 - 接點：`push-notifications/index.native.ts` 的 import 從上游的 `./internal/subscriptions` 改成它（1 行），匯出的函式名稱跟上游一樣。上游的 `subscriptions.ts`（向 Expo 要 push token，註冊給任何 daemon）留著不動、沒有人引用。
-- 只有連上宣告 `woowtechPush` 的 daemon 才要通知權限和 FCM token：每個 daemon 的訂閱最多問一次權限，連官方 Paseo 的 daemon 時完全不問，也不碰 Firebase。
+- 只有連上宣告 `woowtechPush` 的 daemon 才要通知權限和 FCM token：每個 daemon 的訂閱最多問一次權限，連官方 Paseo 的 daemon 時完全不問，也不碰 Firebase。Android 的通知通道也在這時建立，在拿 token 之前（見下面 Android 的「通知通道」）。
 - 快取沿用上游的 key `@paseo:expo-push-token:<serverId>`，存註冊出去的字串。升級後第一次同步會在那裡找到舊的 Expo token，先撤銷它。連的是沒有 `woowtechPush` 的 daemon（官方 Paseo，或這個改版以前的我們）也撤銷：那種 daemon 會把 agent 的回覆送到 Expo，直到舊 token 的 48 小時租約到期。daemon 宣告了 `pushTokenRevocation` 才撤銷並刪掉快取，不問權限、不碰 Firebase；沒宣告的，快取留著。
 - 換 token、換語言時先撤銷舊字串（我們的 daemon 宣告了 `pushTokenRevocation`）再註冊新的，同一支手機才不會收到兩則；通知權限被拒時撤銷並刪快取（上游只刪快取）；每次重新連線都再註冊一次，續 48 小時的租約。
 - FCM token 更新的監聽在第一次拿到 token 之後才開始，而且只有 token 真的換了才重新同步：Android 的 `expo-notifications` 每次 `getDevicePushTokenAsync` 都會把同一個 token 當成新 token 再發一次事件（`PushTokenModule.kt`），不比對的話，同步取 token、事件又排下一次同步，會一直重新註冊。token 不符契約時不註冊，warn 只寫長度。
@@ -673,6 +686,21 @@ Android：
 - 不連結 RNFB，`react-native.config.js` 在 Android 設成 `null`，有沒有 plist 都一樣。`expo-notifications` 本來就依賴 `firebase-messaging`，`google-services.json` 照上游放在 `.secrets/`。
 - 不能多一個 FCM 服務：`expo-notifications` 的 FirebaseMessagingService 在 manifest 裡的優先序是 -1，有 RNFB 的服務時會讓給它，前景訊息和 token 更新就不會進 `expo-notifications`。
 - App 在背景時由 FCM SDK 顯示通知。點擊由 `expo-notifications` 的 `ExpoNotificationLifecycleListener` 從啟動 intent 的 extras 轉成點擊事件；它的原始碼註解說 SDK 55 可能拿掉這個 class，升 Expo SDK 55 時要重測 Android 的點擊。
+- 通知通道（2026-10-05）：
+  - 原因：原本 App 只建一個 `default` 通道，重要性 DEFAULT，中繼每則推播都指定它，所以 Android 從不跳出橫幅（heads-up）。橫幅要重要性 HIGH，而 Android 不讓 App 調高已經存在的通道，所以改用新的通道 ID。
+  - 兩個通道，重要性都是 HIGH，定義在 fork 自有的 `push-notifications/internal/woowtech-notification-channels.ts`：
+
+    | 通道 ID           | 繁中名稱   | 英文名稱      | 中繼的推播                 |
+    | ----------------- | ---------- | ------------- | -------------------------- |
+    | `agent-attention` | 需要你處理 | Needs you     | `permission`、`attention`  |
+    | `agent-finished`  | 工作完成   | Work finished | `finished`、每日上限的通知 |
+
+  - 名稱是系統設定裡的通知類別，跟中繼的句子同一種語言，用同一個 `pushLocaleFor` 決定：`zh` 開頭（簡中也算）用繁中，其他用英文。中繼只有這兩種語言，所以名稱不放第 14 節依介面語言給字的 `woowtech-copy.ts`，跟通道 ID 寫在同一個檔。
+  - 時機跟原本的 `default` 一樣：連上宣告 `woowtechPush` 的 daemon、有通知權限之後、拿 FCM token 之前，每次同步都設一次。同一個 ID 再設一次只改名稱，不會調高重要性。所以換語言後，把註冊換成新語言的那次同步也改名（daemon 沒連上時等下次連上）；使用者在系統設定調低的通道也不會被調回來。
+  - `app.config.js` 的 `expo-notifications` 外掛加上 `defaultChannel: "agent-finished"`，外掛把它寫成 manifest 的 `com.google.firebase.messaging.default_notification_channel_id`。推播指定的通道手機上沒有時，FCM SDK 改用這個通道；manifest 沒寫的話，會落到 FCM 自己建的「Miscellaneous」（重要性 DEFAULT，沒有橫幅）。F-Droid 版沒有這個外掛，也沒有 FCM；它的 `expo-notifications` stub 多了 `AndroidImportance.HIGH`。
+  - `default` 不再建立。照 owner 的決定這一版不刪，等中繼部署而且確定不回滾之後，下一版再用 `deleteNotificationChannelAsync` 刪掉。中繼部署前還是指定 `default`：已經有它的手機照舊收在 `default`（沒有橫幅），新裝的手機沒有它，就收在 `agent-finished`。
+  - 上線順序：先發 App，再部署中繼（中繼的改動和步驟見「接下來」）。中繼先部署的話，還沒更新的 App 沒有這兩個通道，manifest 也沒有預設通道，推播會落到「Miscellaneous」。
+  - 還要實機驗：POCO 上 App 在背景和被滑掉時，`finished` 和 `permission` 的推播都跳出橫幅；系統設定的通知類別是「需要你處理」和「工作完成」（英文介面是 Needs you、Work finished），換語言後跟著換；只把「工作完成」調低時，完成的通知不再跳出，要授權的仍然跳出。從裝過舊版的手機升級也看一次：`default` 還在，新的推播進新通道。沒有橫幅時，先看系統設定裡這個 App 的「懸浮通知」（MIUI、HyperOS 另有這個開關）。
 
 契約 fixture：
 
@@ -686,11 +714,11 @@ Android：
 接點（上游的檔），行數以上游 v0.8.0 為準：
 
 - server 和 protocol：`push/index.ts`（13 行增、4 行刪：預設 `deliver`、`send()` 裡的 `toRemotePushPayload`、`renew` 撤銷同一支手機的其他字串）、`websocket-server.ts`（3 行：`woowtechPush` 旗標 2 行、terminal 推播的 `reason` 1 行）、`protocol/src/messages.ts`（3 行）。
-- App：`push-notifications/index.native.ts`（8 行增、1 行刪：import 和載入時呼叫 `turnOffExpoPushRegistration()`）、`app.config.js`（2 行 require、plist 改由 `woowtech-ios-firebase.js` 決定（上游 variants 裡的兩個 `googleServiceInfoPlist` 留著不用，少改上游的行）、外掛 1 行、`expo-build-properties` 的 `ios` 區塊）、`metro.config.cjs`（3 行）、`package.json`（2 個相依）、`package-lock.json`（只有新增）。
+- App：`push-notifications/index.native.ts`（8 行增、1 行刪：import 和載入時呼叫 `turnOffExpoPushRegistration()`）、`app.config.js`（2 行 require、plist 改由 `woowtech-ios-firebase.js` 決定（上游 variants 裡的兩個 `googleServiceInfoPlist` 留著不用，少改上游的行）、外掛 1 行、`expo-build-properties` 的 `ios` 區塊、`expo-notifications` 外掛的 `defaultChannel` 1 行和 2 行註解）、`metro.config.cjs`（3 行）、`src/fdroid/expo-notifications.ts`（F-Droid stub 的 `AndroidImportance` 加 `HIGH`，1 行和 1 行註解）、`package.json`（2 個相依）、`package-lock.json`（只有新增）。
 - `knip.json`：server 的 `ignore` 放 `push-service.ts`（它還提供 `PushPayload` 型別，但 `PushService` 沒人用），App 的 `ignoreFiles` 放 `subscriptions.ts`，knip 才不會建議刪掉這兩個上游的檔。`npm run knip` 本身在 main 也會停在 knip 的 Expo 外掛（`app.config.js` 的外掛有函式，knip 5.86 當成字串處理），要看報告就分 workspace 跑，packages/app 要先在暫時的設定裡關掉 Expo 外掛。
 - App 根目錄的新檔 `react-native.config.js` 和 `firebase.json` 上游沒有；上游以後加了同名檔會衝突，合併時把兩邊的設定合在一起。
-- 上游的測試檔加了案例：`protocol/src/messages.test.ts`（1 組）、`websocket-server.notifications.test.ts`（2 個）、`websocket-server.terminal-notifications.test.ts`（1 組）。合併時衝突的話，可以先放掉我們加的測試：守門涵蓋 `send()` 的改寫、terminal 推播的 `reason`、`register_push_token` 的路徑、`woowtechPush` 旗標和 App 的接點（`index.native.ts`、`react-native.config.js`、`app.config.js`、`metro.config.cjs`）。
-- fork 自有的檔（各自附測試）：protocol 的 `woowtech-push.ts`；server 的 `push/woowtech-relay.ts`、`push/woowtech-push-content.ts`；App 的 `push-notifications/internal/` 裡的 `woowtech-subscriptions.ts`、`fcm-token-source.ts`、`fcm-token.ts`、`fcm-token.ios.ts`、`fcm-token.android.ts`，`plugins/` 裡的 `with-woowtech-push.js`、`woowtech-ios-firebase.js`、`woowtech-metro-resolver.js`；守門 `woowtech/push.test.mjs`、`woowtech/push-content.test.mjs`。
+- 上游的測試檔加了案例：`protocol/src/messages.test.ts`（1 組）、`websocket-server.notifications.test.ts`（4 個，兩個是下面「誰收到通知」的）、`websocket-server.terminal-notifications.test.ts`（2 組，一組是停止中不推播）。合併時衝突的話，可以先放掉我們加的測試：守門涵蓋 `send()` 的改寫、terminal 推播的 `reason`、`register_push_token` 的路徑、`woowtechPush` 旗標和 App 的接點（`index.native.ts`、`react-native.config.js`、`app.config.js`、`metro.config.cjs`）。
+- fork 自有的檔（各自附測試）：protocol 的 `woowtech-push.ts`；server 的 `push/woowtech-relay.ts`、`push/woowtech-push-content.ts`；App 的 `push-notifications/internal/` 裡的 `woowtech-subscriptions.ts`、`woowtech-notification-channels.ts`、`fcm-token-source.ts`、`fcm-token.ts`、`fcm-token.ios.ts`、`fcm-token.android.ts`，`plugins/` 裡的 `with-woowtech-push.js`、`woowtech-ios-firebase.js`、`woowtech-metro-resolver.js`；守門 `woowtech/push.test.mjs`、`woowtech/push-content.test.mjs`。
 
 測試：
 
@@ -700,17 +728,19 @@ Android：
 - App：
   - `plugins/woowtech-ios-firebase.test.ts`：plist 從哪裡來，以及用 `expo-modules-autolinking` 自己的解析函式確認 RNFB 只在有 plist 的 iOS 連結、保留 build phase。
   - `plugins/with-woowtech-push.test.ts`：外掛只加 iOS 的設定，沒有 plist 時什麼都不做。`plugins/woowtech-metro-resolver.test.ts`：用真的 `metro-resolver` 確認包裝前會解析到網頁版的 `nativeModule.js`，包裝後是平台的檔。
-  - `src/push-notifications/internal/` 的 `fcm-token.test.ts`、`fcm-token.ios.test.ts`、`fcm-token.android.test.ts`、`woowtech-subscriptions.test.ts`：注入有型別的假模組，不用 `vi.mock`。訂閱的測試涵蓋上面 App 的每一條規則；Android 那一項用真的 `fcm-token.android.ts` 配照 `PushTokenModule.kt` 行為的假 `expo-notifications`（取 token 時也發事件，事件在 token 之前或之後到），每次連線只註冊一次。
+  - `src/push-notifications/internal/` 的 `fcm-token.test.ts`、`fcm-token.ios.test.ts`、`fcm-token.android.test.ts`、`woowtech-notification-channels.test.ts`、`woowtech-subscriptions.test.ts`：注入有型別的假模組，不用 `vi.mock`。訂閱的測試涵蓋上面 App 的每一條規則；Android 那一項用真的 `fcm-token.android.ts` 配照 `PushTokenModule.kt` 行為的假 `expo-notifications`（取 token 時也發事件，事件在 token 之前或之後到），每次連線只註冊一次。通道的測試：兩個通道的 ID 和名稱（每種中文都是繁中，其他語言是英文），經 `expo-notifications` 用 `AndroidImportance.HIGH` 設定；訂閱的測試另外確認通道名稱跟著註冊換語言、daemon 沒連上時不改，沒有通知權限時不建立。
   - `src/utils/notification-routing.woowtech-push.test.ts`：兩種點擊資料都開到那個 agent 或 terminal，中繼的每日上限通知開到 `/`。
 - 守門 `woowtech/push-content.test.mjs`：從原始碼跑沒有注入 `deliver` 的 `createPushNotifications`，`fetch` 換成記錄器，中英文各一次：只有一個請求，打到 `https://push.woowtech.io/api/smart/v1/notify`；位元組裡沒有 agent 名稱、回覆、權限內容、資料夾、terminal 名稱和工作區名稱；本文不隨內容改變；Expo token 被撤銷；`WOOWTECH_PUSH_RELAY_URL` 蓋得掉網址。注入記錄用的 `deliver`：交給它的標題和內文不含任何使用者的內容、不隨內容改變，`data` 只有 ID 和 `reason`（拿掉 `send()` 裡的 `toRemotePushPayload` 時，只有這一項會失敗）。用最小的 `this` 呼叫 `websocket-server.ts` 的 `broadcastTerminalAttention`：terminal 完成和等輸入的推播帶著 `reason`，中繼分別收到 `finished` 和 `attention`。另外掃描出貨的原始碼：Expo 的網址只在 `push-service.ts`，沒有任何地方 `new PushService` 或呼叫 `.sendPush(`，`push.woowtech.io` 只在 `woowtech-relay.ts`。
-- 守門 `woowtech/push.test.mjs`，9 項，接點被蓋回上游時失敗：
+- 守門 `woowtech/push.test.mjs`，11 項，接點被蓋回上游時失敗：
   - 沒注入 `deliver` 的 `createPushNotifications` 只打 `WOOWTECH_PUSH_RELAY_URL`（本機的 `node:http` 假中繼），本文正好是那四個欄位，沒有放在標題、內文和 `cwd` 的標記字串。`fetch` 在載入原始碼之前就換掉，只放行假中繼，其他位址在本機回應並記下，接點被改回 Expo 時也不會真的送到 `exp.host`；`diagnostics_channel` 另外記下 undici 和 `node:http` 開出的請求。
   - daemon 的 server_info（從原始碼呼叫 `buildServerInfoStatusPayload`）經 protocol 的 `parseServerInfoStatusPayload` 解析後 `woowtechPush` 是 `true`。
   - App 送的 `register_push_token`（`wsp1:` 字串）經 protocol 的 `WSInboundMessageSchema` 解析，再用最小的 `this` 呼叫 `session.ts` 的 `dispatchMiscMessage`：字串原樣進到 push store，下一則推播交給 `deliver` 的就是它。上游在 schema 或 handler 加上 Expo token 的格式檢查時，這一項會失敗；App 的 `registerPushToken` 不等回應，否則只會靜靜地收不到推播。
   - `index.native.ts` 的 `startSubscription`、`revokeSubscription`、`turnOffExpoPushRegistration` 來自 `woowtech-subscriptions`，而且載入時就呼叫 `turnOffExpoPushRegistration()`；App 的原始碼沒有任何地方引用上游的 `subscriptions.ts`。
+  - `woowtech-subscriptions.ts` 在 iOS 用 `woowtech-expo-registration.ts` 的 `disableIosExpoRegistration`（原生模組 `NotificationsServerRegistrationModule`）停用 Expo 登記，不落到 Expo 傳 `null` 的公開 API。
   - `getExpoPushTokenAsync` 只出現在上游的 `subscriptions.ts`（F-Droid stub 的定義那一行除外）。
   - 用 `expo-modules-autolinking` 自己的 `loadConfigAsync` 和 `resolveReactNativeModule`，每種情況開一個乾淨的子程序：Android 不連結 RNFB（有 plist 也一樣），iOS 正式版和 Debug 版沒有 plist 時不連結，有 plist 時連結並保留「[RNFB] Core Configuration」。守門讀的是 `expo-modules-autolinking/build/reactNativeConfig/` 的內部模組，升級 Expo 時如果搬家，守門會失敗，要改路徑。
   - `expo config --type prebuild`（正式版和 Debug 版，plist 變數各指向一個暫存檔和一個不存在的檔）：plugins 有 `[withWoowtechPush, { disableSPM: true }]`；`expo-build-properties` 的 `ios.useFrameworks` 是 `static`，`forceStaticLinking` 有 `RNFBApp`、`RNFBMessaging`、`react-native-paste-input`；`ios.googleServicesFile` 是給的那個 plist，檔案不存在時沒有這個欄位。少了外掛，iOS 照樣連結 RNFB，但 AppDelegate 沒有 `FirebaseApp.configure()`，App 靜靜地註冊不到推播。
+  - `expo config --type introspect`（正式版和 Debug 版）產生的 Android manifest：`com.google.firebase.messaging.default_notification_channel_id` 是 `agent-finished`，`woowtech-notification-channels.ts` 建的通道是 `agent-attention` 和 `agent-finished`。F-Droid stub 有 `AndroidImportance.HIGH` 和 `setNotificationChannelAsync`。introspect 在記憶體裡跑 prebuild 會跑的 manifest 外掛，不寫出 `android/`；升級 Expo 後 `_internal.modResults` 搬家時，這一項會失敗，要改讀法。
   - 載入 `metro.config.cjs`（`woowtech-metro-resolver` 換成做記號的替身）：最後的 `resolveRequest` 是 `withNativeRnFirebaseModules` 包過的。包裝實際解析到哪個檔由 `plugins/woowtech-metro-resolver.test.ts` 檢查，也包括用 `metro.config.cjs` 本身解析。
   - 契約 fixture 在，合法和不合法的案例都跟 `validateRelayNotifyBody` 一致。
 
@@ -720,12 +750,15 @@ Android：
 npm run build:server   # 守門從原始碼跑，但跨套件的匯入讀 dist
 node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/woowtech-push.test.ts src/messages.test.ts --bail=1)
-(cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts --bail=1)
+(cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts src/server/woowtech-attention-presence.test.ts src/server/woowtech-shutdown-push.test.ts src/server/woowtech-attention-fallback.test.ts src/server/woowtech-attention-fallback-daemon.test.ts --bail=1)
+(cd packages/protocol && npx vitest run src/woowtech-attention-fallback.test.ts --bail=1)
+(cd packages/app && npx --no-install vitest run src/utils/woowtech-notification-fallback.test.ts --project unit --bail=1)
+(cd packages/desktop && npx --no-install vitest run src/features/woowtech-notification-settings.test.ts --bail=1)
 (cd packages/app && npx vitest run plugins/woowtech-ios-firebase.test.ts plugins/with-woowtech-push.test.ts plugins/woowtech-metro-resolver.test.ts src/push-notifications src/utils/notification-routing.woowtech-push.test.ts --bail=1)
 (cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts src/navigation/woowtech-welcome-host-online.test.ts src/navigation/woowtech-cold-start-tap.test.ts src/navigation/woowtech-notification-response.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1、T1 S3、「配對後第一次點通知」和 RC-I-21c 小節
 ```
 
-- 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛和 `expo-build-properties` 的 `ios`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
+- 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛、`expo-build-properties` 的 `ios` 和 `expo-notifications` 的 `defaultChannel`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝、F-Droid stub 的 `AndroidImportance.HIGH`。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
 - 升級 RNFB：檢查上面 iOS 外掛的路徑、`woowtech-metro-resolver.js` 改寫的 import、`firebase.json` 的鍵和 `forceStaticLinking` 的 pod 名稱。升級 Expo：檢查 static frameworks 和 SPM 的限制、Android 的點擊（SDK 55），以及守門讀的 autolinking 模組。
 
 - 各種組合：新 App 加新 daemon 正常；新 App 加官方 daemon，不註冊，舊版 App 在那台 daemon 註冊過的 Expo token 在第一次連上時撤銷，之後不推播（撤銷沒送到的話，那台 daemon 會繼續送到 Expo，最多到舊 token 的 48 小時租約到期）；官方 App 或舊測試版加新 daemon，它們註冊的 Expo token 在第一次推播時被撤銷，不送出，更新 App 後重新註冊。
@@ -783,6 +816,25 @@ node --test woowtech/*.test.mjs
   - 守門 `woowtech/welcome-host-online.test.mjs` 只看原始碼：`isFocused` 來自 `useIsFocused`，`WelcomeScreen` 裡唯一會轉頁的 effect 第一行問 `shouldWelcomeMoveOnToHost({ anyOnlineServerId, isFocused })`，依賴有這兩個。vitest 的歡迎頁 effect 照這幾行寫，所以把 `welcome-screen.tsx` 改回上游時，紅的是守門。
   - 紅綠與突變：修之前主案例的焦點是 `open-project`、設定那個案例也紅，修後 4/4；拿掉修法時 vitest 2 個紅、守門紅，依賴拿掉 `isFocused` 時守門紅。Android 模擬器複驗見 `logs/fix-first-tap.md`。
 - 合併上游：上游改成只在 focused 時轉頁，或拿掉這個 effect 時，先確認新測試仍綠，再拿掉 fork 的判斷和守門。
+
+#### 誰收到 agent 和 terminal 的通知
+
+上游的規則（`agent-attention-policy.ts`）：每個連著的 App 用 heartbeat 回報裝置種類（手機是 `mobile`，網頁和桌面版都是 `web`）、`appVisible`、正在看的 agent 和 terminal、最後一次操作的時間。最後一次操作在 180 秒內的算「在場」。有人在場而且正看著那個 agent，誰都不通知；有人在場就只讓最近操作的那一個顯示 App 內或桌面的通知，不推播；沒人在場才推播。fork 改了兩條（owner 2026-10-05 同意）：
+
+- 背景中的手機不算在場：手機 App 只靠推播，不顯示 App 內通知，上游卻在它切到背景後 180 秒內仍選它當通知對象，結果什麼都沒有。`woowtech-attention-presence.ts` 的 `woowtechClientPresenceState()` 把 `mobile` 而且 `appVisible=false` 的 App 當成沒有活動時間；網頁和桌面版照上游（桌面版在背景仍會跳系統通知）。只改 daemon，舊版 App 也有效，因為兩個欄位本來就有送。
+- daemon 停止時不通知：停 daemon 會關掉每個 agent，正在跑的 agent 被中斷後從 running 變 idle，上游當成「完成」，每個 agent 多推一則「工作完成了」；等權限的 agent 也會再推一次。`websocket-server.ts` 的兩個 attention 廣播在第一個 `await` 之前讀 `connectionLifecycle === "stopping"`（`bootstrap` 的 `stop()` 先呼叫 `prepareForShutdown()` 再關 agent），停止中交給 `woowtechNotificationPlanWhileStopping()`，誰都不通知；attention 事件本身照送。
+- 桌面版和網頁的視窗沒有焦點就不算「正在看」（owner 2026-10-05 的決定 (c)）：上游的 `appVisible` 只看分頁有沒有被藏起來，視窗開著那個 agent、你卻在用別的 App 時，daemon 當成你正在看，Mac 和手機都不通知。`use-client-activity.ts` 改用上游自己的 `getIsAppActivelyVisible()`（看得到而且有焦點；手機照舊看 AppState），視窗的 `focus`／`blur` 也更新，切走和切回來都馬上送 heartbeat（不經 5 秒的操作節流），每次定時 heartbeat 前也重讀一次焦點，掛上 listener 之前錯過的焦點變化不會一直卡著。daemon 的 `appVisible && focusedTerminalId` 清 terminal 提醒也跟著改成要有焦點。
+- Mac 顯示不出通知時改推手機（提案 4，owner 2026-10-05 同意）：daemon 只交給一個在場的用戶端顯示，不推播；Mac 的通知被關掉、還沒按允許、或 5 秒沒結果時，什麼都不會出現。現在：
+  - daemon 交出通知時記下來（`woowtech-attention-fallback.ts`）：agent 用 agent ID 加這則訊息的 `timestamp`，terminal 用 terminal ID（同一個 terminal 只留最新的），也記下交給哪個 session。只記可以推播的（`error` 本來就不推），停止中本來就沒有對象。最多 64 則、60 秒。
+  - App 的 `sendOsNotification` 回報沒顯示（桌面版是 `failed` 或 5 秒 `unconfirmed`，丟出錯誤也算）時，`utils/woowtech-notification-fallback.ts` 送 `attention.notification.report_display_failure.request`。手機不送：手機本來就只靠推播。只送給 `server_info.features.woowtechAttentionFallback` 是 true 的 daemon，官方 Paseo 不會有。
+  - daemon 只在回報的是當初那個 session、60 秒內、還沒處理過時推一次，回 `pushed`；否則回 `unknown` 或 `expired`。舊 App 不回報，行為跟以前一樣。
+  - 桌面版同一次啟動第一次沒顯示時，側欄出現提示（`desktop/woowtech-notification-display-callout-source.tsx`，文案在 `i18n/woowtech-copy.ts` 的 `notificationDisplay`，只有繁中和英文）。daemon 回 `pushed` 才說「已改送到你的手機」；daemon 沒有旗標（舊版或官方 Paseo）時說這台主機無法改送、請更新；其他情況不提手機。只要這次啟動有一則改送成功，提示就一直這樣說。按鈕用固定網址開系統的通知設定（`desktop/src/features/woowtech-notification-settings.ts`：macOS 的 `x-apple.systempreferences:com.apple.Notifications-Settings.extension`、Windows 的 `ms-settings:notifications`；preload 只在這兩個平台提供，Linux 沒有按鈕）。一般的 `paseo:opener:openUrl` 仍只開 http(s) 和 mailto。關掉提示只到這次結束。
+  - terminal 的通知沒有 timestamp，同一個 terminal 只記最新一則：第一則 5 秒沒結果、第二則 2 秒後已顯示時，第一則的回報會推出第二則的內容。很少見，照設計；要分得清楚，得在上游的 `terminal_attention_required` 加通知 ID。
+  - 樣式設成「無」（只進通知中心）或專注模式時，系統回報已顯示，不會補推，這是使用者自己的設定。授權提示還沒按時的回報要在簽章的打包版上確認（10/2 的 dev 版是「as none」但回報 show）。
+- 接點：`websocket-server.ts` 的 import、`getClientActivityState` 回傳 `woowtechClientPresenceState(activity)`、兩個 attention 廣播外面包 `woowtechNotificationPlanWhileStopping`、交出通知時的 `remember`、terminal 推播抽成 `sendPush`、`woowtechAttentionFallback` 旗標和傳給 Session（+61／−20 行）；`session.ts`（選項、欄位、`dispatchMiscMessage` 的一個 case，+18 行）；`authorization/operation-permissions.ts`（+4 行）；protocol `messages.ts`（import、兩個 union、旗標，+11 行）；client `daemon-client.ts`（兩個方法，+20 行）；App `session-context.tsx`（+24／−1 行）、`_layout.tsx`（+3 行）、`desktop/host.ts`（+2 行）、`hooks/use-client-activity.ts`（+14／−3 行）；desktop `preload.ts`、`features/notifications.ts`（各 +3 行）。
+- 測試（改推手機和焦點）：server `woowtech-attention-fallback.test.ts`（記錄、只認原來的 session、只推一次、過期、terminal 只留最新、上限 64）和 `woowtech-attention-fallback-daemon.test.ts`（行程內真的 daemon：桌面版在場、收到 `shouldNotify`、別的用戶端回報是 `unknown`、自己回報後推一次、再報是 `unknown`）；protocol `woowtech-attention-fallback.test.ts`；App `utils/woowtech-notification-fallback.test.ts`（手機不報、已顯示不報、舊 daemon 不送、送不到不丟例外、提示只通知一次）；desktop `features/woowtech-notification-settings.test.ts`。守門 `woowtech/attention-fallback.test.mjs` 看所有接點和焦點規則。突變：拿掉 `remember` 時 daemon 測試紅（`unknown`），拿掉手機的排除時 App 測試紅。
+- 測試（在場和停止）：`woowtech-attention-presence.test.ts`（presence 對應和停止中的 plan）、`woowtech-shutdown-push.test.ts`（行程內的 daemon 真的停止：修之前推出 `['permission','finished']` 和 `['finished']`，修之後 0 則）、`websocket-server.notifications.test.ts` 和 `websocket-server.terminal-notifications.test.ts` 各加的案例。守門 `woowtech/attention-presence.test.mjs`：接點被改回上游時失敗。
+- 還要實機：手機切到背景後約 30 秒和 120 秒觸發，兩支手機都要收到推播；Android 的連線在背景保持多久、iOS 多久斷，還沒量過。Mac 簽章的打包版：在系統設定關掉通知後觸發，手機要收到推播、側欄出現提示、按鈕開到通知設定；打開通知後不補推；視窗開著那個 agent 但切到別的 App 時要跳通知。點進桌面版內建瀏覽器的網頁（`<webview>`）時，`document.hasFocus()` 可能是 false，要確認這時不會被當成離開（terminal 通知照跳、提醒不清掉）。
 
 #### RC-I-21c：冷啟動點通知，工作區對了，聚焦的卻是上次記住的 agent
 
@@ -1074,7 +1126,9 @@ CORS：
 
 - 新 home 的 `daemon.cors.allowedOrigins` 改成空的，不再放行 `https://app.paseo.sh`。原本上游網站上的程式可以從使用者的瀏覽器直接連本機的 daemon（HTTP 和 WebSocket 都看這份白名單），而 daemon 預設沒有密碼。
 - daemon 自己固定放行的照舊（`bootstrap.ts`）：桌面版的 `woowtech-smart://app`、daemon 自己的位址（`http://127.0.0.1:<port>`、`http://localhost:<port>`），WebSocket 另外接受同源。開發用的也照舊：`scripts/dev-home.sh` 寫的 `"*"`、`scripts/dev-daemon.sh` 的 `PASEO_CORS_ORIGINS`。
-- 已存在的 home 不動：內部測試版建立的 `config.json` 還列著 `https://app.paseo.sh`，要自己拿掉，例如 `woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`。要不要自動拿掉還沒決定（接下來）。
+- 已存在的 home：內部測試版建立的 `config.json` 還列著 `https://app.paseo.sh`。daemon 解析設定時，`daemon.cors.allowedOrigins` 和 `PASEO_CORS_ORIGINS` 裡正好是這個網址的來源（有沒有結尾斜線都算）都拿掉。其他來源照用，包括 app.paseo.sh 的其他寫法（http、別的 port、子網域）。`"*"` 也照用，仍然放行所有來源，只有開發用的 home 會寫。
+  - 寫在 fork 的 `packages/server/src/server/woowtech-cors-origins.ts`（`withoutUpstreamWebApp`），網址用 `app-base-url.ts` 匯出的 `UPSTREAM_DEFAULT_APP_BASE_URL`，不另外寫一次。`config.ts` 的 `resolveCorsAllowedOrigins` 把回傳值交給它。daemon 啟動、重新載入設定（例如 `daemon config set` 之後）都走這裡。
+  - 跟 `app.baseUrl` 一樣不改寫 `config.json`：`woowtech-smart daemon config get daemon.cors.allowedOrigins` 仍顯示檔案裡的上游網址。要從檔案清掉，執行 `woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`。
 
 文案：
 
@@ -1089,25 +1143,27 @@ CORS：
   - 在 app.woowtech.io 自架網頁版：要多維運一個能操作使用者 daemon 的網頁 App，每次發版都要更新。
   - 維持 app.paseo.sh：上游隨時可能改或停掉那個網站。
 
-接點（上游的檔）：`persisted-config.ts`（4 行）、`config.ts`（3 行）、`pairing-offer.ts`（2 行）、`bootstrap.ts`（4 行，熱檔）、`protocol/src/connection-offer.ts`（1 行註解）、`cli/src/commands/onboard.ts`（4 行）、`app/src/components/pair-link-modal.tsx`（2 行）、`app/src/app/_layout.tsx`（`OfferLinkListener` 的 `handleUrl` 改成呼叫 `handlePairingLink`，加 1 行 import，熱檔），以及上游測試 `app/src/runtime/host-runtime.test.ts` 加的 1 個測試。F6 補名另在 `app/src/runtime/host-runtime.ts` 加 43 行，政策及整合測試留 fork 自有檔。
+接點（上游的檔）：`persisted-config.ts`（4 行）、`config.ts`（配對 3 行；CORS 在 `resolveCorsAllowedOrigins`，+4／-2 行）、`pairing-offer.ts`（2 行）、`bootstrap.ts`（4 行，熱檔）、`protocol/src/connection-offer.ts`（1 行註解）、`cli/src/commands/onboard.ts`（4 行）、`app/src/components/pair-link-modal.tsx`（2 行）、`app/src/app/_layout.tsx`（`OfferLinkListener` 的 `handleUrl` 改成呼叫 `handlePairingLink`，加 1 行 import，熱檔），以及上游測試 `app/src/runtime/host-runtime.test.ts` 加的 1 個測試。F6 補名另在 `app/src/runtime/host-runtime.ts` 加 43 行，政策及整合測試留 fork 自有檔。
 
 測試：
 
 - server `pairing-link.test.ts`：新 home 的連結（整段比對 offer）；沒給 `app.baseUrl` 的連結；上游預設兩種寫法的遷移；自己設的值不動（daemon 的網頁版、自己的網站、app.paseo.sh 底下的路徑）；`PASEO_APP_BASE_URL` 優先；`daemon config set` 後重新載入。
 - server `cors-defaults.test.ts`：新 home 沒有 web origin、dev 的 `"*"` 和 `PASEO_CORS_ORIGINS` 照舊；實際起 daemon，上游網頁版的 HTTP 拿不到 CORS 標頭、WebSocket 回 403，桌面版和 daemon 自己的網頁版照樣連得上。
+- server `woowtech-cors-origins.test.ts`：上游網頁版兩種寫法都拿掉，其他來源照原本的順序留下（含 `"*"` 和 app.paseo.sh 的 http、別的 port、子網域、路徑）；內部測試版的 home 解析後沒有上游網頁版，`config.json` 不變；`PASEO_CORS_ORIGINS` 給的也拿掉；`daemon config set` 後重新載入也一樣；實際起 daemon，這種 home 對上游網頁版不回 CORS 標頭、WebSocket 回 403，留下的來源照樣連得上。
 - CLI `commands/daemon/pair.app-link.test.ts`：新 home 和寫著上游預設的 home，`daemon pair` 的連結都是 `woowtech-smart:///`。`utils/daemon-target.app-link.test.ts`：`--host` 帶配對連結時，訊息裡的 offer 會遮掉。
 - App：`runtime/woowtech-pairing-link.test.ts` 是 `OfferLinkListener` 收到連結後的每一步：`woowtech-smart:///#offer=` 和帶 offer 的 https 連結都會匯入並轉到「開啟專案」、沒有 offer 的連結不處理、連結不交給 URL 類別、匯入失敗時 warn 不轉頁、監聽已經卸載時不轉頁；用真的 `HostRuntimeStore`（記憶體 storage）照冷啟動的順序先讀連結再 `boot()`，記憶體和存檔都有舊主機和新主機。`host-runtime.test.ts` 的新測試是 `handlePairingLink` 呼叫的匯入（`upsertConnectionFromOfferUrl`）；`components/pair-link-modal.app-link.test.tsx` 和 `components/pair-scan.app-link.test.tsx`（掃描器是 `src/app` 裡的路由，測試放外面，因為 Expo Router 會把 `src/app` 裡的每個檔案當成路由）：貼上和掃描新連結都能配對，範例文字是新連結。三個都把 URL 類別換成會記錄的版本，確認配對連結沒有交給它。
 - protocol `brand-pairing.test.ts`：CLI 的 `--host` 和 daemon 匯出的解析函式讀得到新連結的 offer。
 - App 補名：`runtime/woowtech-host-label.test.ts` 用真實 HostRuntimeStore、controller、DaemonClient，注入記憶體 transport/storage，驗首次補名及存檔／重開、等待期間 rename/remove、身分不符／空 hostname、離線匯入後恢復、同 client 重連、舊連線與移除後重建的 callback、registry hydration 與冷啟動深連結；沒有打網路或假元件測試。
-- 守門 `woowtech/pairing.test.mjs`，7 項：
+- 守門 `woowtech/pairing.test.mjs`，8 項：
   - 從原始碼跑 daemon 的設定和配對：新 home 的連結是 `woowtech-smart:///#offer=`，offer 是這個 home 的；沒給 `app.baseUrl` 也一樣。
   - 用 expo-router 自己的函式（`build/fork/extractPathFromURL`）確認連結落在 index 路由；用 `expo config --type introspect` 確認正式版和 Debug 版在 iOS（`CFBundleURLSchemes`）和 Android（VIEW + BROWSABLE，沒有 host 或路徑限制的 intent filter）都註冊了 `woowtech-smart`。
   - `_layout.tsx` 只掛一個 `OfferLinkListener`，不在任何條件裡；它把 `Linking.getInitialURL()` 和 `url` 事件的連結都交給 `handlePairingLink`，裡面沒有平台判斷（`Platform.`、`isWeb`、`isNative`、`getIsElectron`），也沒有 `new URL(`。上游自己的配對連結只會從網頁版進來，所以這個監聽被限定在網頁或改成讀 https 主機時，只有這一項會失敗。
   - 上游預設的 home 改用 App 連結，自己設的值不動。
   - 新 home 沒有 web origin，CLI 讀的預設（`readPersistedConfig` 的 `defaultsIfMissing`）也沒有。
+  - 內部測試版的 home（CORS 白名單列著上游網頁版的兩種寫法）解析後只剩其他來源，`PASEO_CORS_ORIGINS` 給的也拿掉，`config.json` 不變。
   - 補名用目前 controller 的正常 server_info；保留 request version／client、主機世代、registry ready、重連快取與持久化接點，不另啟動 probe。
-  - 出貨的原始碼不准出現 app.paseo.sh。「出貨的原始碼」是 `shipped-sources.mjs` 的 app、cli、client、desktop、protocol、server 的 `src`（含 App 的翻譯 `src/i18n`），加上 relay、plugin、highlight、expo-two-way-audio 的 `src`（App 和 daemon 相依的套件）、App 的 `plugins/`、`woowtech/skills`，以及 `app.config.js`、`eas.json`、`public/index.html`、`public/manifest.json`、`electron-builder.yml`、`wrangler.woowtech.toml`。不掃：測試、e2e、test-utils，`docs/`、`public-docs/`、`SECURITY.md`、`CHANGELOG.md` 這些說明文件，`scripts/`、`nix/`，以及上游的官網 `packages/website`。唯一的例外是 `app-base-url.ts` 辨認上游預設的那一行，守門也檢查它只有那一行。
-  - 突變都被抓到：新 home 的 `app.baseUrl` 或 CORS 改回、`config.ts` 不遷移、遷移少了結尾斜線那種寫法、`pairing-offer.ts` 或 `bootstrap.ts` 的預設改回、`onboard` 加回 Web app、範例文字改回、`app.config.js` 的 scheme 改掉、`BRAND_PAIRING` 改成有 host 的網址（要重建 protocol 的 dist）、`app-base-url.ts` 多一行提到 app.paseo.sh。
+  - 出貨的原始碼不准出現 app.paseo.sh。「出貨的原始碼」是 `shipped-sources.mjs` 的 app、cli、client、desktop、protocol、server 的 `src`（含 App 的翻譯 `src/i18n`），加上 relay、plugin、highlight、expo-two-way-audio 的 `src`（App 和 daemon 相依的套件）、App 的 `plugins/`、`woowtech/skills`，以及 `app.config.js`、`eas.json`、`public/index.html`、`public/manifest.json`、`electron-builder.yml`、`wrangler.woowtech.toml`。不掃：測試、e2e、test-utils，`docs/`、`public-docs/`、`SECURITY.md`、`CHANGELOG.md` 這些說明文件，`scripts/`、`nix/`，以及上游的官網 `packages/website`。唯一的例外是 `app-base-url.ts` 辨認上游預設的那一行（`woowtech-cors-origins.ts` 從那裡匯入），守門也檢查它只有那一行。
+  - 突變都被抓到：新 home 的 `app.baseUrl` 或 CORS 改回、`config.ts` 不遷移、遷移少了結尾斜線那種寫法、`pairing-offer.ts` 或 `bootstrap.ts` 的預設改回、`onboard` 加回 Web app、範例文字改回、`app.config.js` 的 scheme 改掉、`BRAND_PAIRING` 改成有 host 的網址（要重建 protocol 的 dist）、`app-base-url.ts` 多一行提到 app.paseo.sh。CORS 的 5 種（2026-10-05）：`config.ts` 不再呼叫 `withoutUpstreamWebApp`、只過濾 `config.json` 的（`PASEO_CORS_ORIGINS` 放行）、少了結尾斜線那種寫法、過濾變成什麼都不拿、`woowtech-cors-origins.ts` 寫出 app.paseo.sh。前四種 `woowtech-cors-origins.test.ts` 也會失敗。
 
 上游合併後要再確認：
 
@@ -1115,7 +1171,7 @@ CORS：
 npm run build:server   # 守門從原始碼跑，但跨套件的匯入讀 dist
 node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/brand-pairing.test.ts --bail=1)
-(cd packages/server && npx vitest run src/server/pairing-link.test.ts src/server/cors-defaults.test.ts --bail=1)
+(cd packages/server && npx vitest run src/server/pairing-link.test.ts src/server/cors-defaults.test.ts src/server/woowtech-cors-origins.test.ts --bail=1)
 (cd packages/cli && npx vitest run src/commands/daemon/pair.app-link.test.ts src/utils/daemon-target.app-link.test.ts --bail=1)
 (cd packages/app && npx vitest run src/runtime/woowtech-pairing-link.test.ts src/runtime/host-runtime.test.ts src/components/pair-link-modal.app-link.test.tsx src/components/pair-scan.app-link.test.tsx --bail=1)
 ```
@@ -1126,6 +1182,7 @@ node --test woowtech/*.test.mjs
 - 上游新增 `src/app/+native-intent.tsx`、改了 `src/app/index.tsx`，或把 index 放進 `Stack.Protected`：連結可能不再落在啟動畫面，要在模擬器上用 `xcrun simctl openurl` 和 `adb shell am start` 重新確認。
 - 上游讓掃描器或「貼上配對連結」改用 URL 類別讀 fragment：那兩個 App 測試會失敗，改回字串運算。上游改寫 `OfferLinkListener`（限定平台、改用 URL 類別、不再交給 `handlePairingLink`）：守門的 `OfferLinkListener` 那一項會失敗，照訊息改回交給 `handlePairingLink`。
 - 上游在新 home 的 CORS 預設或 `bootstrap.ts` 的固定清單加回網頁版：`cors-defaults.test.ts` 和守門會失敗。
+- 上游改寫 `resolveCorsAllowedOrigins`（例如多一個來源）：`withoutUpstreamWebApp` 要包住最後的回傳值，接點不見時 `woowtech-cors-origins.test.ts` 和守門的 CORS 那一項會失敗。
 
 ### 20. 暫停工作區自動命名與 Git metadata 生成
 
@@ -1802,6 +1859,14 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 桌面版的「關於」視窗和麥克風權限提示（2026-10-05，分支 `woowtech/desktop-about-cors-1005`，第 6 節）：每次突變只改一個地方，改完用 sha256 確認還原。
+  - 守門 `desktop-about.test.mjs` 先紅（electron-builder 算出「Copyright © 2026 Mohamed Boudra」、`main.ts` 沒有呼叫）後綠 3/3。8 種突變都被抓到：yml 的版權拿掉或改年份、fork 檔的版權或 `credits` 改掉、`main.ts` 的呼叫拿掉、移到 `app.whenReady()` 之後、之後又設別的值、選單的「關於」改成自訂項目。
+  - 守門 `desktop-permissions.test.mjs` 先紅後綠 1/1。10 種突變都被抓到：拿掉 `extendInfo`、英文改回 Electron 的、多一句沒有翻譯的相機說明、少一個 `extraResources`、對到 `zh-Hans.lproj`、繁中改成英文、簡中用 `$(PRODUCT_NAME)`、少分號、清空檔案、鍵拼錯。
+  - 桌面版 `woowtech-about-panel.test.ts` 先紅（yml 沒有 `copyright`）後綠 2/2；`desktop-packaging`、AppUserModelID 的測試照樣全過。全部守門 `node --test woowtech/*.test.mjs` 189/189。
+  - 沒有完整打包（`electron-builder --mac` 太重）。改用 electron-builder 26.8.1 自己的 `createMacApp` 和 extraResources 複製，在去掉 Electron Framework 的 Electron.app 副本上跑：Info.plist 的 `NSHumanReadableCopyright` 是 `© 2026 WOOW TECH CO., LTD.`，`NSMicrophoneUsageDescription` 是新的英文句子，Electron 其他的說明不變；`Contents/Resources/zh_TW.lproj`、`zh_CN.lproj` 各有 `InfoPlist.strings`，沒有多出別的中文語系資料夾。
+  - 再用 CoreFoundation（`CFBundleCopyLocalizationsForPreferences`）查這個副本：zh-Hant-TW、zh-Hant-HK 選 `zh_TW`，zh-Hans-CN、zh-Hans-SG 選 `zh_CN`，讀到的都是我們的句子；英文沒有翻譯檔，用 Info.plist 的句子。`plutil -lint` 兩個檔都過。
+  - 沒看到的：實際的「關於」視窗和權限提示，要在打包、簽章後的 App 上看（接下來）。
+- 舊 home 的 CORS 白名單拿掉上游網頁版（2026-10-05，分支 `woowtech/desktop-about-cors-1005`，第 19 節）：`npm run build:server` 之後，`woowtech-cors-origins.test.ts` 先紅（4 個：解析、`PASEO_CORS_ORIGINS`、重新載入、實際起 daemon，上游網頁版拿到 CORS 標頭）後綠 6/6；`cors-defaults`、`pairing-link` 和 config 相關 6 檔照樣全過。守門 `pairing.test.mjs` 9/9，5 種突變都被抓到（第 19 節），每次只改一個地方，改完用 sha256 確認還原。
 - 第一階段驗收：商標與第三方授權（2026-09-30，分支 `woowtech/logo-compliance-0930` 的 `33f2fa8ac`，第 22、24 節）：main `7aee17b77` 加上第一階段從 `8c19faee0` 起的 11 個 commit（建置 6 個 `85775f63b`～`272aabfa9`、審查後的修正 5 個 `223de0c69`～`a0d8eec29`）和合併 main 的 `33f2fa8ac`，共 12 個 commit，都有 Co-Authored-By。對 main 改 24 檔（+1926／−77，新增 8 檔，沒有刪檔）：App 的 `packages/app/src` 20 檔、`woowtech/` 4 檔（README、`vendor-marks.mjs` 和兩個守門）；沒有 e2e、server、桌面版的檔案，package.json 和 lock 沒有變更，`.github` 跟 main 相同。每一步的步驟紀錄和證據在 `~/.local/share/woowtech-smart/logs/logo-s1-*`（`logo-s1-<步驟>.md`），截圖在 `~/.local/share/woowtech-smart/shots/logo-s1-*`，CI 的 API 回應和 job log 在同一個 logs 目錄的 `logo-s1-ci-*`。
   - 為什麼：協調資料夾的逐家研究 `coord/reports/logo-usage-research.md`（不在 repo 裡，不是法律意見），和 owner 在 2026-09-30 的決定：06:5x 同意協調者的四項建議，07:0x 補充「同意前先用徽章，後面可以改版更新再優化，目前以可以先上架為目的」。所以分兩階段：第一階段只做上架前一定要有的，廠商標誌改回是第二階段。
   - 這一輪的內容（細節在第 24 節）：
@@ -2166,8 +2231,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 - 第一次正式發佈：建立公開的 `WOOWTECH/woowtech-smart-releases`，並完成 Developer ID 簽章與公證。沒有簽章，macOS 的自動更新無法運作。
   發佈 repo 要放 `CHANGELOG.md`，App 的更新紀錄才讀得到。
-- 桌面版的版權行還是上游作者：electron-builder 預設用 `package.json` 的 author，會出現在 macOS 的「關於」視窗。
-  `author`、`homepage`、`repository` 由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步，發佈前要決定怎麼標示。
+- 桌面版打包進去的 `package.json` 仍是上游的 `author`、`homepage`、`repository`，由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步。macOS 版的版權和「關於」視窗已改用 WOOW TECH（第 6 節）；Windows 執行檔的公司名稱、安裝程式的網址和 Linux 套件的網址還讀這些值，發佈 Windows、Linux 版之前要決定怎麼標示（可以用 `electron-builder.yml` 的 `extraMetadata` 只改打包進去的值）。
+- 桌面版的「關於」視窗和麥克風權限提示（第 6 節）要在打包、簽章後的 App 上看：選單「關於 woowtech smart」顯示 `© 2026 WOOW TECH CO., LTD.` 和 `https://aiot.woowtech.io/`，Finder「取得資訊」的版權也是這一行；系統語言設成繁中、簡中、英文各一次，第一次按聽寫時的提示是對應的句子（重問一次：`tccutil reset Microphone io.woowtech.smart.desktop`）。提示的標題是系統的句子加上 App 名稱 woowtech smart，中文說明裡寫的是「渥屋智能」，看過再決定要不要一致。
 - 品牌識別：CLI（第 12、13 節）和 daemon 自己的訊息（第 17 節）都改完了。刻意保留上游名稱的列在第 17 節；企業版裝回本地語音時，語音模式給 agent 的指示（`voice-config.ts`）要一起改。
 - CLI 改名合回 main 之後：
   - 重建 server 的 dist，跑 CLI 的 e2e（`tests/17-onboard.test.ts`、`03-daemon.test.ts`）和桌面版打包後的 smoke。`src/commands/daemon/lifecycle.e2e.test.ts` 已在 `woowtech/services` 跑過（驗證紀錄）。
@@ -2184,11 +2249,14 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 在模擬器上確認：英文系統的主畫面標籤、「新功能」的空狀態、繁中的設定頁和側欄。
 - 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
 - 配對連結直接叫起 App（第 19 節）的實機驗收：iOS 和 Android 的相機掃 QR Code、`xcrun simctl openurl`、`adb shell am start`，冷啟動和 App 已開著各一次；已經有一台主機、App 關著時掃新的 QR Code，再重開 App，兩台都在；沒裝 App 時掃描的反應；桌面版點連結不會有反應。Android 相機叫不起 App 時，照第 19 節的「取捨」決定要不要改成在我們網域放一頁。
-- 已存在的 home 的 `config.json` 還在 CORS 白名單列著 `https://app.paseo.sh`，要不要自動拿掉，還沒決定（第 19 節）。審查建議比照 `appBaseUrlFromConfig`，在 fork 的檔裡解析時去掉正好等於 `https://app.paseo.sh`（有沒有結尾斜線都算）的來源，`config.ts` 的 `resolveCorsAllowedOrigins` 改 1 行呼叫它；不做的話，第一個對外版本之前要確認內部測試版沒有給過外部使用者。Hub（`hub.paseo.sh`）仍是上游的。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 推播（第 16 節）：protocol、daemon、App 和守門都做完了（分支 `woowtech/push`，2026-09-26 已合進 main），接下來：
   - 中繼的 smart 模式和 push.woowtech.io 已在 2026-09-25 部署（第 16 節）。部署後的檢查：`POST {}` 回 400 `invalid_request`（field `token`）、假的 FCM token 回 410、直接打 run.app 回 403、GET 回 405、其他路徑回 404。
   - 通知用字寫在中繼的 `smart-messages.js`，owner 在 2026-09-26 確認維持現在的句子。
+  - Android 通知通道（第 16 節 Android 的「通知通道」）：App 這邊在分支 `woowtech/android-channels-1005`。中繼這邊做在本機 clone `~/.local/share/woowtech-smart/wt/relay-channels-1005` 的分支 `smart-channels-1005`（`9b7a344`，從 `smart-mode` 的 `dff78a1` 開出：`smart-payload.js` 依原因指定通道、測試、中繼 README），還沒推上 GitHub，也還沒部署。照這個順序：
+    1. App 合進 main，新版裝到測試手機，連上 daemon、允許通知後，系統設定裡有兩個通道。
+    2. 中繼的分支推上 `WOOWTECH/woowtech-push-relay`、合進 `smart-mode`，在 Cloud Shell 用乾淨的 clone 先跑 `deploy/woowtech-smart-deploy.sh --dry-run`，再跑 `deploy/woowtech-smart-deploy.sh`（中繼 README 的「WoowTech: the woowtech smart profile」）。部署後照上面的檢查跑一次，第 16 節的部署紀錄改成新的 commit 和 revision。
+    3. 照第 16 節的「還要實機驗」在 POCO 上驗。
   - 兩個平台都用實機驗收（設計 6.6）：
     - 通知只顯示中繼的句子，點下去開到那個 agent 或 terminal，App 在背景和被滑掉各試一次；換語言後只收到一則新語言的通知；解除安裝後中繼回 410、daemon 刪掉那筆；桌面版的系統通知仍有回覆預覽。
     - iPhone 上 `registerDeviceForRemoteMessages` 會回來（RNFB 和 `expo-notifications` 都接了 AppDelegate）；TestFlight 版（production APNs）和 Xcode 裝的開發版（sandbox）都拿得到 token。

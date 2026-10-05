@@ -13,6 +13,7 @@ import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import type { ClientCapability } from "@getpaseo/protocol/client-capabilities";
 import type { AgentAttentionNotificationPayload } from "@getpaseo/protocol/agent-attention-notification";
 import { parsePluginSourceReference } from "@getpaseo/protocol/plugin-source-reference";
+import type { AttentionDisplayFailureTarget } from "@getpaseo/protocol/woowtech-attention-fallback";
 import {
   AgentCreateFailedStatusPayloadSchema,
   AgentCreatedStatusPayloadSchema,
@@ -4998,6 +4999,25 @@ export class DaemonClient {
         type: "get_daemon_config_request",
       },
       responseType: "get_daemon_config_response",
+    });
+  }
+
+  // woowtech smart: tell the daemon this client's system did not show a notice it was asked to
+  // show, so the daemon sends the push it skipped (woowtech-attention-fallback.ts). Only daemons
+  // that advertise woowtechAttentionFallback know the request.
+  supportsAttentionDisplayFallback(): boolean {
+    return this.lastServerInfoMessage?.features?.woowtechAttentionFallback === true;
+  }
+
+  async reportAttentionDisplayFailure(
+    target: AttentionDisplayFailureTarget,
+  ): Promise<CorrelatedResponsePayload<"attention.notification.report_display_failure.response">> {
+    if (!this.supportsAttentionDisplayFallback()) {
+      throw new Error("Update the host to send notices this device could not show to the phone.");
+    }
+    return this.sendCorrelatedSessionRequest({
+      message: { type: "attention.notification.report_display_failure.request", target },
+      responseType: "attention.notification.report_display_failure.response",
     });
   }
 

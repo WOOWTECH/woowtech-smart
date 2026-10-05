@@ -100,6 +100,14 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       } | null>,
     sendNotification: (payload: { title: string; body?: string; data?: Record<string, unknown> }) =>
       ipcRenderer.invoke("paseo:notification:send", payload),
+    // woowtech smart: opens the system's notification settings (woowtech-notification-settings.ts),
+    // only where the system has such a page.
+    ...(process.platform === "darwin" || process.platform === "win32"
+      ? {
+          openSystemSettings: () =>
+            ipcRenderer.invoke("woowtech:notification:openSystemSettings") as Promise<boolean>,
+        }
+      : {}),
   },
   opener: {
     openUrl: (url: string) => ipcRenderer.invoke("paseo:opener:openUrl", url),
