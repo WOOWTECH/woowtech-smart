@@ -71,6 +71,7 @@ import {
   isPushEligibleAttentionReason,
   type ClientPresenceState,
 } from "./agent-attention-policy.js";
+import { woowtechClientPresenceState } from "./woowtech-attention-presence.js";
 import {
   buildAgentAttentionNotificationPayload,
   findLatestPermissionRequest,
@@ -2470,12 +2471,8 @@ export class VoiceAssistantWebSocketServer {
       };
     }
 
-    return {
-      appVisible: activity.appVisible,
-      focusedAgentId: activity.focusedAgentId,
-      focusedTerminalId: activity.focusedTerminalId,
-      lastActivityAtMs: activity.lastActivityAt.getTime(),
-    };
+    // woowtech smart: a backgrounded phone counts as absent (woowtech-attention-presence.ts).
+    return woowtechClientPresenceState(activity);
   }
 
   private async broadcastAgentAttention(params: {

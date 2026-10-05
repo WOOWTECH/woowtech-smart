@@ -343,6 +343,27 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     expect(pushNotifications.sent).toEqual([]);
   });
 
+  // woowtech smart (PROPOSAL 1): a backgrounded phone cannot show the in-app notice, so it
+  // must not swallow the push (woowtech-attention-presence.ts).
+  it("pushes when the only connected phone is backgrounded but recently active", async () => {
+    const { server, pushNotifications } = createServer();
+    const phoneWs = connectClient(server, {
+      deviceType: "mobile",
+      appVisible: false,
+      focusedAgentId: "agent-X",
+      lastActivityAt: new Date(Date.now() - 30_000),
+    });
+
+    await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+      agentId: "agent-X",
+      provider: "claude",
+      reason: "finished",
+    });
+
+    expect(readAttentionRequiredMessage(phoneWs).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toHaveLength(1);
+  });
+
   it("pushes non-error attention when the only connected client has never sent a heartbeat", async () => {
     const { server, pushNotifications } = createServer();
     const ws = connectClient(server, null);
