@@ -577,7 +577,7 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 4. 有推播時，daemon 對每支手機發一個 `POST https://push.woowtech.io/api/smart/v1/notify`，本文只有 `{ token, locale, reason, target }`。
 5. push.woowtech.io 是 Cloudflare Worker（`smart-push-proxy`）：只放行這條路徑、每個 IP 每分鐘 120 次（Worker 的 `IP_RATE_LIMITER` binding，每個 Cloudflare 據點各自計數，沒有建 WAF 規則），加上 edge key 標頭後轉給 Cloud Run。
 6. Cloud Run 的 `smart-push`（GCP 專案 `woowtech-smart`，asia-east1）跑中繼 repo `woowtech-push-relay` 的 smart 模式（`RELAY_PROFILE=smart`）：驗證格式、查每個 token 的上限（每分鐘 10 則、每天 500 則）、從 `functions/smart-messages.js` 挑句子，用 Cloud Run 的服務帳戶呼叫 FCM。
-7. FCM 送到 Android；iOS 由 FCM 用上傳到 Firebase 的 APNs 金鑰轉給 APNs。
+7. FCM 送到 Android，中繼依原因指定 App 的通知通道（見下面 Android 的「通知通道」）；iOS 由 FCM 用上傳到 Firebase 的 APNs 金鑰轉給 APNs。
 8. 點通知：`expo-notifications` 回報點擊，`notification-routing.ts`（沒改）開到那個 agent 或 terminal。iOS 的 ID 放在 APNs payload 的 `body`（`expo-notifications` 只讀 `userInfo["body"]`），Android 的在 FCM `data`，點下去時成為啟動 intent 的 extras。
 
 中繼的程式、文字和部署步驟在中繼 repo（`WOOWTECH/woowtech-push-relay`，`smart-mode` 分支），這裡只記 smart 這邊。
@@ -633,7 +633,7 @@ daemon：`packages/server/src/server/push/woowtech-relay.ts`
 App：`packages/app/src/push-notifications/internal/woowtech-subscriptions.ts`
 
 - 接點：`push-notifications/index.native.ts` 的 import 從上游的 `./internal/subscriptions` 改成它（1 行），匯出的函式名稱跟上游一樣。上游的 `subscriptions.ts`（向 Expo 要 push token，註冊給任何 daemon）留著不動、沒有人引用。
-- 只有連上宣告 `woowtechPush` 的 daemon 才要通知權限和 FCM token：每個 daemon 的訂閱最多問一次權限，連官方 Paseo 的 daemon 時完全不問，也不碰 Firebase。
+- 只有連上宣告 `woowtechPush` 的 daemon 才要通知權限和 FCM token：每個 daemon 的訂閱最多問一次權限，連官方 Paseo 的 daemon 時完全不問，也不碰 Firebase。Android 的通知通道也在這時建立，在拿 token 之前（見下面 Android 的「通知通道」）。
 - 快取沿用上游的 key `@paseo:expo-push-token:<serverId>`，存註冊出去的字串。升級後第一次同步會在那裡找到舊的 Expo token，先撤銷它。連的是沒有 `woowtechPush` 的 daemon（官方 Paseo，或這個改版以前的我們）也撤銷：那種 daemon 會把 agent 的回覆送到 Expo，直到舊 token 的 48 小時租約到期。daemon 宣告了 `pushTokenRevocation` 才撤銷並刪掉快取，不問權限、不碰 Firebase；沒宣告的，快取留著。
 - 換 token、換語言時先撤銷舊字串（我們的 daemon 宣告了 `pushTokenRevocation`）再註冊新的，同一支手機才不會收到兩則；通知權限被拒時撤銷並刪快取（上游只刪快取）；每次重新連線都再註冊一次，續 48 小時的租約。
 - FCM token 更新的監聽在第一次拿到 token 之後才開始，而且只有 token 真的換了才重新同步：Android 的 `expo-notifications` 每次 `getDevicePushTokenAsync` 都會把同一個 token 當成新 token 再發一次事件（`PushTokenModule.kt`），不比對的話，同步取 token、事件又排下一次同步，會一直重新註冊。token 不符契約時不註冊，warn 只寫長度。
@@ -673,6 +673,21 @@ Android：
 - 不連結 RNFB，`react-native.config.js` 在 Android 設成 `null`，有沒有 plist 都一樣。`expo-notifications` 本來就依賴 `firebase-messaging`，`google-services.json` 照上游放在 `.secrets/`。
 - 不能多一個 FCM 服務：`expo-notifications` 的 FirebaseMessagingService 在 manifest 裡的優先序是 -1，有 RNFB 的服務時會讓給它，前景訊息和 token 更新就不會進 `expo-notifications`。
 - App 在背景時由 FCM SDK 顯示通知。點擊由 `expo-notifications` 的 `ExpoNotificationLifecycleListener` 從啟動 intent 的 extras 轉成點擊事件；它的原始碼註解說 SDK 55 可能拿掉這個 class，升 Expo SDK 55 時要重測 Android 的點擊。
+- 通知通道（2026-10-05）：
+  - 原因：原本 App 只建一個 `default` 通道，重要性 DEFAULT，中繼每則推播都指定它，所以 Android 從不跳出橫幅（heads-up）。橫幅要重要性 HIGH，而 Android 不讓 App 調高已經存在的通道，所以改用新的通道 ID。
+  - 兩個通道，重要性都是 HIGH，定義在 fork 自有的 `push-notifications/internal/woowtech-notification-channels.ts`：
+
+    | 通道 ID           | 繁中名稱   | 英文名稱      | 中繼的推播                 |
+    | ----------------- | ---------- | ------------- | -------------------------- |
+    | `agent-attention` | 需要你處理 | Needs you     | `permission`、`attention`  |
+    | `agent-finished`  | 工作完成   | Work finished | `finished`、每日上限的通知 |
+
+  - 名稱是系統設定裡的通知類別，跟中繼的句子同一種語言，用同一個 `pushLocaleFor` 決定：`zh` 開頭（簡中也算）用繁中，其他用英文。中繼只有這兩種語言，所以名稱不放第 14 節依介面語言給字的 `woowtech-copy.ts`，跟通道 ID 寫在同一個檔。
+  - 時機跟原本的 `default` 一樣：連上宣告 `woowtechPush` 的 daemon、有通知權限之後、拿 FCM token 之前，每次同步都設一次。同一個 ID 再設一次只改名稱，不會調高重要性。所以換語言後，把註冊換成新語言的那次同步也改名（daemon 沒連上時等下次連上）；使用者在系統設定調低的通道也不會被調回來。
+  - `app.config.js` 的 `expo-notifications` 外掛加上 `defaultChannel: "agent-finished"`，外掛把它寫成 manifest 的 `com.google.firebase.messaging.default_notification_channel_id`。推播指定的通道手機上沒有時，FCM SDK 改用這個通道；manifest 沒寫的話，會落到 FCM 自己建的「Miscellaneous」（重要性 DEFAULT，沒有橫幅）。F-Droid 版沒有這個外掛，也沒有 FCM；它的 `expo-notifications` stub 多了 `AndroidImportance.HIGH`。
+  - `default` 不再建立。照 owner 的決定這一版不刪，等中繼部署而且確定不回滾之後，下一版再用 `deleteNotificationChannelAsync` 刪掉。中繼部署前還是指定 `default`：已經有它的手機照舊收在 `default`（沒有橫幅），新裝的手機沒有它，就收在 `agent-finished`。
+  - 上線順序：先發 App，再部署中繼（中繼的改動和步驟見「接下來」）。中繼先部署的話，還沒更新的 App 沒有這兩個通道，manifest 也沒有預設通道，推播會落到「Miscellaneous」。
+  - 還要實機驗：POCO 上 App 在背景和被滑掉時，`finished` 和 `permission` 的推播都跳出橫幅；系統設定的通知類別是「需要你處理」和「工作完成」（英文介面是 Needs you、Work finished），換語言後跟著換；只把「工作完成」調低時，完成的通知不再跳出，要授權的仍然跳出。從裝過舊版的手機升級也看一次：`default` 還在，新的推播進新通道。沒有橫幅時，先看系統設定裡這個 App 的「懸浮通知」（MIUI、HyperOS 另有這個開關）。
 
 契約 fixture：
 
@@ -686,11 +701,11 @@ Android：
 接點（上游的檔），行數以上游 v0.8.0 為準：
 
 - server 和 protocol：`push/index.ts`（13 行增、4 行刪：預設 `deliver`、`send()` 裡的 `toRemotePushPayload`、`renew` 撤銷同一支手機的其他字串）、`websocket-server.ts`（3 行：`woowtechPush` 旗標 2 行、terminal 推播的 `reason` 1 行）、`protocol/src/messages.ts`（3 行）。
-- App：`push-notifications/index.native.ts`（8 行增、1 行刪：import 和載入時呼叫 `turnOffExpoPushRegistration()`）、`app.config.js`（2 行 require、plist 改由 `woowtech-ios-firebase.js` 決定（上游 variants 裡的兩個 `googleServiceInfoPlist` 留著不用，少改上游的行）、外掛 1 行、`expo-build-properties` 的 `ios` 區塊）、`metro.config.cjs`（3 行）、`package.json`（2 個相依）、`package-lock.json`（只有新增）。
+- App：`push-notifications/index.native.ts`（8 行增、1 行刪：import 和載入時呼叫 `turnOffExpoPushRegistration()`）、`app.config.js`（2 行 require、plist 改由 `woowtech-ios-firebase.js` 決定（上游 variants 裡的兩個 `googleServiceInfoPlist` 留著不用，少改上游的行）、外掛 1 行、`expo-build-properties` 的 `ios` 區塊、`expo-notifications` 外掛的 `defaultChannel` 1 行和 2 行註解）、`metro.config.cjs`（3 行）、`src/fdroid/expo-notifications.ts`（F-Droid stub 的 `AndroidImportance` 加 `HIGH`，1 行和 1 行註解）、`package.json`（2 個相依）、`package-lock.json`（只有新增）。
 - `knip.json`：server 的 `ignore` 放 `push-service.ts`（它還提供 `PushPayload` 型別，但 `PushService` 沒人用），App 的 `ignoreFiles` 放 `subscriptions.ts`，knip 才不會建議刪掉這兩個上游的檔。`npm run knip` 本身在 main 也會停在 knip 的 Expo 外掛（`app.config.js` 的外掛有函式，knip 5.86 當成字串處理），要看報告就分 workspace 跑，packages/app 要先在暫時的設定裡關掉 Expo 外掛。
 - App 根目錄的新檔 `react-native.config.js` 和 `firebase.json` 上游沒有；上游以後加了同名檔會衝突，合併時把兩邊的設定合在一起。
 - 上游的測試檔加了案例：`protocol/src/messages.test.ts`（1 組）、`websocket-server.notifications.test.ts`（2 個）、`websocket-server.terminal-notifications.test.ts`（1 組）。合併時衝突的話，可以先放掉我們加的測試：守門涵蓋 `send()` 的改寫、terminal 推播的 `reason`、`register_push_token` 的路徑、`woowtechPush` 旗標和 App 的接點（`index.native.ts`、`react-native.config.js`、`app.config.js`、`metro.config.cjs`）。
-- fork 自有的檔（各自附測試）：protocol 的 `woowtech-push.ts`；server 的 `push/woowtech-relay.ts`、`push/woowtech-push-content.ts`；App 的 `push-notifications/internal/` 裡的 `woowtech-subscriptions.ts`、`fcm-token-source.ts`、`fcm-token.ts`、`fcm-token.ios.ts`、`fcm-token.android.ts`，`plugins/` 裡的 `with-woowtech-push.js`、`woowtech-ios-firebase.js`、`woowtech-metro-resolver.js`；守門 `woowtech/push.test.mjs`、`woowtech/push-content.test.mjs`。
+- fork 自有的檔（各自附測試）：protocol 的 `woowtech-push.ts`；server 的 `push/woowtech-relay.ts`、`push/woowtech-push-content.ts`；App 的 `push-notifications/internal/` 裡的 `woowtech-subscriptions.ts`、`woowtech-notification-channels.ts`、`fcm-token-source.ts`、`fcm-token.ts`、`fcm-token.ios.ts`、`fcm-token.android.ts`，`plugins/` 裡的 `with-woowtech-push.js`、`woowtech-ios-firebase.js`、`woowtech-metro-resolver.js`；守門 `woowtech/push.test.mjs`、`woowtech/push-content.test.mjs`。
 
 測試：
 
@@ -700,17 +715,19 @@ Android：
 - App：
   - `plugins/woowtech-ios-firebase.test.ts`：plist 從哪裡來，以及用 `expo-modules-autolinking` 自己的解析函式確認 RNFB 只在有 plist 的 iOS 連結、保留 build phase。
   - `plugins/with-woowtech-push.test.ts`：外掛只加 iOS 的設定，沒有 plist 時什麼都不做。`plugins/woowtech-metro-resolver.test.ts`：用真的 `metro-resolver` 確認包裝前會解析到網頁版的 `nativeModule.js`，包裝後是平台的檔。
-  - `src/push-notifications/internal/` 的 `fcm-token.test.ts`、`fcm-token.ios.test.ts`、`fcm-token.android.test.ts`、`woowtech-subscriptions.test.ts`：注入有型別的假模組，不用 `vi.mock`。訂閱的測試涵蓋上面 App 的每一條規則；Android 那一項用真的 `fcm-token.android.ts` 配照 `PushTokenModule.kt` 行為的假 `expo-notifications`（取 token 時也發事件，事件在 token 之前或之後到），每次連線只註冊一次。
+  - `src/push-notifications/internal/` 的 `fcm-token.test.ts`、`fcm-token.ios.test.ts`、`fcm-token.android.test.ts`、`woowtech-notification-channels.test.ts`、`woowtech-subscriptions.test.ts`：注入有型別的假模組，不用 `vi.mock`。訂閱的測試涵蓋上面 App 的每一條規則；Android 那一項用真的 `fcm-token.android.ts` 配照 `PushTokenModule.kt` 行為的假 `expo-notifications`（取 token 時也發事件，事件在 token 之前或之後到），每次連線只註冊一次。通道的測試：兩個通道的 ID 和名稱（每種中文都是繁中，其他語言是英文），經 `expo-notifications` 用 `AndroidImportance.HIGH` 設定；訂閱的測試另外確認通道名稱跟著註冊換語言、daemon 沒連上時不改，沒有通知權限時不建立。
   - `src/utils/notification-routing.woowtech-push.test.ts`：兩種點擊資料都開到那個 agent 或 terminal，中繼的每日上限通知開到 `/`。
 - 守門 `woowtech/push-content.test.mjs`：從原始碼跑沒有注入 `deliver` 的 `createPushNotifications`，`fetch` 換成記錄器，中英文各一次：只有一個請求，打到 `https://push.woowtech.io/api/smart/v1/notify`；位元組裡沒有 agent 名稱、回覆、權限內容、資料夾、terminal 名稱和工作區名稱；本文不隨內容改變；Expo token 被撤銷；`WOOWTECH_PUSH_RELAY_URL` 蓋得掉網址。注入記錄用的 `deliver`：交給它的標題和內文不含任何使用者的內容、不隨內容改變，`data` 只有 ID 和 `reason`（拿掉 `send()` 裡的 `toRemotePushPayload` 時，只有這一項會失敗）。用最小的 `this` 呼叫 `websocket-server.ts` 的 `broadcastTerminalAttention`：terminal 完成和等輸入的推播帶著 `reason`，中繼分別收到 `finished` 和 `attention`。另外掃描出貨的原始碼：Expo 的網址只在 `push-service.ts`，沒有任何地方 `new PushService` 或呼叫 `.sendPush(`，`push.woowtech.io` 只在 `woowtech-relay.ts`。
-- 守門 `woowtech/push.test.mjs`，9 項，接點被蓋回上游時失敗：
+- 守門 `woowtech/push.test.mjs`，11 項，接點被蓋回上游時失敗：
   - 沒注入 `deliver` 的 `createPushNotifications` 只打 `WOOWTECH_PUSH_RELAY_URL`（本機的 `node:http` 假中繼），本文正好是那四個欄位，沒有放在標題、內文和 `cwd` 的標記字串。`fetch` 在載入原始碼之前就換掉，只放行假中繼，其他位址在本機回應並記下，接點被改回 Expo 時也不會真的送到 `exp.host`；`diagnostics_channel` 另外記下 undici 和 `node:http` 開出的請求。
   - daemon 的 server_info（從原始碼呼叫 `buildServerInfoStatusPayload`）經 protocol 的 `parseServerInfoStatusPayload` 解析後 `woowtechPush` 是 `true`。
   - App 送的 `register_push_token`（`wsp1:` 字串）經 protocol 的 `WSInboundMessageSchema` 解析，再用最小的 `this` 呼叫 `session.ts` 的 `dispatchMiscMessage`：字串原樣進到 push store，下一則推播交給 `deliver` 的就是它。上游在 schema 或 handler 加上 Expo token 的格式檢查時，這一項會失敗；App 的 `registerPushToken` 不等回應，否則只會靜靜地收不到推播。
   - `index.native.ts` 的 `startSubscription`、`revokeSubscription`、`turnOffExpoPushRegistration` 來自 `woowtech-subscriptions`，而且載入時就呼叫 `turnOffExpoPushRegistration()`；App 的原始碼沒有任何地方引用上游的 `subscriptions.ts`。
+  - `woowtech-subscriptions.ts` 在 iOS 用 `woowtech-expo-registration.ts` 的 `disableIosExpoRegistration`（原生模組 `NotificationsServerRegistrationModule`）停用 Expo 登記，不落到 Expo 傳 `null` 的公開 API。
   - `getExpoPushTokenAsync` 只出現在上游的 `subscriptions.ts`（F-Droid stub 的定義那一行除外）。
   - 用 `expo-modules-autolinking` 自己的 `loadConfigAsync` 和 `resolveReactNativeModule`，每種情況開一個乾淨的子程序：Android 不連結 RNFB（有 plist 也一樣），iOS 正式版和 Debug 版沒有 plist 時不連結，有 plist 時連結並保留「[RNFB] Core Configuration」。守門讀的是 `expo-modules-autolinking/build/reactNativeConfig/` 的內部模組，升級 Expo 時如果搬家，守門會失敗，要改路徑。
   - `expo config --type prebuild`（正式版和 Debug 版，plist 變數各指向一個暫存檔和一個不存在的檔）：plugins 有 `[withWoowtechPush, { disableSPM: true }]`；`expo-build-properties` 的 `ios.useFrameworks` 是 `static`，`forceStaticLinking` 有 `RNFBApp`、`RNFBMessaging`、`react-native-paste-input`；`ios.googleServicesFile` 是給的那個 plist，檔案不存在時沒有這個欄位。少了外掛，iOS 照樣連結 RNFB，但 AppDelegate 沒有 `FirebaseApp.configure()`，App 靜靜地註冊不到推播。
+  - `expo config --type introspect`（正式版和 Debug 版）產生的 Android manifest：`com.google.firebase.messaging.default_notification_channel_id` 是 `agent-finished`，`woowtech-notification-channels.ts` 建的通道是 `agent-attention` 和 `agent-finished`。F-Droid stub 有 `AndroidImportance.HIGH` 和 `setNotificationChannelAsync`。introspect 在記憶體裡跑 prebuild 會跑的 manifest 外掛，不寫出 `android/`；升級 Expo 後 `_internal.modResults` 搬家時，這一項會失敗，要改讀法。
   - 載入 `metro.config.cjs`（`woowtech-metro-resolver` 換成做記號的替身）：最後的 `resolveRequest` 是 `withNativeRnFirebaseModules` 包過的。包裝實際解析到哪個檔由 `plugins/woowtech-metro-resolver.test.ts` 檢查，也包括用 `metro.config.cjs` 本身解析。
   - 契約 fixture 在，合法和不合法的案例都跟 `validateRelayNotifyBody` 一致。
 
@@ -725,7 +742,7 @@ node --test woowtech/*.test.mjs
 (cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts src/navigation/woowtech-welcome-host-online.test.ts src/navigation/woowtech-cold-start-tap.test.ts src/navigation/woowtech-notification-response.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1、T1 S3、「配對後第一次點通知」和 RC-I-21c 小節
 ```
 
-- 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛和 `expo-build-properties` 的 `ios`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
+- 守門失敗時照訊息把接點改回來：預設 `deliver`、`woowtechPush` 旗標、`index.native.ts` 的 import 和載入時的 `turnOffExpoPushRegistration()`、`react-native.config.js`、`app.config.js` 的外掛、`expo-build-properties` 的 `ios` 和 `expo-notifications` 的 `defaultChannel`、plist 由 `iosGoogleServiceInfoPlist()` 決定、`metro.config.cjs` 最後那行包裝、F-Droid stub 的 `AndroidImportance.HIGH`。上游改了 `subscriptions.ts` 的註冊流程（例如新的時機或欄位），要照樣搬到 `woowtech-subscriptions.ts`。
 - 升級 RNFB：檢查上面 iOS 外掛的路徑、`woowtech-metro-resolver.js` 改寫的 import、`firebase.json` 的鍵和 `forceStaticLinking` 的 pod 名稱。升級 Expo：檢查 static frameworks 和 SPM 的限制、Android 的點擊（SDK 55），以及守門讀的 autolinking 模組。
 
 - 各種組合：新 App 加新 daemon 正常；新 App 加官方 daemon，不註冊，舊版 App 在那台 daemon 註冊過的 Expo token 在第一次連上時撤銷，之後不推播（撤銷沒送到的話，那台 daemon 會繼續送到 Expo，最多到舊 token 的 48 小時租約到期）；官方 App 或舊測試版加新 daemon，它們註冊的 Expo token 在第一次推播時被撤銷，不送出，更新 App 後重新註冊。
@@ -2189,6 +2206,10 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 推播（第 16 節）：protocol、daemon、App 和守門都做完了（分支 `woowtech/push`，2026-09-26 已合進 main），接下來：
   - 中繼的 smart 模式和 push.woowtech.io 已在 2026-09-25 部署（第 16 節）。部署後的檢查：`POST {}` 回 400 `invalid_request`（field `token`）、假的 FCM token 回 410、直接打 run.app 回 403、GET 回 405、其他路徑回 404。
   - 通知用字寫在中繼的 `smart-messages.js`，owner 在 2026-09-26 確認維持現在的句子。
+  - Android 通知通道（第 16 節 Android 的「通知通道」）：App 這邊在分支 `woowtech/android-channels-1005`。中繼這邊做在本機 clone `~/.local/share/woowtech-smart/wt/relay-channels-1005` 的分支 `smart-channels-1005`（`9b7a344`，從 `smart-mode` 的 `dff78a1` 開出：`smart-payload.js` 依原因指定通道、測試、中繼 README），還沒推上 GitHub，也還沒部署。照這個順序：
+    1. App 合進 main，新版裝到測試手機，連上 daemon、允許通知後，系統設定裡有兩個通道。
+    2. 中繼的分支推上 `WOOWTECH/woowtech-push-relay`、合進 `smart-mode`，在 Cloud Shell 用乾淨的 clone 先跑 `deploy/woowtech-smart-deploy.sh --dry-run`，再跑 `deploy/woowtech-smart-deploy.sh`（中繼 README 的「WoowTech: the woowtech smart profile」）。部署後照上面的檢查跑一次，第 16 節的部署紀錄改成新的 commit 和 revision。
+    3. 照第 16 節的「還要實機驗」在 POCO 上驗。
   - 兩個平台都用實機驗收（設計 6.6）：
     - 通知只顯示中繼的句子，點下去開到那個 agent 或 terminal，App 在背景和被滑掉各試一次；換語言後只收到一則新語言的通知；解除安裝後中繼回 410、daemon 刪掉那筆；桌面版的系統通知仍有回覆預覽。
     - iPhone 上 `registerDeviceForRemoteMessages` 會回來（RNFB 和 `expo-notifications` 都接了 AppDelegate）；TestFlight 版（production APNs）和 Xcode 裝的開發版（sandbox）都拿得到 token。

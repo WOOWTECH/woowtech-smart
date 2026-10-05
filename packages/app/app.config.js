@@ -74,6 +74,9 @@ const buildProfile = isFdroidBuild
           {
             icon: "./assets/images/notification-icon.png",
             color: "#6183fc",
+            // woowtech smart: FCM's default channel in the Android manifest, where a push naming a
+            // channel the phone lacks lands instead of FCM's "Miscellaneous" (woowtech/README.md, 16).
+            defaultChannel: "agent-finished",
           },
         ],
       ],
