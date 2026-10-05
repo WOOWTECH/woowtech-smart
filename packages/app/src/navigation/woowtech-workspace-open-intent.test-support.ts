@@ -26,6 +26,7 @@ import type { RouteNode } from "expo-router/build/Route";
 import type { RequireContext } from "expo-router/build/types";
 import { shouldWelcomeMoveOnToHost } from "@/navigation/woowtech-welcome-host-online";
 import {
+  isAgentOpenIntentWaitingForWorkspace,
   readWorkspaceRouteOpenParam,
   type WorkspaceRouteOpenParams,
 } from "@/navigation/woowtech-workspace-open-intent";
@@ -451,7 +452,6 @@ export function createNavigationScenario(input: {
     routes: [actionStateFor(input.startAt)],
   } as unknown as PartialState<NavigationState>);
   const knownWorkspaceIds = new Set<string>();
-  let workspacesHydrated = false;
   const openedTabs: OpenedTab[] = [];
   let lastWorkspaceId: string | null = null;
   let anyOnlineServerId: string | null = null;
@@ -568,8 +568,10 @@ export function createNavigationScenario(input: {
     const workspaceId = decodeWorkspaceIdFromPathSegment(workspaceValue) ?? "";
     const openValue = readOpenParam({ container, route });
     const openIntent = parseWorkspaceOpenIntent(openValue);
-    const waitingForWorkspace =
-      openIntent?.kind === "agent" && (!workspacesHydrated || !knownWorkspaceIds.has(workspaceId));
+    const waitingForWorkspace = isAgentOpenIntentWaitingForWorkspace({
+      openIntent,
+      workspaceExists: knownWorkspaceIds.has(workspaceId),
+    });
     if (!openValue || waitingForWorkspace) {
       return false;
     }
@@ -632,7 +634,6 @@ export function createNavigationScenario(input: {
       render();
     },
     directoryArrives(workspaceIds) {
-      workspacesHydrated = true;
       for (const workspaceId of workspaceIds) {
         knownWorkspaceIds.add(workspaceId);
       }
