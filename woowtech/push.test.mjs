@@ -11,6 +11,9 @@
 // - packages/app/react-native.config.js (with plugins/woowtech-ios-firebase.js): React Native
 //   Firebase stays off Android, where expo-notifications gives the FCM token, and off iOS
 //   builds without a GoogleService-Info.plist.
+// - packages/app/app.config.js and src/fdroid/expo-notifications.ts: the Android manifest names
+//   the app's channel agent-finished as FCM's default channel, and the F-Droid build's stand-in
+//   for expo-notifications has what the channels use.
 // The relay repo owns the request contract; packages/protocol/tests/fixtures keeps a byte for
 // byte copy of its fixture, which the daemon's check must agree with.
 //
@@ -28,7 +31,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 
-import { expoPrebuildConfig } from "./expo-config.mjs";
+import { expoIntrospectedConfig, expoPrebuildConfig } from "./expo-config.mjs";
 import { findInShippedSources, repoRoot } from "./shipped-sources.mjs";
 import { importSource, requireSource } from "./source-modules.mjs";
 
@@ -462,6 +465,39 @@ test("app.config.js builds iOS with React Native Firebase from CocoaPods, and it
       }
     }
   }
+});
+
+const FCM_DEFAULT_CHANNEL = "com.google.firebase.messaging.default_notification_channel_id";
+
+// app.config.js: expo-notifications writes FCM's default channel into the Android manifest. A
+// push that names a channel the phone does not have, such as the relay's "default" on a phone that
+// never had it, lands there instead of in FCM's own "Miscellaneous" channel, which shows no
+// heads-up banner.
+test("the Android manifest names a channel the app creates as FCM's default channel", () => {
+  const { woowtechNotificationChannels } = requireSource(
+    "packages/app/src/push-notifications/internal/woowtech-notification-channels.ts",
+  );
+  assert.deepEqual(
+    woowtechNotificationChannels("en").map((channel) => channel.id),
+    ["agent-attention", "agent-finished"],
+    "the channels the relay's pushes name",
+  );
+
+  for (const variant of ["production", "development"]) {
+    // Introspection runs the manifest mods prebuild runs, without writing an android/ folder.
+    const manifest = expoIntrospectedConfig(variant)._internal?.modResults?.android?.manifest;
+    assert.ok(manifest, `${variant}: expo config --type introspect gave no Android manifest`);
+    const metaData = manifest.manifest.application?.[0]?.["meta-data"] ?? [];
+    const defaultChannel = metaData.find(
+      (entry) => entry.$["android:name"] === FCM_DEFAULT_CHANNEL,
+    );
+    assert.equal(defaultChannel?.$["android:value"], "agent-finished", `${variant}: manifest`);
+  }
+
+  // The F-Droid build swaps it in for expo-notifications (metro.config.cjs).
+  const stub = requireSource("packages/app/src/fdroid/expo-notifications.ts");
+  assert.equal(typeof stub.AndroidImportance?.HIGH, "number", "the F-Droid stub's HIGH");
+  assert.equal(typeof stub.setNotificationChannelAsync, "function", "the F-Droid stub");
 });
 
 test("metro.config.cjs resolves with the wrapper that keeps the Firebase JS SDK out of iOS", () => {

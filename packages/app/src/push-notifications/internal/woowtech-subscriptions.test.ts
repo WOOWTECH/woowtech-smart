@@ -2,6 +2,7 @@ import type { ConnectionState, DaemonClient } from "@getpaseo/client/internal/da
 import { describe, expect, it } from "vitest";
 import { createAndroidFcmTokenSource, type ExpoPushTokens } from "./fcm-token.android";
 import { createIosFcmTokenSource, type RnFirebaseMessaging } from "./fcm-token.ios";
+import type { WoowtechNotificationChannel } from "./woowtech-notification-channels";
 import {
   createWoowtechPushSubscriptions,
   type PushDaemonClient,
@@ -85,6 +86,8 @@ function createPhone(options: { permission?: boolean; fcmToken?: string | null }
   let language = "zh-TW";
   const refreshListeners = new Set<(token: string) => void>();
   const languageListeners = new Set<(language: string) => void>();
+  /** Each set of Android notification channels the app created or renamed. */
+  const channelSets: (readonly WoowtechNotificationChannel[])[] = [];
   const dependencies: WoowtechPushDependencies = {
     storage: {
       getItem: async (key) => storage.get(key) ?? null,
@@ -99,8 +102,9 @@ function createPhone(options: { permission?: boolean; fcmToken?: string | null }
       events.push(`permission(mayAsk=${mayAsk})`);
       return options.permission ?? true;
     },
-    prepareNotificationChannel: async () => {
-      events.push("channel");
+    setNotificationChannels: async (channels) => {
+      events.push("channels");
+      channelSets.push(channels);
     },
     fcmTokens: {
       getToken: async () => {
@@ -129,6 +133,7 @@ function createPhone(options: { permission?: boolean; fcmToken?: string | null }
     dependencies,
     storage,
     events,
+    channelSets,
     setFcmToken(token: string | null) {
       fcmToken = token;
     },
@@ -244,10 +249,59 @@ describe("woowtech push subscription", () => {
     expect(phone.events).toEqual([
       "disableExpoServerRegistration",
       "permission(mayAsk=true)",
-      "channel",
+      "channels",
       "getToken",
       "onTokenRefresh",
     ]);
+  });
+
+  it("creates the Android channels the relay names, in the app's language", async () => {
+    const phone = createPhone();
+    const client = new FakeDaemonClient(WOOWTECH_DAEMON);
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+
+    expect(phone.channelSets).toEqual([
+      [
+        { id: "agent-attention", name: "需要你處理" },
+        { id: "agent-finished", name: "工作完成" },
+      ],
+    ]);
+  });
+
+  it("renames the Android channels along with the registration when the app switches language", async () => {
+    const phone = createPhone();
+    const client = new FakeDaemonClient(WOOWTECH_DAEMON);
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+    const english = [
+      { id: "agent-attention", name: "Needs you" },
+      { id: "agent-finished", name: "Work finished" },
+    ];
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+    phone.changeLanguage("en");
+    await settle();
+    expect(phone.channelSets.at(-1)).toEqual(english);
+    expect(client.registered.at(-1)).toBe(`wsp1:en:${FCM_TOKEN}`);
+
+    // Away from the daemon, the relay keeps writing in the registered language, and the channels
+    // keep their names until the registration moves.
+    client.disconnect();
+    phone.changeLanguage("zh-TW");
+    await settle();
+    expect(phone.channelSets.at(-1)).toEqual(english);
+    client.connect();
+    await settle();
+    expect(phone.channelSets.at(-1)).toEqual([
+      { id: "agent-attention", name: "需要你處理" },
+      { id: "agent-finished", name: "工作完成" },
+    ]);
+    expect(client.registered.at(-1)).toBe(`wsp1:zh-TW:${FCM_TOKEN}`);
   });
 
   it("revokes the string cached for the daemon, such as an old Expo token, before registering", async () => {
@@ -403,6 +457,7 @@ describe("woowtech push subscription", () => {
     expect(client.received).toEqual([`revoke wsp1:zh-TW:${FCM_TOKEN}`]);
     expect(phone.storage.has(CACHE_KEY)).toBe(false);
     expect(phone.events).not.toContain("getToken");
+    expect(phone.channelSets).toEqual([]);
   });
 
   it("registers nothing without an FCM token, as in a build without Firebase files", async () => {
