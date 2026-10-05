@@ -4,6 +4,7 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { getIsElectron, isWeb, isNative } from "@/constants/platform";
 import { readDesktopSystemIdleTimeMs } from "@/desktop/electron/idle";
 import { invokeDesktopCommand } from "@/desktop/electron/invoke";
+import { getIsAppActivelyVisible } from "@/utils/app-visibility";
 import {
   type ClientActivityTracker,
   createClientActivityTracker,
@@ -40,7 +41,9 @@ export function useClientActivity({
       deviceType: isWeb ? "web" : "mobile",
       initialFocusedAgentId: focusedAgentId,
       initialFocusedTerminalId: focusedTerminalId,
-      initialAppVisible: AppState.currentState === "active",
+      // woowtech smart: on web and desktop, a window behind another app is not being looked at, so
+      // appVisible also needs window focus; the daemon then still notifies (README section 16).
+      initialAppVisible: getIsAppActivelyVisible(),
       now: () => Date.now(),
       onAppResumed: (awayMs) => onAppResumedRef.current?.(awayMs),
     });
@@ -50,7 +53,7 @@ export function useClientActivity({
   // Track app visibility via AppState (native).
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
-      tracker.notifyAppVisibility(nextState === "active");
+      tracker.notifyAppVisibility(getIsAppActivelyVisible(nextState));
       tracker.sendHeartbeat();
     });
     return () => subscription.remove();
@@ -67,14 +70,20 @@ export function useClientActivity({
     };
 
     const handleVisibilityChange = () => {
-      const visible = document.visibilityState === "visible";
+      // woowtech smart: visible and focused, and a switch to another app reaches the daemon at
+      // once instead of with the next 15 s heartbeat.
+      const visible = getIsAppActivelyVisible();
       const { changed } = tracker.notifyAppVisibility(visible);
       if (changed && visible) {
         tracker.maybeSendImmediateHeartbeat();
+      } else if (changed) {
+        tracker.sendHeartbeat();
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleVisibilityChange);
+    window.addEventListener("blur", handleVisibilityChange);
     window.addEventListener("focus", handleUserActivity);
     window.addEventListener("pointerdown", handleUserActivity, { passive: true });
     window.addEventListener("keydown", handleUserActivity);
@@ -83,6 +92,8 @@ export function useClientActivity({
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleVisibilityChange);
+      window.removeEventListener("blur", handleVisibilityChange);
       window.removeEventListener("focus", handleUserActivity);
       window.removeEventListener("pointerdown", handleUserActivity);
       window.removeEventListener("keydown", handleUserActivity);

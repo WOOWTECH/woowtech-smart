@@ -646,6 +646,20 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
   failed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
 };
 
+const NOTIFICATION_DISPLAY_ENGLISH = {
+  title: "Notifications are not showing",
+  description:
+    "The system did not show a woowtech smart notification. Notifications may be turned off or not allowed yet. If your phone has the app, the notification went there instead.",
+  openSettings: "Open notification settings",
+};
+
+const NOTIFICATION_DISPLAY_ZH_TW: typeof NOTIFICATION_DISPLAY_ENGLISH = {
+  title: "這台電腦沒有顯示通知",
+  description:
+    "系統沒有顯示 woowtech smart 的通知，可能是通知被關掉，或還沒按「允許」。手機有登入 App 的話，這則通知已改送到手機。",
+  openSettings: "打開通知設定",
+};
+
 const AGENT_NOTIFICATION_TITLES_ENGLISH = {
   finished: "Agent finished",
   permission: "Agent needs permission",
@@ -1192,6 +1206,8 @@ export function woowtechCopyFor(language: string) {
       language === "zh-TW" ? DESKTOP_NOTIFICATIONS_ZH_TW : DESKTOP_NOTIFICATIONS_ENGLISH,
     agentNotificationTitles:
       language === "zh-TW" ? AGENT_NOTIFICATION_TITLES_ZH_TW : AGENT_NOTIFICATION_TITLES_ENGLISH,
+    notificationDisplay:
+      language === "zh-TW" ? NOTIFICATION_DISPLAY_ZH_TW : NOTIFICATION_DISPLAY_ENGLISH,
     composer: language === "zh-TW" ? COMPOSER_ZH_TW : COMPOSER_ENGLISH,
     schedules: language === "zh-TW" ? SCHEDULES_ZH_TW : SCHEDULES_ENGLISH,
     time: language === "zh-TW" ? TIME_ZH_TW : TIME_ENGLISH,

@@ -186,6 +186,10 @@ import type { HubExecutionAgents } from "./hub/daemon-executions.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import type { PushNotifications } from "./push/index.js";
 import {
+  answerAttentionDisplayFailure,
+  type WoowtechAttentionFallback,
+} from "./woowtech-attention-fallback.js";
+import {
   archivePersistedWorkspaceRecord,
   archiveWorkspaceContents,
 } from "./workspace-archive-service.js";
@@ -449,6 +453,8 @@ export interface SessionOptions {
   logger: pino.Logger;
   downloadTokenStore: DownloadTokenStore;
   pushNotifications: PushNotifications;
+  /** woowtech smart: pushes a notice the client could not show (woowtech-attention-fallback.ts). */
+  woowtechAttentionFallback?: WoowtechAttentionFallback;
   paseoHome: string;
   worktreesRoot?: string;
   agentManager: AgentManager;
@@ -718,6 +724,7 @@ export class Session {
   private readonly workspaceRecovery: WorkspaceRecoveryService;
   private readonly daemonConfigStore: DaemonConfigStore;
   private readonly pushNotifications: PushNotifications;
+  private readonly woowtechAttentionFallback: WoowtechAttentionFallback | undefined;
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
   private unsubscribeAgentEvents: (() => void) | null = null;
@@ -852,6 +859,7 @@ export class Session {
     this.onLifecycleIntent = onLifecycleIntent ?? null;
     this.onWorkspaceRecovered = onWorkspaceRecovered ?? null;
     this.pushNotifications = pushNotifications;
+    this.woowtechAttentionFallback = options.woowtechAttentionFallback;
     this.paseoHome = paseoHome;
     this.messageReceipts = options.messageReceipts;
     this.creationService = options.creationService;
@@ -3016,6 +3024,16 @@ export class Session {
         return;
       case "register_push_token":
         this.handleRegisterPushToken(msg.token);
+        return;
+      case "attention.notification.report_display_failure.request":
+        // woowtech smart: this client's system did not show a notice (woowtech-attention-fallback.ts).
+        this.emit(
+          answerAttentionDisplayFailure({
+            fallback: this.woowtechAttentionFallback,
+            request: msg,
+            reporter: this,
+          }),
+        );
         return;
       case "push.unregister.request":
         this.pushNotifications.revoke(msg.token);

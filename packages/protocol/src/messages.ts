@@ -24,6 +24,10 @@ import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "./agent-title-limits.js";
 import { AgentProviderSchema } from "./provider-manifest.js";
 import { ProviderPaseoToolsPolicySchema } from "./provider-config.js";
 import { ProviderAuthStatusSchema } from "./woowtech-provider-auth.js";
+import {
+  AttentionDisplayFailureReportRequestSchema,
+  AttentionDisplayFailureReportResponseSchema,
+} from "./woowtech-attention-fallback.js";
 import { TOOL_CALL_ICON_NAMES } from "./agent-types.js";
 import { WORKSPACE_LABEL_COLORS } from "./workspace-labels.js";
 import {
@@ -3301,6 +3305,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectRequestSchema,
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
+  // woowtech smart: a notice the OS did not show (woowtech-attention-fallback.ts).
+  AttentionDisplayFailureReportRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3519,6 +3525,9 @@ export const ServerInfoStatusPayloadSchema = z
         // woowtech smart (fork-owned, not upstream): pushes go through WoowTech's relay, so
         // the app may register wsp1 push tokens (woowtech-push.ts). Never set by Paseo.
         woowtechPush: z.boolean().optional(),
+        // woowtech smart (fork-owned, not upstream): the daemon pushes a notice the picked client
+        // could not show (woowtech-attention-fallback.ts). Never set by Paseo.
+        woowtechAttentionFallback: z.boolean().optional(),
         // COMPAT(plugins): added in v0.3.0, remove gate after 2027-08-07.
         plugins: z.boolean().optional(),
         // COMPAT(pluginManagement): added in v0.4.0, remove gate after 2027-08-14.
@@ -6827,6 +6836,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopStopResponseSchema,
   DaemonUpdateProgressMessageSchema,
   DaemonUpdateResponseSchema,
+  // woowtech smart: answer to a notice the OS did not show (woowtech-attention-fallback.ts).
+  AttentionDisplayFailureReportResponseSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

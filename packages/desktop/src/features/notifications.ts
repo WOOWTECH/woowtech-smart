@@ -10,6 +10,7 @@ import {
   type NotificationDeliveryResult,
 } from "./woowtech-notification-delivery.js";
 import { notificationIconCandidates } from "./woowtech-notification-icon.js";
+import { openSystemNotificationSettings } from "./woowtech-notification-settings.js";
 
 interface NotificationInput {
   title?: unknown;
@@ -177,4 +178,8 @@ export function registerNotificationHandlers(options: {
     return (await sendWithResult(event, rawInput)) === "shown";
   });
   ipcMain.handle("woowtech:notification:sendWithResult", sendWithResult);
+  // woowtech smart: the callout for notices the system did not show opens its settings.
+  ipcMain.handle("woowtech:notification:openSystemSettings", () =>
+    openSystemNotificationSettings(),
+  );
 }

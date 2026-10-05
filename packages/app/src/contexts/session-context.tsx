@@ -38,6 +38,8 @@ import {
 } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { sendOsNotification } from "@/utils/os-notifications";
+import { handleOsNotificationResult } from "@/utils/woowtech-notification-fallback";
+import { isNative } from "@/constants/platform";
 import { localizeAgentNotification } from "@/utils/woowtech-agent-notification";
 import { getIsAppActivelyVisible, getIsAppVisible } from "@/utils/app-visibility";
 import {
@@ -211,6 +213,9 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
   const { t } = useTranslation();
   const notificationTranslationRef = useRef(t);
   notificationTranslationRef.current = t;
+  // woowtech smart: read at send time, so the notice callback keeps depending on serverId only.
+  const notificationClientRef = useRef(client);
+  notificationClientRef.current = client;
   const voiceRuntime = useVoiceRuntimeOptional();
   const voiceAudioEngine = useVoiceAudioEngineOptional();
   const queryClient = useQueryClient();
@@ -313,11 +318,20 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         return;
       }
 
+      // woowtech smart: a notice the system did not show goes to the phone instead
+      // (woowtech-notification-fallback.ts).
       void sendOsNotification(
         localizeAgentNotification({
           notification,
           reason: params.reason,
           t: notificationTranslationRef.current,
+        }),
+      ).then((shown) =>
+        handleOsNotificationResult({
+          shown,
+          native: isNative,
+          client: notificationClientRef.current,
+          target: { kind: "agent", agentId: params.agentId, timestamp: params.timestamp },
         }),
       );
     },
@@ -689,6 +703,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       if (!message.payload.shouldNotify) {
         return;
       }
+      const terminalId = message.payload.terminalId;
       void sendOsNotification({
         title: message.payload.title,
         body: message.payload.body,
@@ -700,7 +715,15 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
           cwd: message.payload.cwd,
           ...(message.payload.workspaceId ? { workspaceId: message.payload.workspaceId } : {}),
         },
-      });
+      }).then((shown) =>
+        // woowtech smart: a notice the system did not show goes to the phone instead.
+        handleOsNotificationResult({
+          shown,
+          native: isNative,
+          client,
+          target: { kind: "terminal", terminalId },
+        }),
+      );
     });
 
     return () => {
