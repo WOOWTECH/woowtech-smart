@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { app, BrowserWindow, Notification, ipcMain, nativeImage, webContents } from "electron";
 import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
@@ -11,6 +12,10 @@ import {
 } from "./woowtech-notification-delivery.js";
 import { notificationIconCandidates } from "./woowtech-notification-icon.js";
 import { openSystemNotificationSettings } from "./woowtech-notification-settings.js";
+import {
+  agentNotificationId,
+  agentTargetForNotificationData,
+} from "./woowtech-notification-launch.js";
 
 interface NotificationInput {
   title?: unknown;
@@ -152,11 +157,17 @@ export function registerNotificationHandlers(options: {
     const senderWebContentsId = event.sender.id;
     const icon = getNotificationIcon();
     const settings = await getDesktopSettingsStore().get();
+    // woowtech smart: on macOS the id carries the agent, so a Notification Center click that
+    // relaunches the quit app finds it in launchInfo (woowtech-notification-launch.ts).
+    const agent = agentTargetForNotificationData(data);
+    const macId =
+      agent && process.platform === "darwin" ? agentNotificationId(agent, randomUUID()) : null;
     const notification = new Notification({
       title,
       ...(body ? { body } : {}),
       ...(icon ? { icon } : {}),
       silent: !settings.notifications.playSound,
+      ...(macId ? { id: macId } : {}),
     });
 
     activeNotifications.add(notification);

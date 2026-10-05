@@ -55,6 +55,7 @@ import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
 import { resolveAppIconPath } from "./features/stamped-icon.js";
 import { applyWindowsAppUserModelId } from "./features/woowtech-app-user-model-id.js";
 import { woowtechAboutPanelOptions } from "./features/woowtech-about-panel.js";
+import { agentTargetFromLaunchInfo } from "./features/woowtech-notification-launch.js";
 import { setupApplicationMenu } from "./features/menu.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
@@ -367,6 +368,17 @@ let pendingOpenProjectPath = parseOpenProjectPathFromArgv({
   isDefaultApp: process.defaultApp,
 });
 let pendingAgentNavigation = parseAgentDeepLinkFromArgv(process.argv);
+
+// woowtech smart: a Notification Center click after the app quit relaunches it on macOS with
+// that notification's id in launchInfo; the id carries the agent (woowtech-notification-launch.ts).
+app.once("ready", (_event, launchInfo) => {
+  const target = agentTargetFromLaunchInfo(launchInfo);
+  if (!target || pendingAgentNavigation) {
+    return;
+  }
+  log.info("[launch] agent link via notification center", target);
+  pendingAgentNavigation = target;
+});
 
 // Each window pulls its own pending open-project path on mount, keyed by
 // webContents id, so deep-linked windows (second-instance launches, the

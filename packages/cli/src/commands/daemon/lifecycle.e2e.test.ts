@@ -14,6 +14,17 @@ import {
 import { expect, test } from "vitest";
 import { connectToDaemon } from "../../utils/client.js";
 
+// woowtech smart: paseo.pid exists before its JSON is written, so a read right after it appears
+// can see an empty file (CI 2026-10-05: "Unexpected end of JSON input"). Wait for a whole lock.
+async function readLockPid(lockPath: string): Promise<number | null> {
+  try {
+    const lock = JSON.parse(await readFile(lockPath, "utf8")) as { pid?: unknown };
+    return typeof lock.pid === "number" ? lock.pid : null;
+  } catch {
+    return null;
+  }
+}
+
 const repo = fileURLToPath(new URL("../../../../..", import.meta.url));
 const cli = path.join(repo, "packages/cli/dist/index.js");
 
@@ -363,8 +374,8 @@ test.skipIf(process.platform === "win32").each([["start"], ["daemon", "run"]])(
       });
       const exited = new Promise((resolve) => child!.once("exit", resolve));
       await expect
-        .poll(async () => existsSync(path.join(home, "paseo.pid")), { timeout: 10_000 })
-        .toBe(true);
+        .poll(async () => readLockPid(path.join(home, "paseo.pid")), { timeout: 10_000 })
+        .not.toBeNull();
       const lock = JSON.parse(await readFile(path.join(home, "paseo.pid"), "utf8"));
       await f.ok(["status", "--home", home]);
       child.kill("SIGINT");
