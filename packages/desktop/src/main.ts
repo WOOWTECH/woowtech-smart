@@ -54,6 +54,7 @@ import { createBrowserCaptureService } from "./features/browser-capture.js";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
 import { resolveAppIconPath } from "./features/stamped-icon.js";
 import { applyWindowsAppUserModelId } from "./features/woowtech-app-user-model-id.js";
+import { woowtechAboutPanelOptions } from "./features/woowtech-about-panel.js";
 import { setupApplicationMenu } from "./features/menu.js";
 import {
   BROWSER_NEW_TAB_REQUEST_EVENT,
@@ -132,6 +133,8 @@ const bootstrapComplete = new Promise<void>((resolve) => {
 let bootstrapIsComplete = false;
 
 app.setName(APP_NAME);
+// woowtech smart: WOOW TECH's copyright and website in the About window.
+app.setAboutPanelOptions(woowtechAboutPanelOptions());
 applyWindowsAppUserModelId({
   platform: process.platform,
   isPackaged: app.isPackaged,
