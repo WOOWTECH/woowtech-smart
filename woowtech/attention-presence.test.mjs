@@ -1,4 +1,4 @@
-// woowtech smart: PROPOSAL guard (not merged). Source wiring only; the behaviour is covered by
+// woowtech smart (README section 16): source wiring only; the behaviour is covered by
 // packages/server/src/server/woowtech-attention-presence.test.ts and the woowtech cases in
 // websocket-server.notifications.test.ts. Fails when an upstream merge puts the daemon's
 // presence mapping back to upstream.
@@ -43,7 +43,7 @@ test("the daemon maps client activity through woowtechClientPresenceState", () =
   assert.doesNotMatch(body, /lastActivityAtMs: activity\.lastActivityAt\.getTime\(\)/);
 });
 
-// PROPOSAL 2: the flag is read before the first await, and the daemon raises it before it
+// Nothing notifies while the daemon stops: the flag is read before the first await, and the daemon raises it before it
 // closes agents.
 test("attention raised while the daemon stops notifies nobody", () => {
   const tree = source(serverFile);

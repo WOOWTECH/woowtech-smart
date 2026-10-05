@@ -343,7 +343,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     expect(pushNotifications.sent).toEqual([]);
   });
 
-  // woowtech smart (PROPOSAL 1): a backgrounded phone cannot show the in-app notice, so it
+  // woowtech smart (README section 16): a backgrounded phone cannot show the in-app notice, so it
   // must not swallow the push (woowtech-attention-presence.ts).
   it("pushes when the only connected phone is backgrounded but recently active", async () => {
     const { server, pushNotifications } = createServer();
@@ -364,7 +364,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     expect(pushNotifications.sent).toHaveLength(1);
   });
 
-  // woowtech smart (PROPOSAL 2): closing agents on shutdown interrupts their runs; the
+  // woowtech smart (README section 16): closing agents on shutdown interrupts their runs; the
   // resulting "finished" must not notify anyone.
   it("notifies nobody about attention raised while the daemon is stopping", async () => {
     const { server, pushNotifications } = createServer();

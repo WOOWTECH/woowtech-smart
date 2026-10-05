@@ -1,5 +1,5 @@
-// woowtech smart: fork-owned rules on top of agent-attention-policy.ts.
-// PROPOSAL (not merged): see ~/.local/share/woowtech-smart/proposals/push-behaviour.md.
+// woowtech smart: fork-owned rules on top of agent-attention-policy.ts (woowtech/README.md
+// section 16: a backgrounded phone is absent, and nothing notifies while the daemon stops).
 import type { ClientPresenceState, NotificationPlan } from "./agent-attention-policy.js";
 
 export interface WoowtechClientActivity {

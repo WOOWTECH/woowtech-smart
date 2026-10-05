@@ -1,6 +1,6 @@
-// woowtech smart: PROPOSAL 2 (not merged). Stopping the daemon closes every agent; the close
-// interrupts a run, and the running -> idle edge used to send a "finished" push for work that
-// never finished. See ~/.local/share/woowtech-smart/proposals/push-behaviour.md.
+// woowtech smart (woowtech/README.md section 16): stopping the daemon closes every agent; the
+// close interrupts a run, and the running -> idle edge used to send a "finished" push for work
+// that never finished. An in-process daemon, so it runs with the unit tests.
 import { expect, test } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

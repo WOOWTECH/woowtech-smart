@@ -1,4 +1,4 @@
-// woowtech smart: PROPOSAL tests for woowtech-attention-presence.ts.
+// woowtech smart: tests for woowtech-attention-presence.ts (woowtech/README.md section 16).
 import { describe, expect, it } from "vitest";
 import { computeNotificationPlan, PRESENCE_THRESHOLD_MS } from "./agent-attention-policy.js";
 import {

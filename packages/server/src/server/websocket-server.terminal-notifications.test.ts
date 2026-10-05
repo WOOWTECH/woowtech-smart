@@ -502,7 +502,7 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
     });
   });
 
-  // woowtech smart (PROPOSAL 2): terminal attention raised while the daemon stops is not pushed.
+  // woowtech smart (README section 16): terminal attention raised while the daemon stops is not pushed.
   it("does not push terminal attention raised while the daemon is stopping", async () => {
     const { manager, emit } = createTerminalManager();
     const { server, pushNotifications } = createServer(

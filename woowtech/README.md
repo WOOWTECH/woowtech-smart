@@ -689,7 +689,7 @@ Android：
 - App：`push-notifications/index.native.ts`（8 行增、1 行刪：import 和載入時呼叫 `turnOffExpoPushRegistration()`）、`app.config.js`（2 行 require、plist 改由 `woowtech-ios-firebase.js` 決定（上游 variants 裡的兩個 `googleServiceInfoPlist` 留著不用，少改上游的行）、外掛 1 行、`expo-build-properties` 的 `ios` 區塊）、`metro.config.cjs`（3 行）、`package.json`（2 個相依）、`package-lock.json`（只有新增）。
 - `knip.json`：server 的 `ignore` 放 `push-service.ts`（它還提供 `PushPayload` 型別，但 `PushService` 沒人用），App 的 `ignoreFiles` 放 `subscriptions.ts`，knip 才不會建議刪掉這兩個上游的檔。`npm run knip` 本身在 main 也會停在 knip 的 Expo 外掛（`app.config.js` 的外掛有函式，knip 5.86 當成字串處理），要看報告就分 workspace 跑，packages/app 要先在暫時的設定裡關掉 Expo 外掛。
 - App 根目錄的新檔 `react-native.config.js` 和 `firebase.json` 上游沒有；上游以後加了同名檔會衝突，合併時把兩邊的設定合在一起。
-- 上游的測試檔加了案例：`protocol/src/messages.test.ts`（1 組）、`websocket-server.notifications.test.ts`（2 個）、`websocket-server.terminal-notifications.test.ts`（1 組）。合併時衝突的話，可以先放掉我們加的測試：守門涵蓋 `send()` 的改寫、terminal 推播的 `reason`、`register_push_token` 的路徑、`woowtechPush` 旗標和 App 的接點（`index.native.ts`、`react-native.config.js`、`app.config.js`、`metro.config.cjs`）。
+- 上游的測試檔加了案例：`protocol/src/messages.test.ts`（1 組）、`websocket-server.notifications.test.ts`（4 個，兩個是下面「誰收到通知」的）、`websocket-server.terminal-notifications.test.ts`（2 組，一組是停止中不推播）。合併時衝突的話，可以先放掉我們加的測試：守門涵蓋 `send()` 的改寫、terminal 推播的 `reason`、`register_push_token` 的路徑、`woowtechPush` 旗標和 App 的接點（`index.native.ts`、`react-native.config.js`、`app.config.js`、`metro.config.cjs`）。
 - fork 自有的檔（各自附測試）：protocol 的 `woowtech-push.ts`；server 的 `push/woowtech-relay.ts`、`push/woowtech-push-content.ts`；App 的 `push-notifications/internal/` 裡的 `woowtech-subscriptions.ts`、`fcm-token-source.ts`、`fcm-token.ts`、`fcm-token.ios.ts`、`fcm-token.android.ts`，`plugins/` 裡的 `with-woowtech-push.js`、`woowtech-ios-firebase.js`、`woowtech-metro-resolver.js`；守門 `woowtech/push.test.mjs`、`woowtech/push-content.test.mjs`。
 
 測試：
@@ -720,7 +720,7 @@ Android：
 npm run build:server   # 守門從原始碼跑，但跨套件的匯入讀 dist
 node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/woowtech-push.test.ts src/messages.test.ts --bail=1)
-(cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts --bail=1)
+(cd packages/server && npx vitest run src/server/push src/server/websocket-server.notifications.test.ts src/server/websocket-server.terminal-notifications.test.ts src/server/woowtech-attention-presence.test.ts src/server/woowtech-shutdown-push.test.ts --bail=1)
 (cd packages/app && npx vitest run plugins/woowtech-ios-firebase.test.ts plugins/with-woowtech-push.test.ts plugins/woowtech-metro-resolver.test.ts src/push-notifications src/utils/notification-routing.woowtech-push.test.ts --bail=1)
 (cd packages/app && npx --no-install vitest run src/screens/workspace/missing-workspace-directory-demand.test.ts src/runtime/directory-sync/index.test.ts src/navigation/woowtech-workspace-open-intent.test.ts src/navigation/woowtech-welcome-host-online.test.ts src/navigation/woowtech-cold-start-tap.test.ts src/navigation/woowtech-notification-response.test.ts --project unit --maxWorkers=1 --no-file-parallelism --bail=1)   # T1，見下面的 T1、T1 S3、「配對後第一次點通知」和 RC-I-21c 小節
 ```
@@ -783,6 +783,16 @@ node --test woowtech/*.test.mjs
   - 守門 `woowtech/welcome-host-online.test.mjs` 只看原始碼：`isFocused` 來自 `useIsFocused`，`WelcomeScreen` 裡唯一會轉頁的 effect 第一行問 `shouldWelcomeMoveOnToHost({ anyOnlineServerId, isFocused })`，依賴有這兩個。vitest 的歡迎頁 effect 照這幾行寫，所以把 `welcome-screen.tsx` 改回上游時，紅的是守門。
   - 紅綠與突變：修之前主案例的焦點是 `open-project`、設定那個案例也紅，修後 4/4；拿掉修法時 vitest 2 個紅、守門紅，依賴拿掉 `isFocused` 時守門紅。Android 模擬器複驗見 `logs/fix-first-tap.md`。
 - 合併上游：上游改成只在 focused 時轉頁，或拿掉這個 effect 時，先確認新測試仍綠，再拿掉 fork 的判斷和守門。
+
+#### 誰收到 agent 和 terminal 的通知
+
+上游的規則（`agent-attention-policy.ts`）：每個連著的 App 用 heartbeat 回報裝置種類（手機是 `mobile`，網頁和桌面版都是 `web`）、`appVisible`、正在看的 agent 和 terminal、最後一次操作的時間。最後一次操作在 180 秒內的算「在場」。有人在場而且正看著那個 agent，誰都不通知；有人在場就只讓最近操作的那一個顯示 App 內或桌面的通知，不推播；沒人在場才推播。fork 改了兩條（owner 2026-10-05 同意）：
+
+- 背景中的手機不算在場：手機 App 只靠推播，不顯示 App 內通知，上游卻在它切到背景後 180 秒內仍選它當通知對象，結果什麼都沒有。`woowtech-attention-presence.ts` 的 `woowtechClientPresenceState()` 把 `mobile` 而且 `appVisible=false` 的 App 當成沒有活動時間；網頁和桌面版照上游（桌面版在背景仍會跳系統通知）。只改 daemon，舊版 App 也有效，因為兩個欄位本來就有送。
+- daemon 停止時不通知：停 daemon 會關掉每個 agent，正在跑的 agent 被中斷後從 running 變 idle，上游當成「完成」，每個 agent 多推一則「工作完成了」；等權限的 agent 也會再推一次。`websocket-server.ts` 的兩個 attention 廣播在第一個 `await` 之前讀 `connectionLifecycle === "stopping"`（`bootstrap` 的 `stop()` 先呼叫 `prepareForShutdown()` 再關 agent），停止中交給 `woowtechNotificationPlanWhileStopping()`，誰都不通知；attention 事件本身照送。
+- 接點：`websocket-server.ts` 的 import、`getClientActivityState` 回傳 `woowtechClientPresenceState(activity)`，以及兩個 attention 廣播外面包 `woowtechNotificationPlanWhileStopping`（+28／−18 行）。
+- 測試：`woowtech-attention-presence.test.ts`（presence 對應和停止中的 plan）、`woowtech-shutdown-push.test.ts`（行程內的 daemon 真的停止：修之前推出 `['permission','finished']` 和 `['finished']`，修之後 0 則）、`websocket-server.notifications.test.ts` 和 `websocket-server.terminal-notifications.test.ts` 各加的案例。守門 `woowtech/attention-presence.test.mjs`：接點被改回上游時失敗。
+- 還要實機：手機切到背景後約 30 秒和 120 秒觸發，兩支手機都要收到推播；Android 的連線在背景保持多久、iOS 多久斷，還沒量過。
 
 #### RC-I-21c：冷啟動點通知，工作區對了，聚焦的卻是上次記住的 agent
 
