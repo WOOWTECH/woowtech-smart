@@ -40,6 +40,8 @@ export function createDesktopWindowOwner<TAgentTarget>(
 ): DesktopWindowOwner<TAgentTarget> {
   const pendingProjects = new PendingOpenProjectStore();
   let agentWindowCreation: Promise<void> | null = null;
+  // woowtech smart: activation and a notification click can both restore at once.
+  let restoreCreation: Promise<void> | null = null;
 
   const open = async (input: {
     initialRoute: string | null;
@@ -92,7 +94,12 @@ export function createDesktopWindowOwner<TAgentTarget>(
       if (deliverable) window.sendAgent(deliverable);
     },
     async restoreWhenActivated() {
-      if (port.windows().length === 0) await owner.openPrimary();
+      if (restoreCreation) return restoreCreation;
+      if (port.windows().length > 0) return;
+      restoreCreation = owner.openPrimary().finally(() => {
+        restoreCreation = null;
+      });
+      return restoreCreation;
     },
     takePendingProject: (webContentsId) => pendingProjects.take(webContentsId),
   };
