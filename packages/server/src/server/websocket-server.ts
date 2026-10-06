@@ -77,6 +77,12 @@ import {
 } from "./woowtech-attention-presence.js";
 import { WoowtechAttentionFallback } from "./woowtech-attention-fallback.js";
 import {
+  readEscalationDelayMs,
+  recipientAttendedTo,
+  waitsBeforePhoneGetsNotice,
+  type NoticeTarget,
+} from "./woowtech-attention-escalation.js";
+import {
   buildAgentAttentionNotificationPayload,
   findLatestPermissionRequest,
 } from "@getpaseo/protocol/agent-attention-notification";
@@ -557,6 +563,9 @@ export class VoiceAssistantWebSocketServer {
   // woowtech smart: pushes a notice the picked client could not show (woowtech-attention-fallback.ts).
   private readonly woowtechAttentionFallback = new WoowtechAttentionFallback({
     hasPushTargets: () => this.pushNotifications.hasActiveTokens(),
+    escalationMs: readEscalationDelayMs(process.env),
+    onEscalated: (target) =>
+      this.logger.info({ target }, "A notice nobody dealt with is going to the phone"),
   });
   private readonly mcpBaseUrl: string | null;
   private speech!: SpeechService | null;
@@ -1036,6 +1045,7 @@ export class VoiceAssistantWebSocketServer {
 
   public prepareForShutdown(): void {
     this.connectionLifecycle = "stopping";
+    this.woowtechAttentionFallback.close();
   }
 
   public beginAcceptingConnections(): void {
@@ -2486,6 +2496,45 @@ export class VoiceAssistantWebSocketServer {
     return woowtechClientPresenceState(activity);
   }
 
+  /**
+   * woowtech smart: a computer's notice waits, then goes to the phone if nobody dealt with it
+   * (woowtech-attention-escalation.ts). A phone's notice does not wait.
+   */
+  private woowtechEscalationFor(input: {
+    ws: WebSocketLike;
+    session: Session;
+    target: NoticeTarget;
+    isSettled: () => boolean;
+  }): { isAttendedTo: () => boolean } | undefined {
+    if (!waitsBeforePhoneGetsNotice(input.session.getClientActivity(input.ws))) {
+      return undefined;
+    }
+    const noticedAtMs = Date.now();
+    return {
+      isAttendedTo: () =>
+        input.isSettled() ||
+        recipientAttendedTo({
+          activity: input.session.getClientActivity(input.ws),
+          noticedAtMs,
+          target: input.target,
+        }),
+    };
+  }
+
+  /** Someone looked at the agent (its attention is cleared) or answered its permission request. */
+  private woowtechAgentNoticeSettled(
+    agentId: string,
+    reason: "finished" | "error" | "permission",
+  ): boolean {
+    const agent = this.agentManager.getAgent(agentId);
+    if (!agent) {
+      return true;
+    }
+    return reason === "permission"
+      ? agent.pendingPermissions.size === 0
+      : !agent.attention.requiresAttention;
+  }
+
   private async broadcastAgentAttention(params: {
     agentId: string;
     provider: AgentProvider;
@@ -2565,6 +2614,12 @@ export class VoiceAssistantWebSocketServer {
               );
             });
           },
+          escalation: this.woowtechEscalationFor({
+            ws,
+            session: connection.session,
+            target: { kind: "agent", id: params.agentId },
+            isSettled: () => this.woowtechAgentNoticeSettled(params.agentId, params.reason),
+          }),
         });
       }
       const attentionPayload = {
@@ -2694,6 +2749,12 @@ export class VoiceAssistantWebSocketServer {
           target: { kind: "terminal", terminalId: params.terminalId },
           recipient,
           push: sendPush,
+          escalation: this.woowtechEscalationFor({
+            ws,
+            session: recipient,
+            target: { kind: "terminal", id: params.terminalId },
+            isSettled: () => false,
+          }),
         });
       }
       const message = wrapSessionMessage({

@@ -1,9 +1,11 @@
 // woowtech smart (README section 16): source wiring only. The behaviour is covered by
-// packages/server/src/server/woowtech-attention-fallback.test.ts, the in-process daemon test
-// woowtech-attention-fallback-daemon.test.ts, packages/protocol/src/woowtech-attention-fallback.test.ts,
+// packages/server/src/server/woowtech-attention-fallback.test.ts and woowtech-attention-escalation.test.ts,
+// the in-process daemon test woowtech-attention-fallback-daemon.test.ts,
+// packages/protocol/src/woowtech-attention-fallback.test.ts,
 // packages/app/src/utils/woowtech-notification-fallback.test.ts and
 // packages/desktop/src/features/woowtech-notification-settings.test.ts. Fails when an upstream merge
-// drops a seam of "a notice the system did not show goes to the phone" or of the focus rule (c).
+// drops a seam of "a notice the system did not show, or nobody dealt with, goes to the phone" or of
+// the focus rule (c).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -87,6 +89,35 @@ test("the daemon remembers each notice it hands to a client instead of a push", 
   );
   assert.match(terminal, /push: sendPush,/);
   assert.match(terminal, /if \(plan\.shouldPush\) \{\s*sendPush\(\);\s*\}/);
+});
+
+// A system that puts a banner away still reports it shown, so detection is not enough: a notice
+// handed to a computer also goes to the phone when nobody deals with it within a few minutes.
+test("a computer's notice waits, then goes to the phone, and every wait stops with the daemon", () => {
+  assert.match(read(serverFile), /escalationMs: readEscalationDelayMs\(process\.env\),/);
+  const agent = methodBody(serverFile, "broadcastAgentAttention");
+  assert.match(
+    agent,
+    /escalation: this\.woowtechEscalationFor\(\{[\s\S]*?target: \{ kind: "agent", id: params\.agentId \},\s*isSettled: \(\) => this\.woowtechAgentNoticeSettled\(params\.agentId, params\.reason\),/,
+  );
+  const terminal = methodBody(serverFile, "broadcastTerminalAttention");
+  assert.match(
+    terminal,
+    /escalation: this\.woowtechEscalationFor\(\{[\s\S]*?target: \{ kind: "terminal", id: params\.terminalId \},/,
+  );
+  assert.match(
+    methodBody(serverFile, "prepareForShutdown"),
+    /this\.woowtechAttentionFallback\.close\(\);/,
+    "a stopping daemon must not push for the notices it was still waiting on",
+  );
+  const settled = methodBody(serverFile, "woowtechAgentNoticeSettled");
+  assert.match(settled, /agent\.pendingPermissions\.size === 0/);
+  assert.match(settled, /!agent\.attention\.requiresAttention/);
+
+  const escalation = read("packages/server/src/server/woowtech-attention-escalation.ts");
+  assert.match(escalation, /export const ATTENTION_ESCALATION_MS = 180_000;/);
+  assert.match(escalation, /activity\?\.deviceType === "web"/, "a phone's notice does not wait");
+  assert.match(escalation, /activity\.lastActivityAt\.getTime\(\) > noticedAtMs/);
 });
 
 test("the session answers a report with the ledger, for the reporting client only", () => {
