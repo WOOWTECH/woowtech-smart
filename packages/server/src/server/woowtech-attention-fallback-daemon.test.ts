@@ -1,6 +1,7 @@
 // woowtech smart (woowtech/README.md section 16): through a real in-process daemon, a present
 // desktop client is asked to show an agent's notice instead of a push; when it reports that its
-// system did not show it, the daemon sends that push, once, and only for that client.
+// system did not show it, the daemon sends that push, once, and only for that client. When
+// nobody reports and nobody deals with the notice, the daemon sends it after the escalation wait.
 import { expect, test } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -118,4 +119,98 @@ test("a notice the desktop could not show is pushed once after its report", asyn
     await daemon.close();
     rmSync(cwd, { recursive: true, force: true });
   }
+}, 60_000);
+
+interface EscalationRound {
+  desktop: DaemonClient;
+  push: RecordingPushSender;
+  agentId: string;
+}
+
+/**
+ * A present desktop is asked to show a finished agent's notice, and nothing is pushed yet.
+ * The daemon reads the escalation wait when it starts; a second keeps these tests short.
+ */
+async function withEscalationRound(
+  waitSeconds: string,
+  run: (round: EscalationRound) => Promise<void>,
+): Promise<void> {
+  const cwd = mkdtempSync(path.join(tmpdir(), "woowtech-attention-escalation-"));
+  const previousWait = process.env.WOOWTECH_ESCALATION_SECONDS;
+  process.env.WOOWTECH_ESCALATION_SECONDS = waitSeconds;
+  const push = new RecordingPushSender();
+  const daemon = await createTestPaseoDaemon({
+    isDev: true,
+    agentClients: { mock: new MockLoadTestAgentClient() },
+    pushNotificationSender: push,
+  });
+  const desktop = await connect(daemon.port);
+  try {
+    const created = await desktop.createWorkspace({
+      source: { kind: "directory", path: cwd },
+      title: "Attention escalation",
+    });
+    const workspaceId = created.workspace?.id;
+    if (!workspaceId) throw new Error(created.error ?? "Expected the workspace to be created");
+    desktop.registerPushToken("wsp1:en:fcm-test-token:APA91bTestTokenForTheEscalation");
+    const nextNotice = await watchNotices(desktop);
+    reportPresentDesktop(desktop);
+    const agent = await desktop.createAgent({
+      provider: "mock",
+      cwd,
+      workspaceId,
+      model: "e2e-fast-stream",
+      initialPrompt: "finish quickly",
+    });
+    expect(await nextNotice()).toMatchObject({ agentId: agent.id, shouldNotify: true });
+    expect(push.sent).toEqual([]);
+    await run({ desktop, push, agentId: agent.id });
+  } finally {
+    await desktop.close().catch(() => undefined);
+    await daemon.close();
+    if (previousWait === undefined) delete process.env.WOOWTECH_ESCALATION_SECONDS;
+    else process.env.WOOWTECH_ESCALATION_SECONDS = previousWait;
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+test("a desktop notice nobody deals with goes to the phone after the wait", async () => {
+  await withEscalationRound("1", async ({ push, agentId }) => {
+    await waitUntil(() => push.sent.length === 1, "the escalated push");
+    await pause(1_500);
+
+    expect(push.sent).toHaveLength(1);
+    expect(push.sent[0]?.data).toMatchObject({ agentId, reason: "finished" });
+  });
+}, 60_000);
+
+test("a desktop notice is not pushed when the desktop saw input after it", async () => {
+  await withEscalationRound("1", async ({ desktop, push }) => {
+    await pause(20);
+    reportPresentDesktop(desktop);
+    await pause(2_500);
+
+    expect(push.sent).toEqual([]);
+  });
+}, 60_000);
+
+test("a desktop notice is not pushed once someone has looked at the agent", async () => {
+  await withEscalationRound("1", async ({ desktop, push, agentId }) => {
+    await desktop.clearAgentAttention(agentId);
+    await pause(2_500);
+
+    expect(push.sent).toEqual([]);
+  });
+}, 60_000);
+
+test("a desktop notice is not pushed when the wait is turned off", async () => {
+  await withEscalationRound("0", async ({ push }) => {
+    await pause(2_500);
+
+    expect(push.sent).toEqual([]);
+  });
 }, 60_000);
