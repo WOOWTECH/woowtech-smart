@@ -271,7 +271,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 啟動畫面 `splash-icon.png`：透明背景上的藍色標誌，800px。Android 12 以後系統把它畫在一個直徑三分之二畫布的圓裡，所以標誌寬 50%（對角線 64%，不會被切到）。
   - Android 的啟動圖是 prebuild 產生的：`@expo/prebuild-config` 的 `withAndroidSplashImages` 先用啟動畫面的背景色畫一塊 288dp 的方塊，再把標誌疊上去；`dark` 有 `image` 才會產生 `drawable-night-*`。原本 `dark` 只有背景色，深色模式就用淺色那張（白方塊），這才是黑底上出現白方塊的原因。所以 `dark.image` 也指向 `splash-icon.png`，深色版畫在黑方塊上。iOS 直接用原圖疊在背景色上，所以原圖本身也要去背。
   - favicon（網頁和桌面版視窗的小圖示，含執行中、需要注意兩種狀態點）：透明背景，標誌寬 92%。
-  - iOS 18 的深色和染色圖示（`ios-icon-dark.png` 藍色標誌、`ios-icon-tinted.png` 白色剪影，都是透明背景，`app.config.js` 的 `ios.icon`）：系統自己畫背景。主圖示仍是不透明的白底，App Store 不收有透明通道的圖示。
+  - iOS 18 的深色圖示（`ios-icon-dark.png`，透明背景上的藍色標誌，`app.config.js` 的 `ios.icon`）：系統自己畫深色背景。主圖示仍是不透明的白底，App Store 不收有透明通道的圖示。沒有提供染色圖示：prebuild 的 `withIosIcons` 會把染色圖示鋪到白底上（白色剪影就變成一整塊白），iOS 沒拿到染色圖示時會自己把主圖示染色；要做專用的染色圖示，先在實機上確認 iOS 怎麼替白底的圖上色。
   - Android 13 以後的主題圖示（`android-icon-monochrome.png`，`adaptiveIcon.monochromeImage`）：白色剪影，幾何跟自適應前景一樣（寬 40%），使用者開啟「主題圖示」時系統依桌布配色上色。
   - 通知圖示本來就是白色剪影；App 畫面裡的 logo 是向量繪製，本來就沒有底板。
 - 來源是 `woowtech/brand/woowtech-symbol.svg`：設計系統的官方字形，是 PDF 轉出的 SVG，已經裁切到字形的範圍。
@@ -287,7 +287,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 網頁版和桌面版的啟動畫面用 CSS 遮罩畫標誌，沒有經過 logo 元件，到 2026-09-29 都還是上游 Paseo 的蝴蝶（手機版一直是 WOOW 標誌）。現在遮罩用 `paseo-logo.tsx` 的 `woowSymbolMaskSvg()`，跟元件同樣的 10 筆筆畫。上游留下的 `assets/images/butterfly-*.svg`、`favicon-*.svg` 在整個 repo（含官網）都沒有引用，已刪；App 用的 favicon 是 `generate-icons.mjs` 產生的 PNG。
 - `woowtech/icons.test.mjs` 檢查以下幾件事，合併上游時如果被換回 Paseo 的圖示就會失敗：
   - 圖示內容：有品牌藍、沒有上游的黑色方塊。
-  - 啟動畫面、favicon、iOS 深色和染色圖示、Android 主題圖示的邊緣是透明的，沒有白色底板；染色和主題圖示是白色剪影；`app.config.js` 接上這些圖。
+  - 啟動畫面、favicon、iOS 深色圖示、Android 主題圖示的邊緣是透明的，沒有白色底板；主題圖示是白色剪影；`app.config.js` 接上這些圖，深色啟動畫面有自己的圖。
   - 尺寸和格式。
   - Android 的底色和通知的強調色。
   - logo 元件跟品牌檔一致。

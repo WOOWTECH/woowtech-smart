@@ -119,7 +119,6 @@ const CLEAR_LOGOS = [
   `${images}/splash-icon.png`,
   ...favicons.map((suffix) => `${images}/favicon${suffix}.png`),
   `${images}/ios-icon-dark.png`,
-  `${images}/ios-icon-tinted.png`,
   `${images}/android-icon-monochrome.png`,
 ];
 
@@ -154,8 +153,8 @@ test("the logo has a transparent background wherever it sits on the app's own ba
     assert.equal(edge.white, 0, `${file} sits on a white tile`);
     assert.ok(shareOfPixels(image, () => true) < 0.5, `${file} covers most of its canvas`);
   }
-  // Tinted and themed icons are silhouettes: the system colors them.
-  for (const file of [`${images}/ios-icon-tinted.png`, `${images}/android-icon-monochrome.png`]) {
+  // The themed icon is a silhouette: the system colors it.
+  for (const file of [`${images}/android-icon-monochrome.png`]) {
     const image = readPng(repoPath(file));
     assert.deepEqual([image.width, image.height], [1024, 1024], file);
     assert.ok(shareOfPixels(image, () => true) > 0.03, `${file} is empty`);
@@ -167,12 +166,11 @@ test("the logo has a transparent background wherever it sits on the app's own ba
   }
 });
 
-test("iOS has dark and tinted icons, and Android a themed one", () => {
+test("iOS has a dark icon, and Android a themed one", () => {
   const config = expoPrebuildConfig("production");
   assert.deepEqual(config.ios.icon, {
     light: "./assets/images/icon.png",
     dark: "./assets/images/ios-icon-dark.png",
-    tinted: "./assets/images/ios-icon-tinted.png",
   });
   assert.equal(
     config.android.adaptiveIcon.monochromeImage,

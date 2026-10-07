@@ -2,7 +2,7 @@
 // woowtech/brand: the blue symbol on white tiles for app icons (the brand choice,
 // distinct from WOOW Home's blue tiles), the bare symbol on a transparent background
 // wherever the logo sits on the app's own background (splash screen, favicons, the
-// iOS dark and tinted icons, Android's themed icon), a white symbol for Android
+// iOS dark icon, Android's themed icon), a white symbol for Android
 // notifications, and a blue tile for development desktop builds.
 //
 //   node woowtech/tools/generate-icons.mjs              # write into the packages
@@ -104,10 +104,9 @@ const compositions = {
   favicon: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92 }),
   faviconRunning: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92, dot: RUNNING_DOT }),
   faviconAttention: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92, dot: ATTENTION_DOT }),
-  // iOS 18 dark and tinted app icons: the system draws the background, the icon gives the
-  // symbol at the size of the light icon's. Tinted icons are grayscale; the system tints them.
+  // iOS 18 dark app icon: the system draws the background, the icon gives the symbol at the
+  // size of the light icon's. No tinted icon: prebuild flattens it onto white (withIosIcons).
   iosDark: clear({ glyph: BLUE_SYMBOL, glyphWidth: 62 }),
-  iosTinted: clear({ glyph: WHITE_SYMBOL, glyphWidth: 62 }),
   // Android 13+ themed icon: a silhouette with the adaptive foreground's geometry.
   androidMonochrome: clear({ glyph: WHITE_SYMBOL, glyphWidth: 40 }),
   // macOS icon grid: an 824px tile inside the 1024px canvas, with a soft shadow.
@@ -236,7 +235,6 @@ try {
   write("packages/app/assets/images/notification-icon.png", png("notification", 96));
   write("packages/app/assets/images/splash-icon.png", png("splash", 800));
   write("packages/app/assets/images/ios-icon-dark.png", png("iosDark", MASTER));
-  write("packages/app/assets/images/ios-icon-tinted.png", png("iosTinted", MASTER));
   write("packages/app/assets/images/android-icon-monochrome.png", png("androidMonochrome", MASTER));
   for (const name of ["favicon", "favicon-light", "favicon-dark"]) {
     write(`packages/app/assets/images/${name}.png`, png("favicon", 48));

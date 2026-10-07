@@ -161,12 +161,12 @@ export default {
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
-      // woowtech smart: iOS 18 dark and tinted icons draw the bare symbol on the system's own
-      // background; the light icon stays the opaque white tile the App Store requires.
+      // woowtech smart: the iOS 18 dark icon is the bare symbol on the system's dark background;
+      // the light icon stays the opaque white tile the App Store requires. No tinted icon: prebuild
+      // flattens it onto white, and iOS tints the light icon itself when there is none.
       icon: {
         light: "./assets/images/icon.png",
         dark: "./assets/images/ios-icon-dark.png",
-        tinted: "./assets/images/ios-icon-tinted.png",
       },
       supportsTablet: true,
       infoPlist: {

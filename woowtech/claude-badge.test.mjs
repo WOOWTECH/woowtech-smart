@@ -86,7 +86,6 @@ const OUR_IMAGES = new Set([
   "packages/app/assets/images/favicon.png",
   "packages/app/assets/images/icon.png",
   "packages/app/assets/images/ios-icon-dark.png",
-  "packages/app/assets/images/ios-icon-tinted.png",
   "packages/app/assets/images/notification-icon.png",
   "packages/app/assets/images/splash-icon.png",
   "packages/app/public/apple-touch-icon.png",
