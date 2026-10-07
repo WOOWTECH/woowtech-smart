@@ -76,6 +76,7 @@ const ALLOWED_DRAWINGS = {
 // The bitmap images of woowtech smart's own that ship (woowtech/tools/generate-icons.mjs).
 const OUR_IMAGES = new Set([
   "packages/app/assets/images/android-icon-foreground.png",
+  "packages/app/assets/images/android-icon-monochrome.png",
   "packages/app/assets/images/favicon-dark-attention.png",
   "packages/app/assets/images/favicon-dark-running.png",
   "packages/app/assets/images/favicon-dark.png",
@@ -84,6 +85,7 @@ const OUR_IMAGES = new Set([
   "packages/app/assets/images/favicon-light.png",
   "packages/app/assets/images/favicon.png",
   "packages/app/assets/images/icon.png",
+  "packages/app/assets/images/ios-icon-dark.png",
   "packages/app/assets/images/notification-icon.png",
   "packages/app/assets/images/splash-icon.png",
   "packages/app/public/apple-touch-icon.png",

@@ -161,6 +161,13 @@ export default {
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
+      // woowtech smart: the iOS 18 dark icon is the bare symbol on the system's dark background;
+      // the light icon stays the opaque white tile the App Store requires. No tinted icon: prebuild
+      // flattens it onto white, and iOS tints the light icon itself when there is none.
+      icon: {
+        light: "./assets/images/icon.png",
+        dark: "./assets/images/ios-icon-dark.png",
+      },
       supportsTablet: true,
       infoPlist: {
         CFBundleName: shortName,
@@ -175,6 +182,8 @@ export default {
       adaptiveIcon: {
         backgroundColor: "#FFFFFF",
         foregroundImage: "./assets/images/android-icon-foreground.png",
+        // woowtech smart: Android 13+ "Themed icons" draws this silhouette in the system colors.
+        monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -206,6 +215,10 @@ export default {
           resizeMode: "contain",
           backgroundColor: "#ffffff",
           dark: {
+            // woowtech smart: Android draws the splash logo onto a square of the background color
+            // (@expo/prebuild-config withAndroidSplashImages), and only makes night drawables when
+            // dark has an image: without one, the white square showed on the black dark splash.
+            image: "./assets/images/splash-icon.png",
             backgroundColor: "#000000",
           },
         },
