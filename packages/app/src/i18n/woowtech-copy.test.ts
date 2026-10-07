@@ -4,6 +4,28 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "./i18next";
 import { woowtechCopyFor } from "./woowtech-copy";
 
+// These newer fork surfaces are translated only in Traditional Chinese.
+const TRADITIONAL_CHINESE_ONLY_SURFACES = [
+  "desktopNotifications.",
+  "notificationDisplay.",
+  "notificationBannerCheck.",
+  "agentNotificationTitles.",
+  "metadataGeneration.",
+  "confirmDialog.",
+  "composer.",
+  "schedules.",
+  "time.",
+  "message.",
+  "workspaceRecovery.",
+  "claudeSdk.",
+  "claudeAuth.",
+  "thirdPartyNotices.",
+] as const;
+
+function isTraditionalChineseOnly(key: string): boolean {
+  return TRADITIONAL_CHINESE_ONLY_SURFACES.some((surface) => key.startsWith(surface));
+}
+
 // Text upstream hardcodes in English, which these files now read from the
 // woowtech.* translations. An upstream merge can bring a literal back.
 const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
@@ -108,22 +130,7 @@ describe("woowtech smart's own text", () => {
       const untranslated = [...english].flatMap(([key, text]) => {
         const newSurface = key.startsWith("addProject.") || key.startsWith("hostPicker.");
         if (newSurface && !["zh-TW", "zh-CN"].includes(language)) return [];
-        // These newer fork surfaces are translated only in Traditional Chinese.
-        const traditionalChineseOnly =
-          key.startsWith("desktopNotifications.") ||
-          key.startsWith("notificationDisplay.") ||
-          key.startsWith("agentNotificationTitles.") ||
-          key.startsWith("metadataGeneration.") ||
-          key.startsWith("confirmDialog.") ||
-          key.startsWith("composer.") ||
-          key.startsWith("schedules.") ||
-          key.startsWith("time.") ||
-          key.startsWith("message.") ||
-          key.startsWith("workspaceRecovery.") ||
-          key.startsWith("claudeSdk.") ||
-          key.startsWith("claudeAuth.") ||
-          key.startsWith("thirdPartyNotices.");
-        if (traditionalChineseOnly && language !== "zh-TW") return [];
+        if (isTraditionalChineseOnly(key) && language !== "zh-TW") return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });
       expect({ language, untranslated }).toEqual({ language, untranslated: [] });

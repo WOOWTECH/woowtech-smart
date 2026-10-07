@@ -82,6 +82,7 @@ import { loadDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { RosettaCalloutSource } from "@/desktop/updates/rosetta-callout-source";
 import { UpdateCalloutSource } from "@/desktop/updates/update-callout-source";
 import { NotificationDisplayCalloutSource } from "@/desktop/woowtech-notification-display-callout-source";
+import { NotificationBannerCheckCalloutSource } from "@/desktop/woowtech-notification-banner-check-callout-source";
 import { useActiveWorktreeNewAction } from "@/hooks/use-active-worktree-new-action";
 import { useGlobalNewWorkspaceAction } from "@/hooks/use-global-new-workspace-action";
 import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
@@ -584,6 +585,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <UpdateCalloutSource />
         {/* woowtech smart: notices the system did not show (woowtech-notification-fallback.ts). */}
         <NotificationDisplayCalloutSource />
+        <NotificationBannerCheckCalloutSource />
         <LegacyAgentSkillsMigration />
         <WorktreeSetupCalloutSource />
         <CommandCenterRootActions />
