@@ -86,9 +86,15 @@ export function answerBannerSeen(): void {
   });
 }
 
-/** The person did not see the banner, or the system could not show the test notification. */
+/**
+ * The person did not see the banner, or the system could not show the test notification. Either
+ * way banners do not show now, so an earlier yes no longer holds.
+ */
 export function showBannerHelp(): void {
-  update({ phase: "help" });
+  update({ confirmed: false, phase: "help" });
+  AsyncStorage.removeItem(CONFIRMED_STORAGE_KEY).catch((error) => {
+    console.warn("[Notifications] Could not forget that the banner was seen", error);
+  });
 }
 
 /**

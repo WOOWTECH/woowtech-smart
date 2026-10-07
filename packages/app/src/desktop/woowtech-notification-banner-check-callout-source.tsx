@@ -22,6 +22,11 @@ import {
 } from "@/utils/woowtech-notification-banner-check";
 
 const CALLOUT_ID = "woowtech-notification-banner-check";
+// Ties go to the callout registered first, and this one registers again each time its content
+// changes: while the person is answering it, it stays in front of the other sidebar callouts
+// (worktree setup is 100, a notice the system did not show is 200, Rosetta is 300).
+const IDLE_PRIORITY = 100;
+const ANSWERING_PRIORITY = 250;
 
 interface BannerCheckCalloutContent {
   title: string;
@@ -130,7 +135,7 @@ export function NotificationBannerCheckCalloutSource() {
       id: CALLOUT_ID,
       // Closing it is an answer too: it stays closed on this computer.
       dismissalKey: CALLOUT_ID,
-      priority: 100,
+      priority: phase === "idle" ? IDLE_PRIORITY : ANSWERING_PRIORITY,
       ...content,
       dismissible: true,
       testID: "notification-banner-check-callout",

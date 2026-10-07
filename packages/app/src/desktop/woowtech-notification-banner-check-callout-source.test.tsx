@@ -5,11 +5,15 @@
 // (woowtech-notification-banner-check-callout-source.tsx, woowtech/README.md section 16).
 import { i18n as testI18n } from "@/i18n/i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React from "react";
+import React, { useEffect } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearAsyncStorageStub } from "../../test-stubs/async-storage";
-import { SidebarCalloutProvider, SidebarCalloutViewport } from "@/contexts/sidebar-callout-context";
+import {
+  SidebarCalloutProvider,
+  SidebarCalloutViewport,
+  useSidebarCallouts,
+} from "@/contexts/sidebar-callout-context";
 import {
   forgetBannerCheckForTest,
   getBannerCheck,
@@ -50,13 +54,28 @@ vi.mock("@/desktop/host", async (importOriginal) => {
   };
 });
 
-function renderSidebar() {
-  return render(
+/** Another sidebar callout with the banner check's resting priority, like worktree setup. */
+function CompetingCallout() {
+  const callouts = useSidebarCallouts();
+  useEffect(
+    () => callouts.show({ id: "competing", priority: 100, title: "Set up worktrees" }),
+    [callouts],
+  );
+  return null;
+}
+
+function Sidebar({ competing }: { competing: boolean }) {
+  return (
     <SidebarCalloutProvider>
       <NotificationBannerCheckCalloutSource />
+      {competing ? <CompetingCallout /> : null}
       <SidebarCalloutViewport />
-    </SidebarCalloutProvider>,
+    </SidebarCalloutProvider>
   );
+}
+
+function renderSidebar() {
+  return render(<Sidebar competing={false} />);
 }
 
 describe("the first-run banner check in the desktop sidebar", () => {
@@ -103,6 +122,19 @@ describe("the first-run banner check in the desktop sidebar", () => {
     expect(host.openSystemSettings).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByText("Test again"));
     await vi.waitFor(() => expect(host.sent).toHaveLength(2));
+  });
+
+  it("stays in front of another callout while the person answers it", async () => {
+    const view = render(<Sidebar competing={false} />);
+    await screen.findByText("Send test notification");
+    view.rerender(<Sidebar competing />);
+
+    fireEvent.click(screen.getByText("Send test notification"));
+
+    expect(await screen.findByText("Did you see the banner?")).toBeTruthy();
+    expect(screen.queryByText("Set up worktrees")).toBeNull();
+    fireEvent.click(screen.getByText("No"));
+    expect(await screen.findByText("Notifications are not showing")).toBeTruthy();
   });
 
   it("goes straight to the help when the system could not show the test", async () => {
