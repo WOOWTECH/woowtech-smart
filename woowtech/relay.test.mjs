@@ -127,3 +127,22 @@ test("no shipped source names upstream's relay", () => {
     [],
   );
 });
+
+test("the daemon cuts its relay sockets when it stops", () => {
+  // A graceful close waits for the relay's answer, and the daemon's shutdown waits for these
+  // sockets; an offline relay never answers (README 11).
+  const transport = readFileSync(
+    new URL("../packages/server/src/server/relay-transport.ts", import.meta.url),
+    "utf8",
+  );
+  const stop = transport.slice(
+    transport.indexOf("const stop = async (): Promise<void> => {"),
+    transport.indexOf("const connectControl = (): void => {"),
+  );
+  assert.match(stop, /controlWs\.terminate\(\);/);
+  assert.match(
+    stop,
+    /for \(const ws of dataSockets\.values\(\)\) \{\s*try \{\s*ws\.terminate\(\);/,
+  );
+  assert.doesNotMatch(stop, /\.close\(\)/);
+});

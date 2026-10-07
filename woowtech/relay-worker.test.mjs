@@ -124,6 +124,16 @@ test("our Worker runs upstream's relay: same code, Durable Object and migrations
   assert.deepEqual(ours.migrations, upstream.migrations);
 });
 
+test("our relay answers a Close frame before anything else in webSocketClose", () => {
+  // Under the compatibility date the runtime does not answer it for a hibernated socket: the peer
+  // waited 20 s and got 1006, and a stopping daemon was killed at its 10 s deadline (README 11).
+  const adapter = readFileSync(path.join(relayDir, "src/cloudflare-adapter.ts"), "utf8");
+  assert.match(
+    adapter,
+    /webSocketClose\(ws: WebSocket, code: number, reason: string, _wasClean: boolean\): void \{\s*\/\/ woowtech smart:[^\n]*\n\s*answerCloseFrame\(ws, code, reason\);/,
+  );
+});
+
 test("our Worker keeps no Workers Logs", () => {
   // The owner turned Workers Logs off after the 2026-09-26 acceptance: the relay logs
   // which role connected to which server ID, and nobody needs that kept in Cloudflare.
