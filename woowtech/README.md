@@ -348,7 +348,9 @@ relay 讓手機不在同一個網路時也連得到 daemon，流量端對端加�
 
 Worker：
 
-- 程式是上游的 `packages/relay/src/cloudflare-adapter.ts`，沒改：每個 daemon（serverId）一個 Durable Object `RelayDurableObject`，用 WebSocket hibernation 轉送 daemon 和 App 之間的 WebSocket，不存資料。`/health` 回 `{"status":"ok"}`，`/ws` 是 relay。
+- 程式是上游的 `packages/relay/src/cloudflare-adapter.ts`，只加一個接點：每個 daemon（serverId）一個 Durable Object `RelayDurableObject`，用 WebSocket hibernation 轉送 daemon 和 App 之間的 WebSocket，不存資料。`/health` 回 `{"status":"ok"}`，`/ws` 是 relay。
+- 接點：`webSocketClose` 第一行呼叫 `answerCloseFrame`（`src/woowtech-close-reply.ts`），回覆對方的 Close frame。`compatibility_date` 是 2024-12-01，runtime 不會替 hibernation 的 socket 回覆，關閉的一方只能等到自己逾時：2026-10-07 對 relay.woowtech.io 實測是 20 秒，最後是 1006。停止 daemon 時要等 relay 的 socket 關掉，每次都撐到 10 秒的期限被強制結束（`Forcing shutdown - HTTP server didn't close in time`，worker exit code 1）。對方的代碼是 1004、1005、1006、1015 時（這幾個不能放進 Close frame）回 1000。上游沒有這個接點，`wrangler.toml` 的部署也一樣有這個問題。
+- daemon 那邊不再等 relay 回覆：`relay-transport.ts` 的 `stop()` 用 `terminate()` 切斷控制和資料 socket，不做關閉握手（relay 連不上時也永遠等不到）。relay 收到斷線，照原本的邏輯關掉配對的 App socket（1012），App 會重連。
 - 上游的 `wrangler.toml` 設了 `PASEO_RELAY_UPSTREAM = "https://paseo-relay-next.fly.dev"`：上游把正式流量搬到了 Fly，Cloudflare 上的 Worker 只把請求原樣轉過去。沒設這個變數時，Worker 自己當 relay。
 - 我們用 fork 自己的 `packages/relay/wrangler.woowtech.toml` 部署，上游的 `wrangler.toml` 不動：
   - 帳號 `9c27…`、Worker 名稱 `woowtech-smart-relay`、custom domain `relay.woowtech.io`（部署時自動建 DNS 記錄和憑證）、`workers_dev = false`（不開 workers.dev 網址）。

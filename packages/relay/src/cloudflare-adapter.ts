@@ -19,6 +19,7 @@
 
 import { createCutoverProxy } from "./cutover-proxy.js";
 import type { ConnectionRole, RelaySessionAttachment } from "./types.js";
+import { answerCloseFrame } from "./woowtech-close-reply.js";
 
 type RelayProtocolVersion = "1" | "2";
 
@@ -509,6 +510,8 @@ export class RelayDurableObject {
    * Called when a WebSocket closes (wakes from hibernation).
    */
   webSocketClose(ws: WebSocket, code: number, reason: string, _wasClean: boolean): void {
+    // woowtech smart: complete the closing handshake, or the peer waits for its timeout.
+    answerCloseFrame(ws, code, reason);
     const attachmentRaw = deserializeAttachment(ws);
     if (!isRecord(attachmentRaw)) return;
     const attachment = attachmentRaw;
