@@ -269,6 +269,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 採白底藍字（WOOW 標誌 #6183fc），跟 WOOW Home 的藍底白字做出區隔。桌面版的開發版用藍底白字，一眼能分辨。
 - 白色底板只用在 App 圖示（iOS 主圖示、Android 自適應圖示的底色、macOS／Windows 圖示、網頁的主畫面圖示）。標誌放在 App 自己的背景上時一律去背（2026-10-07，owner：「logo 都要用去背的」）：Android 深色模式的啟動畫面原本是黑底上一塊白色圓角底板。
   - 啟動畫面 `splash-icon.png`：透明背景上的藍色標誌，800px。Android 12 以後系統把它畫在一個直徑三分之二畫布的圓裡，所以標誌寬 50%（對角線 64%，不會被切到）。
+  - Android 的啟動圖是 prebuild 產生的：`@expo/prebuild-config` 的 `withAndroidSplashImages` 先用啟動畫面的背景色畫一塊 288dp 的方塊，再把標誌疊上去；`dark` 有 `image` 才會產生 `drawable-night-*`。原本 `dark` 只有背景色，深色模式就用淺色那張（白方塊），這才是黑底上出現白方塊的原因。所以 `dark.image` 也指向 `splash-icon.png`，深色版畫在黑方塊上。iOS 直接用原圖疊在背景色上，所以原圖本身也要去背。
   - favicon（網頁和桌面版視窗的小圖示，含執行中、需要注意兩種狀態點）：透明背景，標誌寬 92%。
   - iOS 18 的深色和染色圖示（`ios-icon-dark.png` 藍色標誌、`ios-icon-tinted.png` 白色剪影，都是透明背景，`app.config.js` 的 `ios.icon`）：系統自己畫背景。主圖示仍是不透明的白底，App Store 不收有透明通道的圖示。
   - Android 13 以後的主題圖示（`android-icon-monochrome.png`，`adaptiveIcon.monochromeImage`）：白色剪影，幾何跟自適應前景一樣（寬 40%），使用者開啟「主題圖示」時系統依桌布配色上色。

@@ -180,6 +180,19 @@ test("iOS has dark and tinted icons, and Android a themed one", () => {
   );
 });
 
+test("the dark splash screen gets its own logo drawables on Android", () => {
+  // Android composites the splash logo onto a square of the splash background color, and makes
+  // the night drawables only when dark names an image: without one, the white square of the light
+  // splash showed on the black dark splash (2026-10-07).
+  const splash = expoPrebuildConfig("production").plugins.find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === "expo-splash-screen",
+  );
+  assert.ok(splash, "the expo-splash-screen plugin is not configured");
+  assert.equal(splash[1].image, "./assets/images/splash-icon.png");
+  assert.equal(splash[1].dark?.image, "./assets/images/splash-icon.png");
+  assert.equal(splash[1].dark?.backgroundColor?.toLowerCase(), "#000000");
+});
+
 test("Android's adaptive icon sits on white", () => {
   const { adaptiveIcon } = expoPrebuildConfig("production").android;
   assert.equal(adaptiveIcon.backgroundColor.toLowerCase(), "#ffffff");
