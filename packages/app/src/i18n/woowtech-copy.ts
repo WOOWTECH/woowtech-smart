@@ -663,6 +663,40 @@ const NOTIFICATION_DISPLAY_ZH_TW: typeof NOTIFICATION_DISPLAY_ENGLISH = {
   openSettings: "打開通知設定",
 };
 
+const NOTIFICATION_BANNER_CHECK_ENGLISH = {
+  idleTitle: "Check that notifications show up",
+  idleDescription:
+    "Send a test notification and see whether a banner appears at the top right of your screen.",
+  send: "Send test notification",
+  askTitle: "Did you see the banner?",
+  askDescription:
+    "A test notification was just sent. It should appear as a banner at the top right of your screen.",
+  seen: "Yes, I saw it",
+  notSeen: "No",
+  helpTitle: "Notifications are not showing",
+  helpDescription:
+    "In System Settings → Notifications, find woowtech smart, turn on Allow Notifications and choose Banners or Alerts. Also check that Focus (Do Not Disturb) is off.",
+  openSettings: "Open notification settings",
+  testAgain: "Test again",
+  confirmedHint: "Confirmed: banners appear on this computer.",
+};
+
+const NOTIFICATION_BANNER_CHECK_ZH_TW: typeof NOTIFICATION_BANNER_CHECK_ENGLISH = {
+  idleTitle: "確認通知會跳出來",
+  idleDescription: "傳送一則測試通知，看看螢幕右上角有沒有跳出橫幅。",
+  send: "傳送測試通知",
+  askTitle: "你有看到通知橫幅嗎？",
+  askDescription: "剛才傳送了一則測試通知，它會以橫幅出現在螢幕右上角。",
+  seen: "有看到",
+  notSeen: "沒看到",
+  helpTitle: "通知沒有跳出來",
+  helpDescription:
+    "請到「系統設定 → 通知」，找到 woowtech smart，打開「允許通知」，並把樣式選成「橫幅」或「提示」。也確認「專注模式」（勿擾）沒有開著。",
+  openSettings: "打開通知設定",
+  testAgain: "再測一次",
+  confirmedHint: "已確認：這台電腦的通知會跳出橫幅。",
+};
+
 const AGENT_NOTIFICATION_TITLES_ENGLISH = {
   finished: "Agent finished",
   permission: "Agent needs permission",
@@ -1211,6 +1245,8 @@ export function woowtechCopyFor(language: string) {
       language === "zh-TW" ? AGENT_NOTIFICATION_TITLES_ZH_TW : AGENT_NOTIFICATION_TITLES_ENGLISH,
     notificationDisplay:
       language === "zh-TW" ? NOTIFICATION_DISPLAY_ZH_TW : NOTIFICATION_DISPLAY_ENGLISH,
+    notificationBannerCheck:
+      language === "zh-TW" ? NOTIFICATION_BANNER_CHECK_ZH_TW : NOTIFICATION_BANNER_CHECK_ENGLISH,
     composer: language === "zh-TW" ? COMPOSER_ZH_TW : COMPOSER_ENGLISH,
     schedules: language === "zh-TW" ? SCHEDULES_ZH_TW : SCHEDULES_ENGLISH,
     time: language === "zh-TW" ? TIME_ZH_TW : TIME_ENGLISH,

@@ -195,3 +195,29 @@ test("Windows gets the electron-builder appId as AppUserModelID before the app i
   assert.ok(appId);
   assert.ok(helper.includes(`WOOWTECH_DESKTOP_APP_ID = "${appId}"`));
 });
+
+// woowtech smart (README section 16): macOS keeps a new app's notifications hidden until the person
+// answers its first-launch prompt, and still reports them shown, so the desktop asks the person.
+test("the desktop asks whether the banner showed, in Settings and once in the sidebar", () => {
+  assert.match(
+    source("packages/app/src/app/_layout.tsx"),
+    /<NotificationBannerCheckCalloutSource \/>/,
+  );
+  const section = source("packages/app/src/desktop/components/desktop-notifications-section.tsx");
+  assert.match(
+    section,
+    /<NotificationBannerCheckPrompt onTestAgain=\{handleSendTestNotification\} \/>/,
+  );
+  assert.match(section, /void loadBannerCheck\(\);/);
+  const permissions = source("packages/app/src/desktop/permissions/use-desktop-permissions.ts");
+  assert.match(permissions, /if \(state\.status === "success"\) askAboutBanner\(\);/);
+  assert.match(
+    permissions,
+    /if \(state\.status === "error" \|\| state\.status === "unconfirmed"\) showBannerHelp\(\);/,
+  );
+  const callout = source(
+    "packages/app/src/desktop/woowtech-notification-banner-check-callout-source.tsx",
+  );
+  assert.match(callout, /if \(!isElectron \|\| !loaded \|\| confirmed\) \{/);
+  assert.match(callout, /dismissalKey: CALLOUT_ID,/, "closing the callout keeps it closed");
+});
