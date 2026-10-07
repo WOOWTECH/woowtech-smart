@@ -267,18 +267,26 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 ### 8. 圖示與 logo（品牌識別第三步）
 
 - 採白底藍字（WOOW 標誌 #6183fc），跟 WOOW Home 的藍底白字做出區隔。桌面版的開發版用藍底白字，一眼能分辨。
+- 白色底板只用在 App 圖示（iOS 主圖示、Android 自適應圖示的底色、macOS／Windows 圖示、網頁的主畫面圖示）。標誌放在 App 自己的背景上時一律去背（2026-10-07，owner：「logo 都要用去背的」）：Android 深色模式的啟動畫面原本是黑底上一塊白色圓角底板。
+  - 啟動畫面 `splash-icon.png`：透明背景上的藍色標誌，800px。Android 12 以後系統把它畫在一個直徑三分之二畫布的圓裡，所以標誌寬 50%（對角線 64%，不會被切到）。
+  - favicon（網頁和桌面版視窗的小圖示，含執行中、需要注意兩種狀態點）：透明背景，標誌寬 92%。
+  - iOS 18 的深色和染色圖示（`ios-icon-dark.png` 藍色標誌、`ios-icon-tinted.png` 白色剪影，都是透明背景，`app.config.js` 的 `ios.icon`）：系統自己畫背景。主圖示仍是不透明的白底，App Store 不收有透明通道的圖示。
+  - Android 13 以後的主題圖示（`android-icon-monochrome.png`，`adaptiveIcon.monochromeImage`）：白色剪影，幾何跟自適應前景一樣（寬 40%），使用者開啟「主題圖示」時系統依桌布配色上色。
+  - 通知圖示本來就是白色剪影；App 畫面裡的 logo 是向量繪製，本來就沒有底板。
 - 來源是 `woowtech/brand/woowtech-symbol.svg`：設計系統的官方字形，是 PDF 轉出的 SVG，已經裁切到字形的範圍。
   - `woowtech/tools/flatten-symbol.py` 把它攤平成 `woowtech-symbol-path.svg`，共 10 筆路徑，畫出來跟原檔逐像素相同。
   - 不能合成一條路徑：筆畫會重疊，合成後在非零環繞規則下，交叉處會被挖成空洞。
 - `woowtech/tools/generate-icons.mjs` 產生全部 22 個圖示，需要 Google Chrome、sips 和 iconutil。加 `--out <資料夾>` 可以只輸出預覽。
   - iOS：1024 滿版、沒有透明通道。
   - Android：自適應圖示的字形寬度 40%，落在安全區內，底色白色；通知圖示是白色剪影。
+  - Headless Chrome 偶爾在寫完截圖後、關閉時當掉（exit code 2，「Teardown watchdog expired」），所以產生器看截圖檔是否寫出，最多試三次。只想換其中幾張圖時，用 `--out` 輸出到別的資料夾再挑檔案複製：Chrome 版本不同時，沒改的圖也會有像素差異。
   - favicon：字形放大，16px 也看得出輪廓。狀態點沿用上游的顏色，執行中是 #3b82f6、需要注意是 #22c55e。
   - macOS：照 824/1024 的格線畫，含陰影。
 - App 裡的 logo 元件（`paseo-logo.tsx`，有 5 個地方在用）改畫 WOOW 標誌，顏色見第 9 節。
 - 網頁版和桌面版的啟動畫面用 CSS 遮罩畫標誌，沒有經過 logo 元件，到 2026-09-29 都還是上游 Paseo 的蝴蝶（手機版一直是 WOOW 標誌）。現在遮罩用 `paseo-logo.tsx` 的 `woowSymbolMaskSvg()`，跟元件同樣的 10 筆筆畫。上游留下的 `assets/images/butterfly-*.svg`、`favicon-*.svg` 在整個 repo（含官網）都沒有引用，已刪；App 用的 favicon 是 `generate-icons.mjs` 產生的 PNG。
 - `woowtech/icons.test.mjs` 檢查以下幾件事，合併上游時如果被換回 Paseo 的圖示就會失敗：
   - 圖示內容：有品牌藍、沒有上游的黑色方塊。
+  - 啟動畫面、favicon、iOS 深色和染色圖示、Android 主題圖示的邊緣是透明的，沒有白色底板；染色和主題圖示是白色剪影；`app.config.js` 接上這些圖。
   - 尺寸和格式。
   - Android 的底色和通知的強調色。
   - logo 元件跟品牌檔一致。

@@ -1,14 +1,24 @@
 // Generates woowtech smart's app, web and desktop icons from the brand symbol in
-// woowtech/brand: the blue symbol on white tiles (the brand choice, distinct from
-// WOOW Home's blue tiles), a white symbol for Android notifications, and a blue
-// tile for development desktop builds.
+// woowtech/brand: the blue symbol on white tiles for app icons (the brand choice,
+// distinct from WOOW Home's blue tiles), the bare symbol on a transparent background
+// wherever the logo sits on the app's own background (splash screen, favicons, the
+// iOS dark and tinted icons, Android's themed icon), a white symbol for Android
+// notifications, and a blue tile for development desktop builds.
 //
 //   node woowtech/tools/generate-icons.mjs              # write into the packages
 //   node woowtech/tools/generate-icons.mjs --out DIR    # write a preview set to DIR
 //
 // Needs Google Chrome (headless rendering), sips and iconutil (macOS).
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,15 +53,28 @@ function page(body) {
   return `<html><head><style>html,body{margin:0;background:transparent}</style></head><body><div style="position:relative;width:${MASTER}px;height:${MASTER}px">${body}</div></body></html>`;
 }
 
+/** A status dot in the bottom-right corner (favicons). */
+function statusDot(color) {
+  return color
+    ? `<div style="position:absolute;right:0;bottom:0;width:${MASTER * 0.36}px;height:${MASTER * 0.36}px;border-radius:50%;background:${color}"></div>`
+    : "";
+}
+
+/**
+ * The bare symbol on a transparent canvas. A white tile would show as a white box on
+ * a dark background: Android's dark splash screen did (2026-10-07).
+ */
+function clear({ glyph, glyphWidth, dot }) {
+  return page(`${symbol(glyph, glyphWidth)}${statusDot(dot)}`);
+}
+
 /** A square tile, inset from the canvas edge, holding a centered symbol. */
 function tile({ inset, radius, fill, border, shadow = "none", glyph, glyphWidth, dot }) {
   const size = MASTER - inset * 2;
   const borderCss = border
     ? `box-shadow:inset 0 0 0 ${Math.round(MASTER * 0.012)}px ${border}${shadow === "none" ? "" : `,${shadow}`};`
     : `box-shadow:${shadow};`;
-  const dotHtml = dot
-    ? `<div style="position:absolute;right:0;bottom:0;width:${MASTER * 0.36}px;height:${MASTER * 0.36}px;border-radius:50%;background:${dot}"></div>`
-    : "";
+  const dotHtml = statusDot(dot);
   return page(
     `<div style="position:absolute;left:${inset}px;top:${inset}px;width:${size}px;height:${size}px;border-radius:${radius}px;background:${fill};${borderCss}">${symbol(glyph, glyphWidth)}</div>${dotHtml}`,
   );
@@ -74,33 +97,19 @@ const compositions = {
     glyph: BLUE_SYMBOL,
     glyphWidth: 62,
   }),
-  // Favicons show at 16-32px, so the symbol fills more of the tile.
-  favicon: tile({
-    inset: 20,
-    radius: 200,
-    fill: "#ffffff",
-    border: TILE_BORDER,
-    glyph: BLUE_SYMBOL,
-    glyphWidth: 76,
-  }),
-  faviconRunning: tile({
-    inset: 20,
-    radius: 200,
-    fill: "#ffffff",
-    border: TILE_BORDER,
-    glyph: BLUE_SYMBOL,
-    glyphWidth: 76,
-    dot: RUNNING_DOT,
-  }),
-  faviconAttention: tile({
-    inset: 20,
-    radius: 200,
-    fill: "#ffffff",
-    border: TILE_BORDER,
-    glyph: BLUE_SYMBOL,
-    glyphWidth: 76,
-    dot: ATTENTION_DOT,
-  }),
+  // Android 12+ draws the splash icon inside a circle two thirds of the canvas wide, so the
+  // symbol (105.2 x 83.4) is 50% wide: its diagonal, 64%, stays inside the circle.
+  splash: clear({ glyph: BLUE_SYMBOL, glyphWidth: 50 }),
+  // Favicons show at 16-32px, so the symbol fills almost the whole canvas.
+  favicon: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92 }),
+  faviconRunning: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92, dot: RUNNING_DOT }),
+  faviconAttention: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92, dot: ATTENTION_DOT }),
+  // iOS 18 dark and tinted app icons: the system draws the background, the icon gives the
+  // symbol at the size of the light icon's. Tinted icons are grayscale; the system tints them.
+  iosDark: clear({ glyph: BLUE_SYMBOL, glyphWidth: 62 }),
+  iosTinted: clear({ glyph: WHITE_SYMBOL, glyphWidth: 62 }),
+  // Android 13+ themed icon: a silhouette with the adaptive foreground's geometry.
+  androidMonochrome: clear({ glyph: WHITE_SYMBOL, glyphWidth: 40 }),
   // macOS icon grid: an 824px tile inside the 1024px canvas, with a soft shadow.
   desktop: tile({
     inset: 100,
@@ -125,21 +134,31 @@ function renderMaster(name) {
   const html = path.join(work, `${name}.html`);
   const png = path.join(work, `${name}.png`);
   writeFileSync(html, compositions[name]);
-  execFileSync(
-    CHROME,
-    [
-      "--headless=new",
-      "--disable-gpu",
-      "--hide-scrollbars",
-      "--allow-file-access-from-files",
-      "--default-background-color=00000000",
-      `--window-size=${MASTER},${MASTER}`,
-      `--screenshot=${png}`,
-      `file://${html}`,
-    ],
-    { stdio: "ignore" },
-  );
-  return png;
+  const args = [
+    "--headless=new",
+    "--disable-gpu",
+    "--hide-scrollbars",
+    "--allow-file-access-from-files",
+    "--default-background-color=00000000",
+    `--window-size=${MASTER},${MASTER}`,
+    `--screenshot=${png}`,
+    `file://${html}`,
+  ];
+  // Headless Chrome sometimes crashes while shutting down (exit code 2, "Teardown watchdog
+  // expired") after it wrote the screenshot, so the file decides, with up to three tries.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    rmSync(png, { force: true });
+    try {
+      execFileSync(CHROME, args, { stdio: "ignore" });
+    } catch (error) {
+      if (!existsSync(png) || statSync(png).size === 0) {
+        if (attempt === 3) throw error;
+        continue;
+      }
+    }
+    if (existsSync(png) && statSync(png).size > 0) return png;
+  }
+  throw new Error(`Chrome wrote no screenshot for ${name}`);
 }
 
 // --- PNG helpers ---------------------------------------------------------------
@@ -215,7 +234,10 @@ try {
   write("packages/app/assets/images/icon.png", withoutAlpha(masters.fullBleed));
   write("packages/app/assets/images/android-icon-foreground.png", png("androidForeground", MASTER));
   write("packages/app/assets/images/notification-icon.png", png("notification", 96));
-  write("packages/app/assets/images/splash-icon.png", png("tile", 200));
+  write("packages/app/assets/images/splash-icon.png", png("splash", 800));
+  write("packages/app/assets/images/ios-icon-dark.png", png("iosDark", MASTER));
+  write("packages/app/assets/images/ios-icon-tinted.png", png("iosTinted", MASTER));
+  write("packages/app/assets/images/android-icon-monochrome.png", png("androidMonochrome", MASTER));
   for (const name of ["favicon", "favicon-light", "favicon-dark"]) {
     write(`packages/app/assets/images/${name}.png`, png("favicon", 48));
   }

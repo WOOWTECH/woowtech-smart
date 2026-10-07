@@ -161,6 +161,13 @@ export default {
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
+      // woowtech smart: iOS 18 dark and tinted icons draw the bare symbol on the system's own
+      // background; the light icon stays the opaque white tile the App Store requires.
+      icon: {
+        light: "./assets/images/icon.png",
+        dark: "./assets/images/ios-icon-dark.png",
+        tinted: "./assets/images/ios-icon-tinted.png",
+      },
       supportsTablet: true,
       infoPlist: {
         CFBundleName: shortName,
@@ -175,6 +182,8 @@ export default {
       adaptiveIcon: {
         backgroundColor: "#FFFFFF",
         foregroundImage: "./assets/images/android-icon-foreground.png",
+        // woowtech smart: Android 13+ "Themed icons" draws this silhouette in the system colors.
+        monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,

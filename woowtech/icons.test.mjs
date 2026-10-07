@@ -1,4 +1,5 @@
-// woowtech smart's icons: the blue WOOW symbol on white (the brand choice), in the
+// woowtech smart's icons: the blue WOOW symbol on white app-icon tiles (the brand choice) and
+// on a transparent background wherever it sits on the app's own background, in the
 // sizes and formats each platform requires. The checks look at what the pictures
 // contain, so an upstream merge that brings Paseo's icons back fails here.
 //
@@ -32,7 +33,8 @@ const favicons = [
 const SYMBOL_ICONS = [
   { path: `${images}/icon.png`, size: 1024, opaque: true },
   { path: `${images}/android-icon-foreground.png`, size: 1024 },
-  { path: `${images}/splash-icon.png`, size: 200 },
+  { path: `${images}/splash-icon.png`, size: 800 },
+  { path: `${images}/ios-icon-dark.png`, size: 1024 },
   ...favicons.map((suffix) => ({ path: `${images}/favicon${suffix}.png`, size: 48 })),
   { path: "packages/app/public/apple-touch-icon.png", size: 180, opaque: true },
   { path: "packages/app/public/pwa-icon-192.png", size: 192 },
@@ -108,6 +110,73 @@ test("icons have the sizes and formats their platforms require", () => {
     shareOfPixels(notification, (red, green, blue) => Math.min(red, green, blue) < 230),
     0,
     "the notification icon is not a white silhouette",
+  );
+});
+
+// The logo on the app's own background has no tile: a white tile showed as a white box on
+// Android's dark splash screen (2026-10-07). App icons keep theirs (SYMBOL_ICONS, opaque).
+const CLEAR_LOGOS = [
+  `${images}/splash-icon.png`,
+  ...favicons.map((suffix) => `${images}/favicon${suffix}.png`),
+  `${images}/ios-icon-dark.png`,
+  `${images}/ios-icon-tinted.png`,
+  `${images}/android-icon-monochrome.png`,
+];
+
+/** The share of the outermost pixel ring that is transparent, and that is opaque white. */
+function border(image) {
+  const { width, height, rgba } = image;
+  let clear = 0;
+  let white = 0;
+  let total = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (x !== 0 && y !== 0 && x !== width - 1 && y !== height - 1) continue;
+      const offset = (y * width + x) * 4;
+      const [red, green, blue, alpha] = rgba.subarray(offset, offset + 4);
+      total += 1;
+      if (alpha < 16) clear += 1;
+      if (alpha > 200 && Math.min(red, green, blue) > 235) white += 1;
+    }
+  }
+  return { clear: clear / total, white: white / total };
+}
+
+test("the logo has a transparent background wherever it sits on the app's own background", () => {
+  for (const file of CLEAR_LOGOS) {
+    const image = readPng(repoPath(file));
+    const edge = border(image);
+    // Favicons' status dot touches the corner.
+    assert.ok(
+      edge.clear > 0.9,
+      `${file} has a background: ${Math.round(edge.clear * 100)}% of its edge is clear`,
+    );
+    assert.equal(edge.white, 0, `${file} sits on a white tile`);
+    assert.ok(shareOfPixels(image, () => true) < 0.5, `${file} covers most of its canvas`);
+  }
+  // Tinted and themed icons are silhouettes: the system colors them.
+  for (const file of [`${images}/ios-icon-tinted.png`, `${images}/android-icon-monochrome.png`]) {
+    const image = readPng(repoPath(file));
+    assert.deepEqual([image.width, image.height], [1024, 1024], file);
+    assert.ok(shareOfPixels(image, () => true) > 0.03, `${file} is empty`);
+    assert.equal(
+      shareOfPixels(image, (red, green, blue) => Math.min(red, green, blue) < 230),
+      0,
+      `${file} is not a white silhouette`,
+    );
+  }
+});
+
+test("iOS has dark and tinted icons, and Android a themed one", () => {
+  const config = expoPrebuildConfig("production");
+  assert.deepEqual(config.ios.icon, {
+    light: "./assets/images/icon.png",
+    dark: "./assets/images/ios-icon-dark.png",
+    tinted: "./assets/images/ios-icon-tinted.png",
+  });
+  assert.equal(
+    config.android.adaptiveIcon.monochromeImage,
+    "./assets/images/android-icon-monochrome.png",
   );
 });
 
