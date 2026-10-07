@@ -76,6 +76,18 @@ describe("the question after a test notification", () => {
     await vi.waitFor(async () => expect(await AsyncStorage.getItem(CONFIRMED_KEY)).toBe("1"));
   });
 
+  it("takes back an earlier yes on a no, on this computer too", async () => {
+    await sendBannerCheckNotification(async () => "shown");
+    answerBannerSeen();
+    await vi.waitFor(async () => expect(await AsyncStorage.getItem(CONFIRMED_KEY)).toBe("1"));
+
+    await sendBannerCheckNotification(async () => "shown");
+    showBannerHelp();
+
+    expect(getBannerCheck()).toMatchObject({ confirmed: false, phase: "help" });
+    await vi.waitFor(async () => expect(await AsyncStorage.getItem(CONFIRMED_KEY)).toBeNull());
+  });
+
   it("ends with a no that shows the help", async () => {
     await sendBannerCheckNotification(async () => "shown");
     showBannerHelp();
