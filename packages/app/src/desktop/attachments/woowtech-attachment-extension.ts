@@ -22,3 +22,21 @@ export function attachmentExtensionFromName(name: string | null | undefined): st
   const extension = baseName.slice(dot);
   return ACCEPTED_EXTENSION.test(extension) ? extension : "";
 }
+
+/**
+ * The lowercase extension of a path, a file name or a URL (attachments/file-types.ts
+ * getFileExtension). Upstream cut the whole string at the first "#" and "?" before looking for the
+ * last dot, so a local "shot#1.png" or "what?.png" was no image (the desktop image picker failed
+ * without a word), and a "Makefile" under ~/.config gave ".config/…/makefile", which the desktop's
+ * main process refused with an English error (2026-10-08, Mac acceptance app). The file name as it
+ * is comes first; a "?query" or "#fragment" is dropped only when that gives no extension, so
+ * "/tmp/screenshot.PNG?cache=1" still reads as a PNG.
+ */
+export function pathExtension(path: string): string {
+  const asIs = attachmentExtensionFromName(path);
+  if (asIs) {
+    return asIs.toLowerCase();
+  }
+  const withoutSuffix = path.split("#", 1)[0]?.split("?", 1)[0] ?? path;
+  return attachmentExtensionFromName(withoutSuffix).toLowerCase();
+}

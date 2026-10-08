@@ -49,6 +49,14 @@ test("desktop attachments take the extension from the file name only (RC-D-12c1)
   assert.doesNotMatch(store, /getFileExtensionFromName/);
 });
 
+test("a local file's extension keeps # and ? in its name (desktop open dialog, 10/8)", () => {
+  const fileTypes = source("packages/app/src/attachments/file-types.ts");
+  assert.match(
+    fileTypes,
+    /export function getFileExtension\(path: string\): string \{[^}]*return pathExtension\(path\);/s,
+  );
+});
+
 test("the supervisor starts workers outside a working directory that was removed", () => {
   const supervisor = source("packages/server/scripts/supervisor.ts");
   assert.match(supervisor, /const cwd = workerCwd\(\);/);
