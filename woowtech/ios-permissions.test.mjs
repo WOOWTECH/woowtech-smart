@@ -8,6 +8,7 @@ import { expoIntrospectedConfig } from "./expo-config.mjs";
 
 const KEYS = [
   "NSCameraUsageDescription",
+  "NSLocalNetworkUsageDescription",
   "NSMicrophoneUsageDescription",
   "NSPhotoLibraryUsageDescription",
 ];

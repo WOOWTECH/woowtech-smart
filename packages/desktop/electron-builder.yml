@@ -19,6 +19,7 @@ protocols:
       - woowtech-smart
 afterPack: ./scripts/after-pack.js
 afterSign: ./scripts/after-sign.js
+# woowtech smart: scripts/after-pack.js flips the Electron fuses (scripts/woowtech-fuses.js).
 directories:
   output: release
 files:
