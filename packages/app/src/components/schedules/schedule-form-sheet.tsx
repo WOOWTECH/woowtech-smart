@@ -21,7 +21,7 @@ import { ComboboxItem } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { HostStatusDotSlot } from "@/components/hosts/host-picker";
+import { HostStatusDotSlot, useHostConnectionLabel } from "@/components/hosts/host-picker";
 import { createControlGeometry, type FieldControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
@@ -971,11 +971,14 @@ function HostOptionItem({
   onPress,
 }: SelectFieldRenderOptionInput<string>): ReactElement {
   const leadingSlot = useMemo(() => <HostStatusDotSlot serverId={option.value} />, [option.value]);
+  // woowtech smart: the address under the name tells hosts with the same name apart.
+  const connectionLabel = useHostConnectionLabel(option.value);
 
   return (
     <ComboboxItem
       testID={option.testID}
       label={option.label}
+      description={connectionLabel}
       selected={selected}
       active={active}
       onPress={onPress}

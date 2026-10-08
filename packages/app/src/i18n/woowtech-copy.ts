@@ -617,6 +617,30 @@ const HOST_PICKER_COPY: Readonly<Record<string, typeof HOST_PICKER_ENGLISH>> = {
   "zh-CN": HOST_PICKER_ZH_CN,
 };
 
+// Text upstream hardcodes in English in its components, seen in Traditional Chinese on 2026-09-30
+// (README section 14). English is upstream's text.
+const INTERFACE_TEXT_ENGLISH = {
+  markAsRead: "Mark as read",
+  markAsUnread: "Mark as unread",
+  pinWorkspace: "Pin chat",
+  project: "Project",
+  searchProjects: "Search projects",
+  noProjects: "No projects available.",
+  noMatchingHosts: "No matching hosts",
+  questionPosition: "Question {{index}} of {{total}}",
+};
+
+const INTERFACE_TEXT_ZH_TW: typeof INTERFACE_TEXT_ENGLISH = {
+  markAsRead: "標示為已讀",
+  markAsUnread: "標示為未讀",
+  pinWorkspace: "置頂工作區",
+  project: "專案",
+  searchProjects: "搜尋專案",
+  noProjects: "沒有可用的專案。",
+  noMatchingHosts: "沒有符合的主機",
+  questionPosition: "第 {{index}} 題，共 {{total}} 題",
+};
+
 const DESKTOP_NOTIFICATIONS_ENGLISH = {
   supported: "Notifications are supported; system permission has not been confirmed.",
   unknown: "System notification permission could not be checked.",
@@ -1239,6 +1263,7 @@ export function woowtechCopyFor(language: string) {
       language === "zh-TW" ? METADATA_GENERATION_ZH_TW : METADATA_GENERATION_ENGLISH,
     addProject: ADD_PROJECT_COPY[language] ?? ADD_PROJECT_ENGLISH,
     hostPicker: HOST_PICKER_COPY[language] ?? HOST_PICKER_ENGLISH,
+    interfaceText: language === "zh-TW" ? INTERFACE_TEXT_ZH_TW : INTERFACE_TEXT_ENGLISH,
     desktopNotifications:
       language === "zh-TW" ? DESKTOP_NOTIFICATIONS_ZH_TW : DESKTOP_NOTIFICATIONS_ENGLISH,
     agentNotificationTitles:

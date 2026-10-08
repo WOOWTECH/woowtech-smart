@@ -1,4 +1,5 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Modal,
   Pressable,
@@ -15,7 +16,7 @@ import { router } from "expo-router";
 import { Server } from "lucide-react-native";
 import { create } from "zustand";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { HostStatusDotSlot } from "@/components/hosts/host-picker";
+import { HostStatusDotSlot, useHostConnectionLabel } from "@/components/hosts/host-picker";
 import { isWeb } from "@/constants/platform";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import {
@@ -111,6 +112,8 @@ function HostChooserRow({
   onChooseHost: (serverId: string) => void;
 }) {
   const { theme } = useUnistyles();
+  // woowtech smart: the address, not the server id, tells hosts with the same name apart.
+  const connectionLabel = useHostConnectionLabel(host.serverId);
   const handlePress = useCallback(() => onChooseHost(host.serverId), [host.serverId, onChooseHost]);
   const rowStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -135,7 +138,7 @@ function HostChooserRow({
           {host.label}
         </Text>
         <Text style={styles.rowSubtitle} numberOfLines={1}>
-          {host.serverId}
+          {connectionLabel ?? host.serverId}
         </Text>
       </View>
       <Server size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
@@ -144,6 +147,7 @@ function HostChooserRow({
 }
 
 export function HostChooserModal() {
+  const { t } = useTranslation();
   const { theme } = useUnistyles();
   const hosts = useHosts();
   const request = useHostChooserStore((state) => state.request);
@@ -252,7 +256,7 @@ export function HostChooserModal() {
               ref={inputRef}
               initialValue={query}
               onChangeText={handleQueryChange}
-              placeholder="Search hosts..."
+              placeholder={t("woowtech.hostPicker.search")}
               placeholderTextColor={theme.colors.foregroundMuted}
               style={styles.input}
               autoCapitalize="none"
@@ -266,7 +270,9 @@ export function HostChooserModal() {
             keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator={false}
           >
-            {options.length === 0 ? <Text style={styles.emptyText}>No matching hosts</Text> : null}
+            {options.length === 0 ? (
+              <Text style={styles.emptyText}>{t("woowtech.interfaceText.noMatchingHosts")}</Text>
+            ) : null}
             {options.map((host, index) => (
               <HostChooserRow
                 key={host.serverId}

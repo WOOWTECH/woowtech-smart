@@ -1469,14 +1469,14 @@ function useNewWorkspaceFormStack(input: NewWorkspaceFormStackInput): ReactEleme
         value={project.selectedOptionId}
         onSelect={project.onSelect}
         searchable
-        searchPlaceholder="Search projects"
-        title="Project"
+        searchPlaceholder={t("woowtech.interfaceText.searchProjects")}
+        title={t("woowtech.interfaceText.project")}
         open={project.openState}
         onOpenChange={project.onOpenChange}
         desktopPlacement="bottom-start"
         desktopMinWidth={360}
         anchorRef={project.anchorRef}
-        emptyText="No projects available."
+        emptyText={t("woowtech.interfaceText.noProjects")}
         renderOption={project.renderOption}
         footer={addProjectAction}
       />
@@ -1493,7 +1493,9 @@ function useNewWorkspaceFormStack(input: NewWorkspaceFormStackInput): ReactEleme
         onOpenChange={host.onOpenChange}
         anchorRef={host.anchorRef}
         searchable={false}
-        title="Host"
+        // woowtech smart: the address under each name tells hosts with the same name apart.
+        showActiveConnection
+        title={t("woowtech.hostPicker.title")}
         desktopPlacement="bottom-start"
         desktopMinWidth={200}
         hostOptionTestID={newWorkspaceHostOptionTestID}

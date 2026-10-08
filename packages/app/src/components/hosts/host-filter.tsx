@@ -72,6 +72,8 @@ export function HostFilter({
       anchorRef={filterAnchorRef}
       includeAllHost={includeAllHost}
       searchable={false}
+      // woowtech smart: the address under each name tells hosts with the same name apart.
+      showActiveConnection
       title={t("woowtech.hostPicker.filterTitle")}
       desktopPlacement="bottom-start"
       hostOptionTestID={hostOptionTestID}

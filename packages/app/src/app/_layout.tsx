@@ -83,6 +83,7 @@ import { RosettaCalloutSource } from "@/desktop/updates/rosetta-callout-source";
 import { UpdateCalloutSource } from "@/desktop/updates/update-callout-source";
 import { NotificationDisplayCalloutSource } from "@/desktop/woowtech-notification-display-callout-source";
 import { NotificationBannerCheckCalloutSource } from "@/desktop/woowtech-notification-banner-check-callout-source";
+import { useSettingsScreenOptions } from "@/navigation/woowtech-settings-swipe-back";
 import { useActiveWorktreeNewAction } from "@/hooks/use-active-worktree-new-action";
 import { useGlobalNewWorkspaceAction } from "@/hooks/use-global-new-workspace-action";
 import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
@@ -870,6 +871,8 @@ const ROOT_STACK_NESTED_NAVIGATOR_SCREENS = ["h/[serverId]"] as const;
 
 function RootStack() {
   const storeReady = useStoreReady();
+  // woowtech smart: iOS edge swipe back on settings pages (navigation/woowtech-settings-swipe-back.ts).
+  const settingsOptions = useSettingsScreenOptions();
   return (
     <ThemedStack
       screenOptions={ROOT_STACK_SCREEN_OPTIONS}
@@ -878,8 +881,8 @@ function RootStack() {
       <Stack.Screen name="index" />
       <Stack.Protected guard={storeReady}>
         <Stack.Screen name="welcome" />
-        <Stack.Screen name="settings/index" />
-        <Stack.Screen name="settings/[section]" />
+        <Stack.Screen name="settings/index" options={settingsOptions} />
+        <Stack.Screen name="settings/[section]" options={settingsOptions} />
         <Stack.Screen name="new" />
         <Stack.Screen name="open-project" />
         <Stack.Screen name="sessions" />
@@ -887,11 +890,17 @@ function RootStack() {
         <Stack.Screen name="pair-scan" />
       </Stack.Protected>
       <Stack.Screen name="h/[serverId]" />
-      <Stack.Screen name="settings/hosts/[serverId]/index" />
-      <Stack.Screen name="settings/hosts/[serverId]/[hostSection]" />
-      <Stack.Screen name="settings/hosts/[serverId]/plugins/[pluginId]/[screenId]" />
-      <Stack.Screen name="settings/hosts/[serverId]/projects/index" />
-      <Stack.Screen name="settings/hosts/[serverId]/projects/[projectId]" />
+      <Stack.Screen name="settings/hosts/[serverId]/index" options={settingsOptions} />
+      <Stack.Screen name="settings/hosts/[serverId]/[hostSection]" options={settingsOptions} />
+      <Stack.Screen
+        name="settings/hosts/[serverId]/plugins/[pluginId]/[screenId]"
+        options={settingsOptions}
+      />
+      <Stack.Screen name="settings/hosts/[serverId]/projects/index" options={settingsOptions} />
+      <Stack.Screen
+        name="settings/hosts/[serverId]/projects/[projectId]"
+        options={settingsOptions}
+      />
     </ThemedStack>
   );
 }

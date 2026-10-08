@@ -1236,6 +1236,7 @@ node --test woowtech/*.test.mjs
   - 最後還是失敗時，連線中斷的錯誤改顯示「與主機的連線中斷，檔案沒有上傳。主機連回來後請再加入一次。」（`woowtech.composer.uploadConnectionLost`，只有繁中和英文）。
   - 順手修上游的 key：composer 在 client 不在時 toast `composer.errors.daemonClientDisconnected`，但這個 key 不存在，畫面會顯示 key 本身；改用 `common.errors.daemonClientDisconnected`。
 - 檔名含 `#`、`?`、`%` 的附件（RC 驗收發現）：上游的 `pathToFileUri` 直接把路徑接成 `file://…`，解析網址的地方（`URL`、fetch、expo-file-system）會把 `shot#1.png` 讀成 `shot`，`100%.png` 直接出錯，`a%20b.png` 被當成 `a b.png`。現在這三個字元先做百分比編碼，`fileUriToPath` 照舊解回來；其他路徑的 URI 不變（`attachments/utils.ts`）。手機版附件的預覽網址原本自己接 `file://`，改用同一個函式（`native-file-attachment-store.ts`）。
+- 桌面版的副檔名（9/30 RC-D-12c1，第 25 節）：主程序照副檔名命名附件的複本，只收 1～16 個英數字（`packages/desktop/src/features/attachments.ts` 的 `normalizeExtension`），否則丟英文錯誤、還帶出本機路徑。上游在檔名沒有副檔名時拿整條來源路徑找最後一個點，檔案放在名稱有點的資料夾（`~/.config/tool/Makefile`）就得到 `.config/tool/Makefile`。`desktop/attachments/woowtech-attachment-extension.ts` 只看最後一段，而且只回主程序收的副檔名；`desktop-attachment-store.ts` 的 `extensionForAttachment` 檔名和來源路徑都經過它。
 - 還沒做：上傳最後失敗時附件仍會從 composer 消失，只留 toast。要照 `docs/testing.md` 的 fallible action 規則把失敗的附件留在原處、可以重試，要另外做 composer 的 UI。
 - 測試：`packages/client/src/daemon-client.test.ts` 加了兩個（連線中開始的上傳在連上後送出完整的 begin、chunk、end；沒連線時什麼都不送並回連線錯誤）；`composer/woowtech-upload-reconnect.test.ts`（重送、不重送的錯誤、等不到主機、次數上限、等 client 重連或換 client、訊息翻譯）。裝置上的重連重送在定向輪（integration-0928）驗過，見「驗證紀錄」。
 
@@ -1451,6 +1452,18 @@ node --test woowtech/*.test.mjs
   - GitHub 標誌的路徑資料來源不明（上游 `1a01e836b` 加入，沒寫出處），沒有核對是不是官方 Invertocat 原檔；研究的條件是官方原檔、不改形。要換官方檔，由能下載品牌檔的步驟處理。
   - Codeberg 官方 logo 包是藍色和白色兩版；淺色主題畫黑色是照研究「黑或白」的條件。
   - App 沒有開放原始碼授權頁：上游 Paseo（Apache-2.0）和打包進去的 npm 套件的授權聲明，手機版和桌面版都沒有地方顯示。
+
+### 25. 上架候選全面驗收（2026-09-30）找到的介面問題
+
+9/30 在三個模擬器平台驗收 33f2fa8ac（清單和結果 10/8 從舊 Mac 搬到工作資料夾的 `oldmac-0930/`，逐項現況在 `plans/rc-reverify-1008.md`）。owner 2026-10-08 要這些都處理（分支 `woowtech/rc-fixes-1008`）：
+
+- iOS 設定頁不能從左邊緣滑回上一頁（RC-I-09f）：根 stack 一律不做換頁動畫（`app/_layout.tsx` 的 `ROOT_STACK_SCREEN_OPTIONS`，上游），react-native-screens 把沒有動畫的 pop 交給自己的 animator，邊緣滑動推不動它，標題列的返回鍵照常。`navigation/woowtech-settings-swipe-back.ts`：iOS、視窗寬度小於 720（unistyles 的 md，跟 `useIsCompactFormFactor` 同一條線）時，設定的 7 個畫面用平台的推入動畫，滑動返回就回來了。較寬的版面不改：設定換頁用的是 replace（`settings-screen.tsx` 的 `handleSelectSection`），有動畫的話每換一個分頁都會滑一次。寬度讀 `useWindowDimensions`，不讀 Unistyles，route tree 才不會每次 Unistyles 更新都重畫（[docs/expo-router.md](../docs/expo-router.md)）。
+- 檔案總管斷線後主機回來，仍停在「主機未連線」，要按「重試」（RC-A-14、RC-D-12b；iOS 當時是切到設定再回來才恢復）：上游只在工作區開啟時和按「重試」時載入。`components/woowtech-file-explorer-reconnect.ts`：主機從斷線變成連線、檔案總管正顯示錯誤時，自動重試一次，跟按「重試」一樣。
+- 繁中介面寫死的英文（K-37）：側欄工作區選單「Mark as read／unread」、快捷鍵「Pin chat」（`keyboard-shortcuts.ts` 的 `SHORTCUT_HELP_LABEL_KEYS` 沒有 `pin-workspace`，退回英文 label）、新工作區的專案選單「Project」「Search projects」「No projects available.」和主機選單標題「Host」、匯入工作階段的主機選擇「Search hosts...」「No matching hosts」、問題卡分頁的報讀「Question N of M」。文字在 `woowtech-copy.ts` 的 `interfaceText`（繁中和英文，英文照上游）；`woowtech-copy.test.ts` 的 `REPLACED_ENGLISH` 擋住字面值回來。
+- 兩台同名主機在選單裡分不出來（K-34）：設定和側欄的主機選單本來就在名字下面顯示連線位址（`showActiveConnection`），新工作區、歷史和排程的主機篩選、排程表單、匯入工作階段的主機選擇沒有（匯入那個顯示完整的 server id）。位址的寫法抽成 `components/hosts/host-picker.tsx` 的 `useHostConnectionLabel`，這幾處都用它。
+- 桌面附件（RC-D-12c1）見第 21 節。
+- 守門：`woowtech/rc0930-fixes.test.mjs`（上面每個上游接點）。測試：`navigation/woowtech-settings-swipe-back.test.ts`、`components/woowtech-file-explorer-reconnect.test.ts`、`desktop/attachments/woowtech-attachment-extension.test.ts`、`i18n/woowtech-interface-text.test.ts`。每個修正都改回原樣跑過一次，對應的測試或守門都會紅。
+- 刻意沒改的（上游，不擋上架）：Android 停止串流時偶發的 `RetryableMountingLayerException`（RC-A-04d，RN 0.81.5＋Reanimated 4.3.1，正式版實測時留意）、新增 ACP 供應商探測逾時的訊息、桌面 App 內瀏覽器的新分頁預設開 example.com、排程表單的 cron 錯誤訊息被鍵盤擋住（RC-A-18）。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 

@@ -205,6 +205,8 @@ export const SHORTCUT_HELP_ROW_ORDER: Record<ShortcutSectionId, readonly string[
 };
 
 const SHORTCUT_HELP_LABEL_KEYS: Record<string, string> = {
+  // woowtech smart: upstream has no key for this one, so its English label showed in every language.
+  "pin-workspace": "woowtech.interfaceText.pinWorkspace",
   "new-agent": "settings.shortcuts.help.openProject",
   "new-workspace": "settings.shortcuts.help.newWorkspace",
   "switch-project": "settings.shortcuts.help.switchProject",

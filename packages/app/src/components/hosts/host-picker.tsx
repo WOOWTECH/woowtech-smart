@@ -55,6 +55,16 @@ function formatActiveConnectionLabel(connection: ActiveConnection, t: TFunction)
   return formatConnectionEndpoint(connection.endpoint);
 }
 
+/**
+ * The address a host is reached at, shown under its name: two hosts often share a name (two
+ * daemons on one computer, or the same computer over the relay and directly).
+ */
+export function useHostConnectionLabel(serverId: string): string | undefined {
+  const { t } = useTranslation();
+  const activeConnection = useHostRuntimeSnapshot(serverId)?.activeConnection ?? null;
+  return activeConnection ? formatActiveConnectionLabel(activeConnection, t) : undefined;
+}
+
 export interface HostPickerOptionProps {
   serverId: string;
   label: string;
@@ -78,11 +88,8 @@ export function HostPickerOption({
 }: HostPickerOptionProps): ReactElement {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const activeConnection = useHostRuntimeSnapshot(serverId)?.activeConnection ?? null;
-  const connectionLabel =
-    showActiveConnection && activeConnection
-      ? formatActiveConnectionLabel(activeConnection, t)
-      : undefined;
+  const hostConnectionLabel = useHostConnectionLabel(serverId);
+  const connectionLabel = showActiveConnection ? hostConnectionLabel : undefined;
   const leadingSlot = useMemo(() => <HostStatusDotSlot serverId={serverId} />, [serverId]);
   const handleSettingsPress = useCallback(
     (event: GestureResponderEvent) => {

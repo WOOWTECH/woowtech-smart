@@ -9,6 +9,7 @@ const TRADITIONAL_CHINESE_ONLY_SURFACES = [
   "desktopNotifications.",
   "notificationDisplay.",
   "notificationBannerCheck.",
+  "interfaceText.",
   "agentNotificationTitles.",
   "metadataGeneration.",
   "confirmDialog.",
@@ -37,6 +38,16 @@ const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
     'title ?? "Host"',
   ],
   "components/hosts/host-filter.tsx": ['title="Filter by host"', "`Filter: ${selectedHostLabel}`"],
+  // 2026-09-30 RC (README section 14).
+  "components/sidebar/sidebar-workspace-menu.tsx": ["Mark as read\n", "Mark as unread\n"],
+  "screens/new-workspace-screen.tsx": [
+    'searchPlaceholder="Search projects"',
+    'title="Project"',
+    'emptyText="No projects available."',
+    'title="Host"',
+  ],
+  "hosts/host-chooser.tsx": ['placeholder="Search hosts..."', ">No matching hosts<"],
+  "components/question-form-card.tsx": ["`Question ${"],
   "components/add-project-flow.tsx": [
     '"Add project"',
     '"Search for directory"',
