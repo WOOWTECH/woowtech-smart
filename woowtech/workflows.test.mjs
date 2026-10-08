@@ -77,36 +77,17 @@ test("every workflow file is either enabled or disabled in GitHub's UI", () => {
   );
 });
 
-test("CI runs weekly, on pull requests and on demand, not on every push to main", () => {
+test("CI runs on every push to main, on pull requests and on demand, as upstream does", () => {
+  // The repository is public since 2026-10-08, so standard runners cost no minutes. While it
+  // was private (GitHub Free, 2,000 minutes a month) CI ran weekly instead.
   const { on } = workflow("ci.yml");
-  const message =
-    "A CI run takes about 125 of GitHub Free's 2,000 private-repo minutes a month, or 275 " +
-    "with Playwright. Ten full runs a working day would need about 30 times the month's " +
-    "minutes; the weekly run without Playwright takes about a quarter.";
-  assert.deepEqual(
-    Object.keys(on).sort(),
-    ["merge_group", "pull_request", "schedule", "workflow_dispatch"],
-    message,
-  );
-  const weekly = /^\d{1,2} \d{1,2} \* \* [0-6]$/;
-  assert.deepEqual(
-    on.schedule.map(({ cron }) => weekly.test(cron)),
-    [true],
-    message,
-  );
-});
-
-test("CI's weekly run skips change detection, which has no default branch to compare with", () => {
-  // dorny/paths-filter reads the default branch from the event payload, and a
-  // schedule event's payload does not carry the repository, so the action fails
-  // there. Outside pull requests every job runs whatever it detects.
-  const pathFilters = workflow("ci.yml").jobs.changes.steps.filter(({ uses }) =>
-    String(uses).startsWith("dorny/paths-filter@"),
-  );
-  assert.deepEqual(
-    pathFilters.map((step) => step.if),
-    ["github.event_name != 'schedule'"],
-  );
+  assert.deepEqual(Object.keys(on).sort(), [
+    "merge_group",
+    "pull_request",
+    "push",
+    "workflow_dispatch",
+  ]);
+  assert.deepEqual(on.push, { branches: ["main"] });
 });
 
 /**
