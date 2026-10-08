@@ -178,6 +178,23 @@ export default {
         ...iosPermissionText.en,
         ITSAppUsesNonExemptEncryption: false,
       },
+      // woowtech smart: the app's own entries in PrivacyInfo.xcprivacy. The phone's FCM token reaches
+      // WoowTech's push relay through the daemon, and the relay keeps its SHA-256 for the daily
+      // quota until its UTC day ends (woowtech/README.md, 16). pod install adds every pod's
+      // required-reason APIs to this file, and the Firebase SDKs ship their own manifests.
+      privacyManifests: {
+        NSPrivacyTracking: false,
+        NSPrivacyCollectedDataTypes: [
+          {
+            NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeDeviceID",
+            NSPrivacyCollectedDataTypeLinked: false,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+            ],
+          },
+        ],
+      },
       bundleIdentifier: variant.packageId,
       ...(googleServiceInfoPlist ? { googleServicesFile: googleServiceInfoPlist } : {}),
       buildNumber: nativeReleaseVersion.iosBuildNumber,

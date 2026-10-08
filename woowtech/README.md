@@ -208,6 +208,12 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
     - 繁中、簡中寫在 `locales` 的 `ios` 底下，進 `InfoPlist.strings`。那裡不會展開 `$(PRODUCT_NAME)`，所以名稱直接寫「渥屋智能」。`android` 底下仍只有 `app_name`。
     - 英文寫在 `ios.infoPlist`；相機那句同時給 `expo-camera` 的 `cameraPermission`，照片那句會蓋過 `expo-image-picker` 的預設文字。
     - 守門 `woowtech/ios-permissions.test.mjs` 用 `expo config` 查兩個版本。prebuild 驗過：`zh-Hans.lproj`、`zh-Hant.lproj` 的 `InfoPlist.strings` 都有三句。已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
+  - iOS 的隱私清單 `PrivacyInfo.xcprivacy`（2026-10-08）：清單少宣告「需要理由的 API」（required reason API），App Store Connect 就不收那個建置。
+    - API 的理由不用自己寫：`pod install` 時 React Native 把每個 pod 宣告的理由和它自己核心用到的合併進 App 的清單，所以 `expo-build-properties` 的 `ios.privacyManifestAggregationEnabled` 不能關。Firebase 的 SDK 各自帶清單（`.app` 裡的 `*_Privacy.bundle`）。
+    - 2026-10-08 掃過 iPad 驗收版（Debug）的執行檔和三個內嵌 framework：`nm -u` 看 C 函式和常數，`strings` 看 selector。用到檔案時間、磁碟空間、UserDefaults 三類，清單都有，另外有 React Native 核心的開機時間；沒用到 `activeInputModes`。正式版上傳前用同樣方法再掃一次。
+    - `app.config.js` 的 `ios.privacyManifests` 只寫 App 自己的部分：不追蹤；收集裝置 ID，用途是 App 功能，不連結到使用者身分。裝置 ID 是 FCM token：daemon 把它交給推播中繼，中繼為了每日上限保留它的 SHA-256，到那一天（UTC）結束（第 16 節）。App Store Connect 的「App 隱私權」問卷要跟這裡、跟 Firebase 清單宣告的一致。
+    - Apple「常用第三方 SDK」名單上的 `hermes` 是 Imgur 的 SDK，不是 React Native 的 Hermes 引擎（Apple DTS 在開發者論壇的回答），`hermes.framework` 裡沒有清單是正常的。
+    - 守門 `woowtech/ios-privacy-manifest.test.mjs`：`ios.privacyManifests` 的內容，以及合併沒有被關掉。
 - 桌面版（macOS）的「關於」視窗和 Finder 的「取得資訊」：版權是 `© 2026 WOOW TECH CO., LTD.`，「關於」視窗另外顯示官網 `https://aiot.woowtech.io/`。原本 electron-builder 用 `package.json` 的 author 產生「Copyright © 2026 Mohamed Boudra」，那是上游作者。
   - `electron-builder.yml` 的 `copyright` 寫進 Info.plist 的 `NSHumanReadableCopyright`，Windows 執行檔的版權欄也用它。
   - `main.ts` 在 `app.setName` 後面呼叫 `app.setAboutPanelOptions(woowtechAboutPanelOptions())`（+3 行）。內容在 fork 的 `src/features/woowtech-about-panel.ts`：同一行版權，官網放在 `credits`，因為 macOS 不顯示 `website`（Linux 才顯示）。官網取自 `BRAND_LINKS.website`。App 名稱和版本照預設，從 Info.plist 讀。沒打包的開發版也顯示同樣的版權和官網。
