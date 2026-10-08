@@ -74,6 +74,26 @@ test("terminal tabs show the daemon's default names in the app language (10/8)",
   );
 });
 
+test("a turn's timestamp reads in the app language, not the system's (10/8)", () => {
+  const time = source("packages/app/src/utils/time.ts");
+  assert.match(time, /locale: string = appDateLocale\(\),/);
+  assert.doesNotMatch(time, /toLocaleDateString\(undefined/);
+  assert.doesNotMatch(
+    time,
+    /new Intl\.DateTimeFormat\(undefined, \{\s*hour: "numeric",\s*minute: "2-digit",\s*hourCycle/,
+  );
+  // Memoized labels take the locale, so they follow a language change.
+  const message = source("packages/app/src/components/message.tsx");
+  assert.match(
+    message,
+    /formatMessageTimestamp\(completedAt, new Date\(\), dateLocale\)[^\]]*\[completedAt, dateLocale\]/s,
+  );
+  assert.match(
+    message,
+    /formatMessageTimestamp\(new Date\(timestamp\), new Date\(\), dateLocale\),\s*\[timestamp, dateLocale\]/,
+  );
+});
+
 test("host lists show each host's address, so hosts with the same name differ (K-34)", () => {
   for (const path of [
     "packages/app/src/screens/new-workspace-screen.tsx",
