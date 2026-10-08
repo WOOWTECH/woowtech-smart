@@ -122,6 +122,7 @@ import { useInstalledPlugins } from "@/plugins/registry";
 import { HostPluginsPage } from "@/screens/settings/plugins-page";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import { renderWoowtechSettingsSection } from "@/screens/settings/woowtech-third-party-notices-section";
+import { WoowtechPrivacyPolicyRow } from "@/screens/settings/woowtech-privacy-policy-row";
 import ProjectsScreen from "@/screens/projects-screen";
 import ProjectSettingsScreen from "@/screens/project-settings-screen";
 import { SETTINGS_DESKTOP_SIDEBAR_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
@@ -616,6 +617,8 @@ function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSection
             <Text style={styles.aboutValue}>{appVersionText}</Text>
           </View>
           <WhatsNewRow />
+          {/* woowtech smart: the privacy policy, linked inside the app (README §10). */}
+          <WoowtechPrivacyPolicyRow />
           {isDesktopApp ? <DesktopAppUpdateRow /> : null}
         </View>
       </SettingsSection>

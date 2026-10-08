@@ -1230,6 +1230,16 @@ const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
 // Settings > Trademarks and third-party notices (woowtech/README.md §24). The marks' names,
 // owners, credits and license texts come from screens/settings/woowtech-third-party-notices.ts and
 // stay as their owners write them.
+const PRIVACY_POLICY_ENGLISH = {
+  title: "Privacy policy",
+  hint: "What data the app handles and where it goes",
+};
+
+const PRIVACY_POLICY_ZH_TW: typeof PRIVACY_POLICY_ENGLISH = {
+  title: "隱私權政策",
+  hint: "App 處理哪些資料、送到哪裡",
+};
+
 const THIRD_PARTY_NOTICES_ENGLISH = {
   title: "Trademarks and third-party notices",
   statement:
@@ -1303,6 +1313,15 @@ function daemonTextCopyFor(language: string) {
   };
 }
 
+// The About page's legal entries, apart from woowtechCopyFor so it stays within the complexity limit.
+function legalCopyFor(language: string) {
+  const traditionalChinese = language === "zh-TW";
+  return {
+    thirdPartyNotices: traditionalChinese ? THIRD_PARTY_NOTICES_ZH_TW : THIRD_PARTY_NOTICES_ENGLISH,
+    privacyPolicy: traditionalChinese ? PRIVACY_POLICY_ZH_TW : PRIVACY_POLICY_ENGLISH,
+  };
+}
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
@@ -1328,7 +1347,6 @@ export function woowtechCopyFor(language: string) {
     time: language === "zh-TW" ? TIME_ZH_TW : TIME_ENGLISH,
     message: language === "zh-TW" ? MESSAGE_ZH_TW : MESSAGE_ENGLISH,
     ...daemonTextCopyFor(language),
-    thirdPartyNotices:
-      language === "zh-TW" ? THIRD_PARTY_NOTICES_ZH_TW : THIRD_PARTY_NOTICES_ENGLISH,
+    ...legalCopyFor(language),
   };
 }

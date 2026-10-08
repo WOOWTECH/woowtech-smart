@@ -12,6 +12,8 @@ export const BRAND_LINKS = {
   /** The website as the app shows it, without the scheme. */
   websiteHost: WEBSITE_HOST,
   supportEmail: "mailto:woowtech@designsmart.com.tw",
+  /** The privacy policy, a Help Center post on the website (Apple 5.1.1 and Google Play want it in the app). */
+  privacyPolicy: `${WEBSITE}/blog/help-center-7/woowtech-smart-app-yin-si-quan-zheng-ce-privacy-policy-391`,
   releases: `https://github.com/${RELEASES_REPO}/releases`,
   changelogSource: `https://raw.githubusercontent.com/${RELEASES_REPO}/main/CHANGELOG.md`,
   // The website has no documentation pages yet, so every topic opens its home

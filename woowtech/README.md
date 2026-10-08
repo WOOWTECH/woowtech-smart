@@ -331,7 +331,11 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 對外連結都寫在 `packages/protocol/src/brand-links.ts`（`BRAND_LINKS`），App 和 CLI 共用。要改連結，只改這個檔案。
 - 說明文件：官網 aiot.woowtech.io 還沒有說明頁，App 的 8 處和 CLI 的 2 處都先開官網首頁。哪個主題有了頁面，就改 `docs` 裡對應的那一項。
 - 回報問題：寄信到 woowtech@designsmart.com.tw。
-  上游的外部連結開啟器只放行 http/https。現在 App 的 `utils/open-external-url.ts` 和桌面版的 `features/opener.ts` 多放行 `mailto:`，`file:`、`javascript:` 照樣擋掉。
+- 隱私權政策（2026-10-08）：官網 Help Center 網誌的一篇文章（Odoo `blog.post` 391，中英文在同一頁），網址是 `BRAND_LINKS.privacyPolicy`，也是兩個商店要填的隱私權政策網址。
+  - 設定「關於」頁的「隱私權政策」那一列打開它（`screens/settings/woowtech-privacy-policy-row.tsx`，`settings-screen.tsx` 的 `AboutSection` 加一行）：App Store 審查準則 5.1.1 和 Google Play 都要求 App 裡找得到隱私權政策。
+  - 改政策就在 Odoo 改那篇文章。網址靠結尾的 391 找文章，標題改了，舊網址也會轉到新的。App 的資料流變了（例如加了分析或當機回報 SDK），政策和商店的隱私填答要一起改。
+  - 守門 `woowtech/help-links.test.mjs`；測試 `woowtech-privacy-policy-row.test.tsx`（繁中、英文、點了開政策網址）。
+    上游的外部連結開啟器只放行 http/https。現在 App 的 `utils/open-external-url.ts` 和桌面版的 `features/opener.ts` 多放行 `mailto:`，`file:`、`javascript:` 照樣擋掉。
 - 社群與快速求助：官網首頁 aiot.woowtech.io（`BRAND_LINKS.website`）。2026-09-26 起不再導向 LINE 官方帳號（擁有者決定）。
   - 說明選單的 Discord 改成「官方網站」。
   - 設定的「關於」頁和專案首頁底部，原本有 GitHub Star、贊助上游作者、Discord 三個按鈕，現在只留「官方網站」（地球圖示）。

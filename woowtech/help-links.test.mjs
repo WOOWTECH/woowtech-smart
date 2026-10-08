@@ -65,3 +65,14 @@ test("the help menu and the community button open the website's home page", () =
   // The item's label names the website in every language, not LINE.
   assert.doesNotMatch(read("packages/app/src/i18n/support-copy.ts"), /LINE/);
 });
+
+// Apple (App Store Review Guideline 5.1.1) and Google Play want the privacy policy reachable
+// inside the app as well as in the store listing. It is a Help Center post on the website.
+test("Settings > About opens the privacy policy on the website", () => {
+  const links = read("packages/protocol/src/brand-links.ts");
+  assert.match(links, /privacyPolicy: `\$\{WEBSITE\}\/blog\/help-center-7\/[a-z0-9-]+-391`,/);
+  const row = read("packages/app/src/screens/settings/woowtech-privacy-policy-row.tsx");
+  assert.match(row, /openExternalUrl\(BRAND_LINKS\.privacyPolicy\)/);
+  const settings = read("packages/app/src/screens/settings-screen.tsx");
+  assert.match(settings, /<WhatsNewRow \/>[\s\S]{0,200}<WoowtechPrivacyPolicyRow \/>/);
+});
