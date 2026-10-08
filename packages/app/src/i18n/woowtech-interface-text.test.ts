@@ -28,6 +28,7 @@ describe("upstream's hardcoded English", () => {
     expect(i18n.t("woowtech.interfaceText.questionPosition", { index: 2, total: 3 })).toBe(
       "第 2 題，共 3 題",
     );
+    expect(i18n.t("woowtech.interfaceText.filterBy", { value: "全部" })).toBe("篩選：全部");
     expect(pinWorkspaceLabel()).toBe("置頂工作區");
   });
 

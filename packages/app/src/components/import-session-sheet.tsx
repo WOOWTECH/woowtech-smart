@@ -741,7 +741,9 @@ export function ImportSessionSheet({
             style={filterTriggerStyle}
             testID="import-session-filter-trigger"
             accessibilityRole="button"
-            accessibilityLabel={`Filter: ${selectedProviderLabel}`}
+            accessibilityLabel={t("woowtech.interfaceText.filterBy", {
+              value: selectedProviderLabel,
+            })}
           >
             {selectedProvider === ALL_FILTER_VALUE ? (
               <Layers size={14} color={theme.colors.foregroundMuted} />

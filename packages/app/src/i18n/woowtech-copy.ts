@@ -628,6 +628,7 @@ const INTERFACE_TEXT_ENGLISH = {
   noProjects: "No projects available.",
   noMatchingHosts: "No matching hosts",
   questionPosition: "Question {{index}} of {{total}}",
+  filterBy: "Filter: {{value}}",
 };
 
 const INTERFACE_TEXT_ZH_TW: typeof INTERFACE_TEXT_ENGLISH = {
@@ -639,6 +640,7 @@ const INTERFACE_TEXT_ZH_TW: typeof INTERFACE_TEXT_ENGLISH = {
   noProjects: "沒有可用的專案。",
   noMatchingHosts: "沒有符合的主機",
   questionPosition: "第 {{index}} 題，共 {{total}} 題",
+  filterBy: "篩選：{{value}}",
 };
 
 const DESKTOP_NOTIFICATIONS_ENGLISH = {

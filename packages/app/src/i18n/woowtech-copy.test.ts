@@ -48,6 +48,7 @@ const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
   ],
   "hosts/host-chooser.tsx": ['placeholder="Search hosts..."', ">No matching hosts<"],
   "components/question-form-card.tsx": ["`Question ${"],
+  "components/import-session-sheet.tsx": ["`Filter: ${"],
   "components/add-project-flow.tsx": [
     '"Add project"',
     '"Search for directory"',

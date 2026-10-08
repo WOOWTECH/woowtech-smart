@@ -49,6 +49,13 @@ test("desktop attachments take the extension from the file name only (RC-D-12c1)
   assert.doesNotMatch(store, /getFileExtensionFromName/);
 });
 
+test("the supervisor starts workers outside a working directory that was removed", () => {
+  const supervisor = source("packages/server/scripts/supervisor.ts");
+  assert.match(supervisor, /const cwd = workerCwd\(\);/);
+  assert.match(supervisor, /spawn\(spawnSpec\.command, spawnSpec\.args, \{[^}]*\bcwd,/s);
+  assert.match(supervisor, /fork\(workerEntry, workerArgs, \{[^}]*\bcwd,/s);
+});
+
 test("host lists show each host's address, so hosts with the same name differ (K-34)", () => {
   for (const path of [
     "packages/app/src/screens/new-workspace-screen.tsx",
