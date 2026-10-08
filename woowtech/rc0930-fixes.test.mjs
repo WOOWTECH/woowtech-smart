@@ -56,6 +56,13 @@ test("the supervisor starts workers outside a working directory that was removed
   assert.match(supervisor, /fork\(workerEntry, workerArgs, \{[^}]*\bcwd,/s);
 });
 
+test("dictation and voice mode say why they are unavailable in the app language (10/8)", () => {
+  assert.match(
+    source("packages/app/src/utils/server-info-capabilities.ts"),
+    /return voiceUnavailableText\(message\);/,
+  );
+});
+
 test("host lists show each host's address, so hosts with the same name differ (K-34)", () => {
   for (const path of [
     "packages/app/src/screens/new-workspace-screen.tsx",

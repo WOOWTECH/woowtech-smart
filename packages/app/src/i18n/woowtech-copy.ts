@@ -1138,6 +1138,31 @@ const WORKSPACE_RECOVERY_ZH_TW: typeof WORKSPACE_RECOVERY_ENGLISH = {
   unsupportedAction: "請更新渥屋智能，才能恢復這個工作區。",
 };
 
+// The daemon says why dictation or voice mode is unavailable in English, and the host info carries
+// only those words (voice/woowtech-voice-readiness-copy.ts). The English matches the daemon's text.
+const VOICE_READINESS_ENGLISH = {
+  dictationDisabled: "Dictation is disabled in daemon config.",
+  dictationSttUnavailable: "Dictation is unavailable: speech-to-text service is not ready.",
+  voiceDisabled: "Realtime voice is disabled in daemon config.",
+  voiceTurnDetectionUnavailable:
+    "Realtime voice is unavailable: turn-detection service is not ready.",
+  voiceSttUnavailable: "Realtime voice is unavailable: speech-to-text service is not ready.",
+  voiceTtsUnavailable: "Realtime voice is unavailable: text-to-speech service is not ready.",
+  modelsDownloading:
+    "Voice features are unavailable while models download in the background ({{models}}). Try again in a few minutes.",
+};
+
+const VOICE_READINESS_ZH_TW: typeof VOICE_READINESS_ENGLISH = {
+  dictationDisabled: "主機的設定關閉了聽寫。",
+  dictationSttUnavailable: "無法使用聽寫：主機的語音轉文字服務還沒準備好。",
+  voiceDisabled: "主機的設定關閉了語音模式。",
+  voiceTurnDetectionUnavailable: "無法使用語音模式：主機偵測說話停頓的服務還沒準備好。",
+  voiceSttUnavailable: "無法使用語音模式：主機的語音轉文字服務還沒準備好。",
+  voiceTtsUnavailable: "無法使用語音模式：主機的文字轉語音服務還沒準備好。",
+  modelsDownloading:
+    "主機正在背景下載語音模型（{{models}}），下載完成前無法使用語音功能。請過幾分鐘再試。",
+};
+
 const COMPOSER_ENGLISH = {
   uploadConnectionLost:
     "The file was not uploaded because the connection to the host was lost. Add it again once the host is back.",
@@ -1283,6 +1308,7 @@ export function woowtechCopyFor(language: string) {
     time: language === "zh-TW" ? TIME_ZH_TW : TIME_ENGLISH,
     message: language === "zh-TW" ? MESSAGE_ZH_TW : MESSAGE_ENGLISH,
     workspaceRecovery: language === "zh-TW" ? WORKSPACE_RECOVERY_ZH_TW : WORKSPACE_RECOVERY_ENGLISH,
+    voiceReadiness: language === "zh-TW" ? VOICE_READINESS_ZH_TW : VOICE_READINESS_ENGLISH,
     thirdPartyNotices:
       language === "zh-TW" ? THIRD_PARTY_NOTICES_ZH_TW : THIRD_PARTY_NOTICES_ENGLISH,
   };

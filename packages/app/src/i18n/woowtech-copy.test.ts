@@ -18,6 +18,7 @@ const TRADITIONAL_CHINESE_ONLY_SURFACES = [
   "time.",
   "message.",
   "workspaceRecovery.",
+  "voiceReadiness.",
   "claudeSdk.",
   "claudeAuth.",
   "thirdPartyNotices.",
