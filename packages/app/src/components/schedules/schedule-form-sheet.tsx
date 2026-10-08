@@ -21,7 +21,11 @@ import { ComboboxItem } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { HostStatusDotSlot, useHostConnectionLabel } from "@/components/hosts/host-picker";
+import {
+  HostStatusDotSlot,
+  hostsSharingAName,
+  useHostSubtitle,
+} from "@/components/hosts/host-picker";
 import { createControlGeometry, type FieldControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
@@ -660,9 +664,12 @@ function ScheduleTargetFields({
     },
     [providerSnapshot],
   );
+  const sharedHostNames = useMemo(() => hostsSharingAName(state.hosts), [state.hosts]);
   const renderHostOption = useCallback(
-    (input: SelectFieldRenderOptionInput<string>) => <HostOptionItem {...input} />,
-    [],
+    (input: SelectFieldRenderOptionInput<string>) => (
+      <HostOptionItem {...input} sharesName={sharedHostNames.has(input.option.value)} />
+    ),
+    [sharedHostNames],
   );
   const renderProjectOption = useCallback(
     (input: SelectFieldRenderOptionInput<string>) => <ProjectOptionItem {...input} />,
@@ -969,10 +976,12 @@ function HostOptionItem({
   selected,
   active,
   onPress,
-}: SelectFieldRenderOptionInput<string>): ReactElement {
+  sharesName,
+}: SelectFieldRenderOptionInput<string> & { sharesName: boolean }): ReactElement {
   const leadingSlot = useMemo(() => <HostStatusDotSlot serverId={option.value} />, [option.value]);
-  // woowtech smart: the address under the name tells hosts with the same name apart.
-  const connectionLabel = useHostConnectionLabel(option.value);
+  // woowtech smart: the address under the name, with a short id tag when another host has the
+  // same name, tells hosts apart (components/hosts/host-picker.tsx hostSubtitle).
+  const connectionLabel = useHostSubtitle(option.value, sharesName);
 
   return (
     <ComboboxItem

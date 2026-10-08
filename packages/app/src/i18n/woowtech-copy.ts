@@ -629,6 +629,8 @@ const INTERFACE_TEXT_ENGLISH = {
   noMatchingHosts: "No matching hosts",
   questionPosition: "Question {{index}} of {{total}}",
   filterBy: "Filter: {{value}}",
+  workspaceProject: "Workspace project",
+  workspaceIsolation: "Workspace isolation",
 };
 
 const INTERFACE_TEXT_ZH_TW: typeof INTERFACE_TEXT_ENGLISH = {
@@ -641,6 +643,8 @@ const INTERFACE_TEXT_ZH_TW: typeof INTERFACE_TEXT_ENGLISH = {
   noMatchingHosts: "沒有符合的主機",
   questionPosition: "第 {{index}} 題，共 {{total}} 題",
   filterBy: "篩選：{{value}}",
+  workspaceProject: "工作區專案",
+  workspaceIsolation: "工作區隔離方式",
 };
 
 const DESKTOP_NOTIFICATIONS_ENGLISH = {

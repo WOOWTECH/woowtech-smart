@@ -16,7 +16,11 @@ import { router } from "expo-router";
 import { Server } from "lucide-react-native";
 import { create } from "zustand";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { HostStatusDotSlot, useHostConnectionLabel } from "@/components/hosts/host-picker";
+import {
+  HostStatusDotSlot,
+  hostsSharingAName,
+  useHostSubtitle,
+} from "@/components/hosts/host-picker";
 import { isWeb } from "@/constants/platform";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import {
@@ -105,15 +109,18 @@ export function useHostChooser() {
 function HostChooserRow({
   host,
   active,
+  sharesName,
   onChooseHost,
 }: {
   host: HostProfile;
   active: boolean;
+  sharesName: boolean;
   onChooseHost: (serverId: string) => void;
 }) {
   const { theme } = useUnistyles();
-  // woowtech smart: the address, not the server id, tells hosts with the same name apart.
-  const connectionLabel = useHostConnectionLabel(host.serverId);
+  // woowtech smart: the address, with a short id tag when another host has the same name, instead
+  // of the whole server id (components/hosts/host-picker.tsx hostSubtitle).
+  const subtitle = useHostSubtitle(host.serverId, sharesName);
   const handlePress = useCallback(() => onChooseHost(host.serverId), [host.serverId, onChooseHost]);
   const rowStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -138,7 +145,7 @@ function HostChooserRow({
           {host.label}
         </Text>
         <Text style={styles.rowSubtitle} numberOfLines={1}>
-          {connectionLabel ?? host.serverId}
+          {subtitle ?? host.serverId}
         </Text>
       </View>
       <Server size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
@@ -150,6 +157,7 @@ export function HostChooserModal() {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
   const hosts = useHosts();
+  const sharedNames = useMemo(() => hostsSharingAName(hosts), [hosts]);
   const request = useHostChooserStore((state) => state.request);
   const close = useHostChooserStore((state) => state.close);
   const inputRef = useRef<EditingTextInputHandle>(null);
@@ -278,6 +286,7 @@ export function HostChooserModal() {
                 key={host.serverId}
                 host={host}
                 active={index === activeOptionIndex}
+                sharesName={sharedNames.has(host.serverId)}
                 onChooseHost={chooseHost}
               />
             ))}

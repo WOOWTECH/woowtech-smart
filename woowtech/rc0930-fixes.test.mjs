@@ -65,10 +65,14 @@ test("host lists show each host's address, so hosts with the same name differ (K
   }
   assert.match(
     source("packages/app/src/components/schedules/schedule-form-sheet.tsx"),
-    /const connectionLabel = useHostConnectionLabel\(option\.value\);[\s\S]*?description=\{connectionLabel\}/,
+    /const connectionLabel = useHostSubtitle\(option\.value, sharesName\);[\s\S]*?description=\{connectionLabel\}/,
   );
+  const chooser = source("packages/app/src/hosts/host-chooser.tsx");
+  assert.match(chooser, /\{subtitle \?\? host\.serverId\}/);
+  assert.match(chooser, /sharesName=\{sharedNames\.has\(host\.serverId\)\}/);
+  // The shared picker tags hosts that share a name even where it shows no address.
   assert.match(
-    source("packages/app/src/hosts/host-chooser.tsx"),
-    /\{connectionLabel \?\? host\.serverId\}/,
+    source("packages/app/src/components/hosts/host-picker.tsx"),
+    /sharesName=\{sharedNames\.has\(option\.id\)\}/,
   );
 });

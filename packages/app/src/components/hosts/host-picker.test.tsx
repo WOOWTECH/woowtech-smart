@@ -6,6 +6,9 @@ import {
   getHostPickerLabel,
   buildHostPickerOptions,
   ENABLE_BUILT_IN_DAEMON_OPTION_ID,
+  hostIdTag,
+  hostsSharingAName,
+  hostSubtitle,
 } from "./host-picker-constants";
 
 const hosts = [{ serverId: "host-a", label: "Host A" }];
@@ -65,4 +68,35 @@ it("updates visible and searchable labels together when the language changes", a
   } finally {
     await i18n.changeLanguage("en");
   }
+});
+
+// woowtech smart: telling hosts with the same name apart (woowtech/README.md section 25, K-34).
+it("tags only the hosts whose name another host also has", () => {
+  const shared = hostsSharingAName([
+    { serverId: "srv_xdz4gLQn_GRS", label: "woowtechmacbook.local" },
+    { serverId: "srv_9t3UPf7qZbJu", label: "woowtechmacbook.local" },
+    { serverId: "srv_other", label: "studio-mac.local" },
+  ]);
+  expect([...shared].sort()).toEqual(["srv_9t3UPf7qZbJu", "srv_xdz4gLQn_GRS"]);
+});
+
+it("puts a short id after the address of a host that shares its name", () => {
+  expect(hostIdTag("srv_9t3UPf7qZbJu")).toBe("9t3U");
+  expect(
+    hostSubtitle({
+      connectionLabel: "relay.woowtech.io",
+      serverId: "srv_9t3UPf7qZbJu",
+      sharesName: true,
+    }),
+  ).toBe("relay.woowtech.io · 9t3U");
+  expect(
+    hostSubtitle({ connectionLabel: undefined, serverId: "srv_9t3UPf7qZbJu", sharesName: true }),
+  ).toBe("9t3U");
+  expect(
+    hostSubtitle({
+      connectionLabel: "relay.woowtech.io",
+      serverId: "srv_9t3UPf7qZbJu",
+      sharesName: false,
+    }),
+  ).toBe("relay.woowtech.io");
 });
