@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import { useSessionStore } from "@/stores/session-store";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
+import { terminalDisplayName } from "@/terminal/woowtech-terminal-name";
 
 interface RenamingTabState {
   kind: "terminal" | "agent";
@@ -40,7 +41,8 @@ export function useWorkspaceTabRename(
       if (tab.target.kind === "terminal") {
         const { terminalId } = tab.target;
         const terminal = terminalsData?.terminals.find((entry) => entry.id === terminalId) ?? null;
-        const currentTitle = terminal?.title ?? terminal?.name ?? "";
+        // woowtech smart: start from the name the tab shows (terminal/woowtech-terminal-name.ts).
+        const currentTitle = terminalDisplayName(terminal?.title ?? terminal?.name ?? "", t);
         setRenamingTab({ kind: "terminal", id: terminalId, currentTitle });
         return;
       }
@@ -52,7 +54,7 @@ export function useWorkspaceTabRename(
         setRenamingTab({ kind: "agent", id: agentId, currentTitle });
       }
     },
-    [normalizedServerId, terminalsData],
+    [normalizedServerId, terminalsData, t],
   );
 
   const handleRenameModalSubmit = useCallback(

@@ -63,6 +63,17 @@ test("dictation and voice mode say why they are unavailable in the app language 
   );
 });
 
+test("terminal tabs show the daemon's default names in the app language (10/8)", () => {
+  assert.match(
+    source("packages/app/src/panels/terminal-panel.tsx"),
+    /const label = name \? terminalDisplayName\(name, t\) : t\("workspace\.tabs\.fallback\.terminal"\);/,
+  );
+  assert.match(
+    source("packages/app/src/screens/workspace/use-workspace-tab-rename.tsx"),
+    /const currentTitle = terminalDisplayName\(terminal\?\.title \?\? terminal\?\.name \?\? "", t\);/,
+  );
+});
+
 test("host lists show each host's address, so hosts with the same name differ (K-34)", () => {
   for (const path of [
     "packages/app/src/screens/new-workspace-screen.tsx",

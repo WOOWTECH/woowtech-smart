@@ -1163,6 +1163,16 @@ const VOICE_READINESS_ZH_TW: typeof VOICE_READINESS_ENGLISH = {
     "主機正在背景下載語音模型（{{models}}），下載完成前無法使用語音功能。請過幾分鐘再試。",
 };
 
+// The daemon's default name for a new terminal (terminal/woowtech-terminal-name.ts). The English
+// matches the daemon's.
+const TERMINAL_NAME_ENGLISH = {
+  numbered: "Terminal {{number}}",
+};
+
+const TERMINAL_NAME_ZH_TW: typeof TERMINAL_NAME_ENGLISH = {
+  numbered: "終端機 {{number}}",
+};
+
 const COMPOSER_ENGLISH = {
   uploadConnectionLost:
     "The file was not uploaded because the connection to the host was lost. Add it again once the host is back.",
@@ -1283,6 +1293,16 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   },
 };
 
+/** The app's text for English the daemon sends: reasons, readiness sentences, default names. */
+function daemonTextCopyFor(language: string) {
+  const traditionalChinese = language === "zh-TW";
+  return {
+    workspaceRecovery: traditionalChinese ? WORKSPACE_RECOVERY_ZH_TW : WORKSPACE_RECOVERY_ENGLISH,
+    voiceReadiness: traditionalChinese ? VOICE_READINESS_ZH_TW : VOICE_READINESS_ENGLISH,
+    terminalName: traditionalChinese ? TERMINAL_NAME_ZH_TW : TERMINAL_NAME_ENGLISH,
+  };
+}
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
@@ -1307,8 +1327,7 @@ export function woowtechCopyFor(language: string) {
     schedules: language === "zh-TW" ? SCHEDULES_ZH_TW : SCHEDULES_ENGLISH,
     time: language === "zh-TW" ? TIME_ZH_TW : TIME_ENGLISH,
     message: language === "zh-TW" ? MESSAGE_ZH_TW : MESSAGE_ENGLISH,
-    workspaceRecovery: language === "zh-TW" ? WORKSPACE_RECOVERY_ZH_TW : WORKSPACE_RECOVERY_ENGLISH,
-    voiceReadiness: language === "zh-TW" ? VOICE_READINESS_ZH_TW : VOICE_READINESS_ENGLISH,
+    ...daemonTextCopyFor(language),
     thirdPartyNotices:
       language === "zh-TW" ? THIRD_PARTY_NOTICES_ZH_TW : THIRD_PARTY_NOTICES_ENGLISH,
   };
