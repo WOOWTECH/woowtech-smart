@@ -3,11 +3,11 @@ import {
   blobToBase64,
   fileUriToPath,
   generateAttachmentId,
-  getFileExtensionFromName,
   normalizeMimeType,
   parseDataUrl,
 } from "@/attachments/utils";
 import type { DesktopAttachmentBridge } from "./desktop-attachment-bridge";
+import { attachmentExtensionFromName } from "./woowtech-attachment-extension";
 
 const IMAGE_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   "image/png": ".png",
@@ -35,12 +35,14 @@ function extensionForAttachment(input: {
   sourcePath?: string | null;
   mimeType: string;
 }): string {
-  const fromName = getFileExtensionFromName(input.fileName);
+  // woowtech smart: only the last path segment, and only an extension the main process accepts
+  // (desktop/attachments/woowtech-attachment-extension.ts).
+  const fromName = attachmentExtensionFromName(input.fileName);
   if (fromName) {
     return fromName;
   }
 
-  const fromSourcePath = getFileExtensionFromName(input.sourcePath);
+  const fromSourcePath = attachmentExtensionFromName(input.sourcePath);
   if (fromSourcePath) {
     return fromSourcePath;
   }

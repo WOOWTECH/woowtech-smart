@@ -50,3 +50,38 @@ export function getHostPickerLabel(
     t(config?.includeAllHost ? "woowtech.hostPicker.all" : "woowtech.hostPicker.title")
   );
 }
+
+// woowtech smart: telling hosts with the same name apart (woowtech/README.md section 25, K-34).
+/** A short tag from a host's server id: srv_9t3UPf7qZbJu reads as 9t3U. */
+export function hostIdTag(serverId: string): string {
+  return serverId.replace(/^srv_/, "").slice(0, 4);
+}
+
+/** The server ids of hosts that share their name with another host. */
+export function hostsSharingAName(
+  hosts: readonly { serverId: string; label: string }[],
+): ReadonlySet<string> {
+  const counts = new Map<string, number>();
+  for (const host of hosts) {
+    counts.set(host.label, (counts.get(host.label) ?? 0) + 1);
+  }
+  return new Set(
+    hosts.filter((host) => (counts.get(host.label) ?? 0) > 1).map((host) => host.serverId),
+  );
+}
+
+/**
+ * The line under a host's name. A phone reaches every host through the same relay, so two hosts
+ * with the same name also share the address (2026-10-08): those get a short id tag as well.
+ */
+export function hostSubtitle(input: {
+  connectionLabel: string | undefined;
+  serverId: string;
+  sharesName: boolean;
+}): string | undefined {
+  if (!input.sharesName) {
+    return input.connectionLabel;
+  }
+  const tag = hostIdTag(input.serverId);
+  return input.connectionLabel ? `${input.connectionLabel} · ${tag}` : tag;
+}

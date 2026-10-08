@@ -5,6 +5,7 @@ import {
   type RotatingFileStream,
 } from "rotating-file-stream";
 import { signalProcessTree } from "../src/utils/tree-kill.js";
+import { workerCwd } from "./woowtech-worker-cwd.js";
 
 const WORKER_HEARTBEAT_INTERVAL_MS = 1_000;
 const WORKER_TERMINATION_GRACE_MS = 10_000;
@@ -275,16 +276,20 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
 
     const spawnSpec = resolveWorkerSpawnSpec?.(workerEntry) ?? null;
     writeLifecycleLog("Spawning worker", { workerEntry });
+    // woowtech smart: not in a working directory that was removed (scripts/woowtech-worker-cwd.ts).
+    const cwd = workerCwd();
     if (spawnSpec) {
       child = spawn(spawnSpec.command, spawnSpec.args, {
         stdio: ["inherit", "pipe", "pipe", "ipc"],
         env: spawnSpec.env ?? workerEnv,
+        cwd,
       });
     } else {
       child = fork(workerEntry, workerArgs, {
         stdio: ["inherit", "pipe", "pipe", "ipc"],
         env: workerEnv,
         execArgv: workerExecArgv,
+        cwd,
       });
     }
 

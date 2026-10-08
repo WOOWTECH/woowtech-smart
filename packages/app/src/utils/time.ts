@@ -142,22 +142,33 @@ function localCalendarDaysBetween(earlier: Date, later: Date): number {
   return Math.round((startOfDay(later).getTime() - startOfDay(earlier).getTime()) / DAY_MS);
 }
 
+/**
+ * woowtech smart: the locale a timestamp's words come from, the app language's (as in
+ * formatMonthDay) rather than the system's, so a timestamp reads like the label around it. With the
+ * system in Chinese and the app in English the turn label read "Worked for 1s, ended 星期三 下午4:52".
+ * A memoized label passes it in, so a language change recomputes the label.
+ */
+export function appDateLocale(): string {
+  return i18n.t("woowtech.time.dateLocale");
+}
+
 // Cached Intl formatter. Explicitly carrying `hourCycle` from the resolved
 // options is what makes the runtime respect the user's OS-level 12h/24h
 // preference rather than the locale's default cycle.
-let cachedTimeFormatter: Intl.DateTimeFormat | null = null;
-function getTimeFormatter(): Intl.DateTimeFormat {
-  if (cachedTimeFormatter) return cachedTimeFormatter;
+let cachedTimeFormatter: { locale: string; formatter: Intl.DateTimeFormat } | null = null;
+function getTimeFormatter(locale: string): Intl.DateTimeFormat {
+  if (cachedTimeFormatter?.locale === locale) return cachedTimeFormatter.formatter;
   const resolved = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
   }).resolvedOptions();
-  cachedTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  const formatter = new Intl.DateTimeFormat(locale, {
     hour: "numeric",
     minute: "2-digit",
     hourCycle: resolved.hourCycle,
   });
-  return cachedTimeFormatter;
+  cachedTimeFormatter = { locale, formatter };
+  return formatter;
 }
 
 /**
@@ -166,8 +177,12 @@ function getTimeFormatter(): Intl.DateTimeFormat {
  * - The previous 6 calendar days: "Wednesday 10:11 PM"
  * - Older, including today's weekday last week: "14 May 2026, 10:11 PM"
  */
-export function formatMessageTimestamp(date: Date, now: Date = new Date()): string {
-  const time = getTimeFormatter().format(date);
+export function formatMessageTimestamp(
+  date: Date,
+  now: Date = new Date(),
+  locale: string = appDateLocale(),
+): string {
+  const time = getTimeFormatter(locale).format(date);
   const daysAgo = localCalendarDaysBetween(date, now);
 
   if (daysAgo === 0) {
@@ -175,11 +190,11 @@ export function formatMessageTimestamp(date: Date, now: Date = new Date()): stri
   }
 
   if (daysAgo > 0 && daysAgo < 7) {
-    const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
+    const weekday = date.toLocaleDateString(locale, { weekday: "long" });
     return `${weekday} ${time}`;
   }
 
-  const dateLabel = date.toLocaleDateString(undefined, {
+  const dateLabel = date.toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",

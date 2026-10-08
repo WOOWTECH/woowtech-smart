@@ -451,9 +451,11 @@ export const UserMessage = memo(function UserMessage({
   const hasImages = images.length > 0;
   const hasAttachments = attachments.length > 0;
   const showTrailingRow = !isPending && hasText && (isCompact || isNative || isHovered);
+  // woowtech smart: in the app language, and again when it changes (utils/time.ts appDateLocale).
+  const dateLocale = t("woowtech.time.dateLocale");
   const formattedTimestamp = useMemo(
-    () => formatMessageTimestamp(new Date(timestamp)),
-    [timestamp],
+    () => formatMessageTimestamp(new Date(timestamp), new Date(), dateLocale),
+    [timestamp, dateLocale],
   );
   const rewindMutation = useRewindAgentMutation({ serverId, agentId, client, messageId });
 
@@ -647,9 +649,11 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         : "",
     [durationMs, t],
   );
+  // woowtech smart: in the app language, and again when it changes (utils/time.ts appDateLocale).
+  const dateLocale = t("woowtech.time.dateLocale");
   const timestampLabel = useMemo(
-    () => (completedAt ? formatMessageTimestamp(completedAt) : ""),
-    [completedAt],
+    () => (completedAt ? formatMessageTimestamp(completedAt, new Date(), dateLocale) : ""),
+    [completedAt, dateLocale],
   );
 
   const primaryLabel = durationLabel || timestampLabel;

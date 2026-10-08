@@ -1,0 +1,42 @@
+// woowtech smart (woowtech/README.md section 21): the desktop's main process copies an attachment to
+// a file named after its extension, and refuses an extension that is not 1-16 letters or digits
+// (packages/desktop/src/features/attachments.ts normalizeExtension), with an English error that
+// shows the local path. Upstream took the extension from the whole source path when the file name
+// had none, so a file without one inside a folder with a dot (~/.config/tool/Makefile) gave
+// ".config/tool/Makefile". The extension now comes from the last path segment only, and only when
+// the main process accepts it.
+
+/** The extensions the main process accepts (normalizeExtension's EXTENSION_PATTERN). */
+const ACCEPTED_EXTENSION = /^\.[A-Za-z0-9]{1,16}$/;
+
+/** The extension of the last segment of `name` (a file name or a path), or "" when it has none the desktop accepts. */
+export function attachmentExtensionFromName(name: string | null | undefined): string {
+  if (!name) {
+    return "";
+  }
+  const baseName = name.replace(/\\/g, "/").split("/").pop() ?? "";
+  const dot = baseName.lastIndexOf(".");
+  if (dot <= 0 || dot === baseName.length - 1) {
+    return "";
+  }
+  const extension = baseName.slice(dot);
+  return ACCEPTED_EXTENSION.test(extension) ? extension : "";
+}
+
+/**
+ * The lowercase extension of a path, a file name or a URL (attachments/file-types.ts
+ * getFileExtension). Upstream cut the whole string at the first "#" and "?" before looking for the
+ * last dot, so a local "shot#1.png" or "what?.png" was no image (the desktop image picker failed
+ * without a word), and a "Makefile" under ~/.config gave ".config/…/makefile", which the desktop's
+ * main process refused with an English error (2026-10-08, Mac acceptance app). The file name as it
+ * is comes first; a "?query" or "#fragment" is dropped only when that gives no extension, so
+ * "/tmp/screenshot.PNG?cache=1" still reads as a PNG.
+ */
+export function pathExtension(path: string): string {
+  const asIs = attachmentExtensionFromName(path);
+  if (asIs) {
+    return asIs.toLowerCase();
+  }
+  const withoutSuffix = path.split("#", 1)[0]?.split("?", 1)[0] ?? path;
+  return attachmentExtensionFromName(withoutSuffix).toLowerCase();
+}

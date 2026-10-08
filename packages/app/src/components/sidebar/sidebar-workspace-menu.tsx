@@ -195,7 +195,7 @@ function SidebarWorkspaceMenuItems({
           leading={markAsReadLeadingIcon}
           onSelect={onMarkAsRead}
         >
-          Mark as read
+          {t("woowtech.interfaceText.markAsRead")}
         </WorkspaceMenuItem>
       ) : null}
       {onMarkAsUnread ? (
@@ -205,7 +205,7 @@ function SidebarWorkspaceMenuItems({
           leading={markAsUnreadLeadingIcon}
           onSelect={onMarkAsUnread}
         >
-          Mark as unread
+          {t("woowtech.interfaceText.markAsUnread")}
         </WorkspaceMenuItem>
       ) : null}
       {onTogglePin ? (
