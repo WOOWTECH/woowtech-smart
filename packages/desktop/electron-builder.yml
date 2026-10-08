@@ -19,17 +19,7 @@ protocols:
       - woowtech-smart
 afterPack: ./scripts/after-pack.js
 afterSign: ./scripts/after-sign.js
-# woowtech smart: Electron fuses, flipped right before signing, after afterPack's smoke test
-# (woowtech/README.md, section 26). The built-in daemon, its supervisor and bin/paseo run this
-# binary with ELECTRON_RUN_AS_NODE, so runAsNode stays on. The NODE_OPTIONS fuse also gates
-# NODE_EXTRA_CA_CERTS, which the daemon needs behind a TLS-inspecting proxy.
-electronFuses:
-  runAsNode: true
-  enableNodeOptionsEnvironmentVariable: true
-  enableNodeCliInspectArguments: false
-  onlyLoadAppFromAsar: true
-  enableEmbeddedAsarIntegrityValidation: true
-  grantFileProtocolExtraPrivileges: false
+# woowtech smart: scripts/after-pack.js flips the Electron fuses (scripts/woowtech-fuses.js).
 directories:
   output: release
 files:

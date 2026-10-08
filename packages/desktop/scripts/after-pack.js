@@ -4,6 +4,7 @@ const path = require("path");
 const { smokePackagedDesktopApp } = require("../e2e/packaged-app-smoke.js");
 
 const { installLinuxLauncher } = require("./linux-sandbox");
+const { flipWoowtechFuses } = require("./woowtech-fuses");
 
 const EXECUTABLE_NAME = "woowtech smart";
 
@@ -116,6 +117,9 @@ exports.default = async function afterPack(context) {
   const arch = ARCH_MAP[context.arch] || process.arch;
 
   pruneNativeModules(context.appOutDir, platform, arch);
+
+  // woowtech smart: before signing, the Linux launcher and the smoke test (scripts/woowtech-fuses.js).
+  await flipWoowtechFuses(context);
 
   if (platform === "linux") {
     installLinuxLauncher(context.appOutDir);

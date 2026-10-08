@@ -1459,7 +1459,7 @@ node --test woowtech/*.test.mjs
 
 ### 26. 桌面版的 Electron fuse（2026-10-08）
 
-上游沒設 fuse，全是 Electron 的預設值。`packages/desktop/electron-builder.yml` 的 `electronFuses` 由 electron-builder 在簽章前翻，每個平台都套用。
+上游沒設 fuse，全是 Electron 的預設值。設定寫在 `packages/desktop/scripts/woowtech-fuses.js`，`after-pack.js` 一開始就用 electron-builder 的 `addElectronFuses` 翻，在簽章、Linux 啟動腳本和打包冒煙測試之前，每個平台都套用。不用設定檔的 `electronFuses`：它在 afterPack 之後才翻，那時 Linux 的執行檔已經換成啟動腳本，CI 的 Linux 打包就失敗（`Could not find sentinel in the provided Electron binary`）。
 
 | fuse                                  | 設定 | 原因                                                                                                                                                                                                                                                                                                         |
 | ------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1473,9 +1473,9 @@ node --test woowtech/*.test.mjs
 - 沒動 EnableCookieEncryption：打開之後就不能再關。App 內瀏覽器的 cookie 會改用鑰匙圈加密，簽章不同的版本（驗收版和正式版）在同一台 Mac 上會跳鑰匙圈提示。之後再決定。
 - 留下的風險：RunAsNode 開著，本機的惡意程式可以先用 `launchctl setenv` 設好 `ELECTRON_RUN_AS_NODE`，再經 LaunchServices 打開 App，借用 App 的 TCC 權限（桌面版只申請麥克風）。要關掉 RunAsNode，daemon 和 CLI 得改用獨立的 Node 執行環境，原生模組也要針對它重新編譯。上游一樣有這個風險，之後再排。
 - 2026-10-08 在 Mac 驗收版的複本上實測：翻好 fuse、用同一個 Apple Development 身分重新簽章後，主視窗從 `woowtech-smart://app` 載入，內建 daemon 和 supervisor 都起得來，`bin/paseo --version` 和 `daemon status` 都正常。把 `app.asar` 改掉一個位元組後，App 一啟動就結束（`ASAR Integrity Violation`），Node 模式讀那個檔也一樣。
-- electron-builder 先跑 afterPack（含打包冒煙測試）才翻 fuse，所以冒煙測試看不到 fuse 的效果。正式版要用 `npx @electron/fuses read --app <.app>` 再確認一次。
+- 打包冒煙測試（Linux、Windows 在 afterPack，Mac 在 afterSign）跑的都是翻過 fuse 的執行檔。正式版仍要用 `npx @electron/fuses read --app <.app>` 確認一次。
 - Windows：electron-builder 26 會把 asar 雜湊寫進 Windows 執行檔，同一組 fuse 要在 Windows 上再驗一次。
-- 守門 `woowtech/desktop-fuses.test.mjs` 檢查 fuse 的設定，也檢查 daemon 和 CLI 還用 Node 模式。等兩邊都不用了，就把 RunAsNode 關掉。
+- 守門 `woowtech/desktop-fuses.test.mjs`：fuse 的設定、after-pack 在 Linux 啟動腳本之前翻、設定檔沒有 `electronFuses`、electron-builder 還有這兩個方法，以及 daemon 和 CLI 還用 Node 模式。等兩邊都不用了，就把 RunAsNode 關掉。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
