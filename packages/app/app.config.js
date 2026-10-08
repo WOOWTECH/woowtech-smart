@@ -212,6 +212,9 @@ export default {
       // Allow HTTP connections for local network hosts (required for release builds)
       usesCleartextTraffic: true,
       permissions: buildProfile.androidPermissions,
+      // woowtech smart: Expo's prebuild template asks for "display over other apps", which only
+      // React Native's debug tools use. Google Play lists it on the store page.
+      blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW"],
       package: variant.packageId,
       versionCode: nativeReleaseVersion.androidVersionCode,
       ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),

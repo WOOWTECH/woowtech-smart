@@ -214,6 +214,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
     - `app.config.js` 的 `ios.privacyManifests` 只寫 App 自己的部分：不追蹤；收集裝置 ID，用途是 App 功能，不連結到使用者身分。裝置 ID 是 FCM token：daemon 把它交給推播中繼，中繼為了每日上限保留它的 SHA-256，到那一天（UTC）結束（第 16 節）。App Store Connect 的「App 隱私權」問卷要跟這裡、跟 Firebase 清單宣告的一致。
     - Apple「常用第三方 SDK」名單上的 `hermes` 是 Imgur 的 SDK，不是 React Native 的 Hermes 引擎（Apple DTS 在開發者論壇的回答），`hermes.framework` 裡沒有清單是正常的。
     - 守門 `woowtech/ios-privacy-manifest.test.mjs`：`ios.privacyManifests` 的內容，以及合併沒有被關掉。
+  - Android 的權限（2026-10-08）：Expo prebuild 的範本會要求 `SYSTEM_ALERT_WINDOW`（在其他應用程式上層顯示），只有 React Native 的除錯工具用得到，Google Play 卻會列在商店頁上。`app.config.js` 的 `android.blockedPermissions` 把它拿掉，prebuild 會寫成 `tools:node="remove"`。守門 `woowtech/android-permissions.test.mjs`。
 - 桌面版（macOS）的「關於」視窗和 Finder 的「取得資訊」：版權是 `© 2026 WOOW TECH CO., LTD.`，「關於」視窗另外顯示官網 `https://aiot.woowtech.io/`。原本 electron-builder 用 `package.json` 的 author 產生「Copyright © 2026 Mohamed Boudra」，那是上游作者。
   - `electron-builder.yml` 的 `copyright` 寫進 Info.plist 的 `NSHumanReadableCopyright`，Windows 執行檔的版權欄也用它。
   - `main.ts` 在 `app.setName` 後面呼叫 `app.setAboutPanelOptions(woowtechAboutPanelOptions())`（+3 行）。內容在 fork 的 `src/features/woowtech-about-panel.ts`：同一行版權，官網放在 `credits`，因為 macOS 不顯示 `website`（Linux 才顯示）。官網取自 `BRAND_LINKS.website`。App 名稱和版本照預設，從 Info.plist 讀。沒打包的開發版也顯示同樣的版權和官網。
