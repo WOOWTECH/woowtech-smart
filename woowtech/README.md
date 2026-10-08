@@ -1456,6 +1456,26 @@ node --test woowtech/*.test.mjs
 - 守門：`woowtech/rc0930-fixes.test.mjs`（上面每個上游接點）。測試：`navigation/woowtech-settings-swipe-back.test.ts`、`components/woowtech-file-explorer-reconnect.test.ts`、`desktop/attachments/woowtech-attachment-extension.test.ts`、`i18n/woowtech-interface-text.test.ts`、`voice/woowtech-voice-readiness-copy.test.ts`、`terminal/woowtech-terminal-name.test.ts`、`utils/woowtech-message-timestamp.test.ts`。每個修正都改回原樣跑過一次，對應的測試或守門都會紅。
 - 刻意沒改的（上游，不擋上架）：Android 停止串流時偶發的 `RetryableMountingLayerException`（RC-A-04d，RN 0.81.5＋Reanimated 4.3.1，正式版實測時留意）、新增 ACP 供應商探測逾時的訊息、桌面 App 內瀏覽器的新分頁預設開 example.com、排程表單的 cron 錯誤訊息被鍵盤擋住（RC-A-18）。
 
+### 26. 桌面版的 Electron fuse（2026-10-08）
+
+上游沒設 fuse，全是 Electron 的預設值。`packages/desktop/electron-builder.yml` 的 `electronFuses` 由 electron-builder 在簽章前翻，每個平台都套用。
+
+| fuse                                  | 設定 | 原因                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| RunAsNode                             | 開   | 內建 daemon、supervisor、終端機 worker 和 CLI（`bin/paseo`）都用 `ELECTRON_RUN_AS_NODE` 跑 App 的執行檔                                                                                                                                                                                                      |
+| EnableNodeOptionsEnvironmentVariable  | 開   | 它也管 `NODE_EXTRA_CA_CERTS`，在公司 TLS 代理後面的使用者要靠它讓 daemon 連得出去。打包版的主程序本來就只吃 `NODE_OPTIONS` 裡的兩個選項；別的程式用 Node 模式叫起這個執行檔時，Electron 也會忽略這些變數（log：`Node.js environment variables are disabled because this process is invoked by other apps.`） |
+| EnableNodeCliInspectArguments         | 關   | 主程序不接受 `--inspect` 和 SIGUSR1。所以對主程序送 SIGUSR1 會照系統預設結束它。Node 模式下 `--inspect` 照樣有效，這個 fuse 管不到                                                                                                                                                                           |
+| OnlyLoadAppFromAsar                   | 開   | 只從 `app.asar` 載入程式                                                                                                                                                                                                                                                                                     |
+| EnableEmbeddedAsarIntegrityValidation | 開   | `app.asar` 的內容跟 electron-builder 記下的雜湊不符時（Mac 記在 Info.plist 的 `ElectronAsarIntegrity`，Windows 記在執行檔的資源），App 啟動就結束；Node 模式讀到被改過的檔案也會停                                                                                                                           |
+| GrantFileProtocolExtraPrivileges      | 關   | 畫面從 App 自己的 `woowtech-smart://` 協定載入，主視窗也不准導到 `file://`                                                                                                                                                                                                                                   |
+
+- 沒動 EnableCookieEncryption：打開之後就不能再關。App 內瀏覽器的 cookie 會改用鑰匙圈加密，簽章不同的版本（驗收版和正式版）在同一台 Mac 上會跳鑰匙圈提示。之後再決定。
+- 留下的風險：RunAsNode 開著，本機的惡意程式可以先用 `launchctl setenv` 設好 `ELECTRON_RUN_AS_NODE`，再經 LaunchServices 打開 App，借用 App 的 TCC 權限（桌面版只申請麥克風）。要關掉 RunAsNode，daemon 和 CLI 得改用獨立的 Node 執行環境，原生模組也要針對它重新編譯。上游一樣有這個風險，之後再排。
+- 2026-10-08 在 Mac 驗收版的複本上實測：翻好 fuse、用同一個 Apple Development 身分重新簽章後，主視窗從 `woowtech-smart://app` 載入，內建 daemon 和 supervisor 都起得來，`bin/paseo --version` 和 `daemon status` 都正常。把 `app.asar` 改掉一個位元組後，App 一啟動就結束（`ASAR Integrity Violation`），Node 模式讀那個檔也一樣。
+- electron-builder 先跑 afterPack（含打包冒煙測試）才翻 fuse，所以冒煙測試看不到 fuse 的效果。正式版要用 `npx @electron/fuses read --app <.app>` 再確認一次。
+- Windows：electron-builder 26 會把 asar 雜湊寫進 Windows 執行檔，同一組 fuse 要在 Windows 上再驗一次。
+- 守門 `woowtech/desktop-fuses.test.mjs` 檢查 fuse 的設定，也檢查 daemon 和 CLI 還用 Node 模式。等兩邊都不用了，就把 RunAsNode 關掉。
+
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
 ### 第一批：上游 `836f1a9..d6861f81e`
