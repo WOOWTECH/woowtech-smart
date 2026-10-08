@@ -19,24 +19,28 @@ const shortName = "woowtech smart";
 const chineseShortName = "渥屋智能";
 
 // woowtech smart: the purpose strings iOS shows when it asks for each permission, in the phone's
-// language. Apple has rejected a woowtech app for vague or English-only permission text (App
-// Store guideline 5.1.1). Localized InfoPlist.strings do not expand $(PRODUCT_NAME), so the app
-// name is written out.
+// language. The local network one shows when the app first connects to a host at a LAN address.
+// Apple has rejected a woowtech app for vague or English-only permission text (App Store
+// guideline 5.1.1). Localized InfoPlist.strings do not expand $(PRODUCT_NAME), so the app name is
+// written out.
 const iosPermissionText = {
   en: {
     NSCameraUsageDescription: `Allow ${shortName} to use the camera to scan the QR code that pairs it with your computer.`,
     NSMicrophoneUsageDescription: `Allow ${shortName} to use the microphone so you can dictate messages to your agents.`,
     NSPhotoLibraryUsageDescription: `Allow ${shortName} to access your photos so you can attach images to messages to your agents.`,
+    NSLocalNetworkUsageDescription: `Allow ${shortName} to connect to the computers on your local network that run your agents.`,
   },
   "zh-Hant": {
     NSCameraUsageDescription: `允許「${chineseShortName}」使用相機，掃描配對電腦用的 QR Code。`,
     NSMicrophoneUsageDescription: `允許「${chineseShortName}」使用麥克風，用語音輸入給 Agent 的訊息。`,
     NSPhotoLibraryUsageDescription: `允許「${chineseShortName}」取用你的照片，把圖片附加到給 Agent 的訊息。`,
+    NSLocalNetworkUsageDescription: `允許「${chineseShortName}」連線到區域網路上執行 Agent 的電腦。`,
   },
   "zh-Hans": {
     NSCameraUsageDescription: `允许“${chineseShortName}”使用相机，扫描配对电脑用的二维码。`,
     NSMicrophoneUsageDescription: `允许“${chineseShortName}”使用麦克风，用语音输入发给 Agent 的消息。`,
     NSPhotoLibraryUsageDescription: `允许“${chineseShortName}”访问你的照片，把图片附加到发给 Agent 的消息。`,
+    NSLocalNetworkUsageDescription: `允许“${chineseShortName}”连接到局域网上运行 Agent 的电脑。`,
   },
 };
 
