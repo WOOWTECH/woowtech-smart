@@ -40,6 +40,7 @@ import {
   type InlinePathTarget,
 } from "@/components/message";
 import { PlanCard } from "@/components/plan-card";
+import { localizePermissionActions } from "./woowtech-permission-actions";
 import type { StreamItem } from "@/types/stream";
 import type { PendingMessageSubmission } from "@/composer/submission/model";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
@@ -1385,7 +1386,7 @@ function PermissionRequestCard({
   permission: PendingPermission;
   client: DaemonClient | null;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isMobile = useIsCompactFormFactor();
 
   const { request } = permission;
@@ -1408,7 +1409,8 @@ function PermissionRequestCard({
       return [];
     }
     if (Array.isArray(request.actions) && request.actions.length > 0) {
-      return request.actions;
+      // woowtech smart: the provider's labels are English (woowtech-permission-actions.ts).
+      return localizePermissionActions(request.actions, t, i18n.language);
     }
     return [
       {
@@ -1427,7 +1429,7 @@ function PermissionRequestCard({
         variant: "primary",
       },
     ];
-  }, [isPlanRequest, request, t]);
+  }, [i18n.language, isPlanRequest, request, t]);
 
   const planMarkdown = useMemo(() => {
     if (!request) {

@@ -24,6 +24,7 @@ const TRADITIONAL_CHINESE_ONLY_SURFACES = [
   "claudeAuth.",
   "thirdPartyNotices.",
   "privacyPolicy.",
+  "permissionActions.",
 ] as const;
 
 function isTraditionalChineseOnly(key: string): boolean {

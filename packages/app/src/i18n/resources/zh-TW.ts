@@ -217,7 +217,7 @@ export const zhTW: TranslationResources = {
       required: "需要權限",
       deny: "拒絕",
       accept: "接受",
-      implement: "實施",
+      implement: "實作",
       question: "你想如何繼續？",
       proposedPlan: "建議計畫",
     },
