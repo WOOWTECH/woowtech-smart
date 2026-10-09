@@ -99,6 +99,8 @@ export const TERM_FIXES = [
   { find: /應用(?!程式)/g, replace: "應用程式" },
   { find: "訪問", replace: "存取" },
   { find: "批准", replace: "核准" },
+  // "Implement" a plan is writing the code: 實作 (OpenCC gives 實施, as in carrying out a policy).
+  { find: "實施", replace: "實作" },
   { find: "構建", replace: "版本" },
   { find: "配置檔案", replace: "設定檔" },
   { find: "配置", replace: "設定" },

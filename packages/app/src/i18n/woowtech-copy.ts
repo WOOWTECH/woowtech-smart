@@ -1230,6 +1230,14 @@ const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
 // Settings > Trademarks and third-party notices (woowtech/README.md §24). The marks' names,
 // owners, credits and license texts come from screens/settings/woowtech-third-party-notices.ts and
 // stay as their owners write them.
+const PERMISSION_ACTIONS_ENGLISH = {
+  implementWith: "Implement with {{mode}}",
+};
+
+const PERMISSION_ACTIONS_ZH_TW: typeof PERMISSION_ACTIONS_ENGLISH = {
+  implementWith: "以「{{mode}}」實作",
+};
+
 const PRIVACY_POLICY_ENGLISH = {
   title: "Privacy policy",
   hint: "What data the app handles and where it goes",
@@ -1322,6 +1330,13 @@ function legalCopyFor(language: string) {
   };
 }
 
+// The agent stream's own words for provider buttons (agent-stream/woowtech-permission-actions.ts).
+function agentStreamCopyFor(language: string) {
+  return {
+    permissionActions: language === "zh-TW" ? PERMISSION_ACTIONS_ZH_TW : PERMISSION_ACTIONS_ENGLISH,
+  };
+}
+
 /** woowtech smart's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
   return {
@@ -1348,5 +1363,6 @@ export function woowtechCopyFor(language: string) {
     message: language === "zh-TW" ? MESSAGE_ZH_TW : MESSAGE_ENGLISH,
     ...daemonTextCopyFor(language),
     ...legalCopyFor(language),
+    ...agentStreamCopyFor(language),
   };
 }
