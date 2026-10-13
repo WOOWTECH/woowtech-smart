@@ -1,0 +1,11 @@
+{
+  "name": "woowtech-ai-content-report-receiver",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test service.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

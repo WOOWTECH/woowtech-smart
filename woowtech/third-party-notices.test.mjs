@@ -33,6 +33,7 @@ import { VENDOR_MARKS } from "./vendor-marks.mjs";
 
 const NOTICES_FILE = "packages/app/src/screens/settings/woowtech-third-party-notices.ts";
 const NOTICES_PAGE = "packages/app/src/screens/settings/woowtech-third-party-notices-section.tsx";
+const PASEO_LICENSE_FILE = "packages/app/src/screens/settings/woowtech-paseo-license.ts";
 const FILE_ICONS = "packages/app/src/components/material-file-icons.ts";
 const FORGE_VIEWS = "packages/app/src/git/forges";
 const ICONS = "packages/app/src/components/icons";
@@ -312,6 +313,13 @@ test("the notices page carries material-icon-theme's copyright line and MIT noti
     assert.ok(header.includes(line), `material-icon-theme's LICENSE no longer says "${line}"`);
   }
   assert.equal(squeeze(MIT_LICENSE_TEXT), squeeze(body.join("\n\n")));
+});
+
+test("the notices page carries Paseo's current root copyright and complete license", () => {
+  const rootLicense = read("LICENSE").trimEnd();
+  const embedded = requireSource(PASEO_LICENSE_FILE);
+  assert.equal(embedded.PASEO_COPYRIGHT, "Copyright (c) 2025-present Mohamed Boudra");
+  assert.equal(embedded.PASEO_LICENSE_TEXT, rootLicense);
 });
 
 test("Settings opens the notices page at /settings/notices on every platform", () => {

@@ -331,6 +331,11 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 對外連結都寫在 `packages/protocol/src/brand-links.ts`（`BRAND_LINKS`），App 和 CLI 共用。要改連結，只改這個檔案。
 - 說明文件：官網 aiot.woowtech.io 還沒有說明頁，App 的 8 處和 CLI 的 2 處都先開官網首頁。哪個主題有了頁面，就改 `docs` 裡對應的那一項。
 - 回報問題：寄信到 woowtech@designsmart.com.tw。
+- AI 內容回報：已完成的 AI 訊息提供 App 內回報入口，預設只送原因與版本／平台／語言；附加單則訊息需使用者選擇並檢查可編輯預覽。建置時以 `WOOWTECH_AI_CONTENT_REPORT_URL` 指定 HTTPS 收件網址。未設定時不可送出，不把本機草稿視為已送達。
+  - 獨立接收器位於 `woowtech/ai-content-report-service`，使用 Node 20 以上。`AI_REPORT_QUEUE_DIR` 必須是絕對路徑，目錄權限 0700、記錄 0600；預設僅監聽 loopback。`AI_REPORT_ALLOWED_ORIGINS` 是網頁來源的逗號分隔清單，不接受萬用字元。
+  - 接收器附非 root `Dockerfile`，build context 為 repo 根目錄。單一 instance 使用私有持久化 volume；不能直接放到無持久磁碟或多 instance 的環境。`queue-admin.mjs show|delete <receipt>` 僅供受限管理終端使用；`show` 會顯示使用者選擇附加的內容，不能導入集中 log。刪除會同步目錄並確認記錄已消失。
+  - 正式啟用前需安排 HTTPS、持久化儲存、限制佇列的讀取權限及回報處理人員。預設以 socket 來源 IP 限流。反向代理部署時須一起設定 `AI_REPORT_TRUSTED_PROXY_ADDRESS`（Node 實際看到的單一代理 IP）與 `AI_REPORT_CLIENT_ADDRESS_HEADER`；僅信任該 peer，要求一個合法 IP。代理必須覆寫此 header（例如 `X-Real-IP`），不能附加或轉交用戶提供的值。收件檔案及目錄均 fsync 後才回傳 201。預設保存 30 天，啟動及每日清除到期資料（正常運作下可能延後最多一天）；上限 10,000 筆／100 MiB；可透過 `AI_REPORT_RETENTION_DAYS`、`AI_REPORT_MAX_QUEUE_RECORDS`、`AI_REPORT_MAX_QUEUE_BYTES` 調整，變更期限也要更新政策。
+  - 收件編號代表已持久化，不代表已完成人工處理。逾時可能已送達，重試可能產生重複記錄。此資料流啟用前要同步更新下述隱私政策與商店揭露；目前尚未設定正式收件網址。
 - 隱私權政策（2026-10-08）：官網 Help Center 網誌的一篇文章（Odoo `blog.post` 391，中英文在同一頁），網址是 `BRAND_LINKS.privacyPolicy`，也是兩個商店要填的隱私權政策網址。
   - 設定「關於」頁的「隱私權政策」那一列打開它（`screens/settings/woowtech-privacy-policy-row.tsx`，`settings-screen.tsx` 的 `AboutSection` 加一行）：App Store 審查準則 5.1.1 和 Google Play 都要求 App 裡找得到隱私權政策。
   - 改政策就在 Odoo 改那篇文章。網址靠結尾的 391 找文章，標題改了，舊網址也會轉到新的。App 的資料流變了（例如加了分析或當機回報 SDK），政策和商店的隱私填答要一起改。
@@ -1337,6 +1342,9 @@ node --test woowtech/*.test.mjs
 
 ### 24. 商標與第三方授權（上架合規）
 
+- 2026-10-13 擴充：Paseo 的 Apache-2.0 全文與版權，加上行動版軟體清單 `screens/settings/mobile-third-party-licenses.json`；`woowtech-mobile-licenses-section.tsx` 提供搜尋、每頁 20 筆、一次展開一個套件全文，支援繁中／英文及螢幕閱讀器的套件名稱與展開狀態。條款保留原文，Android SDK／ML Kit 專用條款不標成開源授權。
+- 清單依此分支的 iOS／Android production Metro source map、保存的原生建置資料與官方授權檔整理。它不是舊商店安裝檔的逐位元驗證；依賴更新或新 archive 產生後，要重新對照最終產物。開發快取移到外接位置時，可用 `WOOWTECH_METRO_WATCH_FOLDERS` 提供以系統 path delimiter 分隔的實際依賴根目錄，供 Metro 建立完整 file map。
+
 - 依據：協調資料夾的 `coord/reports/logo-usage-research.md`（逐家研究，不在 repo 裡，不是法律意見）。
 - owner 的決定（2026-09-30）：
   - 06:5x 同意協調者的四項建議：
@@ -1358,7 +1366,7 @@ node --test woowtech/*.test.mjs
   - 名稱、所有者、署名和授權條文照原文，不翻譯；標籤（所有者、授權、來源、修改）、段落標題和說明有繁中和英文（`woowtech.thirdPartyNotices`，其他語言顯示英文）。不是任何所有者原文的字也翻譯：公眾領域（`LICENSES.publicDomain` 用 `nameKey`，不是授權名稱）、渥屋智能改了什麼（`changes`）、MIT 段作品標題裡的「標誌」（`logo: true`，繁中「JS 標誌」）。文字可以選取，方便複製授權網址。
   - 署名的核對：每一項都讀過來源頁原文（2026-09-30），存在協調資料夾外的 `logs/logo-s1-sources/`。研究沒列、原文卻要求署名的有 4 項，已經補上：Nix（CC BY 4.0）、SVG（W3C 的 CC BY-SA 4.0，署名「W3C SVG Logo」）、JS logo 和 TOML logo（MIT）。
   - 檔案：
-    - 資料 `screens/settings/woowtech-third-party-notices.ts`：這頁唯一的資料來源（`VENDOR_MARK_NOTICES`、`FORGE_MARK_NOTICES`、`FILE_TYPE_MARK_NOTICES`、`GENERIC_FILE_ICONS`、`MIT_NOTICES`、`MIT_LICENSE_TEXT`），和組出整頁文字的 `buildThirdPartyNotices(t)`。
+    - 資料 `screens/settings/woowtech-third-party-notices.ts`：商標與圖示的資料來源（`VENDOR_MARK_NOTICES`、`FORGE_MARK_NOTICES`、`FILE_TYPE_MARK_NOTICES`、`GENERIC_FILE_ICONS`、`MIT_NOTICES`、`MIT_LICENSE_TEXT`），和組出整頁文字的 `buildThirdPartyNotices(t)`。
     - 畫面 `screens/settings/woowtech-third-party-notices-section.tsx`：跟其他設定頁一樣用 `SettingsSection` 和卡片；每段的用途放在標題旁的 info 提示，改作說明和商標聲明是卡片裡的列，一定看得到。
     - 上游檔的接點（註解 `woowtech smart:`）：`utils/host-routes.ts` 的 `SETTINGS_SECTION_SLUGS` 加 `"notices"`；`screens/settings-screen.tsx` 的 `SIDEBAR_SECTION_ITEMS` 加一列（lucide 的 `Scale`），區段的 switch 加 `default`，交給 fork 的 `renderWoowtechSettingsSection`（在 `woowtech-third-party-notices-section.tsx`）。用 `default` 而不是再加一個 `case`，是因為那個函式的 complexity 已經是 lint 的上限 20。
   - 新增一筆（例如第二階段把 codex 改回標誌）：

@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { PASEO_COPYRIGHT, PASEO_LICENSE_TEXT } from "./woowtech-paseo-license";
 
 // woowtech smart: the Trademarks and third-party notices page (商標與第三方授權) in Settings,
 // woowtech/README.md section 24. It lists every third-party mark the app shows, with its owner and
@@ -345,7 +346,7 @@ export interface NoticeRow {
 }
 
 export interface NoticeSection {
-  readonly id: "trademarks" | "agents" | "forges" | "fileTypes" | "mit";
+  readonly id: "trademarks" | "agents" | "forges" | "fileTypes" | "paseo" | "mit";
   readonly title: string;
   /** What the section is for, for its header's info tooltip. */
   readonly info?: string;
@@ -369,7 +370,6 @@ function noticeLines(notice: MarkNotice, t: TFunction): string[] {
     ...(notice.source ? [t(`${COPY}.source`, { source: notice.source })] : []),
   ];
 }
-
 function markRows(notices: Readonly<Record<string, MarkNotice>>, t: TFunction): NoticeRow[] {
   return Object.entries(notices).map(([key, notice]) => ({
     key,
@@ -413,6 +413,19 @@ export function buildThirdPartyNotices(t: TFunction): NoticeSection[] {
           title: notice.name,
           lines: noticeLines(notice, t),
         })),
+      ],
+    },
+    {
+      id: "paseo",
+      title: t(`${COPY}.sections.paseo`),
+      info: t(`${COPY}.sections.paseoInfo`),
+      rows: [
+        { key: "copyright", title: "Paseo", lines: [PASEO_COPYRIGHT] },
+        {
+          key: "text",
+          title: t(`${COPY}.sections.apacheTextTitle`),
+          lines: [PASEO_LICENSE_TEXT],
+        },
       ],
     },
     {

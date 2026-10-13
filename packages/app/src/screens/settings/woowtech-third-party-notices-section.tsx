@@ -5,6 +5,7 @@ import { SettingsSection } from "@/components/settings/headings/settings-section
 import { settingsStyles } from "@/styles/settings";
 import type { SettingsSectionSlug } from "@/utils/host-routes";
 import { buildThirdPartyNotices, type NoticeRow } from "./woowtech-third-party-notices";
+import { MobileLicensesSection } from "./woowtech-mobile-licenses-section";
 
 // woowtech smart: Settings > Trademarks and third-party notices (商標與第三方授權),
 // woowtech/README.md section 24. Every word comes from woowtech-third-party-notices.ts; this lays it
@@ -39,6 +40,7 @@ export function ThirdPartyNoticesSection() {
           </View>
         </SettingsSection>
       ))}
+      <MobileLicensesSection />
     </View>
   );
 }

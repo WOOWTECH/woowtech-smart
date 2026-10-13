@@ -288,6 +288,7 @@ export default {
     extra: {
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
+      aiContentReportUrl: process.env.WOOWTECH_AI_CONTENT_REPORT_URL?.trim() || undefined,
       router: {},
       eas: {
         projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",

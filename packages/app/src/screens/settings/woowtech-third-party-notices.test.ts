@@ -13,6 +13,7 @@ import {
   type NoticeRow,
   type NoticeSection,
 } from "./woowtech-third-party-notices";
+import { PASEO_COPYRIGHT, PASEO_LICENSE_TEXT } from "./woowtech-paseo-license";
 
 // woowtech smart's page of the third-party marks it shows (woowtech/README.md section 24). Which
 // marks ship is guarded by woowtech/third-party-notices.test.mjs; these tests pin what the page
@@ -245,6 +246,7 @@ describe("the trademarks and third-party notices page", () => {
       "agents",
       "forges",
       "fileTypes",
+      "paseo",
       "mit",
     ]);
     expect(rowOf(english, "agents", "cortex-code")).toEqual({
@@ -292,6 +294,21 @@ describe("the trademarks and third-party notices page", () => {
     ]);
   });
 
+  it("shows Paseo's root copyright and complete Apache-2.0 license before the asset notices", () => {
+    const rootLicense = readFileSync(
+      new URL("../../../../../LICENSE", import.meta.url),
+      "utf8",
+    ).trimEnd();
+    expect(PASEO_COPYRIGHT).toBe("Copyright (c) 2025-present Mohamed Boudra");
+    expect(PASEO_LICENSE_TEXT).toBe(rootLicense);
+    expect(rowOf(pageIn("en"), "paseo", "copyright").lines).toEqual([PASEO_COPYRIGHT]);
+    expect(rowOf(pageIn("en"), "paseo", "text")).toEqual({
+      key: "text",
+      title: "Apache License 2.0 text",
+      lines: [PASEO_LICENSE_TEXT],
+    });
+  });
+
   it("closes with the MIT License text and the copyright notice of each work under it", () => {
     const mit = pageIn("en").find((section) => section.id === "mit");
     expect(mit?.title).toBe("MIT License");
@@ -333,6 +350,7 @@ describe("the trademarks and third-party notices page", () => {
       "Agent",
       "Git 平台",
       "檔案類型圖示",
+      "Paseo — Apache License 2.0",
       "MIT 授權",
     ]);
     expect(rowOf(chinese, "fileTypes", "ruby")).toEqual({
@@ -380,6 +398,7 @@ describe("the trademarks and third-party notices page", () => {
         "顯示在開啟 Git 平台的連結旁。GitHub 與 Codeberg 只用黑色或白色顯示，GitLab 顯示文字徽章。",
       ],
       ["fileTypes", "檔案總管裡，代表這些程式語言與格式的檔案圖示。"],
+      ["paseo", "渥屋智能改作自 Paseo。本節重製 Paseo 的著作權聲明與完整散布授權。"],
       ["mit", "MIT 授權適用於下列每項作品，著作權聲明列在各項作品下。"],
     ]);
     expect(pageIn("en").map((section) => [section.id, section.info])).toEqual([
@@ -397,6 +416,10 @@ describe("the trademarks and third-party notices page", () => {
         "Icons for files written in these languages and formats, in the file explorer.",
       ],
       [
+        "paseo",
+        "woowtech smart is derived from Paseo. This section reproduces Paseo's copyright and complete distribution license.",
+      ],
+      [
         "mit",
         "The MIT License applies to each work below, under the copyright notice listed with it.",
       ],
@@ -405,7 +428,13 @@ describe("the trademarks and third-party notices page", () => {
 
   it("shows no English of woowtech smart's own in Traditional Chinese, only what the owners write", () => {
     // Names, owners, credits, sources, license names and copyright lines stay as written.
-    const asWritten = new Set<string>([MIT_LICENSE_TEXT]);
+    const asWritten = new Set<string>([
+      MIT_LICENSE_TEXT,
+      PASEO_LICENSE_TEXT,
+      PASEO_COPYRIGHT,
+      "Paseo",
+      "Paseo — Apache License 2.0",
+    ]);
     const markNotices = [
       ...Object.values(VENDOR_MARK_NOTICES),
       ...Object.values(FORGE_MARK_NOTICES),

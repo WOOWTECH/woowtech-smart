@@ -1265,6 +1265,10 @@ const THIRD_PARTY_NOTICES_ENGLISH = {
     fileTypesChangesTitle: "Changes from the original logos",
     fileTypesChanges:
       "material-icon-theme redrew these logos as file icons, and woowtech smart tones down their colors. Icons adapted from a logo under a Creative Commons ShareAlike license are shared under that same license.",
+    paseo: "Paseo — Apache License 2.0",
+    paseoInfo:
+      "woowtech smart is derived from Paseo. This section reproduces Paseo's copyright and complete distribution license.",
+    apacheTextTitle: "Apache License 2.0 text",
     mit: "MIT License",
     mitInfo:
       "The MIT License applies to each work below, under the copyright notice listed with it.",
@@ -1297,6 +1301,9 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
     fileTypesChangesTitle: "與原始標誌的差異",
     fileTypesChanges:
       "material-icon-theme 把這些標誌重新繪製成檔案圖示，渥屋智能再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。",
+    paseo: "Paseo — Apache License 2.0",
+    paseoInfo: "渥屋智能改作自 Paseo。本節重製 Paseo 的著作權聲明與完整散布授權。",
+    apacheTextTitle: "Apache License 2.0 授權條文",
     mit: "MIT 授權",
     mitInfo: "MIT 授權適用於下列每項作品，著作權聲明列在各項作品下。",
     mitTextTitle: "授權條文",
@@ -1320,7 +1327,6 @@ function daemonTextCopyFor(language: string) {
     terminalName: traditionalChinese ? TERMINAL_NAME_ZH_TW : TERMINAL_NAME_ENGLISH,
   };
 }
-
 // The About page's legal entries, apart from woowtechCopyFor so it stays within the complexity limit.
 function legalCopyFor(language: string) {
   const traditionalChinese = language === "zh-TW";
