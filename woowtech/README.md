@@ -1343,6 +1343,7 @@ node --test woowtech/*.test.mjs
 ### 24. 商標與第三方授權（上架合規）
 
 - 2026-10-13 擴充：Paseo 的 Apache-2.0 全文與版權，加上行動版軟體清單 `screens/settings/mobile-third-party-licenses.json`；`woowtech-mobile-licenses-section.tsx` 提供搜尋、每頁 20 筆、一次展開一個套件全文，支援繁中／英文及螢幕閱讀器的套件名稱與展開狀態。條款保留原文，Android SDK／ML Kit 專用條款不標成開源授權。
+- 本次盤點共 747 筆、189 份去重全文，另追查預編譯原生庫及 terminal WebView 內嵌 bundle。Hermes LLVH／dtoa 保留精確 source commit 的保守 notices，不宣稱每段原始碼都存留於 dead-stripped binary。
 - 清單依此分支的 iOS／Android production Metro source map、保存的原生建置資料與官方授權檔整理。它不是舊商店安裝檔的逐位元驗證；依賴更新或新 archive 產生後，要重新對照最終產物。開發快取移到外接位置時，可用 `WOOWTECH_METRO_WATCH_FOLDERS` 提供以系統 path delimiter 分隔的實際依賴根目錄，供 Metro 建立完整 file map。
 
 - 依據：協調資料夾的 `coord/reports/logo-usage-research.md`（逐家研究，不在 repo 裡，不是法律意見）。
