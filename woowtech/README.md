@@ -333,10 +333,10 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 說明文件：官網 aiot.woowtech.io 還沒有說明頁，App 的 8 處和 CLI 的 2 處都先開官網首頁。哪個主題有了頁面，就改 `docs` 裡對應的那一項。
 - 回報問題：寄信到 woowtech@designsmart.com.tw。
 - AI 內容回報：已完成的 AI 訊息提供 App 內回報入口，預設只送原因與版本／平台／語言；附加單則訊息需使用者選擇並檢查可編輯預覽。建置時以 `WOOWTECH_AI_CONTENT_REPORT_URL` 指定 HTTPS 收件網址。未設定時不可送出，不把本機草稿視為已送達。
-  - 上線方案（2026-10-14 owner 決定照 aiot／platform 的做法，**尚未部署**）：Cloud Run 服務 `smart-reports` ＋ Firestore ＋ Cloudflare Worker（`reports.woowtech.io`），與 `smart-push` 同一套，專案 woowtech-smart、asia-east1。程式、部署腳本與維運手冊都在 `woowtech/ai-content-report-cloudrun`（先讀它的 `README.md`）。預定收件網址 `https://reports.woowtech.io/v1/ai-content-reports`。
+  - 上線方案（2026-10-14 owner 決定照 aiot／platform 的做法，**同日已上線**）：Cloud Run 服務 `smart-reports` ＋ Firestore ＋ Cloudflare Worker（`reports.woowtech.io`），與 `smart-push` 同一套，專案 woowtech-smart、asia-east1。程式、部署腳本與維運手冊都在 `woowtech/ai-content-report-cloudrun`（先讀它的 `README.md`）。收件網址 `https://reports.woowtech.io/v1/ai-content-reports`，0.8.1 的正式建置帶這個網址。回報由 owner 處理：通知信一到就看，另外每週看一次 Firestore。
   - 通知與保存：收到回報時，Cloud Monitoring 的 log 警示寄信到 woowtech@designsmart.com.tw（信中只有收件編號；Google 限制每個警示政策每天最多 20 封）。回報保存 30 天，由 Firestore TTL 刪除（到期後通常 24 小時內，期間仍讀得到）；沒有備份；每天最多收 2000 筆，超過回 429。查看與刪除走 Firestore 主控台或該資料夾的 `admin.mjs`。
   - 來源：手機 App 不帶 Origin；桌面版從 `woowtech-smart://app` 發出跨來源請求，Worker 只對這個來源回 CORS（`ALLOWED_ORIGINS` 可改），其餘帶 Origin 的請求一律 403；一般瀏覽器的網頁版不支援。
-  - 啟用前（需 owner 核准）：部署服務與 Worker、確認警示信箱已驗證並實際收到一封信、把收件網址寫進建置，並**同時更新**下述隱私權政策與兩個商店的揭露（草稿 `plans/ai-report-go-live-pack-1014.md`）。收件編號代表已寫入 Firestore，不代表已人工處理；逾時可能已送達，重試可能產生重複記錄。
+  - 上線時（10/14，owner 逐項核准）部署了服務與 Worker、實際收到警示信、把收件網址寫進建置，隱私權政策加了第 5 節「AI 內容回報」；兩個商店的揭露答案在 `plans/store-privacy-ai-report-1014.md`。之後改收件方式、保存期限或通知內容，政策與商店揭露要一起改。收件編號代表已寫入 Firestore，不代表已人工處理；逾時可能已送達，重試可能產生重複記錄。
   - 第一版接收器（檔案佇列＋Gmail 通知）留在 `woowtech/ai-content-report-service`，**不是上線路徑**：它要常駐主機與持久磁碟，Gmail 通知要 OAuth，這兩樣都沒有。它的 `contract.mjs` 是兩個接收器共用的契約（Cloud Run 版有一份副本，`contract-sync.test.mjs` 檢查兩份一致；App 端的送出邏輯在 `packages/app/src/components/ai-content-report`），測試也保留。以下是它的細節，改用該方案時才用得上：
     - 獨立接收器位於 `woowtech/ai-content-report-service`，使用 Node 20 以上。`AI_REPORT_QUEUE_DIR` 必須是絕對路徑，目錄權限 0700、記錄 0600；預設僅監聽 loopback。`AI_REPORT_ALLOWED_ORIGINS` 是網頁來源的逗號分隔清單，不接受萬用字元。
     - 接收器附非 root `Dockerfile`，build context 為 repo 根目錄。單一 instance 使用私有持久化 volume；不能直接放到無持久磁碟或多 instance 的環境。`queue-admin.mjs show|delete <receipt>` 僅供受限管理終端使用；`show` 會顯示使用者選擇附加的內容，不能導入集中 log。刪除會同步目錄並確認記錄已消失。
