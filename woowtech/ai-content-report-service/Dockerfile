@@ -9,7 +9,10 @@ RUN addgroup -g ${APP_GID} -S reportsvc \
   && chmod 0700 /var/lib/woowtech-ai-reports
 
 WORKDIR /app
-COPY --chown=reportsvc:reportsvc woowtech/ai-content-report-service/service.mjs woowtech/ai-content-report-service/contract.mjs woowtech/ai-content-report-service/queue-admin.mjs ./
+COPY --chown=reportsvc:reportsvc woowtech/ai-content-report-service/service.mjs woowtech/ai-content-report-service/contract.mjs woowtech/ai-content-report-service/queue-admin.mjs \
+  woowtech/ai-content-report-service/notification-storage.mjs \
+  woowtech/ai-content-report-service/notification-worker.mjs \
+  woowtech/ai-content-report-service/gmail-transport.mjs ./
 
 ENV NODE_ENV=production \
   AI_REPORT_HOST=0.0.0.0 \

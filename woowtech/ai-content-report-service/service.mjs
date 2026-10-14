@@ -1,4 +1,5 @@
 import http from "node:http";
+import { withNotificationLock, cleanupNotificationStates } from "./notification-storage.mjs";
 import { mkdir, open, readdir, rename, stat, unlink } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
@@ -64,6 +65,11 @@ export async function cleanupExpired(queueDir, retentionMs, now = Date.now()) {
       removed += 1;
     }
   }
+  await withNotificationLock(
+    queueDir,
+    (dir) => cleanupNotificationStates(queueDir, dir, retentionMs, now),
+    { create: false, skipBusy: true },
+  );
   return removed;
 }
 

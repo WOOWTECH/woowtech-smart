@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -259,4 +268,42 @@ test("cleanup removes only expired owned queue files", async (t) => {
   await utimes(owned, new Date(0), new Date(0));
   assert.equal(await cleanupExpired(dir, 1000, 5000), 1);
   assert.deepEqual(await readdir(dir), ["leave-me.txt"]);
+});
+
+test("receiver retention cleanup removes expired notification metadata too", async (t) => {
+  const { runNotifications } = await import("./notification-worker.mjs");
+  const dir = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "ai-report-notification-clean-")),
+  );
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const receiptId = `air_${randomUUID()}`;
+  await persistRecord(dir, { receiptId, receivedAt: new Date().toISOString(), report: valid() });
+  await runNotifications({ queueDir: dir, transport: { send: async () => ({ status: "sent" }) } });
+  const file = path.join(dir, `${receiptId}.json`);
+  await utimes(file, new Date(0), new Date(0));
+  assert.equal(await cleanupExpired(dir, 1000, 5000), 1);
+  await assert.rejects(readFile(path.join(dir, "notifications", `${receiptId}.json`)), {
+    code: "ENOENT",
+  });
+  assert.deepEqual(await readdir(path.join(dir, "notifications")), []);
+});
+
+test("receiver cleanup during a busy send is completed by the worker before exit", async (t) => {
+  const { runNotifications } = await import("./notification-worker.mjs");
+  const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), "ai-report-notification-busy-")));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const receiptId = `air_${randomUUID()}`;
+  await persistRecord(dir, { receiptId, receivedAt: new Date().toISOString(), report: valid() });
+  const file = path.join(dir, `${receiptId}.json`);
+  await runNotifications({
+    queueDir: dir,
+    transport: {
+      send: async () => {
+        await utimes(file, new Date(0), new Date(0));
+        assert.equal(await cleanupExpired(dir, 1000, 5000), 1);
+        return { status: "sent" };
+      },
+    },
+  });
+  assert.deepEqual(await readdir(path.join(dir, "notifications")), []);
 });
