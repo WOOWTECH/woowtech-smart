@@ -95,13 +95,24 @@ test("app text outside the translations names woowtech smart", () => {
   const naming = findInShippedSources([/\bPaseo\b/], {
     dirs: ["packages/app/src", "packages/app/public"],
     fileTypes: /\.(?:[cm]?[jt]sx?|json|html)$/,
-    // Translations are renamed as they load (packages/app/src/i18n/brand.ts).
-    skipPaths: ["packages/app/src/i18n/resources/", "packages/app/src/i18n/brand.ts"],
+    skipPaths: [
+      // Translations are renamed as they load (packages/app/src/i18n/brand.ts).
+      "packages/app/src/i18n/resources/",
+      "packages/app/src/i18n/brand.ts",
+      // The license texts of the dependencies, reproduced as they are. Paseo's own is one of them.
+      "packages/app/src/screens/settings/mobile-third-party-licenses.json",
+    ],
     skipComments: true,
     allowLines: [
       // Matches the daemon's English error text to pick a translation; the user
       // sees the translation, which is renamed.
       /"Archive isn't available here because this workspace was not created as a Paseo worktree":/,
+      // The notices page credits the project woowtech smart is derived from. The Apache License
+      // 2.0 (section 4) asks for its copyright notice and license text to stay with the work.
+      /^\s*paseo: "Paseo — Apache License 2\.0",$/,
+      /woowtech smart is derived from Paseo\. This section reproduces Paseo's copyright/,
+      /^\s*paseoInfo: "渥屋智能改作自 Paseo。/,
+      /\{ key: "copyright", title: "Paseo", lines: \[PASEO_COPYRIGHT\] \}/,
     ],
   });
 

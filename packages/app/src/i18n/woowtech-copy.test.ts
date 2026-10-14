@@ -31,6 +31,10 @@ function isTraditionalChineseOnly(key: string): boolean {
   return TRADITIONAL_CHINESE_ONLY_SURFACES.some((surface) => key.startsWith(surface));
 }
 
+// A project and its license, named as they are written, so Traditional Chinese reads the same as
+// English: the notices page credits the project woowtech smart is derived from.
+const KEPT_AS_WRITTEN = new Set(["thirdPartyNotices.sections.paseo"]);
+
 // Text upstream hardcodes in English, which these files now read from the
 // woowtech.* translations. An upstream merge can bring a literal back.
 const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
@@ -151,6 +155,7 @@ describe("woowtech smart's own text", () => {
         const newSurface = key.startsWith("addProject.") || key.startsWith("hostPicker.");
         if (newSurface && !["zh-TW", "zh-CN"].includes(language)) return [];
         if (isTraditionalChineseOnly(key) && language !== "zh-TW") return [];
+        if (KEPT_AS_WRITTEN.has(key)) return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });
       expect({ language, untranslated }).toEqual({ language, untranslated: [] });
