@@ -6,13 +6,19 @@ import { test } from "node:test";
 
 import { expoPrebuildConfig } from "./expo-config.mjs";
 
-test("the iOS privacy manifest says the app tracks no one and collects only the push token", () => {
+test("the iOS privacy manifest says the app tracks no one and collects the push token and the text a user attaches to an AI content report", () => {
   const { ios, plugins } = expoPrebuildConfig("production");
   assert.deepEqual(ios.privacyManifests, {
     NSPrivacyTracking: false,
     NSPrivacyCollectedDataTypes: [
       {
         NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeDeviceID",
+        NSPrivacyCollectedDataTypeLinked: false,
+        NSPrivacyCollectedDataTypeTracking: false,
+        NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+      },
+      {
+        NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeOtherUserContent",
         NSPrivacyCollectedDataTypeLinked: false,
         NSPrivacyCollectedDataTypeTracking: false,
         NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],

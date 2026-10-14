@@ -1,0 +1,12 @@
+# What `gcloud builds submit` uploads for the image. The Dockerfile copies four modules, package.json
+# and the lock file; the rest of the folder stays on this machine.
+.gcloudignore
+.git
+.gitignore
+node_modules/
+deploy/
+*.test.mjs
+support.mjs
+memory-store.mjs
+admin.mjs
+README.md

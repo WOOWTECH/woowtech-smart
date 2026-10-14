@@ -136,6 +136,11 @@ jobs:
       - name: Check woowtech fork guards
         run: node --test --test-concurrency=1 --test-skip-pattern="^Traditional Chinese is regenerated from upstream's current Simplified Chinese$" woowtech/*.test.mjs
 
+      # woowtech smart: the AI content report receiver (Cloud Run). Its tests use an in-memory store
+      # and fake gcloud, so they need neither its npm dependencies nor network access.
+      - name: Test the AI content report receiver
+        run: node --test --test-concurrency=1 woowtech/ai-content-report-cloudrun/*.test.mjs
+
       - name: Typecheck all packages
         run: npm run typecheck
 

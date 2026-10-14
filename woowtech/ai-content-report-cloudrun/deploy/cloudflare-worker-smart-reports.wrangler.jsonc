@@ -1,0 +1,38 @@
+// Optional command-line deployment of the smart reports Worker, as smart-push-proxy has. The
+// dashboard works too (paste cloudflare-worker-smart-reports.js, set RELAY_ORIGIN and the EDGE_KEY
+// secret, add the custom domain reports.woowtech.io, and a WAF rate limiting rule for the per-IP
+// limit). Use this file when a binding is wanted: the IP_RATE_LIMITER binding below makes the
+// Worker apply 10 requests a minute per IP itself (counted per Cloudflare location, no burst
+// setting). Such bindings can only be set through wrangler 4.36+.
+//
+// Before deploying, replace RELAY_ORIGIN with the run.app URL that woowtech-smart-reports-deploy.sh
+// prints (the placeholder is not an https URL, so the Worker answers 500 until it is set), then:
+//   npx wrangler@4 secret put EDGE_KEY --config deploy/cloudflare-worker-smart-reports.wrangler.jsonc
+//   npx wrangler@4 deploy --config deploy/cloudflare-worker-smart-reports.wrangler.jsonc
+// EDGE_KEY is one key. While a rotation leaves "old new" in the Secret Manager secret, give it the
+// new key only (the deploy script's rotation steps print how); the pair would make every request 403.
+// namespace_id must be an integer, as a string, and unique among rate limiting namespaces in the
+// Cloudflare account: smart-push-proxy uses 4101.
+{
+  "name": "smart-reports-proxy",
+  "main": "cloudflare-worker-smart-reports.js",
+  "compatibility_date": "2026-09-01",
+  // workers.dev and Preview URLs off, as in the dashboard's Settings > Domains & Routes: they are
+  // outside the woowtech.io zone and its per-IP rate limit.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "reports.woowtech.io", "custom_domain": true }],
+  // No Workers Logs and no Logpush: the Worker sees client addresses and request bodies.
+  "observability": { "enabled": false },
+  "logpush": false,
+  "vars": {
+    "RELAY_ORIGIN": "set-me:the-run.app-URL-printed-by-woowtech-smart-reports-deploy.sh",
+  },
+  "ratelimits": [
+    {
+      "name": "IP_RATE_LIMITER",
+      "namespace_id": "4102",
+      "simple": { "limit": 10, "period": 60 },
+    },
+  ],
+}
