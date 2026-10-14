@@ -3,8 +3,9 @@
  */
 // The QR scanner is the /pair-scan route (src/app/pair-scan.tsx). Its test lives out
 // here because Expo Router treats every file in src/app as a route.
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import React from "react";
+import { Linking } from "react-native";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const scanner = vi.hoisted(() => ({
@@ -12,6 +13,8 @@ const scanner = vi.hoisted(() => ({
   routes: [] as string[],
   probes: [] as unknown[],
   imports: [] as Array<{ link: string; label: string | undefined }>,
+  permission: { granted: true, canAskAgain: true },
+  permissionRequests: 0,
 }));
 
 // The camera exists on phones only.
@@ -24,7 +27,13 @@ vi.mock("expo-camera", () => ({
     scanner.onBarcodeScanned = props.onBarcodeScanned ?? null;
     return null;
   },
-  useCameraPermissions: () => [{ granted: true }, async () => ({ granted: true })],
+  useCameraPermissions: () => [
+    scanner.permission,
+    async () => {
+      scanner.permissionRequests += 1;
+      return scanner.permission;
+    },
+  ],
 }));
 
 vi.mock("expo-router", () => ({
@@ -86,6 +95,8 @@ beforeEach(() => {
   scanner.routes = [];
   scanner.probes = [];
   scanner.imports = [];
+  scanner.permission = { granted: true, canAskAgain: true };
+  scanner.permissionRequests = 0;
   linksGivenToUrl.length = 0;
 });
 
@@ -129,5 +140,40 @@ describe("scanning a pairing QR code in the app", () => {
 
     expect(scanner.probes).toEqual([]);
     expect(scanner.routes).toEqual([]);
+  });
+});
+
+// A denied camera leaves the scanner with a page and one button. After the system stops asking
+// (the first denial on iOS, the second on Android) the button has to lead somewhere.
+describe("the camera permission page", () => {
+  const GRANT_BUTTON = /grantPermission|Grant permission|授予權限/;
+
+  it("opens the app's settings from the button once the system will not ask again", async () => {
+    const openSettings = vi.fn(async () => undefined);
+    // react-native-web has no openSettings; the phone's Linking does.
+    Object.assign(Linking, { openSettings });
+    scanner.permission = { granted: false, canAskAgain: false };
+
+    const view = render(<screen.default />);
+    await waitFor(() => expect(scanner.permissionRequests).toBeGreaterThan(0));
+    const requestsBeforeTap = scanner.permissionRequests;
+    fireEvent.click(view.getByText(GRANT_BUTTON));
+
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(scanner.permissionRequests).toBe(requestsBeforeTap);
+  });
+
+  it("asks again from the button while the system still will", async () => {
+    const openSettings = vi.fn(async () => undefined);
+    Object.assign(Linking, { openSettings });
+    scanner.permission = { granted: false, canAskAgain: true };
+
+    const view = render(<screen.default />);
+    await waitFor(() => expect(scanner.permissionRequests).toBeGreaterThan(0));
+    const requestsBeforeTap = scanner.permissionRequests;
+    fireEvent.click(view.getByText(GRANT_BUTTON));
+
+    expect(scanner.permissionRequests).toBe(requestsBeforeTap + 1);
+    expect(openSettings).not.toHaveBeenCalled();
   });
 });

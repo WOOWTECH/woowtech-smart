@@ -129,6 +129,13 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
         if (features?.pushTokenRevocation === true) await forgetCachedToken(client, key);
         return;
       }
+      // woowtech smart: the channels come before the question. Android 13 and later shows its
+      // notification prompt only once the app has a channel, so asking first got a fresh install
+      // no prompt at all, and no pushes (Expo's notifications guide, "Permissions > Android").
+      // Named in the app's language, like the relay's text: a new language renames them.
+      await dependencies.setNotificationChannels(
+        woowtechNotificationChannels(dependencies.appLanguage.current()),
+      );
       const mayAsk = !askedPermission;
       askedPermission = true;
       if (!(await dependencies.notificationPermission({ mayAsk }))) {
@@ -136,10 +143,6 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
         await forgetCachedToken(client, key);
         return;
       }
-      // Named in the app's language, like the relay's text: a new language renames them.
-      await dependencies.setNotificationChannels(
-        woowtechNotificationChannels(dependencies.appLanguage.current()),
-      );
       const fcmToken = await dependencies.fcmTokens.getToken();
       if (stopped || !fcmToken) return;
       if (!isFcmToken(fcmToken)) {

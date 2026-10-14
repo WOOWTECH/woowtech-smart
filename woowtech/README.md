@@ -208,6 +208,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
     - 繁中、簡中寫在 `locales` 的 `ios` 底下，進 `InfoPlist.strings`。那裡不會展開 `$(PRODUCT_NAME)`，所以名稱直接寫「渥屋智能」。`android` 底下仍只有 `app_name`。
     - 英文寫在 `ios.infoPlist`；相機那句同時給 `expo-camera` 的 `cameraPermission`，照片那句會蓋過 `expo-image-picker` 的預設文字。
     - 守門 `woowtech/ios-permissions.test.mjs` 用 `expo config` 查兩個版本。prebuild 驗過：`zh-Hans.lproj`、`zh-Hant.lproj` 的 `InfoPlist.strings` 都有三句。已經 prebuild 過的 `packages/app/ios` 要重新 prebuild 才會套用。
+    - 相機被拒絕之後系統就不再問（iOS 第一次，Android 第二次），掃描頁的「授予權限」改成開啟 App 在系統設定裡的頁面（`app/pair-scan.tsx` 的 `handleRequestPermission`，註解 `woowtech smart:`）；上游的按鈕這時什麼都不做，2026-10-14 POCO 實測發現。測試在 `components/pair-scan.app-link.test.tsx`。
   - iOS 的隱私清單 `PrivacyInfo.xcprivacy`（2026-10-08）：清單少宣告「需要理由的 API」（required reason API），App Store Connect 就不收那個建置。
     - API 的理由不用自己寫：`pod install` 時 React Native 把每個 pod 宣告的理由和它自己核心用到的合併進 App 的清單，所以 `expo-build-properties` 的 `ios.privacyManifestAggregationEnabled` 不能關。Firebase 的 SDK 各自帶清單（`.app` 裡的 `*_Privacy.bundle`）。
     - 2026-10-08 掃過 iPad 驗收版（Debug）的執行檔和三個內嵌 framework：`nm -u` 看 C 函式和常數，`strings` 看 selector。用到檔案時間、磁碟空間、UserDefaults 三類，清單都有，另外有 React Native 核心的開機時間；沒用到 `activeInputModes`。正式版上傳前用同樣方法再掃一次。
@@ -682,7 +683,7 @@ daemon：`packages/server/src/server/push/woowtech-relay.ts`
 App：`packages/app/src/push-notifications/internal/woowtech-subscriptions.ts`
 
 - 接點：`push-notifications/index.native.ts` 的 import 從上游的 `./internal/subscriptions` 改成它（1 行），匯出的函式名稱跟上游一樣。上游的 `subscriptions.ts`（向 Expo 要 push token，註冊給任何 daemon）留著不動、沒有人引用。
-- 只有連上宣告 `woowtechPush` 的 daemon 才要通知權限和 FCM token：每個 daemon 的訂閱最多問一次權限，連官方 Paseo 的 daemon 時完全不問，也不碰 Firebase。Android 的通知通道也在這時建立，在拿 token 之前（見下面 Android 的「通知通道」）。
+- 只有連上宣告 `woowtechPush` 的 daemon 才要通知權限和 FCM token：每個 daemon 的訂閱最多問一次權限，連官方 Paseo 的 daemon 時完全不問，也不碰 Firebase。Android 的通知通道也在這時建立，在問權限之前（見下面 Android 的「通知通道」）。
 - 快取沿用上游的 key `@paseo:expo-push-token:<serverId>`，存註冊出去的字串。升級後第一次同步會在那裡找到舊的 Expo token，先撤銷它。連的是沒有 `woowtechPush` 的 daemon（官方 Paseo，或這個改版以前的我們）也撤銷：那種 daemon 會把 agent 的回覆送到 Expo，直到舊 token 的 48 小時租約到期。daemon 宣告了 `pushTokenRevocation` 才撤銷並刪掉快取，不問權限、不碰 Firebase；沒宣告的，快取留著。
 - 換 token、換語言時先撤銷舊字串（我們的 daemon 宣告了 `pushTokenRevocation`）再註冊新的，同一支手機才不會收到兩則；通知權限被拒時撤銷並刪快取（上游只刪快取）；每次重新連線都再註冊一次，續 48 小時的租約。
 - FCM token 更新的監聽在第一次拿到 token 之後才開始，而且只有 token 真的換了才重新同步：Android 的 `expo-notifications` 每次 `getDevicePushTokenAsync` 都會把同一個 token 當成新 token 再發一次事件（`PushTokenModule.kt`），不比對的話，同步取 token、事件又排下一次同步，會一直重新註冊。token 不符契約時不註冊，warn 只寫長度。
@@ -732,7 +733,7 @@ Android：
     | `agent-finished`  | 工作完成   | Work finished | `finished`、每日上限的通知 |
 
   - 名稱是系統設定裡的通知類別，跟中繼的句子同一種語言，用同一個 `pushLocaleFor` 決定：`zh` 開頭（簡中也算）用繁中，其他用英文。中繼只有這兩種語言，所以名稱不放第 14 節依介面語言給字的 `woowtech-copy.ts`，跟通道 ID 寫在同一個檔。
-  - 時機跟原本的 `default` 一樣：連上宣告 `woowtechPush` 的 daemon、有通知權限之後、拿 FCM token 之前，每次同步都設一次。同一個 ID 再設一次只改名稱，不會調高重要性。所以換語言後，把註冊換成新語言的那次同步也改名（daemon 沒連上時等下次連上）；使用者在系統設定調低的通道也不會被調回來。
+  - 時機：連上宣告 `woowtechPush` 的 daemon、問通知權限之前、拿 FCM token 之前，每次同步都設一次。**一定要在問權限之前**：Android 13 以後，系統要等 App 至少建了一個通道才會跳出通知權限視窗（Expo 的 Notifications 文件「Permissions > Android」）。上游和這個 fork 原本都是先問權限、後建通道，全新安裝的 Android 13+ 手機從來不會被問，也就不會登記推播；舊安裝已經有權限，所以 10/6 之前的實機驗收看不出來（10/14 POCO 清資料後重測才發現）。權限被拒時通道照樣留著，使用者之後到系統設定開通知就找得到。同一個 ID 再設一次只改名稱，不會調高重要性。所以換語言後，把註冊換成新語言的那次同步也改名（daemon 沒連上時等下次連上）；使用者在系統設定調低的通道也不會被調回來。
   - `app.config.js` 的 `expo-notifications` 外掛加上 `defaultChannel: "agent-finished"`，外掛把它寫成 manifest 的 `com.google.firebase.messaging.default_notification_channel_id`。推播指定的通道手機上沒有時，FCM SDK 改用這個通道；manifest 沒寫的話，會落到 FCM 自己建的「Miscellaneous」（重要性 DEFAULT，沒有橫幅）。F-Droid 版沒有這個外掛，也沒有 FCM；它的 `expo-notifications` stub 多了 `AndroidImportance.HIGH`。
   - `default` 不再建立。照 owner 的決定這一版不刪，等中繼部署而且確定不回滾之後，下一版再用 `deleteNotificationChannelAsync` 刪掉。中繼部署前還是指定 `default`：已經有它的手機照舊收在 `default`（沒有橫幅），新裝的手機沒有它，就收在 `agent-finished`。
   - 上線順序：先發 App，再部署中繼（中繼的改動和步驟見「接下來」）。中繼先部署的話，還沒更新的 App 沒有這兩個通道，manifest 也沒有預設通道，推播會落到「Miscellaneous」。

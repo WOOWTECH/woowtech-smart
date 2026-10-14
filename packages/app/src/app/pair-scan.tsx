@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Linking, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -203,8 +203,15 @@ export default function PairScanScreen() {
 
   const handleRouterBack = useCallback(() => router.back(), [router]);
   const handleRequestPermission = useCallback(() => {
+    // woowtech smart: once the system will not ask again (after the first denial on iOS, the second
+    // on Android) requestPermission() resolves without a dialog, and the button did nothing. Send
+    // the user to the app's page in the system settings instead.
+    if (permission && !permission.granted && !permission.canAskAgain) {
+      void Linking.openSettings().catch(() => undefined);
+      return;
+    }
     void requestPermission();
-  }, [requestPermission]);
+  }, [permission, requestPermission]);
 
   const bodyStyle = useMemo(
     () => [styles.body, { paddingBottom: insets.bottom + theme.spacing[6] }],
