@@ -15,6 +15,9 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
+  // woowtech smart: Node loads the built packages as they are, for the reason in
+  // packages/app/playwright.config.ts.
+  build: { external: ["**/packages/*/dist/**"] },
   use: {
     baseURL,
     trace: "retain-on-failure",
