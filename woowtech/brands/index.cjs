@@ -49,7 +49,12 @@ function appliedBrand() {
 function renderValue(value, indent) {
   if (typeof value === "string") return JSON.stringify(value);
   if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    const inner = `${indent}  `;
+    const items = value.map((item) => `${inner}${renderValue(item, inner)},`);
+    return `[\n${items.join("\n")}\n${indent}]`;
+  }
+  if (value !== null && typeof value === "object") {
     const inner = `${indent}  `;
     const properties = Object.entries(value).map(([key, child]) => {
       const name = IDENTIFIER.test(key) ? key : JSON.stringify(key);
@@ -57,7 +62,7 @@ function renderValue(value, indent) {
     });
     return `{\n${properties.join("\n")}\n${indent}}`;
   }
-  throw new Error(`A brand value must be a string, number, boolean or object: ${value}`);
+  throw new Error(`A brand value must be a string, number, boolean, array or object: ${value}`);
 }
 
 /** packages/protocol/src/brand-values.ts for `brand`, before formatting. */

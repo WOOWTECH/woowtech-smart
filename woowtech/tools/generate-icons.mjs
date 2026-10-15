@@ -1,12 +1,16 @@
-// Generates woowtech smart's app, web and desktop icons from the brand symbol in
-// woowtech/brand: the blue symbol on white tiles for app icons (the brand choice,
-// distinct from WOOW Home's blue tiles), the bare symbol on a transparent background
-// wherever the logo sits on the app's own background (splash screen, favicons, the
-// iOS dark icon, Android's themed icon), a white symbol for Android
-// notifications, and a blue tile for development desktop builds.
+// Generates a brand's app, web and desktop icons from its logo (woowtech/brands): the logo
+// in its tile color on white tiles for app icons (woowtech smart: the blue WOOW symbol,
+// distinct from WOOW Home's blue tiles; Apporo smart: the grey mark, as Apporo's other apps),
+// the bare logo in its logo color on a transparent background wherever it sits on the app's
+// own background (splash screen, favicons, the iOS dark icon, Android's themed icon), a white
+// logo for Android notifications, and a tile in the brand color for development desktop builds.
 //
-//   node woowtech/tools/generate-icons.mjs              # write into the packages
-//   node woowtech/tools/generate-icons.mjs --out DIR    # write a preview set to DIR
+//   node woowtech/tools/generate-icons.mjs                    # the applied brand, into the packages
+//   node woowtech/tools/generate-icons.mjs --out DIR          # write a preview set to DIR
+//   node woowtech/tools/generate-icons.mjs --brand apporo --out woowtech/brands/apporo/assets
+//
+// Another brand's icons live under woowtech/brands/<id>/assets, laid out like the repository;
+// woowtech/tools/apply-brand.mjs copies them into place.
 //
 // Needs Google Chrome (headless rendering), sips and iconutil (macOS).
 import { execFileSync } from "node:child_process";
@@ -19,17 +23,20 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodeOpaquePng, readPng } from "../png.mjs";
 
+const require = createRequire(import.meta.url);
+const { appliedBrandId, loadBrand } = require("../brands/index.cjs");
+
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
-// The symbol flattened to plain paths (woowtech/tools/flatten-symbol.py), in brand blue.
-const SYMBOL_SOURCE = path.join(repoRoot, "woowtech/brand/woowtech-symbol-path.svg");
+const brandIndex = process.argv.indexOf("--brand");
+const brand = loadBrand(brandIndex === -1 ? appliedBrandId() : process.argv[brandIndex + 1]);
 
-const BRAND_BLUE = "#6183fc";
 const TILE_BORDER = "#e3e6ee";
 const RUNNING_DOT = "#3b82f6";
 const ATTENTION_DOT = "#22c55e";
@@ -39,9 +46,20 @@ const outIndex = process.argv.indexOf("--out");
 const outRoot = outIndex === -1 ? repoRoot : path.resolve(process.argv[outIndex + 1]);
 const work = mkdtempSync(path.join(tmpdir(), "woowtech-icons-"));
 
-const BLUE_SYMBOL = SYMBOL_SOURCE;
-const WHITE_SYMBOL = path.join(work, "symbol-white.svg");
-writeFileSync(WHITE_SYMBOL, readFileSync(SYMBOL_SOURCE, "utf8").replaceAll(BRAND_BLUE, "#ffffff"));
+/** The brand's logo in one color, as an SVG file to draw with. */
+function logoFile(name, fill) {
+  const file = path.join(work, `${name}.svg`);
+  const paths = brand.logo.paths.map((d) => `<path fill="${fill}" d="${d}"/>`).join("");
+  writeFileSync(
+    file,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${brand.logo.viewBox}">${paths}</svg>`,
+  );
+  return file;
+}
+
+const TILE_SYMBOL = logoFile("logo-tile", brand.logo.tileColor);
+const CLEAR_SYMBOL = logoFile("logo-clear", brand.logo.color);
+const WHITE_SYMBOL = logoFile("logo-white", "#ffffff");
 
 // --- compositions (CSS on a MASTER-sized transparent canvas) -----------------
 
@@ -83,10 +101,10 @@ function tile({ inset, radius, fill, border, shadow = "none", glyph, glyphWidth,
 const compositions = {
   // Full-bleed square: the launcher (iOS, Android legacy) applies its own mask.
   fullBleed: page(
-    `<div style="position:absolute;inset:0;background:#ffffff">${symbol(BLUE_SYMBOL, 62)}</div>`,
+    `<div style="position:absolute;inset:0;background:#ffffff">${symbol(TILE_SYMBOL, 62)}</div>`,
   ),
   // Android adaptive icon foreground: the symbol inside the 66% safe zone.
-  androidForeground: page(symbol(BLUE_SYMBOL, 40)),
+  androidForeground: page(symbol(TILE_SYMBOL, 40)),
   // Android notification icons are drawn as a white silhouette.
   notification: page(symbol(WHITE_SYMBOL, 84)),
   tile: tile({
@@ -94,19 +112,19 @@ const compositions = {
     radius: 230,
     fill: "#ffffff",
     border: TILE_BORDER,
-    glyph: BLUE_SYMBOL,
+    glyph: TILE_SYMBOL,
     glyphWidth: 62,
   }),
   // Android 12+ draws the splash icon inside a circle two thirds of the canvas wide, so the
   // symbol (105.2 x 83.4) is 50% wide: its diagonal, 64%, stays inside the circle.
-  splash: clear({ glyph: BLUE_SYMBOL, glyphWidth: 50 }),
+  splash: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 50 }),
   // Favicons show at 16-32px, so the symbol fills almost the whole canvas.
-  favicon: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92 }),
-  faviconRunning: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92, dot: RUNNING_DOT }),
-  faviconAttention: clear({ glyph: BLUE_SYMBOL, glyphWidth: 92, dot: ATTENTION_DOT }),
+  favicon: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 92 }),
+  faviconRunning: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 92, dot: RUNNING_DOT }),
+  faviconAttention: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 92, dot: ATTENTION_DOT }),
   // iOS 18 dark app icon: the system draws the background, the icon gives the symbol at the
   // size of the light icon's. No tinted icon: prebuild flattens it onto white (withIosIcons).
-  iosDark: clear({ glyph: BLUE_SYMBOL, glyphWidth: 62 }),
+  iosDark: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 62 }),
   // Android 13+ themed icon: a silhouette with the adaptive foreground's geometry.
   androidMonochrome: clear({ glyph: WHITE_SYMBOL, glyphWidth: 40 }),
   // macOS icon grid: an 824px tile inside the 1024px canvas, with a soft shadow.
@@ -116,13 +134,13 @@ const compositions = {
     fill: "#ffffff",
     border: TILE_BORDER,
     shadow: "0 10px 22px rgba(26,29,41,0.18)",
-    glyph: BLUE_SYMBOL,
+    glyph: TILE_SYMBOL,
     glyphWidth: 58,
   }),
   desktopDev: tile({
     inset: 100,
     radius: 185,
-    fill: BRAND_BLUE,
+    fill: brand.colors.primary,
     shadow: "0 10px 22px rgba(26,29,41,0.18)",
     glyph: WHITE_SYMBOL,
     glyphWidth: 58,
@@ -135,6 +153,8 @@ function renderMaster(name) {
   writeFileSync(html, compositions[name]);
   const args = [
     "--headless=new",
+    // A profile of its own, so a Chrome the person has open is never involved.
+    `--user-data-dir=${path.join(work, "chrome-profile")}`,
     "--disable-gpu",
     "--hide-scrollbars",
     "--allow-file-access-from-files",

@@ -1,0 +1,29 @@
+# Apporo smart's relay: the same Worker as woowtech smart's (wrangler.woowtech.toml), at
+# relay.apporo.ai. Like that config, it never sets PASEO_RELAY_UPSTREAM, so the Worker runs
+# the relay itself instead of forwarding to upstream's. woowtech/relay-worker.test.mjs guards
+# that and the domain.
+#
+# Not deployed yet. apporo.ai's DNS is in Apporo's Cloudflare account: pin that account here
+# with account_id before the first deploy, from packages/relay:
+#   npx wrangler deploy --config wrangler.apporo.toml
+name = "apporo-smart-relay"
+main = "src/cloudflare-adapter.ts"
+compatibility_date = "2024-12-01"
+
+# relay.apporo.ai is the only address: a custom domain, with its DNS record and certificate
+# created by the deploy. No <name>.<subdomain>.workers.dev address.
+workers_dev = false
+routes = [{ pattern = "relay.apporo.ai", custom_domain = true }]
+
+# No Workers Logs: the relay logs which role connected to which server ID.
+[observability]
+enabled = false
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "RelayDurableObject"
+
+# SQLite-backed Durable Objects, which the Workers Free plan supports.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayDurableObject"]

@@ -17,6 +17,8 @@ import { promisify } from "node:util";
 
 import YAML from "yaml";
 
+import { appliedBrandId, loadBrand } from "./brands/index.cjs";
+
 const workflowsDir = new URL("../.github/workflows/", import.meta.url);
 const desktopDir = new URL("../packages/desktop/", import.meta.url);
 
@@ -409,11 +411,16 @@ test("CI's Ubuntu desktop job may run for an hour", () => {
 
 test("CI's RPM smoke first removes the deb package our desktop build installed", async () => {
   // Upstream's deb is `paseo`. dpkg only warns about a package that is not installed,
-  // so a stale name leaves the deb's files in place to hide what the RPM misses.
+  // so a stale name leaves the deb's files in place to hide what the RPM misses. CI builds
+  // woowtech smart, whose deb is named after its desktop app id.
   const removed = workflow("ci.yml").jobs["desktop-tests-ubuntu"].steps.flatMap(({ run }) =>
     [...String(run ?? "").matchAll(/\bdpkg --remove (\S+)/g)].map(([, name]) => name),
   );
-  assert.deepEqual(removed, [await debPackageName()]);
+  const woowtechDeb = loadBrand("woowtech").desktop.appId.toLowerCase();
+  assert.deepEqual(removed, [woowtechDeb]);
+  if (appliedBrandId() === "woowtech") {
+    assert.equal(await debPackageName(), woowtechDeb);
+  }
 });
 
 test("the pre-commit hook formats and lints .mjs files, as CI does", () => {

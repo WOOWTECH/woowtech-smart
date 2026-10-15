@@ -286,13 +286,16 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 來源是 `woowtech/brand/woowtech-symbol.svg`：設計系統的官方字形，是 PDF 轉出的 SVG，已經裁切到字形的範圍。
   - `woowtech/tools/flatten-symbol.py` 把它攤平成 `woowtech-symbol-path.svg`，共 10 筆路徑，畫出來跟原檔逐像素相同。
   - 不能合成一條路徑：筆畫會重疊，合成後在非零環繞規則下，交叉處會被挖成空洞。
-- `woowtech/tools/generate-icons.mjs` 產生全部 22 個圖示，需要 Google Chrome、sips 和 iconutil。加 `--out <資料夾>` 可以只輸出預覽。
+  - 這 10 筆路徑和 viewBox 也抄在品牌設定 `woowtech.json` 的 `logo`，App 和圖示產生器讀的是那份（第 27 節）；`icons.test.mjs` 檢查兩份相同。
+- `woowtech/tools/generate-icons.mjs` 產生全部 24 個圖示，需要 Google Chrome、sips 和 iconutil。加 `--out <資料夾>` 可以只輸出預覽。
+  - 預設畫目前套用的品牌；`--brand apporo --out woowtech/brands/apporo/assets` 畫 Apporo 的那一套，放在品牌資料夾，換品牌時由 `apply-brand.mjs` 蓋到原位。
+  - Chrome 用暫時的使用者資料夾，不會動到開著的 Chrome。
   - iOS：1024 滿版、沒有透明通道。
   - Android：自適應圖示的字形寬度 40%，落在安全區內，底色白色；通知圖示是白色剪影。
   - Headless Chrome 偶爾在寫完截圖後、關閉時當掉（exit code 2，「Teardown watchdog expired」），所以產生器看截圖檔是否寫出，最多試三次。只想換其中幾張圖時，用 `--out` 輸出到別的資料夾再挑檔案複製：Chrome 版本不同時，沒改的圖也會有像素差異。
   - favicon：字形放大，16px 也看得出輪廓。狀態點沿用上游的顏色，執行中是 #3b82f6、需要注意是 #22c55e。
   - macOS：照 824/1024 的格線畫，含陰影。
-- App 裡的 logo 元件（`paseo-logo.tsx`，有 5 個地方在用）改畫 WOOW 標誌，顏色見第 9 節。
+- App 裡的 logo 元件（`paseo-logo.tsx`，有 5 個地方在用）畫品牌設定的 `logo.paths`：渥屋智能是 WOOW 標誌，顏色見第 9 節。
 - 網頁版和桌面版的啟動畫面用 CSS 遮罩畫標誌，沒有經過 logo 元件，到 2026-09-29 都還是上游 Paseo 的蝴蝶（手機版一直是 WOOW 標誌）。現在遮罩用 `paseo-logo.tsx` 的 `woowSymbolMaskSvg()`，跟元件同樣的 10 筆筆畫。上游留下的 `assets/images/butterfly-*.svg`、`favicon-*.svg` 在整個 repo（含官網）都沒有引用，已刪；App 用的 favicon 是 `generate-icons.mjs` 產生的 PNG。
 - `woowtech/icons.test.mjs` 檢查以下幾件事，合併上游時如果被換回 Paseo 的圖示就會失敗：
   - 圖示內容：有品牌藍、沒有上游的黑色方塊。
@@ -1551,9 +1554,14 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
   - `electron-builder.yml` 沒改。
   - 守門 223 項全過。
   - 相關的單元測試全過：protocol、CLI、桌面版、App、server，共 509 項。
+- **Logo 和圖示**：品牌設定的 `logo` 有路徑、viewBox 和兩個顏色：
+  - `tileColor`：App 圖示白底上的標誌。渥屋是品牌藍；Apporo 照它其他 App 的慣例，用灰色標誌。
+  - `color`：App 裡的 logo，以及透明背景上的標誌（啟動畫面、favicon、iOS 深色圖示）。Apporo 用金色 `#8B6B24`，因為灰色在深色背景上看不清楚。
+  - Apporo 的 24 個圖示在 `woowtech/brands/apporo/assets/`，由 `generate-icons.mjs --brand apporo` 產生。
+- **Apporo 的 relay 設定**：`packages/relay/wrangler.apporo.toml`（`relay.apporo.ai`），還沒部署；apporo.ai 的 DNS 在客戶的 Cloudflare 帳號，第一次部署前要填 `account_id`。
+- **2026-10-15 在 Apporo 套用後的暫存樹跑全部守門**：除了一項要 git 歷史的（暫存樹沒有），全過。
 - **還沒做**：
-  - Apporo 的圖示和 logo 元件：`paseo-logo.tsx` 的路徑、`generate-icons.mjs` 仍是 WOOW 標誌。
-  - 線上服務：relay、推播中繼、AI 回報接收端，連同 Firebase 專案。
+  - 線上服務：relay 的部署、推播中繼、AI 回報接收端，連同 Firebase 專案。
   - 發版腳本的品牌參數。
   - 只准同品牌配對。
 

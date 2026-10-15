@@ -3,8 +3,9 @@
 //   node woowtech/tools/apply-brand.mjs apporo
 //
 // It regenerates packages/protocol/src/brand-values.ts, which the TypeScript packages and
-// woowtech/brands/index.cjs read, and writes the brand into the files listed in
-// woowtech/brands/apply.mjs. Run it in a release tree, never in a checkout you commit from: the
+// woowtech/brands/index.cjs read, writes the brand into the files and icons listed in
+// woowtech/brands/apply.mjs, and regenerates the agent skills (woowtech/skills) with the
+// brand's names. Run it in a release tree, never in a checkout you commit from: the
 // repository keeps woowtech's files, and woowtech/brand-layer.test.mjs fails while another brand
 // is applied unless WOOWTECH_BRAND names it. `git checkout .` goes back to woowtech.
 import { spawnSync } from "node:child_process";
@@ -60,7 +61,15 @@ if (current !== "woowtech") {
 writeFileSync(BRAND_VALUES_PATH, renderBrandValues(loadBrand(id)));
 format([BRAND_VALUES_PATH]);
 const files = applyBrandToFiles(REPO_ROOT, loadBrand(current), loadBrand(id));
+const skills = spawnSync(
+  path.join(REPO_ROOT, "node_modules", ".bin", "tsx"),
+  ["woowtech/tools/generate-skills.mjs"],
+  { cwd: REPO_ROOT, stdio: "inherit" },
+);
+if (skills.status !== 0) {
+  throw new Error("woowtech/tools/generate-skills.mjs failed");
+}
 console.log(`Applied brand ${id}:`);
-for (const file of [path.relative(REPO_ROOT, BRAND_VALUES_PATH), ...files]) {
+for (const file of [path.relative(REPO_ROOT, BRAND_VALUES_PATH), ...files, "woowtech/skills/"]) {
   console.log(`  ${file}`);
 }

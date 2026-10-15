@@ -1,8 +1,8 @@
-// woowtech smart installs its own agent skills. The official Paseo installs
+// The brand installs its own agent skills. The official Paseo installs
 // paseo, paseo-advisor, … into the same agent homes (~/.agents/skills,
 // ~/.claude/skills, ~/.codex/skills), so ours are generated from upstream's
-// skills/ under woowtech-smart* names and send agents to our command, daemon,
-// app and help channels. These checks read the committed skills, because an
+// skills/ under the brand's command's names (woowtech-smart*) and send agents
+// to the brand's command, daemon, app and help channels. These checks read the committed skills, because an
 // upstream merge changes skills/ without regenerating woowtech/skills/, and run
 // the daemon's skill operations from source in a temporary home.
 //
@@ -16,19 +16,18 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { importSource } from "./source-modules.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const skillsDir = path.join(repoRoot, "woowtech", "skills");
 
-const OUR_SKILLS = [
-  "woowtech-smart",
-  "woowtech-smart-advisor",
-  "woowtech-smart-committee",
-  "woowtech-smart-handoff",
-  "woowtech-smart-help",
-  "woowtech-smart-plugin",
-];
+// The brand this checkout builds (woowtech/brands), and the skills named after its command.
+const brand = appliedBrand();
+const COMMAND = brand.cliCommand;
+const OUR_SKILLS = ["", "-advisor", "-committee", "-handoff", "-help", "-plugin"].map(
+  (suffix) => `${COMMAND}${suffix}`,
+);
 
 function skillFiles(skill, dir = path.join(skillsDir, skill)) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -72,7 +71,7 @@ test("the committed skills are what the generator makes from upstream's current 
   assert.equal(check.status, 0, check.stderr || check.stdout);
 });
 
-test("woowtech smart ships its skills under its own names, never the official Paseo's", () => {
+test("the brand ships its skills under its own names, never the official Paseo's", () => {
   const shipped = readdirSync(skillsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
@@ -93,7 +92,7 @@ test("skills do not send agents to the official Paseo", () => {
           const where = `${path.relative(repoRoot, file)}:${index + 1}`;
           if (UPSTREAM_LEFTOVERS.some((pattern) => pattern.test(line))) hits.push(where);
           for (const [link] of line.matchAll(UPSTREAM_LINK)) {
-            if (skill === "woowtech-smart-plugin" && PLUGIN_API_DOCS.test(link)) continue;
+            if (skill === `${COMMAND}-plugin` && PLUGIN_API_DOCS.test(link)) continue;
             hits.push(`${where} ${link}`);
           }
         });
@@ -102,24 +101,25 @@ test("skills do not send agents to the official Paseo", () => {
   assert.deepEqual(hits, []);
 });
 
-test("skills name our command, daemon, app and help channels", () => {
+test("skills name the brand's command, daemon, app and help channels", () => {
+  const website = `https://${brand.links.websiteHost}`;
   const expectations = {
-    "woowtech-smart": ["`woowtech-smart --help`", '"$PASEO_CLI"', "**woowtech-smart-help** skill"],
-    "woowtech-smart-help": [
-      "woowtech-smart daemon status --json",
-      "http://127.0.0.1:6770/api/health",
-      "`~/.woowtech-smart/daemon.log`",
-      "`~/Library/Logs/woowtech smart/main.log`",
-      "`/Applications/woowtech smart.app/Contents/Resources/bin/woowtech-smart`",
+    [COMMAND]: [`\`${COMMAND} --help\``, '"$PASEO_CLI"', `**${COMMAND}-help** skill`],
+    [`${COMMAND}-help`]: [
+      `${COMMAND} daemon status --json`,
+      `http://127.0.0.1:${brand.defaultPort}/api/health`,
+      `\`${brand.homeDir}/daemon.log\``,
+      `\`~/Library/Logs/${brand.name}/main.log\``,
+      `\`/Applications/${brand.name}.app/Contents/Resources/bin/${COMMAND}\``,
       '"$PASEO_CLI"',
-      "WoowTech's relay at `relay.woowtech.io`, which is on unless the user turned it off",
-      "woowtech-smart daemon pair --relay",
-      "https://aiot.woowtech.io",
-      "mailto:woowtech@designsmart.com.tw",
-      "- Questions and quick help: [woowtech smart website](https://aiot.woowtech.io)",
+      `${brand.company.operator}'s relay at \`${brand.services.relayHost}\`, which is on unless the user turned it off`,
+      `${COMMAND} daemon pair --relay`,
+      website,
+      `mailto:${brand.links.supportEmail}`,
+      `- Questions and quick help: [${brand.name} website](${website})`,
     ],
-    "woowtech-smart-plugin": [
-      "woowtech-smart plugin ls",
+    [`${COMMAND}-plugin`]: [
+      `${COMMAND} plugin ls`,
       '"$PASEO_CLI"',
       "https://paseo.sh/docs/plugins",
     ],
@@ -146,7 +146,7 @@ test("the server's build ships woowtech/skills, not upstream's skills", () => {
   assert.doesNotMatch(scripts["build:lib"], /'\.\.\/\.\.\/skills'/);
 });
 
-test("the daemon creates, stages and deletes only woowtech-smart skill folders", async () => {
+test("the daemon creates, stages and deletes only the brand's skill folders", async () => {
   // The daemon run from source, as `npm run dev` and the desktop's dev mode run
   // it, against a home of its own where the official Paseo's current and
   // retired skills are already installed.
@@ -181,7 +181,7 @@ test("the daemon creates, stages and deletes only woowtech-smart skill folders",
 
     assert.deepEqual(
       (await listManagedSkillNames(targets.sourceDir)).filter(
-        (skill) => !skill.startsWith("woowtech-smart"),
+        (skill) => !skill.startsWith(COMMAND),
       ),
       [],
       "names the daemon may create, replace or delete",
@@ -193,8 +193,8 @@ test("the daemon creates, stages and deletes only woowtech-smart skill folders",
     const transaction = await beginSkillsTransaction(
       targets,
       { mode: "all" },
-      { mode: "custom", skills: ["woowtech-smart"] },
-      [{ kind: "delete", name: "woowtech-smart-advisor" }],
+      { mode: "custom", skills: [COMMAND] },
+      [{ kind: "delete", name: `${COMMAND}-advisor` }],
     );
     const staged = readdirSync(path.dirname(targets.agentsDir)).filter((entry) =>
       entry.includes("-skills-"),
@@ -203,7 +203,7 @@ test("the daemon creates, stages and deletes only woowtech-smart skill folders",
     // The official Paseo stages and recovers .paseo-skills-transaction-*.
     assert.deepEqual(
       staged.map((entry) => entry.replace(/[0-9a-f-]{36}$/, "<id>")),
-      [".woowtech-smart-skills-transaction-<id>"],
+      [`.${COMMAND}-skills-transaction-<id>`],
     );
     await uninstallSkills(targets, { mode: "all" });
     for (const root of roots) {
@@ -226,6 +226,7 @@ test("the rewriter keeps upstream's services and API but renames skill invocatio
     brandSkillName: (name) => name.replace(/^paseo/, "woowtech-smart"),
     links: { docs: { home: "" }, supportEmail: "", website: "" },
     daemonHome: "~/.woowtech-smart",
+    operator: "WoowTech",
     port: "6770",
     productName: "woowtech smart",
     relayHost: "relay.woowtech.io",

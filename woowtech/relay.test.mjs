@@ -17,6 +17,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { tsImport } from "tsx/esm/api";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
 
 const { loadConfig } = await tsImport("../packages/server/src/server/config.ts", import.meta.url);
@@ -33,7 +34,8 @@ const { parseConnectionOfferFromUrl } = await tsImport(
   import.meta.url,
 );
 
-const OUR_RELAY = "relay.woowtech.io:443";
+// The brand's own relay (woowtech/brands): relay.woowtech.io:443 for woowtech smart.
+const OUR_RELAY = `${appliedBrand().services.relayHost}:443`;
 
 const homes = [];
 after(() => {
@@ -60,7 +62,7 @@ function relayOf(home, env = {}) {
   };
 }
 
-test("the daemon turns the relay on and connects to relay.woowtech.io", () => {
+test("the daemon turns the relay on and connects to the brand's relay", () => {
   const on = { enabled: true, endpoint: OUR_RELAY, useTls: true };
   const newHome = daemonHome();
   assert.deepEqual(relayOf(newHome), on, "a new home");
@@ -94,7 +96,7 @@ test("the relay stays off when the user turns it off", () => {
   assert.equal(relayOf(home).enabled, false, "woowtech-smart daemon config set");
 });
 
-test("pairing offers send phones to relay.woowtech.io", async () => {
+test("pairing offers send phones to the brand's relay", async () => {
   const home = daemonHome();
   const config = loadConfig(home, { env: {} });
   for (const args of [
@@ -122,6 +124,7 @@ test("no shipped source names upstream's relay", () => {
         "packages/relay/src/cloudflare-adapter.ts",
         "packages/relay/src/cutover-proxy.ts",
         "packages/relay/wrangler.woowtech.toml",
+        "packages/relay/wrangler.apporo.toml",
       ],
     }),
     [],

@@ -4,7 +4,7 @@
 // cmd CLI shims, the Mac's Chinese permission strings and the web shell ship as files. The
 // repository keeps them with woowtech's values, and woowtech/brand-layer.test.mjs checks that
 // applying woowtech to them changes nothing, so every brand value in them is listed here.
-import { readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import YAML from "yaml";
@@ -26,6 +26,42 @@ export const BRANDED_FILES = [
 ];
 
 export const ELECTRON_BUILDER_CONFIG = "packages/desktop/electron-builder.yml";
+
+/**
+ * The icons woowtech/tools/generate-icons.mjs makes. The repository holds woowtech's in place;
+ * another brand's are under woowtech/brands/<id>/assets with the same paths.
+ */
+export const BRAND_ICON_FILES = [
+  "packages/app/assets/images/icon.png",
+  "packages/app/assets/images/android-icon-foreground.png",
+  "packages/app/assets/images/notification-icon.png",
+  "packages/app/assets/images/splash-icon.png",
+  "packages/app/assets/images/ios-icon-dark.png",
+  "packages/app/assets/images/android-icon-monochrome.png",
+  "packages/app/assets/images/favicon.png",
+  "packages/app/assets/images/favicon-light.png",
+  "packages/app/assets/images/favicon-dark.png",
+  "packages/app/assets/images/favicon-light-running.png",
+  "packages/app/assets/images/favicon-light-attention.png",
+  "packages/app/assets/images/favicon-dark-running.png",
+  "packages/app/assets/images/favicon-dark-attention.png",
+  "packages/app/public/apple-touch-icon.png",
+  "packages/app/public/pwa-icon-192.png",
+  "packages/app/public/pwa-icon-512.png",
+  "packages/desktop/assets/icon.png",
+  "packages/desktop/assets/32x32.png",
+  "packages/desktop/assets/64x64.png",
+  "packages/desktop/assets/128x128.png",
+  "packages/desktop/assets/128x128@2x.png",
+  "packages/desktop/assets/icon.icns",
+  "packages/desktop/assets/icon.ico",
+  "packages/desktop/assets/icon-dev.png",
+];
+
+/** Where another brand keeps its icons, laid out like the repository. */
+export function brandAssetsDir(id) {
+  return `woowtech/brands/${id}/assets`;
+}
 
 function valueAt(brand, dottedKey) {
   return dottedKey.split(".").reduce((value, key) => value[key], brand);
@@ -110,6 +146,14 @@ export function brandElectronBuilderConfig(text, brand) {
 /** Writes `to`'s values into every branded file of the checkout at `repoRoot`, which has `from`'s. */
 export function applyBrandToFiles(repoRoot, from, to) {
   const written = [];
+  for (const file of BRAND_ICON_FILES) {
+    const source = path.join(repoRoot, brandAssetsDir(to.id), file);
+    if (!existsSync(source)) {
+      throw new Error(`${source} is missing; make it with woowtech/tools/generate-icons.mjs`);
+    }
+    copyFileSync(source, path.join(repoRoot, file));
+    written.push(file);
+  }
   for (const file of BRANDED_FILES) {
     const absolute = path.join(repoRoot, file.path);
     writeFileSync(absolute, rebrandFileText(readFileSync(absolute, "utf8"), file, from, to));

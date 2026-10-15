@@ -144,7 +144,7 @@ test("the daemon's processes are titled with the brand's name in Activity Monito
   );
 });
 
-test("the daemon's messages name woowtech smart", () => {
+test("the daemon's messages name the brand, not Paseo", () => {
   // Errors and upgrade prompts the app and the CLI show, the diagnostics report
   // people send us, and the text of pull requests the daemon opens on GitHub. They
   // name the product with PRODUCT_NAME (packages/protocol/src/brand-name.ts).
@@ -180,17 +180,17 @@ test("the daemon's messages name woowtech smart", () => {
   assert.deepEqual(naming, []);
 });
 
-test("the daemon introduces itself to agents as woowtech smart", () => {
+test("the daemon introduces itself to agents with the brand's name, not Paseo's", () => {
   assert.deepEqual(
     findInShippedSources([/clientInfo:\s*\{\s*name:\s*"Paseo/], { dirs: ["packages/server/src"] }),
     [],
   );
 });
 
-test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", async () => {
-  for (const [variant, nameSuffix, idSuffix] of [
-    ["production", "", ""],
-    ["development", " Debug", ".debug"],
+test("the mobile app has the brand's name, and its Chinese name on Chinese devices", async () => {
+  for (const [variant, nameSuffix, appId] of [
+    ["production", "", brand.mobileAppId],
+    ["development", brand.debugSuffix, brand.mobileAppIdDebug],
   ]) {
     const config = expoPrebuildConfig(variant);
     const displayNames = Object.fromEntries(
@@ -200,20 +200,20 @@ test("the mobile app is woowtech smart, and 渥屋智能 on Chinese devices", as
       ]),
     );
 
-    assert.equal(config.name, `woowtech smart${nameSuffix}`);
-    assert.equal(config.ios.bundleIdentifier, `io.woowtech.smart${idSuffix}`);
-    assert.equal(config.android.package, `io.woowtech.smart${idSuffix}`);
+    assert.equal(config.name, `${brand.name}${nameSuffix}`);
+    assert.equal(config.ios.bundleIdentifier, appId);
+    assert.equal(config.android.package, appId);
     assert.deepEqual(displayNames, {
-      "zh-Hans": `渥屋智能${nameSuffix}`,
-      "zh-Hant": `渥屋智能${nameSuffix}`,
+      "zh-Hans": `${brand.nameZh}${nameSuffix}`,
+      "zh-Hant": `${brand.nameZh}${nameSuffix}`,
     });
     // Android's localized strings.xml may only translate names the default locale has
     // (app_name, from config.name). Anything else fails release lint with ExtraTranslation.
     assert.deepEqual(
       await generatedAndroidLocaleStrings(config),
       {
-        "b+zh+Hans": { app_name: `渥屋智能${nameSuffix}` },
-        "b+zh+Hant": { app_name: `渥屋智能${nameSuffix}` },
+        "b+zh+Hans": { app_name: `${brand.nameZh}${nameSuffix}` },
+        "b+zh+Hant": { app_name: `${brand.nameZh}${nameSuffix}` },
       },
       variant,
     );
@@ -229,7 +229,7 @@ test("the iOS home screen falls back to a readable short name", () => {
     // one, so it can still hold the short name after app.config.js stops setting it.
     assert.equal(
       expoPrebuildConfig(variant).ios.infoPlist?.CFBundleName,
-      "woowtech smart",
+      brand.name,
       `${variant}: app.config.js sets no ios.infoPlist.CFBundleName`,
     );
     const { ios, locales } = expoIntrospectedConfig(variant);
@@ -239,7 +239,7 @@ test("the iOS home screen falls back to a readable short name", () => {
       locales["zh-Hant"].ios.CFBundleName,
     ];
 
-    assert.deepEqual(shortNames, ["woowtech smart", "渥屋智能", "渥屋智能"], variant);
+    assert.deepEqual(shortNames, [brand.name, brand.nameZh, brand.nameZh], variant);
     for (const name of shortNames) {
       // Apple's limit for CFBundleName.
       assert.ok([...name].length <= 15, `${variant}: "${name}" is longer than 15 characters`);

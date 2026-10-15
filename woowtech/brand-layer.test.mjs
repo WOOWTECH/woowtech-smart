@@ -59,7 +59,7 @@ function coexistenceValues(brand) {
 /** Every key path of `value`: "desktop.appId", … */
 function keyPaths(value, prefix = "") {
   return Object.entries(value).flatMap(([key, child]) =>
-    child !== null && typeof child === "object"
+    child !== null && typeof child === "object" && !Array.isArray(child)
       ? keyPaths(child, `${prefix}${key}.`)
       : [`${prefix}${key}`],
   );

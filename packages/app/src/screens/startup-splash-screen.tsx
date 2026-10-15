@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { getDesktopDaemonLogs, type DesktopDaemonLogs } from "@/desktop/daemon/desktop-daemon";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { isNative, isWeb } from "@/constants/platform";
-import { BRAND_COLOR } from "@/styles/brand";
+import { BRAND_LOGO_COLOR } from "@/styles/brand";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 
 interface StartupSplashScreenProps {
@@ -81,14 +81,14 @@ function ensureWebSplashShimmerKeyframes() {
   webSplashShimmerRegistered = true;
 }
 
-// woowtech smart: the WOOW symbol is a brand mark, so the splash draws it in the brand blue in
+// woowtech smart: the logo is a brand mark, so the splash draws it in the brand's logo color in
 // every theme (README section 9). PaseoLogo already ignores the color on native.
 function LogoShimmer() {
   if (isWeb) {
-    return <WebLogoShimmer color={BRAND_COLOR} />;
+    return <WebLogoShimmer color={BRAND_LOGO_COLOR} />;
   }
 
-  return <NativeLogoShimmer color={BRAND_COLOR} />;
+  return <NativeLogoShimmer color={BRAND_LOGO_COLOR} />;
 }
 
 function WebLogoShimmer({ color }: { color: string }) {
@@ -100,7 +100,7 @@ function WebLogoShimmer({ color }: { color: string }) {
     () => ({
       width: LOGO_SIZE,
       height: LOGO_SIZE,
-      // woowtech smart: the WOOW symbol, the same mask the native splash draws with PaseoLogo.
+      // woowtech smart: the brand's logo, the same mask the native splash draws with PaseoLogo.
       WebkitMaskImage: `url("data:image/svg+xml,${encodeURIComponent(woowSymbolMaskSvg(LOGO_SIZE))}")`,
       WebkitMaskSize: "contain",
       WebkitMaskRepeat: "no-repeat",

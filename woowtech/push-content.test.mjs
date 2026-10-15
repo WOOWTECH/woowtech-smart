@@ -32,7 +32,8 @@ const { VoiceAssistantWebSocketServer } = await tsImport(
   import.meta.url,
 );
 
-const RELAY_URL = "https://push.woowtech.io/api/smart/v1/notify";
+// The brand's push relay (woowtech/brands): push.woowtech.io for woowtech smart.
+const RELAY_URL = appliedBrand().services.pushRelayUrl;
 // Shaped like tokens the phones register. Fake.
 const FCM_TOKEN = "fake-install-0001:APA91bFAKE_TOKEN_FOR_GUARD_TESTS_ONLY-0001";
 const EXPO_TOKEN = "ExponentPushToken[guard]";

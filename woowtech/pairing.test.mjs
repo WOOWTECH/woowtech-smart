@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { expoIntrospectedConfig } from "./expo-config.mjs";
 import { findInShippedSources, repoRoot } from "./shipped-sources.mjs";
 import { importSource } from "./source-modules.mjs";
@@ -34,7 +35,8 @@ const { parseConnectionOfferFromUrl } = await importSource(
   "packages/protocol/src/connection-offer.ts",
 );
 
-const APP_SCHEME = "woowtech-smart";
+// The brand's link scheme (woowtech/brands).
+const APP_SCHEME = appliedBrand().scheme;
 const APP_LINK_PREFIX = `${APP_SCHEME}:///#offer=`;
 const UPSTREAM_WEB_APP = /app\.paseo\.sh/;
 // The one shipped file that names upstream's web app: it moves homes off its default, and
@@ -234,6 +236,7 @@ test("no shipped source names upstream's web app", () => {
         "packages/app/public/manifest.json",
         "packages/desktop/electron-builder.yml",
         "packages/relay/wrangler.woowtech.toml",
+        "packages/relay/wrangler.apporo.toml",
       ],
       skipPaths: [MIGRATION_SOURCE],
     }),
