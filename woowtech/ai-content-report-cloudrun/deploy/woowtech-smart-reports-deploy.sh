@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Deploys the woowtech smart AI content report receiver: Cloud Run service smart-reports in project
-# woowtech-smart, region asia-east1, storing reports in the (default) Firestore database that
-# smart-push already uses, with an e-mail alert for every stored report. It follows smart-push's
-# deploy script (refs/woowtech-push-relay/deploy/woowtech-smart-deploy.sh), with one difference:
-# nothing is changed unless --apply is given.
+# Deploys a brand's AI content report receiver: Cloud Run service smart-reports in the brand's
+# project and region (woowtech smart: woowtech-smart, asia-east1; Apporo smart: apporo-smart-app,
+# us-west1), storing reports in the (default) Firestore database that smart-push uses, with an
+# e-mail alert for every stored report. It follows smart-push's deploy script
+# (refs/woowtech-push-relay/deploy/woowtech-smart-deploy.sh), with one difference: nothing is
+# changed unless --apply is given.
 #
 # Run it in Google Cloud Shell, logged in as an Owner of the project, from a clean clone:
 #   ./woowtech-smart-reports-deploy.sh                 # prints the plan and every command; calls nothing
@@ -15,10 +16,11 @@
 #   --apply    run the steps; without it nothing is called (no gcloud, curl or openssl)
 #   --dry-run  the default, spelled out; wins over --apply
 #   --yes      do not ask for confirmation (required with --apply when stdin is not a terminal)
+#   --brand=ID whose receiver: woowtech (the default) or apporo (woowtech/brands/<ID>.json)
 #   --help     show this text
 # Steps, always run in this order, all of them when none is named:
 #   apis      enable the Google APIs
-#   firestore the (default) database must be Native mode in asia-east1 (created only if missing)
+#   firestore the (default) database must be Native mode in the brand's region (created only if missing)
 #   ttl       Firestore TTL on the field expiresAt of both collections
 #   iam       service account smart-reports with the one project role it needs
 #   secret    the edge key secret (32 random bytes, created once, never printed)
@@ -27,7 +29,8 @@
 #   deploy    the Cloud Run service
 #   alert     e-mail notification channel and the log-based alerting policy
 #   check     read-only checks of the deployed service (nothing is stored)
-# PROJECT_ID overrides the project (default woowtech-smart), NOTIFY_EMAIL the alert address.
+# PROJECT_ID overrides the brand's project, for example for a staging project; NOTIFY_EMAIL the
+# alert address.
 # The alert step uses "gcloud beta" (an e-mail notification channel can only be created there).
 # Cloud Shell has the beta component; elsewhere install it first: gcloud components install beta
 #
@@ -48,9 +51,11 @@ FORCE_DRY=0
 ASSUME_YES=0
 ROLLBACK=0
 REQUESTED=""
+BRAND=woowtech
 for arg in "$@"; do
   case "$arg" in
     --apply) APPLY=1 ;;
+    --brand=*) BRAND="${arg#--brand=}" ;;
     --dry-run) FORCE_DRY=1 ;;
     --yes) ASSUME_YES=1 ;;
     -h | --help)
@@ -75,8 +80,37 @@ if [ "$ROLLBACK" = 1 ] && [ -n "$REQUESTED" ]; then
 fi
 if [ "$APPLY" = 1 ] && [ "$FORCE_DRY" = 0 ]; then DRY_RUN=0; else DRY_RUN=1; fi
 
-PROJECT_ID="${PROJECT_ID:-woowtech-smart}"
-REGION=asia-east1
+# Each brand's receiver: its name in mails and plans, Google Cloud project and region, the host
+# its Cloudflare Worker serves and that Worker's wrangler config. A test keeps the host and the
+# name equal to the brand's file.
+case "$BRAND" in
+  woowtech)
+    PRODUCT="woowtech smart"
+    BRAND_PROJECT_ID=woowtech-smart
+    REGION=asia-east1
+    PUBLIC_HOST=reports.woowtech.io
+    WRANGLER_CONFIG=cloudflare-worker-smart-reports.wrangler.jsonc
+    # The Worker's defaults are woowtech smart's, so its dashboard settings need no more.
+    WORKER_VARS_NOTE=""
+    ;;
+  apporo)
+    PRODUCT="Apporo smart"
+    BRAND_PROJECT_ID=apporo-smart-app
+    REGION=us-west1
+    PUBLIC_HOST=reports.apporo.ai
+    WRANGLER_CONFIG=cloudflare-worker-smart-reports.apporo.wrangler.jsonc
+    WORKER_VARS_NOTE="
+    In the dashboard, also add the text variables PUBLIC_HOST=reports.apporo.ai and
+    ALLOWED_ORIGINS=apporosmart://app (the wrangler config has both)."
+    ;;
+  *)
+    printf 'Unknown brand: %s\n\n' "$BRAND" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+ZONE="${PUBLIC_HOST#*.}"
+PROJECT_ID="${PROJECT_ID:-$BRAND_PROJECT_ID}"
 SERVICE=smart-reports
 REPO=smart-reports
 SA_NAME=smart-reports
@@ -93,9 +127,9 @@ REPORT_PATH=/v1/ai-content-reports
 REPORTS_GROUP=aiContentReports
 COUNTERS_GROUP=aiContentReportCounters
 NOTIFY_EMAIL="${NOTIFY_EMAIL:-woowtech@designsmart.com.tw}"
-CHANNEL_NAME="woowtech smart AI reports (email)"
-# Must equal "displayName" in smart-reports-alert-policy.json (a test checks).
-POLICY_NAME="woowtech smart: new AI content report"
+CHANNEL_NAME="${PRODUCT} AI reports (email)"
+# The displayName of smart-reports-alert-policy.json once __PRODUCT__ is filled in (a test checks).
+POLICY_NAME="${PRODUCT}: new AI content report"
 APIS="run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
   firestore.googleapis.com logging.googleapis.com monitoring.googleapis.com
   secretmanager.googleapis.com iam.googleapis.com"
@@ -230,7 +264,7 @@ if [ "$ROLLBACK" = 1 ]; then
   cat >&3 <<EOF
 Rollback of the AI content report receiver in project ${PROJECT_ID}. This script runs none of it:
 run what you need, in this order. Nothing here touches the Apps or smart-push.
- 1. Cloudflare: remove the custom domain reports.woowtech.io from the Worker smart-reports-proxy,
+ 1. Cloudflare: remove the custom domain ${PUBLIC_HOST} from the Worker smart-reports-proxy,
     then delete the Worker (and its rate limiting rule, if you made one). The App then cannot send
     reports and says so.
  2. The stored reports. Deleting the service does not delete them, and they are only removed by the
@@ -280,7 +314,7 @@ for name in $ALL_STEPS; do
 done
 
 cat >&3 <<EOF
-woowtech smart AI content report receiver: deployment plan${MODE_NOTE}
+${PRODUCT} AI content report receiver: deployment plan${MODE_NOTE}
   project          ${PROJECT_ID}
   region           ${REGION}
   steps            ${REQUESTED:-all of them}
@@ -370,7 +404,7 @@ run_iam() {
   if probe iam service-accounts describe "$SA" --format='value(email)' >/dev/null; then
     note "exists: ${SA}"
   else
-    act iam service-accounts create "$SA_NAME" --display-name="woowtech smart AI report receiver"
+    act iam service-accounts create "$SA_NAME" --display-name="${PRODUCT} AI report receiver"
   fi
   for role in $PROJECT_ROLES; do
     act_iam projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${SA}" \
@@ -425,6 +459,12 @@ run_deploy() {
     --set-secrets "EDGE_KEYS=${SECRET}:latest"
 }
 
+# The alerting policy for the notification channel $1: the template with its blanks filled in.
+render_policy() {
+  sed -e "s|__CHANNEL__|$1|g" -e "s|__PRODUCT__|${PRODUCT}|g" -e "s|__PROJECT__|${PROJECT_ID}|g" \
+    "$POLICY_TEMPLATE"
+}
+
 run_alert() {
   step "${STEP_LABEL} alert: e-mail ${NOTIFY_EMAIL} for every stored report"
   local channel channel_status policy policy_file
@@ -468,10 +508,10 @@ run_alert() {
   else
     WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/smart-reports-deploy.XXXXXX")"
     policy_file="${WORK_DIR}/alert-policy.json"
-    sed "s|__CHANNEL__|${channel}|g" "$POLICY_TEMPLATE" >"$policy_file"
+    render_policy "$channel" >"$policy_file"
   fi
   printf '   the policy file (%s):\n' "$policy_file" >&3
-  sed -e "s|__CHANNEL__|${channel}|g" -e 's/^/     | /' "$POLICY_TEMPLATE" >&3
+  render_policy "$channel" | sed 's/^/     | /' >&3
   act monitoring policies create --policy-from-file="$policy_file" --format=none
 }
 
@@ -553,25 +593,25 @@ if selected deploy || selected check; then
   cat >&3 <<EOF
 
 Done${DONE_NOTE}. Cloud Run URL: ${RUN_URL}
-Next, in Cloudflare (the account that holds the woowtech.io zone):
+Next, in Cloudflare (the account that holds the ${ZONE} zone):
  1. Worker smart-reports-proxy: paste deploy/cloudflare-worker-smart-reports.js into a new Worker, or
-    deploy it with wrangler 4.36+ and deploy/cloudflare-worker-smart-reports.wrangler.jsonc, which also
+    deploy it with wrangler 4.36+ and deploy/${WRANGLER_CONFIG}, which also
     adds the per-IP limit binding. Set its RELAY_ORIGIN to that URL, and its EDGE_KEY secret to the
     output of
       gcloud --project ${PROJECT_ID} secrets versions access latest --secret ${SECRET}
     pasted straight into the Cloudflare secret field (not into chat or documents). That output is one
-    key, except while the key is being rotated (below).
- 2. Give the Worker the custom domain reports.woowtech.io. In the Worker's Settings > Domains & Routes,
-    turn off workers.dev and Preview URLs: those addresses are outside the woowtech.io zone and its
+    key, except while the key is being rotated (below).${WORKER_VARS_NOTE}
+ 2. Give the Worker the custom domain ${PUBLIC_HOST}. In the Worker's Settings > Domains & Routes,
+    turn off workers.dev and Preview URLs: those addresses are outside the ${ZONE} zone and its
     per-IP rate limit. The Worker answers 404 on them anyway; turning them off removes them.
  3. The per-IP limit: the wrangler config's IP_RATE_LIMITER binding (10 requests a minute per IP,
-    counted per Cloudflare location), or a WAF rate limiting rule on the host reports.woowtech.io.
+    counted per Cloudflare location), or a WAF rate limiting rule on the host ${PUBLIC_HOST}.
  4. The Cloudflare account must be on Workers Paid, which has no daily request limit. On Workers Free
     all Workers of the account share 100,000 requests a day and stop serving once they are used up,
     until 00:00 UTC (error 1027).
 Then check the Worker and the key without storing anything: this must print the 400 below, which only a
 request that passed the Worker and carried the right edge key can get:
-  curl -s -X POST https://reports.woowtech.io${REPORT_PATH} -H 'content-type: application/json' -d '{}'
+  curl -s -X POST https://${PUBLIC_HOST}${REPORT_PATH} -H 'content-type: application/json' -d '{}'
   {"error":"unsupported_schema"}
 The e-mail alert is only proven by a real report: send one from the App and wait a few minutes. If the
 channel above said UNVERIFIED, confirm the mail Google sent to ${NOTIFY_EMAIL} first.

@@ -9,6 +9,7 @@ import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
@@ -21,6 +22,7 @@ import { COUNTERS_COLLECTION, REPORTS_COLLECTION } from "./store-port.mjs";
 const here = (name) => fileURLToPath(new URL(name, import.meta.url));
 const SCRIPT = here("./deploy/woowtech-smart-reports-deploy.sh");
 const POLICY = here("./deploy/smart-reports-alert-policy.json");
+const BRANDS_DIR = here("../brands");
 const FAKE_EDGE_KEY = "FAKEEDGEKEYSENTINEL0123456789abcdef0123456789abcdef0123456789ab";
 const RUN_URL = "https://smart-reports-fake-de.a.run.app";
 const CHANNEL = "projects/woowtech-smart/notificationChannels/4242";
@@ -34,7 +36,9 @@ case "$*" in
   *"auth list"*) echo owner@example.invalid; exit 0 ;;
   *"services enable"*) exit 0 ;;
   *"firestore databases describe"*) [ -f "$S/firestore" ] && cat "$S/firestore" && exit 0; exit 1 ;;
-  *"firestore databases create"*) printf 'asia-east1\tFIRESTORE_NATIVE\n' > "$S/firestore"; exit 0 ;;
+  *"firestore databases create"*)
+    location=$(printf '%s' "$*" | sed -n 's/.*--location=\([^ ]*\).*/\1/p')
+    printf '%s\tFIRESTORE_NATIVE\n' "$location" > "$S/firestore"; exit 0 ;;
   *"firestore fields ttls list"*)
     [ -f "$S/ttl-$group" ] && echo "projects/p/databases/(default)/collectionGroups/$group/fields/expiresAt"
     exit 0 ;;
@@ -680,14 +684,22 @@ test('the rotation steps give the Worker the new key alone, never the "old new" 
 
 test("the alert policy template is the log-based policy the receiver's log line feeds", () => {
   const template = readFileSync(POLICY, "utf8");
-  assert.ok(template.includes("__CHANNEL__"));
-  const policy = JSON.parse(template.replace("__CHANNEL__", CHANNEL));
+  for (const blank of ["__CHANNEL__", "__PRODUCT__", "__PROJECT__"]) {
+    assert.ok(template.includes(blank), blank);
+  }
+  const policy = JSON.parse(
+    template
+      .replaceAll("__CHANNEL__", CHANNEL)
+      .replaceAll("__PRODUCT__", "woowtech smart")
+      .replaceAll("__PROJECT__", "woowtech-smart"),
+  );
 
   // The name the script looks the policy up by is the template's.
   const box = sandbox();
   const { script } = cleanCheckout(box.dir);
   const { output } = run(box, script, []);
   assert.ok(output.includes(`displayName="${policy.displayName}"`), output);
+  assert.equal(policy.displayName, "woowtech smart: new AI content report");
 
   // One log-match condition: Google allows no other condition next to it.
   assert.equal(policy.conditions.length, 1);
@@ -715,6 +727,87 @@ test("the alert policy template is the log-based policy the receiver's log line 
   assert.ok(!/reportedContent|reason|locale/.test(text));
   assert.equal(policy.documentation.mimeType, "text/markdown");
   assert.ok(policy.documentation.subject.length <= 255);
+});
+
+test("--brand=apporo deploys Apporo smart's receiver in its own project, region and host", () => {
+  const box = sandbox();
+  const { script } = cleanCheckout(box.dir);
+
+  const { status, output } = run(box, script, ["--brand=apporo", "--apply", "--yes"]);
+
+  assert.equal(status, 0, output);
+  const calls = gcloudCalls(box);
+  assert.ok(calls.length > 10);
+  assert.ok(
+    calls.every((line) => line.startsWith("--project apporo-smart-app ")),
+    calls.join("\n"),
+  );
+  assert.ok(
+    calls.some(
+      (line) => line.includes("firestore databases create") && line.includes("--location=us-west1"),
+    ),
+  );
+  assert.ok(
+    calls.some(
+      (line) => line.includes("run deploy smart-reports") && line.includes("--region us-west1"),
+    ),
+  );
+  assert.ok(calls.some((line) => line.includes("--display-name=Apporo smart AI report receiver")));
+  assert.ok(calls.some((line) => line.includes("--display-name=Apporo smart AI reports (email)")));
+  assert.ok(calls.some((line) => line.includes("GOOGLE_CLOUD_PROJECT=apporo-smart-app")));
+
+  const policy = JSON.parse(readFileSync(join(box.state, "policy.json"), "utf8"));
+  assert.equal(policy.displayName, "Apporo smart: new AI content report");
+  assert.equal(policy.documentation.subject, "Apporo smart: new AI content report");
+  assert.ok(policy.documentation.content.includes("專案 apporo-smart-app"));
+  assert.doesNotMatch(JSON.stringify(policy), /__[A-Z]+__/, "every blank is filled in");
+  assert.ok(!policy.documentation.content.includes("woowtech-smart"), "no woowtech project");
+
+  assert.ok(output.includes("Apporo smart AI content report receiver: deployment plan"), output);
+  assert.ok(output.includes("the account that holds the apporo.ai zone"), output);
+  assert.ok(output.includes("custom domain reports.apporo.ai"), output);
+  assert.ok(
+    output.includes("deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc"),
+    output,
+  );
+  assert.ok(output.includes("PUBLIC_HOST=reports.apporo.ai"), output);
+  assert.ok(output.includes("ALLOWED_ORIGINS=apporosmart://app"), output);
+  assert.ok(!output.includes("woowtech.io"), output);
+});
+
+test("every brand's file has a receiver preset that matches it", () => {
+  const ids = readdirSync(BRANDS_DIR)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => name.slice(0, -".json".length));
+  assert.ok(ids.includes("woowtech") && ids.includes("apporo"), ids.join());
+  for (const id of ids) {
+    const brand = JSON.parse(readFileSync(join(BRANDS_DIR, `${id}.json`), "utf8"));
+    const box = sandbox();
+    const { script } = cleanCheckout(box.dir);
+
+    const { status, output } = run(box, script, [`--brand=${id}`]);
+
+    assert.equal(status, 0, `${id}: ${output}`);
+    assert.deepEqual(box.calls(), [], id);
+    assert.ok(output.includes(`${brand.name} AI content report receiver: deployment plan`), id);
+    // The check after deploying posts to the address the brand's App sends reports to.
+    assert.ok(
+      output.includes(`curl -s -X POST ${brand.services.aiContentReportUrl} `),
+      `${id}: the Worker's host is not the App's report address\n${output}`,
+    );
+  }
+});
+
+test("an unknown brand prints the usage and calls nothing", () => {
+  const box = sandbox();
+  const { script } = cleanCheckout(box.dir);
+
+  const { status, output } = run(box, script, ["--brand=paseo", "--apply", "--yes"]);
+
+  assert.equal(status, 2, output);
+  assert.match(output, /Unknown brand: paseo/);
+  assert.match(output, /--brand=ID/);
+  assert.deepEqual(box.calls(), []);
 });
 
 test("the names in the script are the ones the code uses", () => {

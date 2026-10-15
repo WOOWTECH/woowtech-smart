@@ -22,7 +22,7 @@ const stored = () =>
   });
 
 /** One request through the Worker; `upstream` answers (or throws) in place of the receiver. */
-async function call(path, init, { env = ENV, upstream = stored } = {}) {
+async function call(path, init, { env = ENV, upstream = stored, host = HOST } = {}) {
   const relayed = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input, options) => {
@@ -30,7 +30,7 @@ async function call(path, init, { env = ENV, upstream = stored } = {}) {
     return upstream(input, options);
   };
   try {
-    const response = await worker.fetch(new Request(`${HOST}${path}`, init), env);
+    const response = await worker.fetch(new Request(`${host}${path}`, init), env);
     return { response, relayed, text: await response.text() };
   } finally {
     globalThis.fetch = realFetch;
@@ -474,6 +474,61 @@ function parseJsonc(text) {
   return JSON.parse(withoutComments.replace(/,(\s*[}\]])/g, "$1"));
 }
 
+test("PUBLIC_HOST moves the Worker to another brand's host, and only there", async () => {
+  const apporo = { ...ENV, PUBLIC_HOST: "reports.apporo.ai" };
+
+  const served = await call(REPORT_PATH, post(), {
+    env: apporo,
+    host: "https://reports.apporo.ai",
+  });
+  const elsewhere = await call(REPORT_PATH, post(), { env: apporo });
+
+  assert.equal(served.response.status, 201);
+  assert.equal(served.relayed.length, 1);
+  assert.equal(elsewhere.response.status, 404);
+  assert.equal(elsewhere.relayed.length, 0);
+});
+
+/** A brand's values (woowtech/brands/<id>.json). */
+async function brand(id) {
+  return JSON.parse(await readFile(new URL(`../brands/${id}.json`, import.meta.url), "utf8"));
+}
+
+test("Apporo smart's wrangler config serves its App's report address and desktop origin", async () => {
+  const configUrl = new URL(
+    "./deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc",
+    import.meta.url,
+  );
+  const text = await readFile(configUrl, "utf8");
+  const config = parseJsonc(text);
+  const apporo = await brand("apporo");
+  const reportUrl = new URL(apporo.services.aiContentReportUrl);
+
+  assert.equal(reportUrl.pathname, REPORT_PATH);
+  assert.equal(config.main, "cloudflare-worker-smart-reports.js");
+  assert.deepEqual(config.routes, [{ pattern: reportUrl.hostname, custom_domain: true }]);
+  assert.equal(config.vars.PUBLIC_HOST, reportUrl.hostname);
+  assert.equal(config.vars.ALLOWED_ORIGINS, `${apporo.scheme}://app`);
+  assert.deepEqual(Object.keys(config.vars).sort(), [
+    "ALLOWED_ORIGINS",
+    "PUBLIC_HOST",
+    "RELAY_ORIGIN",
+  ]);
+  assert.ok(
+    !config.vars.RELAY_ORIGIN.startsWith("https:"),
+    "a placeholder until the run.app URL is set",
+  );
+  assert.equal(config.workers_dev, false);
+  assert.equal(config.preview_urls, false);
+  assert.deepEqual(config.observability, { enabled: false });
+  assert.equal(config.logpush, false);
+  assert.doesNotMatch(text, /[0-9a-f]{32,}/i, "no key in the config");
+  assert.deepEqual(
+    config.ratelimits.map((limiter) => limiter.simple),
+    [{ limit: 10, period: 60 }],
+  );
+});
+
 test("the wrangler config deploys the Worker to reports.woowtech.io alone, with no logs", async () => {
   const configUrl = new URL(
     "./deploy/cloudflare-worker-smart-reports.wrangler.jsonc",
@@ -487,6 +542,9 @@ test("the wrangler config deploys the Worker to reports.woowtech.io alone, with 
   assert.equal(config.workers_dev, false);
   assert.equal(config.preview_urls, false);
   assert.deepEqual(config.routes, [{ pattern: "reports.woowtech.io", custom_domain: true }]);
+  const woowtech = await brand("woowtech");
+  assert.equal(new URL(woowtech.services.aiContentReportUrl).hostname, "reports.woowtech.io");
+  assert.equal(DESKTOP, `${woowtech.scheme}://app`, "the Worker's default origin is woowtech's");
   assert.deepEqual(config.observability, { enabled: false });
   assert.equal(config.logpush, false);
 

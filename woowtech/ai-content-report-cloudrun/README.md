@@ -25,8 +25,9 @@ App ─HTTPS─▶ Cloudflare Worker（reports.woowtech.io）─加上 edge key�
 | `admin.mjs`                                                     | 用收件編號在終端機查看或刪除一則回報                     |
 | `Dockerfile`、`.dockerignore`、`.gcloudignore`                  | 映像檔只含四個模組；build context 就是這個資料夾         |
 | `deploy/woowtech-smart-reports-deploy.sh`                       | 部署腳本（預設只印計畫）；`rollback` 印出移除指令        |
-| `deploy/smart-reports-alert-policy.json`                        | 警示政策範本，腳本填入通知管道後建立                     |
+| `deploy/smart-reports-alert-policy.json`                        | 警示政策範本，腳本填入產品名、專案和通知管道後建立       |
 | `deploy/cloudflare-worker-smart-reports.js`、`….wrangler.jsonc` | Worker 與它的 wrangler 設定                              |
+| `deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc`  | Apporo smart 的 Worker 設定（reports.apporo.ai）         |
 
 ## 資料與保存
 
@@ -54,7 +55,17 @@ cd woowtech/ai-content-report-cloudrun
 ./deploy/woowtech-smart-reports-deploy.sh --apply        # 問專案 ID，再依序做
 ./deploy/woowtech-smart-reports-deploy.sh --apply check  # 只做某一步：apis firestore ttl iam secret build logs deploy alert check
 ./deploy/woowtech-smart-reports-deploy.sh rollback       # 印出移除順序，不執行
+./deploy/woowtech-smart-reports-deploy.sh --brand=apporo # Apporo smart 的接收器（見下）
 ```
+
+- 每個品牌各有一套，`--brand=` 選（預設 woowtech）：
+
+  | 品牌     | GCP 專案           | 區域       | Worker 網域           | Cloudflare 帳號     |
+  | -------- | ------------------ | ---------- | --------------------- | ------------------- |
+  | woowtech | `woowtech-smart`   | asia-east1 | `reports.woowtech.io` | WOOW 的             |
+  | apporo   | `apporo-smart-app` | us-west1   | `reports.apporo.ai`   | 客戶的（apporo.ai） |
+
+  兩個品牌用同一份 Worker 程式。Apporo 的 Worker 要多兩個文字變數 `PUBLIC_HOST`、`ALLOWED_ORIGINS`，`….apporo.wrangler.jsonc` 已經寫好；網域和 App 的回報網址由測試對照 `woowtech/brands/<id>.json`。警示信一律寄渥屋（owner 2026-10-15）。
 
 - 要在乾淨、已提交的 checkout 上執行（映像檔標籤是 commit）；用專案擁有者的帳號登入 gcloud；`alert` 步驟要 `gcloud beta`（Cloud Shell 有；別處先 `gcloud components install beta`）。
 - 可重複執行：已存在的不重建，edge key 永遠不重生、不印出。

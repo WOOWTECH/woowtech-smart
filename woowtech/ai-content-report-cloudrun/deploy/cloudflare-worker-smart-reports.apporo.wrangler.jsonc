@@ -1,0 +1,35 @@
+// Apporo smart's smart reports Worker: cloudflare-worker-smart-reports.js as reports.apporo.ai, in
+// the Cloudflare account that holds the apporo.ai zone (the client's, not WOOW's). Everything else
+// is as in cloudflare-worker-smart-reports.wrangler.jsonc, whose notes apply.
+//
+// Before deploying, replace RELAY_ORIGIN with the run.app URL that
+// woowtech-smart-reports-deploy.sh --brand=apporo prints, then:
+//   npx wrangler@4 secret put EDGE_KEY --config deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc
+//   npx wrangler@4 deploy --config deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc
+// The account must be on Workers Paid. namespace_id must be unique among the rate limiting
+// namespaces of that account.
+{
+  "name": "smart-reports-proxy",
+  "main": "cloudflare-worker-smart-reports.js",
+  "compatibility_date": "2026-09-01",
+  // workers.dev and Preview URLs off: they are outside the apporo.ai zone and its per-IP rate limit.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "reports.apporo.ai", "custom_domain": true }],
+  // No Workers Logs and no Logpush: the Worker sees client addresses and request bodies.
+  "observability": { "enabled": false },
+  "logpush": false,
+  "vars": {
+    "RELAY_ORIGIN": "set-me:the-run.app-URL-printed-by-woowtech-smart-reports-deploy.sh",
+    // The host this Worker serves, and Apporo smart's desktop App's origin (woowtech/brands/apporo.json).
+    "PUBLIC_HOST": "reports.apporo.ai",
+    "ALLOWED_ORIGINS": "apporosmart://app",
+  },
+  "ratelimits": [
+    {
+      "name": "IP_RATE_LIMITER",
+      "namespace_id": "4102",
+      "simple": { "limit": 10, "period": 60 },
+    },
+  ],
+}
