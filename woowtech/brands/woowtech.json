@@ -1,0 +1,40 @@
+{
+  "id": "woowtech",
+  "name": "woowtech smart",
+  "nameZh": "渥屋智能",
+  "desktopNameZh": "渥屋智能桌面版",
+  "debugSuffix": " Debug",
+  "mobileAppId": "io.woowtech.smart",
+  "mobileAppIdDebug": "io.woowtech.smart.debug",
+  "mobileSecretsDir": ".secrets",
+  "scheme": "woowtech-smart",
+  "cliCommand": "woowtech-smart",
+  "homeDir": "~/.woowtech-smart",
+  "defaultPort": 6770,
+  "desktop": {
+    "appId": "io.woowtech.smart.desktop",
+    "artifactPrefix": "woowtech-smart",
+    "linuxMaintainer": "WoowTech <woowtech@designsmart.com.tw>",
+    "linuxVendor": "WoowTech"
+  },
+  "company": {
+    "operator": "WoowTech",
+    "copyright": "© 2026 WOOW TECH CO., LTD."
+  },
+  "links": {
+    "websiteHost": "aiot.woowtech.io",
+    "privacyPolicy": "https://aiot.woowtech.io/blog/help-center-7/woowtech-smart-app-yin-si-quan-zheng-ce-privacy-policy-391",
+    "privacyPolicyZh": "https://aiot.woowtech.io/blog/help-center-7/woowtech-smart-app-yin-si-quan-zheng-ce-privacy-policy-391",
+    "supportEmail": "woowtech@designsmart.com.tw",
+    "releasesRepo": "WOOWTECH/woowtech-smart-releases"
+  },
+  "services": {
+    "relayHost": "relay.woowtech.io",
+    "pushRelayUrl": "https://push.woowtech.io/api/smart/v1/notify",
+    "aiContentReportUrl": "https://reports.woowtech.io/v1/ai-content-reports"
+  },
+  "colors": {
+    "primary": "#6183fc",
+    "accentOnDark": "#8fa6fd"
+  }
+}

@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { Command } from "commander";
 import { withOutput } from "../../output/index.js";
 import { addJsonAndDaemonHostOptions } from "../../utils/command-options.js";
@@ -50,7 +51,7 @@ export async function runHubConnect(
     ) {
       await daemon.disconnectHub(false).catch(() => undefined);
       throw new Error(
-        "The daemon did not honor the requested Hub access. Update woowtech smart before connecting it.",
+        `The daemon did not honor the requested Hub access. Update ${PRODUCT_NAME} before connecting it.`,
       );
     }
     return hubStatusResult(response.status);

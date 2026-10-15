@@ -1,7 +1,12 @@
-// Text only woowtech smart shows, and translations for text upstream hardcodes in
+// Text only the fork shows, and translations for text upstream hardcodes in
 // English. It loads under the `woowtech` key of every language's translations
 // (t("woowtech.changelog.empty.title")), so upstream's locale files stay untouched.
-// Every language has to carry every key: the type is English's shape.
+// Every language has to carry every key: the type is English's shape. The product
+// name is a token that woowtechCopyFor writes as the brand's name (i18n/product-name.ts):
+// {productName} for the English name, {productNameZh} for the Chinese name, with the
+// spaces a Latin name takes beside Chinese text.
+import { withProductNames } from "./product-name";
+
 const ENGLISH = {
   changelog: {
     empty: {
@@ -13,13 +18,13 @@ const ENGLISH = {
     browserTools: {
       title: "Browser tools",
       warning:
-        "Allow agents to access and control woowtech smart browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+        "Allow agents to access and control {productName} browser tabs, including logged-in browser state. Only enable this for agents you trust.",
       updating: "Updating browser tools…",
       enable: "Enable browser tools",
     },
     autoArchiveMerged: {
       title: "Archive merged PR workspaces",
-      hint: "Automatically archive clean woowtech smart workspaces after their pull request is merged",
+      hint: "Automatically archive clean {productName} workspaces after their pull request is merged",
       updateFailed: "Unable to update workspaces",
     },
     terminalAgents: {
@@ -59,13 +64,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "瀏覽器工具",
         warning:
-          "允許 Agent 存取並控制渥屋智能的瀏覽器分頁，包括已登入的瀏覽器狀態。只對你信任的 Agent 開啟。",
+          "允許 Agent 存取並控制 {productNameZh} 的瀏覽器分頁，包括已登入的瀏覽器狀態。只對你信任的 Agent 開啟。",
         updating: "正在更新瀏覽器工具…",
         enable: "啟用瀏覽器工具",
       },
       autoArchiveMerged: {
         title: "封存 PR 已合併的工作區",
-        hint: "PR 合併後，自動封存沒有未提交變更的渥屋智能工作區",
+        hint: "PR 合併後，自動封存沒有未提交變更的 {productNameZh} 工作區",
         updateFailed: "無法更新工作區設定",
       },
       terminalAgents: {
@@ -100,13 +105,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "浏览器工具",
         warning:
-          "允许 Agent 访问并控制渥屋智能的浏览器标签页，包括已登录的浏览器状态。仅对你信任的 Agent 启用。",
+          "允许 Agent 访问并控制 {productNameZh} 的浏览器标签页，包括已登录的浏览器状态。仅对你信任的 Agent 启用。",
         updating: "正在更新浏览器工具…",
         enable: "启用浏览器工具",
       },
       autoArchiveMerged: {
         title: "归档 PR 已合并的工作区",
-        hint: "PR 合并后，自动归档没有未提交变更的渥屋智能工作区",
+        hint: "PR 合并后，自动归档没有未提交变更的 {productNameZh} 工作区",
         updateFailed: "无法更新工作区设置",
       },
       terminalAgents: {
@@ -141,13 +146,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "ブラウザツール",
         warning:
-          "エージェントが woowtech smart のブラウザタブにアクセスして操作できるようにします。ログイン中のブラウザの状態も含まれます。信頼できるエージェントにのみ有効にしてください。",
+          "エージェントが {productName} のブラウザタブにアクセスして操作できるようにします。ログイン中のブラウザの状態も含まれます。信頼できるエージェントにのみ有効にしてください。",
         updating: "ブラウザツールを更新しています…",
         enable: "ブラウザツールを有効にする",
       },
       autoArchiveMerged: {
         title: "PR がマージされたワークスペースをアーカイブ",
-        hint: "プルリクエストがマージされたら、未コミットの変更がない woowtech smart のワークスペースを自動的にアーカイブします",
+        hint: "プルリクエストがマージされたら、未コミットの変更がない {productName} のワークスペースを自動的にアーカイブします",
         updateFailed: "ワークスペースの設定を更新できません",
       },
       terminalAgents: {
@@ -182,13 +187,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "브라우저 도구",
         warning:
-          "에이전트가 로그인된 브라우저 상태를 포함해 woowtech smart 브라우저 탭에 접근하고 제어할 수 있도록 허용합니다. 신뢰하는 에이전트에만 사용하세요.",
+          "에이전트가 로그인된 브라우저 상태를 포함해 {productName} 브라우저 탭에 접근하고 제어할 수 있도록 허용합니다. 신뢰하는 에이전트에만 사용하세요.",
         updating: "브라우저 도구 업데이트 중…",
         enable: "브라우저 도구 사용",
       },
       autoArchiveMerged: {
         title: "PR이 병합된 워크스페이스 보관",
-        hint: "풀 리퀘스트가 병합되면 커밋되지 않은 변경 사항이 없는 woowtech smart 워크스페이스를 자동으로 보관합니다",
+        hint: "풀 리퀘스트가 병합되면 커밋되지 않은 변경 사항이 없는 {productName} 워크스페이스를 자동으로 보관합니다",
         updateFailed: "워크스페이스 설정을 업데이트할 수 없습니다",
       },
       terminalAgents: {
@@ -223,13 +228,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "Herramientas del navegador",
         warning:
-          "Permite que los agentes accedan a las pestañas del navegador de woowtech smart y las controlen, incluido el estado de las sesiones iniciadas. Actívalo solo para agentes de confianza.",
+          "Permite que los agentes accedan a las pestañas del navegador de {productName} y las controlen, incluido el estado de las sesiones iniciadas. Actívalo solo para agentes de confianza.",
         updating: "Actualizando las herramientas del navegador…",
         enable: "Activar las herramientas del navegador",
       },
       autoArchiveMerged: {
         title: "Archivar espacios de trabajo con la PR fusionada",
-        hint: "Archiva automáticamente los espacios de trabajo de woowtech smart sin cambios no confirmados cuando se fusiona su pull request",
+        hint: "Archiva automáticamente los espacios de trabajo de {productName} sin cambios no confirmados cuando se fusiona su pull request",
         updateFailed: "No se pudieron actualizar los espacios de trabajo",
       },
       terminalAgents: {
@@ -265,13 +270,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "Outils du navigateur",
         warning:
-          "Autorise les agents à accéder aux onglets du navigateur de woowtech smart et à les contrôler, y compris l'état des sessions connectées. N'activez cette option que pour des agents de confiance.",
+          "Autorise les agents à accéder aux onglets du navigateur de {productName} et à les contrôler, y compris l'état des sessions connectées. N'activez cette option que pour des agents de confiance.",
         updating: "Mise à jour des outils du navigateur…",
         enable: "Activer les outils du navigateur",
       },
       autoArchiveMerged: {
         title: "Archiver les espaces de travail dont la PR est fusionnée",
-        hint: "Archive automatiquement les espaces de travail woowtech smart sans modifications non validées une fois leur pull request fusionnée",
+        hint: "Archive automatiquement les espaces de travail {productName} sans modifications non validées une fois leur pull request fusionnée",
         updateFailed: "Impossible de mettre à jour les espaces de travail",
       },
       terminalAgents: {
@@ -306,13 +311,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "Ferramentas do navegador",
         warning:
-          "Permite que agentes acessem e controlem as abas do navegador do woowtech smart, incluindo o estado das sessões conectadas. Ative apenas para agentes em que você confia.",
+          "Permite que agentes acessem e controlem as abas do navegador do {productName}, incluindo o estado das sessões conectadas. Ative apenas para agentes em que você confia.",
         updating: "Atualizando as ferramentas do navegador…",
         enable: "Ativar as ferramentas do navegador",
       },
       autoArchiveMerged: {
         title: "Arquivar espaços de trabalho com PR mesclado",
-        hint: "Arquiva automaticamente os espaços de trabalho do woowtech smart sem alterações pendentes depois que o pull request deles é mesclado",
+        hint: "Arquiva automaticamente os espaços de trabalho do {productName} sem alterações pendentes depois que o pull request deles é mesclado",
         updateFailed: "Não foi possível atualizar os espaços de trabalho",
       },
       terminalAgents: {
@@ -347,13 +352,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "Инструменты браузера",
         warning:
-          "Разрешает агентам доступ к вкладкам браузера woowtech smart и управление ими, включая состояние входа в аккаунты. Включайте только для агентов, которым доверяете.",
+          "Разрешает агентам доступ к вкладкам браузера {productName} и управление ими, включая состояние входа в аккаунты. Включайте только для агентов, которым доверяете.",
         updating: "Обновление инструментов браузера…",
         enable: "Включить инструменты браузера",
       },
       autoArchiveMerged: {
         title: "Архивировать рабочие пространства с объединёнными PR",
-        hint: "Автоматически архивировать рабочие пространства woowtech smart без незафиксированных изменений после объединения их pull request",
+        hint: "Автоматически архивировать рабочие пространства {productName} без незафиксированных изменений после объединения их pull request",
         updateFailed: "Не удалось обновить рабочие пространства",
       },
       terminalAgents: {
@@ -388,13 +393,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "أدوات المتصفح",
         warning:
-          "يسمح للوكلاء بالوصول إلى علامات تبويب متصفح woowtech smart والتحكم فيها، بما في ذلك حالة تسجيل الدخول في المتصفح. فعّل هذا فقط للوكلاء الذين تثق بهم.",
+          "يسمح للوكلاء بالوصول إلى علامات تبويب متصفح {productName} والتحكم فيها، بما في ذلك حالة تسجيل الدخول في المتصفح. فعّل هذا فقط للوكلاء الذين تثق بهم.",
         updating: "جارٍ تحديث أدوات المتصفح…",
         enable: "تفعيل أدوات المتصفح",
       },
       autoArchiveMerged: {
         title: "أرشفة مساحات العمل بعد دمج طلب السحب",
-        hint: "أرشفة مساحات عمل woowtech smart التي لا تحتوي على تغييرات غير ملتزم بها تلقائيًا بعد دمج طلب السحب الخاص بها",
+        hint: "أرشفة مساحات عمل {productName} التي لا تحتوي على تغييرات غير ملتزم بها تلقائيًا بعد دمج طلب السحب الخاص بها",
         updateFailed: "تعذّر تحديث مساحات العمل",
       },
       terminalAgents: {
@@ -679,17 +684,17 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
 const NOTIFICATION_DISPLAY_ENGLISH = {
   title: "Notifications are not showing",
   description:
-    "The system did not show a woowtech smart notification. Notifications may be turned off or not allowed yet.",
+    "The system did not show a {productName} notification. Notifications may be turned off or not allowed yet.",
   sentToPhone: "That notification went to your phone instead.",
-  hostTooOld: "This host can't send them to your phone. Update it to the latest woowtech smart.",
+  hostTooOld: "This host can't send them to your phone. Update it to the latest {productName}.",
   openSettings: "Open notification settings",
 };
 
 const NOTIFICATION_DISPLAY_ZH_TW: typeof NOTIFICATION_DISPLAY_ENGLISH = {
   title: "這台電腦沒有顯示通知",
-  description: "系統沒有顯示 woowtech smart 的通知，可能是通知被關掉，或還沒按「允許」。",
+  description: "系統沒有顯示 {productName} 的通知，可能是通知被關掉，或還沒按「允許」。",
   sentToPhone: "那則通知已改送到你的手機。",
-  hostTooOld: "這台主機無法改送到手機，請把它更新到最新的 woowtech smart。",
+  hostTooOld: "這台主機無法改送到手機，請把它更新到最新的 {productName}。",
   openSettings: "打開通知設定",
 };
 
@@ -705,7 +710,7 @@ const NOTIFICATION_BANNER_CHECK_ENGLISH = {
   notSeen: "No",
   helpTitle: "Notifications are not showing",
   helpDescription:
-    "In System Settings → Notifications, find woowtech smart, turn on Allow Notifications and choose Banners or Alerts. Also check that Focus (Do Not Disturb) is off.",
+    "In System Settings → Notifications, find {productName}, turn on Allow Notifications and choose Banners or Alerts. Also check that Focus (Do Not Disturb) is off.",
   openSettings: "Open notification settings",
   testAgain: "Test again",
   confirmedHint: "Confirmed: banners appear on this computer.",
@@ -721,7 +726,7 @@ const NOTIFICATION_BANNER_CHECK_ZH_TW: typeof NOTIFICATION_BANNER_CHECK_ENGLISH 
   notSeen: "沒看到",
   helpTitle: "通知沒有跳出來",
   helpDescription:
-    "請到「系統設定 → 通知」，找到 woowtech smart，打開「允許通知」，並把樣式選成「橫幅」或「提示」。也確認「專注模式」（勿擾）沒有開著。",
+    "請到「系統設定 → 通知」，找到 {productName}，打開「允許通知」，並把樣式選成「橫幅」或「提示」。也確認「專注模式」（勿擾）沒有開著。",
   openSettings: "打開通知設定",
   testAgain: "再測一次",
   confirmedHint: "已確認：這台電腦的通知會跳出橫幅。",
@@ -741,9 +746,9 @@ const AGENT_NOTIFICATION_TITLES_ZH_TW: typeof AGENT_NOTIFICATION_TITLES_ENGLISH 
 
 const METADATA_GENERATION_ENGLISH = {
   projectInfo:
-    "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
+    "{productName} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
   description:
-    "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
+    "{productName} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
   automaticHint: "Automatic model selection is inactive while generation is disabled.",
   preferredHint: "Saved model preferences are inactive while generation is disabled.",
   fallbackHint: "This preference is retained; no model is called for metadata generation.",
@@ -751,9 +756,9 @@ const METADATA_GENERATION_ENGLISH = {
 
 const METADATA_GENERATION_ZH_TW: typeof METADATA_GENERATION_ENGLISH = {
   projectInfo:
-    "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。",
+    "{productName} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。",
   description:
-    "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
+    "{productName} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
   automaticHint: "自動產生已停用，目前不會自動選擇模型。",
   preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
   fallbackHint: "此偏好會保留；不會呼叫任何模型來產生後設資料。",
@@ -1125,7 +1130,7 @@ const WORKSPACE_RECOVERY_ENGLISH = {
     "The archived worktree has no branch recorded, so it cannot be restored.",
   project_directory_missing:
     "The source repository needed to restore this worktree no longer exists.",
-  unsupportedAction: "Update woowtech smart to recover this workspace.",
+  unsupportedAction: "Update {productName} to recover this workspace.",
 };
 
 const WORKSPACE_RECOVERY_ZH_TW: typeof WORKSPACE_RECOVERY_ENGLISH = {
@@ -1135,7 +1140,7 @@ const WORKSPACE_RECOVERY_ZH_TW: typeof WORKSPACE_RECOVERY_ENGLISH = {
   workspace_directory_missing: "封存工作區的資料夾已經不存在，無法重新建立。",
   worktree_branch_missing: "這個封存的 worktree 沒有記錄分支，無法恢復。",
   project_directory_missing: "恢復這個 worktree 需要的來源儲存庫已經不存在。",
-  unsupportedAction: "請更新渥屋智能，才能恢復這個工作區。",
+  unsupportedAction: "請更新 {productNameZh}，才能恢復這個工作區。",
 };
 
 // The daemon says why dictation or voice mode is unavailable in English, and the host info carries
@@ -1251,7 +1256,7 @@ const PRIVACY_POLICY_ZH_TW: typeof PRIVACY_POLICY_ENGLISH = {
 const THIRD_PARTY_NOTICES_ENGLISH = {
   title: "Trademarks and third-party notices",
   statement:
-    "woowtech smart is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.",
+    "{productName} is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.",
   sections: {
     trademarks: "Trademarks",
     agents: "Agents",
@@ -1264,10 +1269,10 @@ const THIRD_PARTY_NOTICES_ENGLISH = {
     fileTypesInfo: "Icons for files written in these languages and formats, in the file explorer.",
     fileTypesChangesTitle: "Changes from the original logos",
     fileTypesChanges:
-      "material-icon-theme redrew these logos as file icons, and woowtech smart tones down their colors. Icons adapted from a logo under a Creative Commons ShareAlike license are shared under that same license.",
+      "material-icon-theme redrew these logos as file icons, and {productName} tones down their colors. Icons adapted from a logo under a Creative Commons ShareAlike license are shared under that same license.",
     paseo: "Paseo — Apache License 2.0",
     paseoInfo:
-      "woowtech smart is derived from Paseo. This section reproduces Paseo's copyright and complete distribution license.",
+      "{productName} is derived from Paseo. This section reproduces Paseo's copyright and complete distribution license.",
     apacheTextTitle: "Apache License 2.0 text",
     mit: "MIT License",
     mitInfo:
@@ -1287,7 +1292,7 @@ const THIRD_PARTY_NOTICES_ENGLISH = {
 const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   title: "商標與第三方授權",
   statement:
-    "渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。",
+    "{productNameZh} 與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。",
   sections: {
     trademarks: "商標",
     agents: "Agent",
@@ -1300,9 +1305,9 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
     fileTypesInfo: "檔案總管裡，代表這些程式語言與格式的檔案圖示。",
     fileTypesChangesTitle: "與原始標誌的差異",
     fileTypesChanges:
-      "material-icon-theme 把這些標誌重新繪製成檔案圖示，渥屋智能再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。",
+      "material-icon-theme 把這些標誌重新繪製成檔案圖示，{productNameZh} 再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。",
     paseo: "Paseo — Apache License 2.0",
-    paseoInfo: "渥屋智能改作自 Paseo。本節重製 Paseo 的著作權聲明與完整散布授權。",
+    paseoInfo: "{productNameZh} 改作自 Paseo。本節重製 Paseo 的著作權聲明與完整散布授權。",
     apacheTextTitle: "Apache License 2.0 授權條文",
     mit: "MIT 授權",
     mitInfo: "MIT 授權適用於下列每項作品，著作權聲明列在各項作品下。",
@@ -1343,9 +1348,9 @@ function agentStreamCopyFor(language: string) {
   };
 }
 
-/** woowtech smart's own text in `language`. A language upstream adds later reads English. */
+/** The fork's own text in `language`. A language upstream adds later reads English. */
 export function woowtechCopyFor(language: string) {
-  return {
+  return withProductNames({
     ...(WOOWTECH_COPY[language] ?? ENGLISH),
     claudeSdk: language === "zh-TW" ? CLAUDE_SDK_ZH_TW : CLAUDE_SDK_ENGLISH,
     claudeAuth: language === "zh-TW" ? CLAUDE_AUTH_ZH_TW : CLAUDE_AUTH_ENGLISH,
@@ -1370,5 +1375,5 @@ export function woowtechCopyFor(language: string) {
     ...daemonTextCopyFor(language),
     ...legalCopyFor(language),
     ...agentStreamCopyFor(language),
-  };
+  });
 }

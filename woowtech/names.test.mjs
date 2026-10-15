@@ -1,5 +1,5 @@
-// What people see woowtech smart called: installer files, app text outside the
-// translations, and the mobile app's name. Upstream merges can bring "Paseo"
+// What people see the app called: installer files, app text outside the translations, and
+// the mobile app's name, all the brand's (woowtech/brands). Upstream merges can bring "Paseo"
 // back in files we never touched, so these checks read the sources directly.
 //
 //   node --test woowtech/names.test.mjs
@@ -11,10 +11,12 @@ import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { expoIntrospectedConfig, expoPrebuildConfig } from "./expo-config.mjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
+const brand = appliedBrand();
 
 function read(relativePath) {
   return readFileSync(new URL(relativePath, repoRoot), "utf8");
@@ -68,7 +70,7 @@ test("iOS naming documentation does not claim an unverified home-screen fallback
   assert.doesNotMatch(readme, /Debug 版的主畫面標籤也是「woowtech smart」/);
 });
 
-test("installers are named woowtech-smart and the app links to the dmg the mac build makes", () => {
+test("installers are named after the brand and the app links to the dmg the mac build makes", () => {
   const builder = read("packages/desktop/electron-builder.yml");
   const artifactNames = [...builder.matchAll(/^\s*artifactName:\s*"(.+?)"\s*$/gm)].map(
     (match) => match[1],
@@ -76,7 +78,7 @@ test("installers are named woowtech-smart and the app links to the dmg the mac b
 
   assert.ok(artifactNames.length > 0, "electron-builder.yml names no artifacts");
   for (const name of artifactNames) {
-    assert.match(name, /^woowtech-smart-/);
+    assert.ok(name.startsWith(`${brand.desktop.artifactPrefix}-`), `${name} is not the brand's`);
   }
 
   const macArtifact = /^mac:\n(?:[ ].*\n)*?\s+artifactName:\s*"(.+?)"/m.exec(builder)?.[1];
@@ -86,12 +88,14 @@ test("installers are named woowtech-smart and the app links to the dmg the mac b
   )?.[1];
   assert.ok(dmgLink, "could not find the Apple Silicon download link");
   assert.equal(
-    dmgLink.replaceAll("${normalizedVersion}", "${version}"),
+    dmgLink
+      .replaceAll("${DESKTOP_ARTIFACT_PREFIX}", brand.desktop.artifactPrefix)
+      .replaceAll("${normalizedVersion}", "${version}"),
     macArtifact.replace("${arch}", "arm64").replace("${ext}", "dmg"),
   );
 });
 
-test("app text outside the translations names woowtech smart", () => {
+test("app text outside the translations names the brand, not Paseo", () => {
   const naming = findInShippedSources([/\bPaseo\b/], {
     dirs: ["packages/app/src", "packages/app/public"],
     fileTypes: /\.(?:[cm]?[jt]sx?|json|html)$/,
@@ -107,11 +111,11 @@ test("app text outside the translations names woowtech smart", () => {
       // Matches the daemon's English error text to pick a translation; the user
       // sees the translation, which is renamed.
       /"Archive isn't available here because this workspace was not created as a Paseo worktree":/,
-      // The notices page credits the project woowtech smart is derived from. The Apache License
-      // 2.0 (section 4) asks for its copyright notice and license text to stay with the work.
+      // The notices page credits the project the app is derived from. The Apache License 2.0
+      // (section 4) asks for its copyright notice and license text to stay with the work.
       /^\s*paseo: "Paseo — Apache License 2\.0",$/,
-      /woowtech smart is derived from Paseo\. This section reproduces Paseo's copyright/,
-      /^\s*paseoInfo: "渥屋智能改作自 Paseo。/,
+      /\{productName\} is derived from Paseo\. This section reproduces Paseo's copyright/,
+      /^\s*paseoInfo: "\{productNameZh\} 改作自 Paseo。/,
       /\{ key: "copyright", title: "Paseo", lines: \[PASEO_COPYRIGHT\] \}/,
     ],
   });
@@ -119,21 +123,24 @@ test("app text outside the translations names woowtech smart", () => {
   assert.deepEqual(naming, []);
 });
 
-test("the daemon's processes are titled woowtech smart in Activity Monitor and ps", () => {
+test("the daemon's processes are titled with the brand's name in Activity Monitor and ps", () => {
   // The official Paseo's are "Paseo Supervisor" and "Paseo Daemon": the same
   // titles made the two apps' daemons look alike, and `pkill -f 'Paseo Daemon'`
-  // stopped both. Nothing looks the daemon up by its title.
-  const titleIn = (relativePath) => /^process\.title = "(.+?)";$/m.exec(read(relativePath))?.[1];
+  // stopped both. Each brand's are its own. Nothing looks the daemon up by its title.
+  const titleIn = (relativePath) =>
+    /^process\.title = `\$\{PRODUCT_NAME\}(.+?)`;$/m
+      .exec(read(relativePath))?.[1]
+      ?.replace(/^/, brand.name);
 
   assert.equal(
     titleIn("packages/server/scripts/supervisor-entrypoint.ts"),
-    "woowtech smart Supervisor",
+    `${brand.name} Supervisor`,
   );
-  assert.equal(titleIn("packages/server/src/server/daemon-worker.ts"), "woowtech smart Daemon");
+  assert.equal(titleIn("packages/server/src/server/daemon-worker.ts"), `${brand.name} Daemon`);
   // The local speech worker, which runs only where local speech is installed.
   assert.equal(
     titleIn("packages/server/src/server/speech/providers/local/worker-process.ts"),
-    "woowtech smart Voice",
+    `${brand.name} Voice`,
   );
 });
 

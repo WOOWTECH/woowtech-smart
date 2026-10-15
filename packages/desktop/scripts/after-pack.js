@@ -5,8 +5,10 @@ const { smokePackagedDesktopApp } = require("../e2e/packaged-app-smoke.js");
 
 const { installLinuxLauncher } = require("./linux-sandbox");
 const { flipWoowtechFuses } = require("./woowtech-fuses");
+const { appliedBrand } = require("../../../woowtech/brands/index.cjs");
 
-const EXECUTABLE_NAME = "woowtech smart";
+// electron-builder.yml names the app and its executable after the brand (woowtech/brands/apply.mjs).
+const EXECUTABLE_NAME = appliedBrand().name;
 
 // electron-builder arch enum → Node.js arch string
 const ARCH_MAP = { 0: "ia32", 1: "x64", 2: "armv7l", 3: "arm64", 4: "universal" };

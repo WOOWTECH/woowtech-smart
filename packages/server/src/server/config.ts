@@ -23,6 +23,7 @@ import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
 import { DEFAULT_RELAY_ENDPOINT } from "@getpaseo/protocol/daemon-endpoints";
 import { appBaseUrlFromConfig } from "./app-base-url.js";
 import { withoutUpstreamWebApp } from "./woowtech-cors-origins.js";
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 import { hashDaemonPassword } from "./auth.js";
 import { resolveSpeechConfig } from "./speech/speech-config-resolver.js";
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
@@ -38,8 +39,8 @@ export {
   type PersistedConfig,
 } from "./persisted-config.js";
 
-// woowtech smart listens on its own port, apart from an upstream Paseo daemon.
-const DEFAULT_PORT = 6770;
+// Each brand's daemon listens on its own port, apart from an upstream Paseo daemon.
+const DEFAULT_PORT = DEFAULT_DAEMON_PORT;
 const DEFAULT_TRUSTED_PROXIES = ["loopback"];
 
 interface ResolveBundledWebUiDistDirInput {

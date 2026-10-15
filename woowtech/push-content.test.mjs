@@ -16,6 +16,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { tsImport } from "tsx/esm/api";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
 
 const { createPushNotifications } = await tsImport(
@@ -295,7 +296,14 @@ test("upstream's Expo sender is the only code that names Expo, and nothing calls
     "packages/server/src/server/push/push-service.ts",
   ]);
   assert.deepEqual(findInShippedSources([/new PushService\b/, /\.sendPush\(/]), []);
-  assert.deepEqual(filesOf(findInShippedSources([/push\.woowtech\.io/])), [
+  // The brand's push relay is named once, in its generated values, and only the relay deliver
+  // sends to it.
+  const pushHost = new URL(appliedBrand().services.pushRelayUrl).host;
+  assert.deepEqual(filesOf(findInShippedSources([new RegExp(pushHost.replaceAll(".", "\\."))])), [
+    "packages/protocol/src/brand-values.ts",
+  ]);
+  assert.deepEqual(filesOf(findInShippedSources([/\bBRAND_PUSH_RELAY_URL\b/])), [
+    "packages/protocol/src/brand-push.ts",
     "packages/server/src/server/push/woowtech-relay.ts",
   ]);
 });

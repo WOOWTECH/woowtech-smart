@@ -223,7 +223,7 @@ test("the app's logo component draws the WOOW symbol from woowtech/brand", () =>
   }
 });
 
-test("the startup splash draws the WOOW symbol in the brand blue", () => {
+test("the startup splash draws the logo in the brand color", () => {
   // Upstream fills the web and desktop splash mask with the theme's foreground: white or black.
   const splash = readFileSync(
     repoPath("packages/app/src/screens/startup-splash-screen.tsx"),
@@ -233,8 +233,8 @@ test("the startup splash draws the WOOW symbol in the brand blue", () => {
   const end = splash.indexOf("function WebLogoShimmer(");
   assert.ok(start !== -1 && end > start, "the splash no longer has LogoShimmer");
   const shimmer = splash.slice(start, end);
-  assert.match(shimmer, /<WebLogoShimmer color=\{BRAND_BLUE\} \/>/);
-  assert.match(shimmer, /<NativeLogoShimmer color=\{BRAND_BLUE\} \/>/);
+  assert.match(shimmer, /<WebLogoShimmer color=\{BRAND_COLOR\} \/>/);
+  assert.match(shimmer, /<NativeLogoShimmer color=\{BRAND_COLOR\} \/>/);
 });
 
 test("nothing that ships draws upstream Paseo's butterfly mark", () => {

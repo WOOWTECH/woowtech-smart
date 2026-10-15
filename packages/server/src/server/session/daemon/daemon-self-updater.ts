@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { getErrorMessage } from "@getpaseo/protocol/error-utils";
 import {
   daemonInstallOriginRuntime,
@@ -44,8 +45,7 @@ const defaultRuntime: DaemonSelfUpdateRuntime = {
   installOrigin: daemonInstallOriginRuntime,
 };
 
-const DESKTOP_MANAGED_UPDATE_ERROR =
-  "This daemon is managed by woowtech smart Desktop. Update woowtech smart Desktop on the host.";
+const DESKTOP_MANAGED_UPDATE_ERROR = `This daemon is managed by ${PRODUCT_NAME} Desktop. Update ${PRODUCT_NAME} Desktop on the host.`;
 
 export class DaemonSelfUpdater {
   private inProgress = false;

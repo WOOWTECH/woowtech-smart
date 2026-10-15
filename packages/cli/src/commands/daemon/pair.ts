@@ -1,3 +1,4 @@
+import { BRAND_OPERATOR, PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { confirm, isCancel, log } from "@clack/prompts";
@@ -109,7 +110,7 @@ async function resolveDaemonPairingOffer(
   try {
     const serverInfo = client.getLastServerInfoMessage();
     if (serverInfo?.features?.daemonStatusRpc !== true) {
-      throw new Error("Update the woowtech smart daemon before pairing from this command.");
+      throw new Error(`Update the ${PRODUCT_NAME} daemon before pairing from this command.`);
     }
 
     let offer = await client.getDaemonPairingOffer({
@@ -118,7 +119,7 @@ async function resolveDaemonPairingOffer(
     if (!offer.relayEnabled && enableRelay) {
       if (serverInfo.features.relayConfig !== true) {
         throw new Error(
-          "Update the woowtech smart daemon before enabling relay from this command.",
+          `Update the ${PRODUCT_NAME} daemon before enabling relay from this command.`,
         );
       }
       await client.patchDaemonConfig({ relay: { enabled: true } });
@@ -143,7 +144,7 @@ async function resolveDaemonPairingOffer(
 
 export async function confirmRelayPairing(): Promise<boolean> {
   log.message(
-    "Your connection is end-to-end encrypted. WoowTech cannot read your code or messages.",
+    `Your connection is end-to-end encrypted. ${BRAND_OPERATOR} cannot read your code or messages.`,
   );
   log.message(`Learn how it works: ${RELAY_DOCS_URL}`);
   const answer = await confirm({

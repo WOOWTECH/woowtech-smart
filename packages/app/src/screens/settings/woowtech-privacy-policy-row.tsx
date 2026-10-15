@@ -15,10 +15,14 @@ const ThemedExternalLink = withUnistyles(ExternalLink, (theme) => ({
 }));
 
 export function WoowtechPrivacyPolicyRow() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // A brand can keep its Chinese policy at its own address (Apporo smart does; woowtech smart's
+  // one post holds both languages).
+  const isChinese = i18n.language === "zh" || i18n.language.startsWith("zh-");
+  const policyUrl = isChinese ? BRAND_LINKS.privacyPolicyZh : BRAND_LINKS.privacyPolicy;
   const handlePress = useCallback(() => {
-    void openExternalUrl(BRAND_LINKS.privacyPolicy);
-  }, []);
+    void openExternalUrl(policyUrl);
+  }, [policyUrl]);
 
   return (
     <Pressable

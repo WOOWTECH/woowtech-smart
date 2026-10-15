@@ -15,8 +15,9 @@ import { loadPersistedConfig } from "../src/server/persisted-config.js";
 import { runSupervisor } from "./supervisor.js";
 import { resolveSupervisorLogFile } from "./supervisor-log-config.js";
 import { applySherpaLoaderEnv } from "../src/server/speech/providers/local/sherpa/sherpa-runtime-env.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
-process.title = "woowtech smart Supervisor";
+process.title = `${PRODUCT_NAME} Supervisor`;
 
 interface DaemonRunnerConfig {
   devMode: boolean;

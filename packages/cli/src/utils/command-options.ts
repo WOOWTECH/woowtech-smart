@@ -1,3 +1,4 @@
+import { DEFAULT_DAEMON_HOME } from "@getpaseo/protocol/brand-daemon";
 import type { Command } from "commander";
 import { selectDaemonTarget } from "./daemon-target.js";
 
@@ -9,7 +10,7 @@ const localCommands = new WeakSet<Command>();
 
 export function addLocalDaemonOptions<T extends Command>(command: T): T {
   localCommands.add(command);
-  command.option("--home <path>", "Local daemon home (default: ~/.woowtech-smart)");
+  command.option("--home <path>", `Local daemon home (default: ${DEFAULT_DAEMON_HOME})`);
   return command;
 }
 
@@ -25,7 +26,7 @@ export function addJsonOption<T extends Command>(command: T): T {
 export function addDaemonHostOption<T extends Command>(command: T): T {
   command.option("--host <host>", DAEMON_HOST_OPTION_DESCRIPTION);
   if (!command.options.some((option) => option.long === "--home"))
-    command.option("--home <path>", "Select a local daemon home (default: ~/.woowtech-smart)");
+    command.option("--home <path>", `Select a local daemon home (default: ${DEFAULT_DAEMON_HOME})`);
   return command;
 }
 

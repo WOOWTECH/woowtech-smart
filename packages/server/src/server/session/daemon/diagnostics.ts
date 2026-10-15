@@ -1,6 +1,7 @@
 import { open, statfs } from "node:fs/promises";
 import { cpus, freemem, loadavg, platform, release, totalmem, type } from "node:os";
 import path from "node:path";
+import { AGENT_DEEP_LINK_SCHEME } from "@getpaseo/protocol/agent-deep-link";
 import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 import type pino from "pino";
@@ -56,6 +57,9 @@ export type DaemonWebSocketRuntimeDiagnosticSnapshot = WebSocketRuntimeDiagnosti
   DiagnosticAgentRuntimeMetrics
 >;
 
+// Pairing and agent links in the brand's scheme or upstream's carry keys; the brand checks keep
+// the scheme to letters, digits and hyphens, so it reads literally in the pattern.
+const APP_LINK = new RegExp(`(${AGENT_DEEP_LINK_SCHEME}|paseo):\\/\\/\\S+`, "gi");
 const TOOL_TIMEOUT_MS = 3_000;
 const TOOL_OUTPUT_LIMIT = 512;
 const LOG_TAIL_LINES = 80;
@@ -557,7 +561,7 @@ export function redactDiagnostic(
   }
 
   return redacted
-    .replace(/(woowtech-smart|paseo):\/\/\S+/gi, "$1://[redacted]")
+    .replace(APP_LINK, "$1://[redacted]")
     .replace(
       /([?&](?:password|token|secret|key|publicKey|daemonPublicKeyB64)=)[^&\s"']+/gi,
       "$1[redacted]",

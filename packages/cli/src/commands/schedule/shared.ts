@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { DaemonTarget } from "../../utils/daemon-target.js";
 import { connectToDaemon, getDaemonHost } from "../../utils/client.js";
 import type { CommandError, CommandOptions } from "../../output/index.js";
@@ -128,7 +129,7 @@ function resolveScheduleTarget(args: {
     if (!currentAgentId) {
       throw {
         code: "INVALID_TARGET",
-        message: "--target self requires running inside a woowtech smart agent",
+        message: `--target self requires running inside a ${PRODUCT_NAME} agent`,
       } satisfies CommandError;
     }
     return { type: "self", agentId: currentAgentId };

@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import { DESKTOP_APP_NAME } from "@getpaseo/protocol/brand-desktop";
 import { app } from "electron";
 import log from "electron-log/main";
 import { commandRunsCli } from "./ownership.js";
@@ -48,7 +49,7 @@ export async function installCli(): Promise<InstallStatus> {
       "@echo off",
       `set "BUNDLED_CLI=${shimPath}"`,
       `if not exist "%BUNDLED_CLI%" (`,
-      `  echo woowtech smart CLI not found at %BUNDLED_CLI% — is woowtech smart installed? 1>&2`,
+      `  echo ${DESKTOP_APP_NAME} CLI not found at %BUNDLED_CLI% — is ${DESKTOP_APP_NAME} installed? 1>&2`,
       `  exit /b 1`,
       `)`,
       `call "%BUNDLED_CLI%" %*`,

@@ -1,9 +1,10 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { CommandResult, NpmGlobalPaseoCli, NpmGlobalPaseoInstall } from "./npm-global-cli.js";
 
 export class NpmSelfUpdateUnavailableError extends Error {
   constructor() {
     super(
-      "woowtech smart does not update the daemon through npm. Update the woowtech smart desktop app on this host.",
+      `${PRODUCT_NAME} does not update the daemon through npm. Update the ${PRODUCT_NAME} desktop app on this host.`,
     );
     this.name = "NpmSelfUpdateUnavailableError";
   }

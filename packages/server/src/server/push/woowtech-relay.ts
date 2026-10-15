@@ -7,6 +7,7 @@ import {
   validateRelayNotifyBody,
   type WoowtechPushToken,
 } from "@getpaseo/protocol/woowtech-push";
+import { BRAND_PUSH_RELAY_URL } from "@getpaseo/protocol/brand-push";
 
 import type { PushPayload } from "./push-service.js";
 import type { PushTokenStore } from "./token-store.js";
@@ -235,7 +236,7 @@ export function revokeSupersededPushTokens(input: {
   }
 }
 
-export const DEFAULT_WOOWTECH_PUSH_RELAY_URL = "https://push.woowtech.io/api/smart/v1/notify";
+export const DEFAULT_WOOWTECH_PUSH_RELAY_URL = BRAND_PUSH_RELAY_URL;
 
 /** WOOWTECH_PUSH_RELAY_URL points the daemon at another relay, for tests and staging. */
 export function woowtechPushRelayUrl(env: NodeJS.ProcessEnv = process.env): string {

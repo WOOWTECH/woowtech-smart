@@ -159,6 +159,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 | agent 技能           | `paseo`、`paseo-advisor`…          | `woowtech-smart`、`woowtech-smart-advisor`…          |
 | 技能儲存的暫存資料夾 | `.paseo-skills-transaction-*`      | `.woowtech-smart-skills-transaction-*`               |
 
+- 右欄的值都寫在品牌設定 `woowtech/brands/woowtech.json`，程式從那裡讀（第 27 節）。Apporo smart 有自己的一組，跟上游和渥屋智能都不同，三者可以裝在同一台電腦和同一支手機。
 - port 在 daemon、App（本機備援位址、手動新增主機的預設值）、CLI 說明和 SSH 連線的預設值都一致。
 - 桌面版啟動時會併入登入 shell 的環境變數，但不採用其中的 `PASEO_HOME` 和 `PASEO_HOST`。使用官方 Paseo 的人可能在 shell 設定檔 export 這兩個值，指向官方的 `~/.paseo` 或 daemon；採用的話，我們的 daemon 會搬進官方的資料夾，桌面版呼叫的 CLI 也會連到官方的 daemon。
   - App 自己啟動時就帶著的值照樣有效，桌面版的 e2e 和 smoke 測試靠這個指定暫存 home。
@@ -314,11 +315,11 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 已知取捨：按鈕上的白字對比是 3.4:1，低於無障礙 AA 標準的 4.5:1。
 - 深色背景上的連結用比較淡的 #8fa6fd，確保讀得清楚。
 - 預設的深色主題原本帶上游的綠色調，現在背景改成中性灰（沿用 Zinc 的灰階），紅色也改用 Zinc 那組中性紅。其他深色主題（Zinc、Midnight、陶土、Ghostty）維持原樣。陶土原本叫 Claude，改名見第 22 節。
-- 品牌藍只寫在 `packages/app/src/styles/brand.ts`（`BRAND_BLUE`），主題的強調色直接引用它。
+- 品牌色是品牌設定的 `colors.primary`（第 27 節）。App 從 `packages/app/src/styles/brand.ts` 的 `BRAND_COLOR` 讀，主題的強調色直接引用它；深色背景的連結色是 `colors.accentOnDark`（`BRAND_COLOR_ON_DARK`）。
   主題清單裡代表預設深色主題的色塊（上游是綠色 #2D8B62）也引用它。選單上深色主題顯示的是月亮圖示，這個色塊目前沒有畫出來。
-- 下面兩個值沒辦法引用 `brand.ts`，改品牌藍時要一起改。上游兩處都是綠色 #20744A：
-  - Android 通知的強調色，通知的小圖示會染成這個顏色。寫在 `packages/app/app.config.js` 的 expo-notifications 外掛設定。
-  - 網頁版的鍵盤焦點框。桌面版載入的是同一份網頁，所以也一起改了。寫在 `packages/app/public/index.html` 的 `*:focus-visible`。
+- 另外兩處用到品牌色，上游都是綠色 #20744A：
+  - Android 通知的強調色，通知的小圖示會染成這個顏色。`packages/app/app.config.js` 的 expo-notifications 外掛設定從品牌設定讀。
+  - 網頁版的鍵盤焦點框。桌面版載入的是同一份網頁，所以也一起改了。寫在 `packages/app/public/index.html` 的 `*:focus-visible`，換品牌時由 `apply-brand.mjs` 寫入。
 - 有意義的綠色維持上游原樣，色值也跟品牌綠不同：成功狀態、diff 的新增行、健康檢查通過的執行中腳本、自動接受模式（快速模式是黃色、規劃模式是藍色）、終端機的 ANSI 綠。
 - logo 元件不管呼叫端傳什麼顏色，一律畫品牌藍，因為品牌標誌不應該跟著主題變色。
   - 啟動畫面也一樣。網頁版和桌面版的標誌是 CSS 遮罩，不經過 logo 元件（第 8 節），上游填的是主題的前景色，深色主題是白色、淺色主題是黑色。2026-10-05 起改成品牌藍，跟手機版一致。
@@ -1503,6 +1504,58 @@ node --test woowtech/*.test.mjs
 - 打包冒煙測試（Linux、Windows 在 afterPack，Mac 在 afterSign）跑的都是翻過 fuse 的執行檔。正式版仍要用 `npx @electron/fuses read --app <.app>` 確認一次。
 - Windows：electron-builder 26 會把 asar 雜湊寫進 Windows 執行檔，同一組 fuse 要在 Windows 上再驗一次。
 - 守門 `woowtech/desktop-fuses.test.mjs`：fuse 的設定、after-pack 在 Linux 啟動腳本之前翻、設定檔沒有 `electronFuses`、electron-builder 還有這兩個方法，以及 daemon 和 CLI 還用 Node 模式。等兩邊都不用了，就把 RunAsNode 關掉。
+
+### 27. 品牌層：渥屋智能和 Apporo smart 用同一份程式（2026-10-15）
+
+owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做法：同一份程式，建置時選品牌，不另開 fork。另開 fork 的代價見 aiot 的紀錄（文案走樣、修正要做兩次）。研究和決定在 `~/.local/share/woowtech-smart/team/apporo-smart-1015/`。
+
+- **品牌資料**：`woowtech/brands/<品牌>.json`，一個品牌一份，欄位一樣：
+  - 名稱、中文名、桌面版中文名
+  - 手機 App ID、Firebase 檔所在的資料夾
+  - scheme、CLI 指令、daemon 資料夾和 port
+  - 桌面版 appId、安裝檔前綴
+  - 版權和營運者
+  - 網站、隱私權政策、客服信箱、發佈 repo
+  - relay、推播中繼、AI 回報的網址
+  - 品牌色
+- **TypeScript 怎麼讀**：從 protocol 的品牌模組讀：
+  - `brand-name`、`brand-cli`、`brand-links`、`brand-relay`、`brand-pairing`
+  - `brand-daemon`（port、資料夾）、`brand-desktop`（appId、名稱、介面來源）、`brand-push`
+
+  這些模組讀 `packages/protocol/src/brand-values.ts`。那個檔是 `woowtech/tools/apply-brand.mjs` 從 JSON 產生的，repo 裡放的永遠是 woowtech 版。
+
+- **JS 設定檔怎麼讀**：`app.config.js`、iOS Firebase 外掛、桌面版打包腳本和守門經由 `woowtech/brands/index.cjs` 讀 JSON。它先從 `brand-values.ts` 認出目前套用哪個品牌，所以整個建置只有一個開關，App 和 daemon 不會是不同品牌。
+- **換品牌**：在發版樹跑 `node woowtech/tools/apply-brand.mjs apporo`，不要在要提交的 checkout 跑。它做三件事：
+  - 重新產生 `brand-values.ts`。
+  - 把品牌寫進讀不了常數的檔：`electron-builder.yml`（照欄位改，註解留著）、`bin/paseo`、`bin/paseo.cmd`、Mac 的中文麥克風說明、網頁殼的 `index.html` 和 `manifest.json`。清單在 `woowtech/brands/apply.mjs`。
+  - 回到渥屋：`git checkout .`。
+- **中文名**：Apporo smart 沒有中文名，中文介面也寫「Apporo smart」。`packages/app/src/i18n/product-name.ts` 處理名字兩旁的空格：
+  - 名字兩旁的空格，只有兩邊都是中文字時才拿掉。渥屋智能照舊緊貼中文；Apporo smart 跟中文之間留空格。
+  - fork 自己的文字（`woowtech-copy.ts`）用 `{productName}`（英文名）和 `{productNameZh}`（中文名）佔位，由 `woowtechCopyFor` 換成品牌的名字。
+  - 「Paseo Desktop」在中文寫成品牌設定的 `desktopNameZh`。
+- **守門**：
+  - `woowtech/brand-layer.test.mjs`：
+    - 兩份 JSON 欄位一致、格式對。
+    - 共存的值跟上游和彼此都不同。
+    - `brand-values.ts` 等於 JSON。
+    - 靜態檔帶著目前品牌的值。
+    - repo 是 woowtech。
+    - 出貨的原始碼裡沒有另一個品牌的字樣，Apporo 版裡不能有 woowtech、渥屋、woowtech.io、#6183fc，渥屋版裡不能有 Apporo。
+  - 其他守門的期望值都改成讀目前套用的品牌。
+  - Apporo 的發版樹套用之後，用 `WOOWTECH_BRAND=apporo` 跑全部守門。
+- **改品牌的值**：改 JSON，跑 `node woowtech/tools/apply-brand.mjs woowtech` 重產 `brand-values.ts`，再跑守門。
+- **不改的內部命名**：使用者看不到，改了只會讓上游合併一直衝突。包括 `woowtech-*.ts` 檔名、`WOOWTECH_*` 環境變數、i18n 的 `woowtech.*` key、`woowtechPush` 旗標、Firestore 集合和 Cloud Run 服務名。
+- **2026-10-15 改成讀品牌設定時，確認了渥屋版沒變**：
+  - App 十種語言的翻譯（`rebrandResources` 的輸出）逐字相同。
+  - `expo config` 的 production 和 development 兩種、public 和 prebuild 兩層都相同。
+  - `electron-builder.yml` 沒改。
+  - 守門 223 項全過。
+  - 相關的單元測試全過：protocol、CLI、桌面版、App、server，共 509 項。
+- **還沒做**：
+  - Apporo 的圖示和 logo 元件：`paseo-logo.tsx` 的路徑、`generate-icons.mjs` 仍是 WOOW 標誌。
+  - 線上服務：relay、推播中繼、AI 回報接收端，連同 Firebase 專案。
+  - 發版腳本的品牌參數。
+  - 只准同品牌配對。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 

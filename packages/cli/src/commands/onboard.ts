@@ -1,5 +1,7 @@
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { addLocalDaemonOptions } from "../utils/command-options.js";
 import { cancel, confirm, intro, isCancel, log, note, outro } from "@clack/prompts";
 import { Command, Option } from "commander";
@@ -117,9 +119,9 @@ function printNextSteps(pairingUrl: string | null, paseoHome: string, richUi: bo
   const daemonLogPath = path.join(paseoHome, "daemon.log");
   const nextStepsLines = [
     pairingUrl
-      ? "1. Open woowtech smart and scan the QR code above, or paste the pairing link."
-      : "1. Open woowtech smart and connect to your daemon.",
-    "2. Desktop app: https://github.com/WOOWTECH/woowtech-smart-releases/releases/latest",
+      ? `1. Open ${PRODUCT_NAME} and scan the QR code above, or paste the pairing link.`
+      : `1. Open ${PRODUCT_NAME} and connect to your daemon.`,
+    `2. Desktop app: ${BRAND_LINKS.latestRelease}`,
     `3. Docs: ${BRAND_LINKS.docs.home}`,
     `4. Example: ${CLI_COMMAND} run --home ${JSON.stringify(paseoHome)} --output-schema schema.json "extract fields"`,
   ];
@@ -153,7 +155,7 @@ export function onboardCommand(): Command {
   return addLocalDaemonOptions(new Command("onboard"))
     .description("Run first-time setup, start daemon, and print pairing instructions")
     .option("--listen <listen>", "Listen target (host:port, port, or unix socket path)")
-    .option("--port <port>", "Port to listen on (default: 6770)")
+    .option("--port <port>", `Port to listen on (default: ${DEFAULT_DAEMON_PORT})`)
     .option("--relay", "Enable relay connection without prompting")
     .option("--no-relay", "Disable relay connection")
     .option("--no-mcp", "Disable the Agent MCP HTTP endpoint")
@@ -234,7 +236,7 @@ function persistSetupChoices(paseoHome: string, options: OnboardOptions): void {
 export async function runOnboard(options: OnboardOptions): Promise<void> {
   const richUi = process.stdin.isTTY && process.stdout.isTTY;
   if (richUi) {
-    intro("Welcome to woowtech smart");
+    intro(`Welcome to ${PRODUCT_NAME}`);
   }
 
   if (options.listen && options.port) {
@@ -276,7 +278,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   if (options.relay === false) {
     log.message("Relay pairing skipped because --no-relay was provided.");
     printNextSteps(null, paseoHome, richUi);
-    if (richUi) outro("woowtech smart daemon is running.");
+    if (richUi) outro(`${PRODUCT_NAME} daemon is running.`);
     return;
   }
 
@@ -290,7 +292,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
     if (!shouldEnable) {
       printDirectConnectionGuidance();
       printNextSteps(null, paseoHome, richUi);
-      if (richUi) outro("woowtech smart daemon is running.");
+      if (richUi) outro(`${PRODUCT_NAME} daemon is running.`);
       return;
     }
     pairing = await resolveLocalPairingOffer({ paseoHome, enableRelay: true });
@@ -301,7 +303,7 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
     log.warn("Relay pairing URL is unavailable for this daemon configuration.");
     printNextSteps(null, paseoHome, richUi);
     if (richUi) {
-      outro("woowtech smart daemon is running.");
+      outro(`${PRODUCT_NAME} daemon is running.`);
     }
     return;
   }
@@ -315,6 +317,6 @@ export async function runOnboard(options: OnboardOptions): Promise<void> {
   );
   printNextSteps(pairing.url, paseoHome, richUi);
   if (richUi) {
-    outro("woowtech smart is ready!");
+    outro(`${PRODUCT_NAME} is ready!`);
   }
 }

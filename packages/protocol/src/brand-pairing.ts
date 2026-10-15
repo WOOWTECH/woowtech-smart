@@ -1,10 +1,12 @@
-// Where woowtech smart's pairing links and QR codes send people: straight into the
-// app, through the link scheme packages/app/app.config.js registers (owner decision
+// Where pairing links and QR codes send people: straight into the brand's app,
+// through the link scheme packages/app/app.config.js registers (owner decision
 // 直接叫起 App). Upstream's open its hosted web app instead. The daemon writes this
 // into new homes as app.baseUrl and falls back to it, and the app shows it as the
-// example pairing link.
+// example pairing link. Each brand has its own scheme, so a phone with both apps
+// opens the one the daemon belongs to.
+import { BRAND } from "./brand-values.js";
 
-const APP_LINK_SCHEME = "woowtech-smart";
+const APP_LINK_SCHEME = BRAND.scheme;
 
 // The app's root URL, the one Expo Router opens on a plain launch
 // (Linking.createURL("/")). Expo Router routes a custom-scheme link by its host and

@@ -1,7 +1,7 @@
 import React from "react";
 import Svg, { Path } from "react-native-svg";
 
-import { BRAND_BLUE } from "@/styles/brand";
+import { BRAND_COLOR } from "@/styles/brand";
 
 interface PaseoLogoProps {
   size?: number;
@@ -34,7 +34,7 @@ export function PaseoLogo({ size = 64 }: PaseoLogoProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 105.2 83.4" fill="none">
       {SYMBOL_STROKES.map((stroke) => (
-        <Path key={stroke} d={stroke} fill={BRAND_BLUE} />
+        <Path key={stroke} d={stroke} fill={BRAND_COLOR} />
       ))}
     </Svg>
   );

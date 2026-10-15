@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { Command } from "commander";
 import type { CommandOptions, OutputSchema, SingleResult } from "../../output/index.js";
 import { withOutput } from "../../output/index.js";
@@ -35,7 +36,7 @@ const heartbeatDeleteSchema: OutputSchema<HeartbeatDeleteRow> = {
 function requireCallerAgentId(): string {
   const agentId = process.env.PASEO_AGENT_ID?.trim();
   if (!agentId) {
-    throw new Error("Heartbeat commands must run inside a woowtech smart agent");
+    throw new Error(`Heartbeat commands must run inside a ${PRODUCT_NAME} agent`);
   }
   return agentId;
 }

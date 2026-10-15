@@ -1,3 +1,5 @@
+import { AGENT_DEEP_LINK_SCHEME } from "@getpaseo/protocol/agent-deep-link";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { ServerInfoStatusPayload } from "@getpaseo/protocol/messages";
 import type { HostRuntimeSnapshot } from "@/runtime/host-runtime";
 import type { HostConnection, HostProfile } from "@/types/host-connection";
@@ -22,7 +24,7 @@ export function formatAppDiagnosticHeader(input: {
   isDesktopApp: boolean;
   hostCount: number;
 }): string {
-  return formatDiagnosticSection("woowtech smart app diagnostics", [
+  return formatDiagnosticSection(`${PRODUCT_NAME} app diagnostics`, [
     { label: "Collected at", value: new Date().toISOString() },
     { label: "App version", value: input.appVersion ?? "unknown" },
     { label: "Platform", value: input.platform },
@@ -105,13 +107,17 @@ export function describeConnectionKind(type: HostConnection["type"] | string): s
   }
 }
 
+// Pairing and agent links in the brand's scheme or upstream's carry keys; the brand checks keep
+// the scheme to letters, digits and hyphens, so it reads literally in the pattern.
+const APP_LINK = new RegExp(`(${AGENT_DEEP_LINK_SCHEME}|paseo):\\/\\/\\S+`, "gi");
+
 export function redactAppDiagnosticReport(report: string, hosts: HostProfile[]): string {
   let redacted = report;
   for (const value of collectSensitiveHostValues(hosts)) {
     redacted = redacted.split(value).join("[redacted]");
   }
   return redacted
-    .replace(/(woowtech-smart|paseo):\/\/\S+/gi, "$1://[redacted]")
+    .replace(APP_LINK, "$1://[redacted]")
     .replace(
       /([?&](?:password|token|secret|key|publicKey|daemonPublicKeyB64)=)[^&\s"']+/gi,
       "$1[redacted]",

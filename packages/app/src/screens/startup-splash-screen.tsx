@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { getDesktopDaemonLogs, type DesktopDaemonLogs } from "@/desktop/daemon/desktop-daemon";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { isNative, isWeb } from "@/constants/platform";
-import { BRAND_BLUE } from "@/styles/brand";
+import { BRAND_COLOR } from "@/styles/brand";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 
 interface StartupSplashScreenProps {
@@ -85,10 +85,10 @@ function ensureWebSplashShimmerKeyframes() {
 // every theme (README section 9). PaseoLogo already ignores the color on native.
 function LogoShimmer() {
   if (isWeb) {
-    return <WebLogoShimmer color={BRAND_BLUE} />;
+    return <WebLogoShimmer color={BRAND_COLOR} />;
   }
 
-  return <NativeLogoShimmer color={BRAND_BLUE} />;
+  return <NativeLogoShimmer color={BRAND_COLOR} />;
 }
 
 function WebLogoShimmer({ color }: { color: string }) {

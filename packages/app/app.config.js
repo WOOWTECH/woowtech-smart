@@ -8,6 +8,9 @@ const withPasteInput = require("./plugins/with-paste-input");
 const withWoowtechPush = require("./plugins/with-woowtech-push");
 const { iosGoogleServiceInfoPlist } = require("./plugins/woowtech-ios-firebase");
 const { getNativeReleaseVersion } = require("./native-release-version");
+// The brand this checkout builds (woowtech/brands): woowtech smart unless a release tree applied
+// another one with woowtech/tools/apply-brand.mjs.
+const brand = require("../../woowtech/brands/index.cjs").appliedBrand();
 const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
@@ -15,8 +18,8 @@ const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
 // Keep CFBundleName independent of Expo's sanitized PRODUCT_NAME. The home-screen
 // display name is CFBundleDisplayName; setting this short name does not guarantee
 // the icon label's spacing or truncation. Debug and Release labels still need validation.
-const shortName = "woowtech smart";
-const chineseShortName = "渥屋智能";
+const shortName = brand.name;
+const chineseShortName = brand.nameZh;
 
 // woowtech smart: the purpose strings iOS shows when it asks for each permission, in the phone's
 // language. The local network one shows when the app first connects to a host at a LAN address.
@@ -77,7 +80,7 @@ const buildProfile = isFdroidBuild
           "expo-notifications",
           {
             icon: "./assets/images/notification-icon.png",
-            color: "#6183fc",
+            color: brand.colors.primary,
             // woowtech smart: FCM's default channel in the Android manifest, where a push naming a
             // channel the phone lacks lands instead of FCM's "Miscellaneous" (woowtech/README.md, 16).
             defaultChannel: "agent-finished",
@@ -100,31 +103,35 @@ function resolveSecretFile(params) {
   return undefined;
 }
 
+// Each brand's Firebase files sit in its own folder (woowtech's in .secrets, Apporo's in
+// .secrets/apporo), so a build never falls back to another brand's project.
+const secretsDir = `./${brand.mobileSecretsDir}`;
+
 const variants = {
   production: {
-    name: "woowtech smart",
-    chineseName: "渥屋智能",
-    packageId: "io.woowtech.smart",
+    name: brand.name,
+    chineseName: brand.nameZh,
+    packageId: brand.mobileAppId,
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_PROD",
-      fallbackRelativePath: "./.secrets/google-services.prod.json",
+      fallbackRelativePath: `${secretsDir}/google-services.prod.json`,
     }),
     googleServiceInfoPlist: resolveSecretFile({
       envKey: "GOOGLE_SERVICE_INFO_PLIST_PROD",
-      fallbackRelativePath: "./.secrets/GoogleService-Info.prod.plist",
+      fallbackRelativePath: `${secretsDir}/GoogleService-Info.prod.plist`,
     }),
   },
   development: {
-    name: "woowtech smart Debug",
-    chineseName: "渥屋智能 Debug",
-    packageId: "io.woowtech.smart.debug",
+    name: `${brand.name}${brand.debugSuffix}`,
+    chineseName: `${brand.nameZh}${brand.debugSuffix}`,
+    packageId: brand.mobileAppIdDebug,
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_DEBUG",
-      fallbackRelativePath: "./.secrets/google-services.debug.json",
+      fallbackRelativePath: `${secretsDir}/google-services.debug.json`,
     }),
     googleServiceInfoPlist: resolveSecretFile({
       envKey: "GOOGLE_SERVICE_INFO_PLIST_DEBUG",
-      fallbackRelativePath: "./.secrets/GoogleService-Info.debug.plist",
+      fallbackRelativePath: `${secretsDir}/GoogleService-Info.debug.plist`,
     }),
   },
 };
@@ -156,7 +163,7 @@ export default {
     version: nativeReleaseVersion.appVersion,
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "woowtech-smart",
+    scheme: brand.scheme,
     // Chinese launchers show the Chinese name.
     locales: {
       "zh-Hans": chineseLocale("zh-Hans"),

@@ -1,0 +1,40 @@
+{
+  "id": "apporo",
+  "name": "Apporo smart",
+  "nameZh": "Apporo smart",
+  "desktopNameZh": "Apporo smart 桌面版",
+  "debugSuffix": " Debug",
+  "mobileAppId": "com.apporo.smart",
+  "mobileAppIdDebug": "com.apporo.smart.debug",
+  "mobileSecretsDir": ".secrets/apporo",
+  "scheme": "apporosmart",
+  "cliCommand": "apporo-smart",
+  "homeDir": "~/.apporo-smart",
+  "defaultPort": 6772,
+  "desktop": {
+    "appId": "com.apporo.smart.desktop",
+    "artifactPrefix": "apporo-smart",
+    "linuxMaintainer": "APPORO UNION INC. <info@apporo.ai>",
+    "linuxVendor": "APPORO UNION INC."
+  },
+  "company": {
+    "operator": "Apporo",
+    "copyright": "© 2026 APPORO UNION INC."
+  },
+  "links": {
+    "websiteHost": "www.apporo.ai",
+    "privacyPolicy": "https://www.apporo.ai/smart-privacy-en",
+    "privacyPolicyZh": "https://www.apporo.ai/smart-privacy",
+    "supportEmail": "info@apporo.ai",
+    "releasesRepo": "WOOWTECH/apporo-smart-releases"
+  },
+  "services": {
+    "relayHost": "relay.apporo.ai",
+    "pushRelayUrl": "https://push.apporo.ai/api/smart/v1/notify",
+    "aiContentReportUrl": "https://reports.apporo.ai/v1/ai-content-reports"
+  },
+  "colors": {
+    "primary": "#8B6B24",
+    "accentOnDark": "#C49E53"
+  }
+}

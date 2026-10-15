@@ -16,26 +16,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CLI_COMMAND, withCliCommand } from "../../packages/protocol/src/brand-cli.ts";
+import {
+  DEFAULT_DAEMON_HOME,
+  DEFAULT_DAEMON_PORT,
+} from "../../packages/protocol/src/brand-daemon.ts";
 import { BRAND_LINKS } from "../../packages/protocol/src/brand-links.ts";
+import { BRAND_OPERATOR, PRODUCT_NAME } from "../../packages/protocol/src/brand-name.ts";
 import { BRAND_RELAY } from "../../packages/protocol/src/brand-relay.ts";
 import { brandSkillName } from "../../packages/protocol/src/brand-skills.ts";
-import { DEFAULT_PASEO_HOME } from "../../packages/server/src/server/paseo-home.ts";
 import { createSkillRewriter } from "./skill-rewrites.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const upstreamDir = path.join(repoRoot, "skills");
 const outputDir = path.join(repoRoot, "woowtech", "skills");
 const oxfmt = path.join(repoRoot, "node_modules", ".bin", "oxfmt");
-// The desktop app's name, which also names its .app bundle and log folders.
-const PRODUCT_NAME = "woowtech smart";
-
-/** The daemon's default port, as packages/server/src/server/config.ts sets it. */
-function daemonPort() {
-  const config = readFileSync(path.join(repoRoot, "packages/server/src/server/config.ts"), "utf8");
-  const match = /^const DEFAULT_PORT = (\d+);$/m.exec(config);
-  if (!match) throw new Error("DEFAULT_PORT not found in packages/server/src/server/config.ts");
-  return match[1];
-}
 
 /** Every file under `dir`, as sorted paths relative to it. */
 function listFiles(dir) {
@@ -68,8 +62,9 @@ function generate() {
     withCliCommand,
     brandSkillName,
     links: BRAND_LINKS,
-    daemonHome: DEFAULT_PASEO_HOME,
-    port: daemonPort(),
+    daemonHome: DEFAULT_DAEMON_HOME,
+    operator: BRAND_OPERATOR,
+    port: String(DEFAULT_DAEMON_PORT),
     productName: PRODUCT_NAME,
     relayHost: BRAND_RELAY.host,
     upstreamSkills,
