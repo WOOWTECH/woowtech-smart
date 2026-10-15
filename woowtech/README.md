@@ -1562,10 +1562,15 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
   - Apporo 的 24 個圖示在 `woowtech/brands/apporo/assets/`，由 `generate-icons.mjs --brand apporo` 產生。
 - **Apporo 的 relay 設定**：`packages/relay/wrangler.apporo.toml`（`relay.apporo.ai`），還沒部署；apporo.ai 的 DNS 在客戶的 Cloudflare 帳號，第一次部署前要填 `account_id`。
 - **2026-10-15 在 Apporo 套用後的暫存樹跑全部守門**：除了一項要 git 歷史的（暫存樹沒有），全過。
+- **只准同品牌配對**（owner 2026-10-15）：每個品牌的推播中繼只送得到自己 Firebase 專案的 App，跨品牌配對的手機永遠收不到通知，所以不讓它配。寫在 `packages/protocol/src/brand-match.ts`：
+  - daemon 在 `server_info` 帶 `brand`（id 和名稱）；用戶端在 `hello` 帶 `brand`（id）。兩個欄位都是選填，舊版看不到也不影響。
+  - 用戶端（App、CLI、桌面版）遇到不同品牌的 daemon 就斷線，錯誤寫「This computer runs ○○. Pair it with the ○○ app …」，之後照常重試。
+  - daemon 只擋 App（`mobile`、`browser`），因為推播 token 在 App 手上；CLI、MCP、Hub、外掛照舊。擋的時候先送一個只有品牌的 `server_info`，再用 4004 關閉：經過 relay 時，關閉的原因傳不到 App，App 要靠 `server_info` 才說得出是哪個品牌。
+  - 沒帶品牌的 daemon 和 App（0.8.2 以前）一律當成渥屋智能。所以渥屋智能照舊能配上游 Paseo；Apporo smart 的 daemon 會擋掉舊版渥屋智能 App。
+  - 測試：`packages/server/src/server/websocket-server.brand.test.ts`、`packages/client/src/daemon-client.test.ts` 的品牌兩項。
 - **還沒做**：
   - 線上服務：relay 的部署、推播中繼、AI 回報接收端，連同 Firebase 專案。
   - 發版腳本的品牌參數。
-  - 只准同品牌配對。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
