@@ -16,7 +16,7 @@ import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { BookOpen, Copy, RotateCw, TriangleAlert } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { PaseoLogo, woowSymbolMaskSvg } from "@/components/icons/paseo-logo";
+import { PaseoLogo, brandBadgeSvg, woowSymbolMaskSvg } from "@/components/icons/paseo-logo";
 import { Button } from "@/components/ui/button";
 import { getDesktopDaemonLogs, type DesktopDaemonLogs } from "@/desktop/daemon/desktop-daemon";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
@@ -96,6 +96,7 @@ function WebLogoShimmer({ color }: { color: string }) {
     ensureWebSplashShimmerKeyframes();
   }, []);
 
+  const badge = brandBadgeSvg(LOGO_SIZE);
   const shimmerStyle = useMemo(
     () => ({
       width: LOGO_SIZE,
@@ -105,16 +106,39 @@ function WebLogoShimmer({ color }: { color: string }) {
       WebkitMaskSize: "contain",
       WebkitMaskRepeat: "no-repeat",
       WebkitMaskPosition: "center",
-      background: `linear-gradient(90deg, ${color} 0%, ${color}88 40%, ${color}FF 50%, ${color}88 60%, ${color} 100%)`,
+      // A badge (Apporo smart) keeps its own colors under a white shimmer, as the native splash
+      // draws it; a plain mark is drawn in the logo color, the shimmer a brighter step of it.
+      background: badge
+        ? "linear-gradient(90deg, #FFFFFF00 0%, #FFFFFF00 40%, #FFFFFF66 50%, #FFFFFF00 60%, #FFFFFF00 100%)"
+        : `linear-gradient(90deg, ${color} 0%, ${color}88 40%, ${color}FF 50%, ${color}88 60%, ${color} 100%)`,
       backgroundSize: `${LOGO_SIZE + SHIMMER_PEAK_WIDTH * 2}px ${LOGO_SIZE}px`,
       animationName: WEB_SPLASH_SHIMMER_ANIMATION_NAME,
       animationDuration: `${SHIMMER_DURATION_MS}ms`,
       animationTimingFunction: "linear",
       animationIterationCount: "infinite",
     }),
-    [color],
+    [badge, color],
+  );
+  const badgeStyle = useMemo(
+    () =>
+      badge
+        ? {
+            width: LOGO_SIZE,
+            height: LOGO_SIZE,
+            backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(badge)}")`,
+            backgroundSize: "contain",
+          }
+        : null,
+    [badge],
   );
 
+  if (badgeStyle) {
+    return (
+      <View style={badgeStyle as never}>
+        <View style={shimmerStyle as never} />
+      </View>
+    );
+  }
   return <View style={shimmerStyle as never} />;
 }
 

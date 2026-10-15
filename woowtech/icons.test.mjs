@@ -250,6 +250,10 @@ test("the app's logo component draws the brand's logo", () => {
   assert.match(component, /const VIEW_BOX = BRAND\.logo\.viewBox;/);
   assert.match(component, /<Svg width=\{size\} height=\{size\} viewBox=\{VIEW_BOX\}/);
   assert.match(component, /fill=\{BRAND_LOGO_COLOR\}/);
+  // The badge (Apporo smart): the mark in its tile color inside a white disc with the ring.
+  assert.match(component, /const LOGO_STYLE: "mark" \| "badge" = BRAND\.logo\.style;/);
+  assert.match(component, /stroke=\{BRAND\.logo\.badgeRing\}/);
+  assert.match(component, /fill=\{BRAND\.logo\.tileColor\}/);
 });
 
 test("the startup splash draws the logo in the brand's logo color", () => {

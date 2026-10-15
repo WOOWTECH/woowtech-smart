@@ -51,7 +51,16 @@
       "M 52.528 83.346 L 52.505 41.684 L 57.849 41.682 L 57.872 83.342 Z",
       "M 105.129 83.345 L 99.785 83.345 L 99.785 41.683 L 105.129 41.683 Z"
     ],
+    "style": "mark",
     "color": "#6183fc",
-    "tileColor": "#6183fc"
+    "tileColor": "#6183fc",
+    "badgeRing": "#e3e6ee",
+    "markWidths": {
+      "appIcon": 62,
+      "pwaTile": 62,
+      "desktopTile": 58,
+      "androidForeground": 40,
+      "badge": 60
+    }
   }
 }

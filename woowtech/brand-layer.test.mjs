@@ -112,9 +112,27 @@ test("brand values have the shapes the code relies on", () => {
     ]) {
       assert.ok(url.startsWith("https://"), `${brand.id}: ${url}`);
     }
-    for (const color of Object.values(brand.colors)) {
+    const { logo } = brand;
+    for (const color of [
+      ...Object.values(brand.colors),
+      logo.color,
+      logo.tileColor,
+      logo.badgeRing,
+    ]) {
       assert.match(color, /^#[0-9a-fA-F]{6}$/, `${brand.id}: color ${color}`);
     }
+    assert.ok(["mark", "badge"].includes(logo.style), `${brand.id}: logo.style`);
+    assert.equal(logo.viewBox.split(/\s+/).map(Number).filter(Number.isFinite).length, 4);
+    assert.ok(
+      logo.paths.every((d) => /^M\s*-?\d/.test(d)),
+      `${brand.id}: logo.paths`,
+    );
+    for (const [kind, width] of Object.entries(logo.markWidths)) {
+      assert.ok(width > 0 && width <= 100, `${brand.id}: markWidths.${kind}`);
+    }
+    // Android masks the adaptive icon to a circle 66% of the canvas wide; a mark wider than about
+    // half the canvas loses its corners.
+    assert.ok(logo.markWidths.androidForeground <= 48, `${brand.id}: Android foreground too wide`);
   }
 });
 

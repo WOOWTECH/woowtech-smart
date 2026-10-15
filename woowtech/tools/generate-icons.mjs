@@ -60,6 +60,11 @@ function logoFile(name, fill) {
 const TILE_SYMBOL = logoFile("logo-tile", brand.logo.tileColor);
 const CLEAR_SYMBOL = logoFile("logo-clear", brand.logo.color);
 const WHITE_SYMBOL = logoFile("logo-white", "#ffffff");
+// How wide the mark is in each kind of icon, in percent of the canvas.
+const WIDTH = brand.logo.markWidths;
+// Apporo smart draws its logo on the app's own background as a badge: its grey mark inside a
+// white disc with a light ring. woowtech smart draws its bare symbol there.
+const BADGE = brand.logo.style === "badge";
 
 // --- compositions (CSS on a MASTER-sized transparent canvas) -----------------
 
@@ -86,6 +91,22 @@ function clear({ glyph, glyphWidth, dot }) {
   return page(`${symbol(glyph, glyphWidth)}${statusDot(dot)}`);
 }
 
+/** The brand's badge: a white disc `diameter` percent of the canvas wide, the mark inside it. */
+function badge({ diameter, dot }) {
+  const size = (MASTER * diameter) / 100;
+  const ring = Math.round(size * 0.03);
+  return page(
+    `<div style="position:absolute;left:50%;top:50%;width:${size}px;height:${size}px;transform:translate(-50%,-50%);border-radius:50%;background:#ffffff;box-shadow:inset 0 0 0 ${ring}px ${brand.logo.badgeRing}">${symbol(TILE_SYMBOL, WIDTH.badge)}</div>${statusDot(dot)}`,
+  );
+}
+
+/** The logo on a transparent canvas: the brand's badge, or its bare symbol. */
+function onOwnBackground({ glyphWidth, badgeDiameter, dot }) {
+  return BADGE
+    ? badge({ diameter: badgeDiameter, dot })
+    : clear({ glyph: CLEAR_SYMBOL, glyphWidth, dot });
+}
+
 /** A square tile, inset from the canvas edge, holding a centered symbol. */
 function tile({ inset, radius, fill, border, shadow = "none", glyph, glyphWidth, dot }) {
   const size = MASTER - inset * 2;
@@ -101,10 +122,10 @@ function tile({ inset, radius, fill, border, shadow = "none", glyph, glyphWidth,
 const compositions = {
   // Full-bleed square: the launcher (iOS, Android legacy) applies its own mask.
   fullBleed: page(
-    `<div style="position:absolute;inset:0;background:#ffffff">${symbol(TILE_SYMBOL, 62)}</div>`,
+    `<div style="position:absolute;inset:0;background:#ffffff">${symbol(TILE_SYMBOL, WIDTH.appIcon)}</div>`,
   ),
   // Android adaptive icon foreground: the symbol inside the 66% safe zone.
-  androidForeground: page(symbol(TILE_SYMBOL, 40)),
+  androidForeground: page(symbol(TILE_SYMBOL, WIDTH.androidForeground)),
   // Android notification icons are drawn as a white silhouette.
   notification: page(symbol(WHITE_SYMBOL, 84)),
   tile: tile({
@@ -113,20 +134,22 @@ const compositions = {
     fill: "#ffffff",
     border: TILE_BORDER,
     glyph: TILE_SYMBOL,
-    glyphWidth: 62,
+    glyphWidth: WIDTH.pwaTile,
   }),
   // Android 12+ draws the splash icon inside a circle two thirds of the canvas wide, so the
-  // symbol (105.2 x 83.4) is 50% wide: its diagonal, 64%, stays inside the circle.
-  splash: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 50 }),
-  // Favicons show at 16-32px, so the symbol fills almost the whole canvas.
-  favicon: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 92 }),
-  faviconRunning: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 92, dot: RUNNING_DOT }),
-  faviconAttention: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 92, dot: ATTENTION_DOT }),
+  // WOOW symbol (105.2 x 83.4) is 50% wide: its diagonal, 64%, stays inside the circle. A badge
+  // is 64% wide, inside the same circle.
+  splash: onOwnBackground({ glyphWidth: 50, badgeDiameter: 64 }),
+  // Favicons show at 16-32px, so the logo fills almost the whole canvas. A badge is 70% wide, so
+  // its disc and the status dot together cover less than half of it.
+  favicon: onOwnBackground({ glyphWidth: 92, badgeDiameter: 70 }),
+  faviconRunning: onOwnBackground({ glyphWidth: 92, badgeDiameter: 70, dot: RUNNING_DOT }),
+  faviconAttention: onOwnBackground({ glyphWidth: 92, badgeDiameter: 70, dot: ATTENTION_DOT }),
   // iOS 18 dark app icon: the system draws the background, the icon gives the symbol at the
   // size of the light icon's. No tinted icon: prebuild flattens it onto white (withIosIcons).
-  iosDark: clear({ glyph: CLEAR_SYMBOL, glyphWidth: 62 }),
+  iosDark: clear({ glyph: CLEAR_SYMBOL, glyphWidth: WIDTH.appIcon }),
   // Android 13+ themed icon: a silhouette with the adaptive foreground's geometry.
-  androidMonochrome: clear({ glyph: WHITE_SYMBOL, glyphWidth: 40 }),
+  androidMonochrome: clear({ glyph: WHITE_SYMBOL, glyphWidth: WIDTH.androidForeground }),
   // macOS icon grid: an 824px tile inside the 1024px canvas, with a soft shadow.
   desktop: tile({
     inset: 100,
@@ -135,7 +158,7 @@ const compositions = {
     border: TILE_BORDER,
     shadow: "0 10px 22px rgba(26,29,41,0.18)",
     glyph: TILE_SYMBOL,
-    glyphWidth: 58,
+    glyphWidth: WIDTH.desktopTile,
   }),
   desktopDev: tile({
     inset: 100,
@@ -143,7 +166,7 @@ const compositions = {
     fill: brand.colors.primary,
     shadow: "0 10px 22px rgba(26,29,41,0.18)",
     glyph: WHITE_SYMBOL,
-    glyphWidth: 58,
+    glyphWidth: WIDTH.desktopTile,
   }),
 };
 

@@ -1554,9 +1554,11 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
   - `electron-builder.yml` 沒改。
   - 守門 223 項全過。
   - 相關的單元測試全過：protocol、CLI、桌面版、App、server，共 509 項。
-- **Logo 和圖示**：品牌設定的 `logo` 有路徑、viewBox 和兩個顏色：
-  - `tileColor`：App 圖示白底上的標誌。渥屋是品牌藍；Apporo 照它其他 App 的慣例，用灰色標誌。
-  - `color`：App 裡的 logo，以及透明背景上的標誌（啟動畫面、favicon、iOS 深色圖示）。Apporo 用金色 `#8B6B24`，因為灰色在深色背景上看不清楚。
+- **Logo 和圖示**：品牌設定的 `logo` 有路徑、viewBox、樣式、顏色和各種圖示裡標誌的寬度（`markWidths`）。
+  - `style`：渥屋是 `mark`，App 裡和透明背景上畫裸的標誌。Apporo 是 `badge`：白色圓盤加淺灰外框，裡面是灰色標誌，跟 Apporo platform 一樣（owner 2026-10-15，沿用 10/8 的「Logo都要是圓型外框」）。App 裡的 logo、啟動畫面和 favicon 都用徽章。
+  - `tileColor`：App 圖示白底上的標誌顏色，也是徽章裡的標誌顏色。渥屋是品牌藍；Apporo 照它其他 App 的慣例，用灰色。
+  - `color`：裸標誌的顏色（渥屋的 App 內 logo，以及 iOS 深色圖示）。Apporo 是金色 `#8B6B24`，灰色在深色背景上看不清楚。
+  - `markWidths`：App 圖示裡標誌佔多寬。Apporo 跟它其他 App 一樣幾乎填滿（92%），渥屋是 62%（owner 2026-10-15）。
   - Apporo 的 24 個圖示在 `woowtech/brands/apporo/assets/`，由 `generate-icons.mjs --brand apporo` 產生。
 - **Apporo 的 relay 設定**：`packages/relay/wrangler.apporo.toml`（`relay.apporo.ai`），還沒部署；apporo.ai 的 DNS 在客戶的 Cloudflare 帳號，第一次部署前要填 `account_id`。
 - **2026-10-15 在 Apporo 套用後的暫存樹跑全部守門**：除了一項要 git 歷史的（暫存樹沒有），全過。
