@@ -765,12 +765,15 @@ test("--brand=apporo deploys Apporo smart's receiver in its own project, region 
 
   assert.ok(output.includes("Apporo smart AI content report receiver: deployment plan"), output);
   assert.ok(output.includes("the account that holds the apporo.ai zone"), output);
-  assert.ok(output.includes("custom domain reports.apporo.ai"), output);
+  assert.ok(output.includes("the route www.apporo.ai/api/smart/v1/ai-content-reports"), output);
+  assert.ok(output.includes("rate limiting rule on that path, never the whole host"), output);
+  assert.ok(output.includes("runs on the account's plan, as Apporo aiot's Worker does"), output);
   assert.ok(
     output.includes("deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc"),
     output,
   );
-  assert.ok(output.includes("PUBLIC_HOST=reports.apporo.ai"), output);
+  assert.ok(output.includes("PUBLIC_HOST=www.apporo.ai"), output);
+  assert.ok(output.includes("PUBLIC_PATH=/api/smart/v1/ai-content-reports"), output);
   assert.ok(output.includes("ALLOWED_ORIGINS=apporosmart://app"), output);
   assert.ok(!output.includes("woowtech.io"), output);
 });

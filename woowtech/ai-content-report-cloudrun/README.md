@@ -27,7 +27,7 @@ App ─HTTPS─▶ Cloudflare Worker（reports.woowtech.io）─加上 edge key�
 | `deploy/woowtech-smart-reports-deploy.sh`                       | 部署腳本（預設只印計畫）；`rollback` 印出移除指令        |
 | `deploy/smart-reports-alert-policy.json`                        | 警示政策範本，腳本填入產品名、專案和通知管道後建立       |
 | `deploy/cloudflare-worker-smart-reports.js`、`….wrangler.jsonc` | Worker 與它的 wrangler 設定                              |
-| `deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc`  | Apporo smart 的 Worker 設定（reports.apporo.ai）         |
+| `deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc`  | Apporo smart 的 Worker 設定（www.apporo.ai 上一條路由）  |
 
 ## 資料與保存
 
@@ -60,12 +60,12 @@ cd woowtech/ai-content-report-cloudrun
 
 - 每個品牌各有一套，`--brand=` 選（預設 woowtech）：
 
-  | 品牌     | GCP 專案           | 區域       | Worker 網域           | Cloudflare 帳號     |
-  | -------- | ------------------ | ---------- | --------------------- | ------------------- |
-  | woowtech | `woowtech-smart`   | asia-east1 | `reports.woowtech.io` | WOOW 的             |
-  | apporo   | `apporo-smart-app` | us-west1   | `reports.apporo.ai`   | 客戶的（apporo.ai） |
+  | 品牌     | GCP 專案           | 區域       | App 送到                                                                    | Cloudflare                 |
+  | -------- | ------------------ | ---------- | --------------------------------------------------------------------------- | -------------------------- |
+  | woowtech | `woowtech-smart`   | asia-east1 | `https://reports.woowtech.io/v1/ai-content-reports`（自訂網域）             | WOOW 的帳號，Workers Paid  |
+  | apporo   | `apporo-smart-app` | us-west1   | `https://www.apporo.ai/api/smart/v1/ai-content-reports`（官網上的一條路由） | 客戶的帳號，用它現有的方案 |
 
-  兩個品牌用同一份 Worker 程式。Apporo 的 Worker 要多兩個文字變數 `PUBLIC_HOST`、`ALLOWED_ORIGINS`，`….apporo.wrangler.jsonc` 已經寫好；網域和 App 的回報網址由測試對照 `woowtech/brands/<id>.json`。警示信一律寄渥屋（owner 2026-10-15）。
+  兩個品牌用同一份 Worker 程式。Apporo 照 Apporo aiot 的做法（owner 2026-10-15：「跟 aiot／platform 一致」）：不開子網域，只在官網 www.apporo.ai 掛一條精確路徑。這條比 aiot 的 `www.apporo.ai/api/*` 更精確，Cloudflare 會把它交給這個 Worker，其他 `/api/` 照舊給 aiot。路由絕不能用萬用字元，不然整個官網都會被接走。Worker 多三個文字變數 `PUBLIC_HOST`、`PUBLIC_PATH`、`ALLOWED_ORIGINS`，`….apporo.wrangler.jsonc` 已經寫好；網址和 App 的回報網址由測試對照 `woowtech/brands/<id>.json`。警示信一律寄渥屋。
 
 - 要在乾淨、已提交的 checkout 上執行（映像檔標籤是 commit）；用專案擁有者的帳號登入 gcloud；`alert` 步驟要 `gcloud beta`（Cloud Shell 有；別處先 `gcloud components install beta`）。
 - 可重複執行：已存在的不重建，edge key 永遠不重生、不印出。

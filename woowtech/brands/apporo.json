@@ -30,8 +30,8 @@
   },
   "services": {
     "relayHost": "relay.apporo.ai",
-    "pushRelayUrl": "https://push.apporo.ai/api/smart/v1/notify",
-    "aiContentReportUrl": "https://reports.apporo.ai/v1/ai-content-reports"
+    "pushRelayUrl": "https://www.apporo.ai/api/smart/v1/notify",
+    "aiContentReportUrl": "https://www.apporo.ai/api/smart/v1/ai-content-reports"
   },
   "colors": {
     "primary": "#8B6B24",

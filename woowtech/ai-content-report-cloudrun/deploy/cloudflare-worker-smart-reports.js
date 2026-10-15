@@ -1,10 +1,11 @@
 // Cloudflare Worker `smart-reports-proxy` for reports.woowtech.io: the only public way into the
 // AI content report receiver (Cloud Run service smart-reports, project woowtech-smart). It is
 // smart-push-proxy (push.woowtech.io) with another path, another size limit and CORS for the
-// desktop App. Apporo smart runs the same file as reports.apporo.ai, in the Cloudflare account
-// that holds apporo.ai (cloudflare-worker-smart-reports.apporo.wrangler.jsonc).
+// desktop App. Apporo smart runs the same file on www.apporo.ai/api/smart/v1/ai-content-reports, in
+// the Cloudflare account that holds apporo.ai, as Apporo aiot's Worker serves www.apporo.ai/api/*
+// (cloudflare-worker-smart-reports.apporo.wrangler.jsonc).
 //
-// - Serves only POST /v1/ai-content-reports on its PUBLIC_HOST (other paths 404, other methods
+// - Serves only POST on its PUBLIC_HOST and PUBLIC_PATH (other paths 404, other methods
 //   405). Its workers.dev and Preview URLs get 404 too: they are outside the brand's zone, so
 //   the zone's WAF rate limiting rule would not apply to them. Turn both off in the dashboard as
 //   well, in the Worker's Settings > Domains & Routes.
@@ -30,8 +31,9 @@
 // of Secret Manager secret smart-reports-edge-key; while a rotation leaves "old new" in it, the
 // new key only: the whole pair is sent as one key and every request gets 403), ALLOWED_ORIGINS
 // (optional text, origins separated by commas or spaces; unset means woowtech smart's desktop App's
-// origin, empty means none), PUBLIC_HOST (optional text, the host the Worker serves; unset means
-// reports.woowtech.io), IP_RATE_LIMITER (optional binding).
+// origin, empty means none), PUBLIC_HOST and PUBLIC_PATH (optional text, the address the Worker
+// serves; unset means reports.woowtech.io and /v1/ai-content-reports, the receiver's own path),
+// IP_RATE_LIMITER (optional binding).
 
 const DEFAULT_PUBLIC_HOST = "reports.woowtech.io";
 const REPORT_PATH = "/v1/ai-content-reports";
@@ -71,6 +73,13 @@ function publicHost(env) {
   return typeof env.PUBLIC_HOST === "string" && env.PUBLIC_HOST !== ""
     ? env.PUBLIC_HOST
     : DEFAULT_PUBLIC_HOST;
+}
+
+// The path the App posts to; the receiver behind the Worker always takes REPORT_PATH.
+function publicPath(env) {
+  return typeof env.PUBLIC_PATH === "string" && env.PUBLIC_PATH !== ""
+    ? env.PUBLIC_PATH
+    : REPORT_PATH;
 }
 
 function originAllowed(origin, env) {
@@ -126,7 +135,7 @@ async function readBody(request, maxBytes) {
 // The answer to a request that is turned away before its body is read, or null to go on.
 function earlyAnswer(request, env, origin) {
   const url = new URL(request.url);
-  if (url.hostname !== publicHost(env) || url.pathname !== REPORT_PATH) {
+  if (url.hostname !== publicHost(env) || url.pathname !== publicPath(env)) {
     return json(404, { error: "not_found" });
   }
   if (

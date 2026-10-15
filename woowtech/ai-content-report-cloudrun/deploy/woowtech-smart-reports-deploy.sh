@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Deploys a brand's AI content report receiver: Cloud Run service smart-reports in the brand's
 # project and region (woowtech smart: woowtech-smart, asia-east1; Apporo smart: apporo-smart-app,
-# us-west1), storing reports in the (default) Firestore database that smart-push uses, with an
-# e-mail alert for every stored report. It follows smart-push's deploy script
-# (refs/woowtech-push-relay/deploy/woowtech-smart-deploy.sh), with one difference: nothing is
-# changed unless --apply is given.
+# us-west1, behind www.apporo.ai/api/smart/...), storing reports in the (default) Firestore
+# database that smart-push uses, with an e-mail alert for every stored report. It follows
+# smart-push's deploy script (refs/woowtech-push-relay/deploy/woowtech-smart-deploy.sh), with one
+# difference: nothing is changed unless --apply is given.
 #
 # Run it in Google Cloud Shell, logged in as an Owner of the project, from a clean clone:
 #   ./woowtech-smart-reports-deploy.sh                 # prints the plan and every command; calls nothing
@@ -80,28 +80,44 @@ if [ "$ROLLBACK" = 1 ] && [ -n "$REQUESTED" ]; then
 fi
 if [ "$APPLY" = 1 ] && [ "$FORCE_DRY" = 0 ]; then DRY_RUN=0; else DRY_RUN=1; fi
 
-# Each brand's receiver: its name in mails and plans, Google Cloud project and region, the host
-# its Cloudflare Worker serves and that Worker's wrangler config. A test keeps the host and the
-# name equal to the brand's file.
+# Each brand's receiver: its name in mails and plans, Google Cloud project and region, the address
+# its Cloudflare Worker serves and that Worker's wrangler config and setup. A test keeps the address
+# and the name equal to the brand's file.
 case "$BRAND" in
   woowtech)
     PRODUCT="woowtech smart"
     BRAND_PROJECT_ID=woowtech-smart
     REGION=asia-east1
     PUBLIC_HOST=reports.woowtech.io
+    PUBLIC_PATH=/v1/ai-content-reports
     WRANGLER_CONFIG=cloudflare-worker-smart-reports.wrangler.jsonc
     # The Worker's defaults are woowtech smart's, so its dashboard settings need no more.
     WORKER_VARS_NOTE=""
+    WORKER_ENTRY="the custom domain reports.woowtech.io"
+    WORKER_ENTRY_NOTE=""
+    RATE_TARGET="the host reports.woowtech.io"
+    PLAN_NOTE=" 4. The Cloudflare account must be on Workers Paid, which has no daily request limit. On Workers Free
+    all Workers of the account share 100,000 requests a day and stop serving once they are used up,
+    until 00:00 UTC (error 1027)."
     ;;
   apporo)
     PRODUCT="Apporo smart"
     BRAND_PROJECT_ID=apporo-smart-app
     REGION=us-west1
-    PUBLIC_HOST=reports.apporo.ai
+    # One path on the Apporo website, as Apporo aiot's Worker serves www.apporo.ai/api/*.
+    PUBLIC_HOST=www.apporo.ai
+    PUBLIC_PATH=/api/smart/v1/ai-content-reports
     WRANGLER_CONFIG=cloudflare-worker-smart-reports.apporo.wrangler.jsonc
     WORKER_VARS_NOTE="
-    In the dashboard, also add the text variables PUBLIC_HOST=reports.apporo.ai and
-    ALLOWED_ORIGINS=apporosmart://app (the wrangler config has both)."
+    In the dashboard, also add the text variables PUBLIC_HOST=www.apporo.ai,
+    PUBLIC_PATH=/api/smart/v1/ai-content-reports and ALLOWED_ORIGINS=apporosmart://app (the wrangler
+    config has all three)."
+    WORKER_ENTRY="the route www.apporo.ai/api/smart/v1/ai-content-reports"
+    WORKER_ENTRY_NOTE=" (zone apporo.ai, never a
+    wildcard: it is the Apporo website; it is more specific than Apporo aiot's www.apporo.ai/api/*)"
+    RATE_TARGET="that path, never the whole host"
+    PLAN_NOTE=" 4. The Worker runs on the account's plan, as Apporo aiot's Worker does. On Workers Free all Workers
+    of the account share 100,000 requests a day and stop serving once they are used up, until 00:00 UTC."
     ;;
   *)
     printf 'Unknown brand: %s\n\n' "$BRAND" >&2
@@ -264,7 +280,7 @@ if [ "$ROLLBACK" = 1 ]; then
   cat >&3 <<EOF
 Rollback of the AI content report receiver in project ${PROJECT_ID}. This script runs none of it:
 run what you need, in this order. Nothing here touches the Apps or smart-push.
- 1. Cloudflare: remove the custom domain ${PUBLIC_HOST} from the Worker smart-reports-proxy,
+ 1. Cloudflare: remove ${WORKER_ENTRY} from the Worker smart-reports-proxy,
     then delete the Worker (and its rate limiting rule, if you made one). The App then cannot send
     reports and says so.
  2. The stored reports. Deleting the service does not delete them, and they are only removed by the
@@ -601,17 +617,15 @@ Next, in Cloudflare (the account that holds the ${ZONE} zone):
       gcloud --project ${PROJECT_ID} secrets versions access latest --secret ${SECRET}
     pasted straight into the Cloudflare secret field (not into chat or documents). That output is one
     key, except while the key is being rotated (below).${WORKER_VARS_NOTE}
- 2. Give the Worker the custom domain ${PUBLIC_HOST}. In the Worker's Settings > Domains & Routes,
+ 2. Give the Worker ${WORKER_ENTRY}${WORKER_ENTRY_NOTE}. In the Worker's Settings > Domains & Routes,
     turn off workers.dev and Preview URLs: those addresses are outside the ${ZONE} zone and its
     per-IP rate limit. The Worker answers 404 on them anyway; turning them off removes them.
  3. The per-IP limit: the wrangler config's IP_RATE_LIMITER binding (10 requests a minute per IP,
-    counted per Cloudflare location), or a WAF rate limiting rule on the host ${PUBLIC_HOST}.
- 4. The Cloudflare account must be on Workers Paid, which has no daily request limit. On Workers Free
-    all Workers of the account share 100,000 requests a day and stop serving once they are used up,
-    until 00:00 UTC (error 1027).
+    counted per Cloudflare location), or a WAF rate limiting rule on ${RATE_TARGET}.
+${PLAN_NOTE}
 Then check the Worker and the key without storing anything: this must print the 400 below, which only a
 request that passed the Worker and carried the right edge key can get:
-  curl -s -X POST https://${PUBLIC_HOST}${REPORT_PATH} -H 'content-type: application/json' -d '{}'
+  curl -s -X POST https://${PUBLIC_HOST}${PUBLIC_PATH} -H 'content-type: application/json' -d '{}'
   {"error":"unsupported_schema"}
 The e-mail alert is only proven by a real report: send one from the App and wait a few minutes. If the
 channel above said UNVERIFIED, confirm the mail Google sent to ${NOTIFY_EMAIL} first.

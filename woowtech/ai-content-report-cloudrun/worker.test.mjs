@@ -474,19 +474,25 @@ function parseJsonc(text) {
   return JSON.parse(withoutComments.replace(/,(\s*[}\]])/g, "$1"));
 }
 
-test("PUBLIC_HOST moves the Worker to another brand's host, and only there", async () => {
-  const apporo = { ...ENV, PUBLIC_HOST: "reports.apporo.ai" };
+test("PUBLIC_HOST and PUBLIC_PATH move the Worker to another address, and only there", async () => {
+  const apporo = {
+    ...ENV,
+    PUBLIC_HOST: "www.apporo.ai",
+    PUBLIC_PATH: "/api/smart/v1/ai-content-reports",
+  };
+  const site = { env: apporo, host: "https://www.apporo.ai" };
 
-  const served = await call(REPORT_PATH, post(), {
-    env: apporo,
-    host: "https://reports.apporo.ai",
-  });
-  const elsewhere = await call(REPORT_PATH, post(), { env: apporo });
+  const served = await call("/api/smart/v1/ai-content-reports", post(), site);
+  const receiverPath = await call(REPORT_PATH, post(), site);
+  const otherHost = await call("/api/smart/v1/ai-content-reports", post(), { env: apporo });
 
   assert.equal(served.response.status, 201);
   assert.equal(served.relayed.length, 1);
-  assert.equal(elsewhere.response.status, 404);
-  assert.equal(elsewhere.relayed.length, 0);
+  assert.equal(served.relayed[0].url, `${RELAY}${REPORT_PATH}`, "the receiver keeps its own path");
+  assert.equal(receiverPath.response.status, 404);
+  assert.equal(receiverPath.relayed.length, 0);
+  assert.equal(otherHost.response.status, 404);
+  assert.equal(otherHost.relayed.length, 0);
 });
 
 /** A brand's values (woowtech/brands/<id>.json). */
@@ -494,7 +500,7 @@ async function brand(id) {
   return JSON.parse(await readFile(new URL(`../brands/${id}.json`, import.meta.url), "utf8"));
 }
 
-test("Apporo smart's wrangler config serves its App's report address and desktop origin", async () => {
+test("Apporo smart's wrangler config serves its App's report address on one route", async () => {
   const configUrl = new URL(
     "./deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc",
     import.meta.url,
@@ -504,14 +510,18 @@ test("Apporo smart's wrangler config serves its App's report address and desktop
   const apporo = await brand("apporo");
   const reportUrl = new URL(apporo.services.aiContentReportUrl);
 
-  assert.equal(reportUrl.pathname, REPORT_PATH);
   assert.equal(config.main, "cloudflare-worker-smart-reports.js");
-  assert.deepEqual(config.routes, [{ pattern: reportUrl.hostname, custom_domain: true }]);
+  // The website's host: one exact path, never a wildcard that would take over the site.
+  assert.deepEqual(config.routes, [
+    { pattern: `${reportUrl.hostname}${reportUrl.pathname}`, zone_name: "apporo.ai" },
+  ]);
   assert.equal(config.vars.PUBLIC_HOST, reportUrl.hostname);
+  assert.equal(config.vars.PUBLIC_PATH, reportUrl.pathname);
   assert.equal(config.vars.ALLOWED_ORIGINS, `${apporo.scheme}://app`);
   assert.deepEqual(Object.keys(config.vars).sort(), [
     "ALLOWED_ORIGINS",
     "PUBLIC_HOST",
+    "PUBLIC_PATH",
     "RELAY_ORIGIN",
   ]);
   assert.ok(
