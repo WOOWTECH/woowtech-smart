@@ -453,7 +453,11 @@ run_build() {
   else
     act artifacts repositories create "$REPO" --repository-format=docker --location="$REGION"
   fi
-  act builds submit "$APP_DIR" --tag "$IMAGE"
+  # In apporo-smart-app, Cloud Build runs as the Compute Engine default service account, and gcloud
+  # cannot stream such a build's logs from the default logs bucket: the build succeeds but `builds
+  # submit` exits 1. --suppress-logs waits for the build and exits with its result; gcloud still
+  # prints where the logs are.
+  act builds submit "$APP_DIR" --tag "$IMAGE" --suppress-logs
 }
 
 run_logs() {

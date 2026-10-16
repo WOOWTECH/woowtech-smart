@@ -366,6 +366,10 @@ test("a second run changes nothing that exists and only builds and deploys again
     assert.equal(indexOf(calls, creation), -1, `second run repeated: ${creation}`);
   }
   assert.ok(indexOf(calls, "builds submit") >= 0);
+  assert.ok(
+    calls[indexOf(calls, "builds submit")].includes("--suppress-logs"),
+    "the build waits without streaming logs",
+  );
   assert.ok(indexOf(calls, "run deploy smart-reports") >= 0);
   assert.equal(readFileSync(join(box.state, "secret-value"), "utf8"), secretBefore);
 });
