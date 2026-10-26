@@ -9,10 +9,14 @@ import { generateLocalPairingOffer } from "./pairing-offer.js";
 import { editPersistedConfig } from "./persisted-config.js";
 import { getOrCreateServerId } from "./server-id.js";
 
-// woowtech smart's pairing links and QR codes open the app itself through its own
-// link scheme (owner decision 直接叫起 App). A link is the app's root URL with the
-// offer in its fragment: the app lands on its index route and reads the offer there.
-const APP_ROOT_URL = "woowtech-smart:///";
+// woowtech smart's pairing links and QR codes open its hosted web app, as upstream's open
+// its own (owner decision D2, 2026-10-26). A link is the web app's root with the offer in
+// its fragment: the web app reads the offer there, and so do the app's scanner and its
+// "Paste pairing link" field.
+const WEB_APP_URL = "https://smart.woowtech.io";
+const WEB_LINK_BASE = `${WEB_APP_URL}/`;
+// The app's own link scheme, the default from 2026-09-25 to 2026-10-26 (0.8.1 included).
+const APP_SCHEME_ROOT_URL = "woowtech-smart:///";
 
 const roots: string[] = [];
 
@@ -71,56 +75,58 @@ async function offerOf(home: string): Promise<unknown> {
 }
 
 describe("woowtech smart pairing links", () => {
-  test("a new home's pairing link opens the app with the offer in its fragment", async () => {
+  test("a new home's pairing link opens the web app with the offer in its fragment", async () => {
     const home = await newHome();
 
     const link = await pairingLinkOf(home);
 
-    expect(splitPairingLink(link)).toEqual({ base: APP_ROOT_URL, offer: await offerOf(home) });
+    expect(splitPairingLink(link)).toEqual({ base: WEB_LINK_BASE, offer: await offerOf(home) });
     const written = JSON.parse(await readFile(path.join(home, "config.json"), "utf8"));
-    expect(written.app).toEqual({ baseUrl: APP_ROOT_URL });
+    expect(written.app).toEqual({ baseUrl: WEB_APP_URL });
   });
 
-  test("an offer made without an app base URL opens the app too", async () => {
+  test("an offer made without an app base URL opens the web app too", async () => {
     const home = await newHome();
 
     const pairing = await generateLocalPairingOffer({ paseoHome: home, includeQr: false });
 
     expect(splitPairingLink(pairing.url ?? "")).toEqual({
-      base: APP_ROOT_URL,
+      base: WEB_LINK_BASE,
       offer: await offerOf(home),
     });
   });
 });
 
-// Homes created before this change carry upstream's default app.baseUrl, which
-// sends the QR code to upstream's hosted web app. Nobody chose that value, so it
-// counts as unset; every other value is the user's.
+// Homes created before this change carry a default an earlier release wrote: upstream's
+// hosted web app (internal test builds) or the app's own link scheme (0.8.1). Nobody chose
+// either, so both count as unset; every other value is the user's.
 describe("app.baseUrl in an existing config.json", () => {
-  test.each(["https://app.paseo.sh", "https://app.paseo.sh/"])(
-    "upstream's default %s gets the app link",
-    async (upstreamDefault) => {
-      const home = await homeWithConfig({ version: 1, app: { baseUrl: upstreamDefault } });
+  test.each(["https://app.paseo.sh", "https://app.paseo.sh/", APP_SCHEME_ROOT_URL])(
+    "the earlier default %s gets the web app link",
+    async (earlierDefault) => {
+      const home = await homeWithConfig({ version: 1, app: { baseUrl: earlierDefault } });
 
-      expect(loadConfig(home, { env: {} }).appBaseUrl).toBe(APP_ROOT_URL);
+      expect(loadConfig(home, { env: {} }).appBaseUrl).toBe(WEB_APP_URL);
       expect(splitPairingLink(await pairingLinkOf(home))).toEqual({
-        base: APP_ROOT_URL,
+        base: WEB_LINK_BASE,
         offer: await offerOf(home),
       });
     },
   );
 
-  // The daemon's own web UI, a site of the user's, and anything that is not exactly
-  // upstream's default, even on upstream's host.
-  test.each(["http://127.0.0.1:6770", "https://pair.example.test", "https://app.paseo.sh/pair"])(
-    "a chosen value %s stays",
-    async (chosen) => {
-      const home = await homeWithConfig({ version: 1, app: { baseUrl: chosen } });
+  // The daemon's own web UI, a site of the user's, an app link with a host, and anything
+  // that is not exactly an earlier default, even on upstream's host.
+  test.each([
+    "http://127.0.0.1:6770",
+    "https://pair.example.test",
+    "https://app.paseo.sh/pair",
+    "woowtech-smart://pair",
+  ])("a chosen value %s stays", async (chosen) => {
+    const home = await homeWithConfig({ version: 1, app: { baseUrl: chosen } });
 
-      expect(loadConfig(home, { env: {} }).appBaseUrl).toBe(chosen);
-      expect(splitPairingLink(await pairingLinkOf(home)).base).toBe(`${chosen}/`);
-    },
-  );
+    expect(loadConfig(home, { env: {} }).appBaseUrl).toBe(chosen);
+    expect(splitPairingLink(await pairingLinkOf(home)).base).toBe(`${chosen}/`);
+  });
 
   test("PASEO_APP_BASE_URL still wins over config.json", async () => {
     const home = await homeWithConfig({ version: 1, app: { baseUrl: "https://app.paseo.sh" } });
@@ -130,12 +136,24 @@ describe("app.baseUrl in an existing config.json", () => {
     expect(config.appBaseUrl).toBe("https://pair.example.test");
   });
 
-  // `daemon config set` writes config.json and the running daemon re-resolves it.
-  test("the same rule applies when the daemon reloads config.json", async () => {
+  // PASEO_APP_BASE_URL is the way to keep handing out app links, so it is never migrated.
+  test("PASEO_APP_BASE_URL set to the app's link scheme is used as it is", async () => {
     const home = await newHome();
+    const env = { PASEO_APP_BASE_URL: APP_SCHEME_ROOT_URL };
 
-    const edited = editPersistedConfig(home, "app.baseUrl", { value: "https://app.paseo.sh/" });
-
-    expect(resolveConfigFromPersisted(home, edited, { env: {} }).appBaseUrl).toBe(APP_ROOT_URL);
+    expect(loadConfig(home, { env }).appBaseUrl).toBe(APP_SCHEME_ROOT_URL);
+    expect(splitPairingLink(await pairingLinkOf(home, env)).base).toBe(APP_SCHEME_ROOT_URL);
   });
+
+  // `daemon config set` writes config.json and the running daemon re-resolves it.
+  test.each(["https://app.paseo.sh/", APP_SCHEME_ROOT_URL])(
+    "the same rule applies when the daemon reloads a config.json set to %s",
+    async (earlierDefault) => {
+      const home = await newHome();
+
+      const edited = editPersistedConfig(home, "app.baseUrl", { value: earlierDefault });
+
+      expect(resolveConfigFromPersisted(home, edited, { env: {} }).appBaseUrl).toBe(WEB_APP_URL);
+    },
+  );
 });
