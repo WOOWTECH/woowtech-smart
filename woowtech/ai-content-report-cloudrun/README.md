@@ -1,6 +1,6 @@
 # AI 內容回報接收器（Cloud Run 版）
 
-狀態（2026-10-14）：**已上線。** 6be6f0127 部署，Cloud Run `smart-reports`（revision 00001）＋ Worker `smart-reports-proxy`（`reports.woowtech.io`）。從外部送真回報實測過：收據、讀回、通知信、依收件編號刪除都正常。0.8.1 的正式建置帶這個網址。
+狀態（2026-10-27）：**已上線。** 2026-10-14 從 6be6f0127 部署，Cloud Run `smart-reports`（revision 00001）＋ Worker `smart-reports-proxy`（`reports.woowtech.io`）。從外部送真回報實測過：收據、讀回、通知信、依收件編號刪除都正常。0.8.1 的正式建置帶這個網址。Worker 的程式從 2026-10-27 起也放行網頁版 `https://smart.woowtech.io`（owner 決定 D4），但線上跑的還是 10/14 那一版：網頁版來源的預檢仍得 405、沒有 CORS 標頭（2026-10-26 21:45 UTC 實測）。照下面的「只更新 Worker」重新部署後才會通。
 
 App 的「回報」按鈕把一則回報 POST 到這裡。做法和 `smart-push` 相同：Cloud Run ＋ Firestore ＋ Cloudflare Worker，專案 `woowtech-smart`，區域 asia-east1（台灣）。不需要主機、磁碟或 Gmail 授權。
 
@@ -42,7 +42,10 @@ Worker：只收 `POST /v1/ai-content-reports`、只收 JSON、body 上限 12,288
 
 服務：沒有正確 edge key 一律 403，而且先於讀 body；每日最多 `DAILY_MAX_REPORTS`（2000）筆，超過回 429；最多 3 個 instance；寫入超過 8 秒回 500 `storage_unavailable`（log 代碼 `storage_timeout`）。回 201 一定是 Firestore 已確認寫入之後。
 
-**瀏覽器來源**：手機 App 不帶 Origin。桌面版從 `woowtech-smart://app` 發出跨來源請求，所以 Worker 對這個來源回預檢和 CORS 標頭，其他來源一律 403；服務本身看不到 Origin，也拒絕任何帶 Origin 的請求。要改允許的來源，設 Worker 的 `ALLOWED_ORIGINS`。網頁版（一般瀏覽器）不支援。
+**瀏覽器來源**：手機 App 不帶 Origin。桌面版從 `woowtech-smart://app`、網頁版從 `https://smart.woowtech.io` 發出跨來源請求，所以 Worker 只對這兩個來源回預檢和 CORS 標頭（Worker 程式裡的 `DEFAULT_ALLOWED_ORIGINS`），其他帶 Origin 的請求一律 403，包括 `woowtech-smart-web.pages.dev` 和預覽部署的網址：在那裡送不出回報是刻意的。比對是整串相同，`*` 和 `null` 永遠不放行。服務本身看不到 Origin，也拒絕任何帶 Origin 的請求。
+
+- 要改允許的來源，改 `DEFAULT_ALLOWED_ORIGINS` 和 `worker.test.mjs`，再重新部署。Worker 的變數 `ALLOWED_ORIGINS` 會整份取代這份清單（空字串＝不放行任何瀏覽器），而且下一次 `wrangler deploy` 會把儀表板上設的值清掉，所以只當暫時的開關用。
+- Origin 只決定要不要回應瀏覽器的跨來源請求，不是防濫用：不帶 Origin 的請求照樣收。防濫用靠每 IP 限流和每天 2000 筆的上限；上限被灌滿時，手機 App 的回報也會一起得到 429，這是已知的取捨。
 
 ## 部署
 
@@ -62,9 +65,64 @@ cd woowtech/ai-content-report-cloudrun
 - 驗證不寫資料：對 Worker 送 `{}` 應得 `400 {"error":"unsupported_schema"}`（腳本結尾有指令）。信件要用一則真的回報才能證明。
 - 通知管道若顯示 UNVERIFIED，要點 Google 寄到信箱的確認信，否則收不到警示。Email 管道建好時沒有回報驗證狀態，不用點信也收得到（10/14）。
 - 新建的東西要幾分鐘才生效：`logs` 步驟的排除規則約 5–7 分鐘後才擋得住請求日誌，這段時間的請求（含 IP）會留在 Cloud Logging 到保存期滿，所以部署後先別讓真流量進來；警示政策建好後一分鐘內的第一則回報沒有寄信。
-- Cloudflare 那半用 wrangler 4.144 以上：owner 不在這台電腦前就用 `wrangler login --device`（owner 在任何裝置開連結按允許）。代碼只活 5 分鐘，先請 owner 登入 Cloudflare 再產生代碼。登入看得到好幾個帳號時，用 `CLOUDFLARE_ACCOUNT_ID` 指定有 woowtech.io 的那個。做完 `wrangler logout`。
+- Cloudflare 那半固定用 wrangler 4.149.0（`npx --yes wrangler@4.149.0`，2026-10-08 發佈，有 `login --device`、`--scopes`、`whoami --json`），跟網頁版的 `woowtech/scripts/deploy-web.sh` 同一版。owner 不在這台電腦前就用 `login --device`（owner 在任何裝置開連結按允許）。代碼只活 5 分鐘，先請 owner 登入 Cloudflare 再產生代碼。
+  - 登入放在只給這個 Worker 用的 `XDG_CONFIG_HOME=~/.local/share/woowtech-smart/wrangler-reports`，scopes 只要 `account:read user:read workers_scripts:write workers_routes:write zone:read`；`whoami --json` 的 `tokenPermissions` 多了別的就重新登入。不要用舊的 `wrangler-home`，那是 wrangler 預設的一大串 scopes。網頁版部署用的 `wrangler-pages` 是另一組，只有 Pages 的權限。
+  - 用 `CLOUDFLARE_ACCOUNT_ID` 指定有 woowtech.io 的那個帳號，在空目錄裡執行，`WRANGLER_CACHE_DIR` 也指到空目錄：wrangler 會先讀快取裡記的帳號。
+  - 這組登入改得動 zone 的 Worker 路由，做完一定 `wrangler logout`。
+  - 部署前後都到儀表板看 Observability（Workers Logs、Traces 關著，沒有這個 Worker 的 Logpush）和限流（`IP_RATE_LIMITER` binding 或 WAF 規則），限流再用 V8 實測。步驟在下面的「只更新 Worker」。
 - Worker 的每 IP 限流不精確：同一個 IP 快速送約 30 次才開始回 429（Cloudflare 依地點計數、最終一致），測試時要送夠多。
-- 之後 App 建置時帶 `WOOWTECH_AI_CONTENT_REPORT_URL=https://reports.woowtech.io/v1/ai-content-reports`，並在上線前改隱私權政策與商店揭露（草稿在 `plans/ai-report-go-live-pack-1014.md`）。
+- 之後 App 建置時帶 `WOOWTECH_AI_CONTENT_REPORT_URL=https://reports.woowtech.io/v1/ai-content-reports`，並在上線前改隱私權政策與商店揭露（草稿在 `plans/ai-report-go-live-pack-1014.md`）。網頁版建置時也要帶同一個網址：它只在 `expo export` 時寫進 bundle（`packages/app/app.config.js` 的 `aiContentReportUrl`），`woowtech/scripts/deploy-web.sh` 會帶，建置後 `woowtech/web/check-export.mjs` 檢查 bundle 裡有它。
+
+### 只更新 Worker
+
+改了 Worker 的程式或 wrangler 設定時（例如 2026-10-27 放行網頁版），只重新部署 Worker。Cloud Run 服務不用動：Worker 不轉送 Origin，服務本來就拒絕帶 Origin 的請求（`server.mjs`）。部署要 owner 登入 Cloudflare；部署後的 curl 檢查不寫資料，agent 可以代跑。
+
+部署前，在儀表板 Workers → `smart-reports-proxy` 記下這三項，部署後再看一次：
+
+- Settings → Variables and Secrets：`RELAY_ORIGIN` 是 Text 還是 Secret、有沒有設 `ALLOWED_ORIGINS`、`EDGE_KEY` 是 Secret。
+- Settings → Observability：Workers Logs 和 Traces 都是關的，Logpush 沒有這個 Worker 的 job。新建的 Worker 預設開 Workers Logs（log 裡有請求和回應的細節），10/14 又可能是從儀表板部署的，所以不能假設是關的。
+- 限流：Worker 有 `IP_RATE_LIMITER` binding，或 Security → WAF → Rate limiting rules 有涵蓋 `reports.woowtech.io/v1/ai-content-reports` 的規則。
+
+```bash
+CFG=<乾淨、已合併這次修改的 checkout>/woowtech/ai-content-report-cloudrun/deploy/cloudflare-worker-smart-reports.wrangler.jsonc
+export XDG_CONFIG_HOME=$HOME/.local/share/woowtech-smart/wrangler-reports
+export CLOUDFLARE_ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974 WRANGLER_CACHE_DIR=$(mktemp -d)
+cd "$(mktemp -d)"
+WR="npx --yes wrangler@4.149.0"
+$WR login --device --scopes account:read user:read workers_scripts:write workers_routes:write zone:read
+$WR whoami --json                                 # tokenPermissions 只有上面五項和 offline_access
+$WR deployments list --name smart-reports-proxy   # 上一次是從儀表板還是 wrangler 部署的
+RUN_URL=…   # 儀表板上 RELAY_ORIGIN 的值，或 gcloud --project woowtech-smart run services describe smart-reports --region asia-east1 --format='value(status.url)'
+$WR deploy --config "$CFG" --var "RELAY_ORIGIN:$RUN_URL" --dry-run
+$WR deploy --config "$CFG" --var "RELAY_ORIGIN:$RUN_URL"
+```
+
+- 用 wrangler 部署時：儀表板上設的變數（例如 `ALLOWED_ORIGINS`）會被換掉，`EDGE_KEY` 這個 secret 保留；會加上 `IP_RATE_LIMITER`（namespace 4102）；Observability 和 Logpush 依設定檔關閉。
+- `RELAY_ORIGIN` 是 Secret，或部署時出現 binding 名稱衝突：改用儀表板的 Edit code，貼上新的 `cloudflare-worker-smart-reports.js` 再按 Deploy。這樣設定和 secret 都不變，但也不會有 `IP_RATE_LIMITER`，要靠 WAF 規則限流；Observability 也維持原樣，一定要人工確認。
+- 這五個 scopes 夠不夠帶 custom domain 和 ratelimits 部署，還沒實測。不夠時 wrangler 會報錯，再請 owner 決定要不要加。
+
+部署後馬上檢查：
+
+```bash
+U=https://reports.woowtech.io/v1/ai-content-reports; W=https://smart.woowtech.io
+# V1 網頁版的預檢：204；ACAO=$W；ACAM POST；ACAH content-type, accept；max-age 600；ACEH retry-after；Vary Origin
+curl -sSi -X OPTIONS "$U" -H "Origin: $W" -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type'
+# V2 網頁版送空 JSON：400 {"error":"unsupported_schema"}，而且帶 ACAO（證明來源、RELAY_ORIGIN、EDGE_KEY 都對）
+curl -sSi -X POST "$U" -H "Origin: $W" -H 'content-type: application/json' --data '{}'
+# V3 桌面版的預檢仍然是 204
+curl -sSi -X OPTIONS "$U" -H 'Origin: woowtech-smart://app' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type'
+# V4 不帶 Origin：400，沒有 ACAO
+curl -sSi -X POST "$U" -H 'content-type: application/json' --data '{}'
+# V5 長得像的來源：POST 403、OPTIONS 405，都沒有 ACAO
+for o in http://smart.woowtech.io https://www.smart.woowtech.io https://smart.woowtech.io.evil.invalid https://woowtech-smart-web.pages.dev "$W/"; do curl -s -o /dev/null -w "$o POST %{http_code}\n" -X POST "$U" -H "Origin: $o" -H 'content-type: application/json' --data '{}'; done
+# V8 限流：同一個 IP 連送 40 次 {}，結果裡要有 429（約 30 次後才開始）；{} 只會得到 400、不寫資料。這台的 IP 會被限 1 分鐘
+for i in $(seq 1 40); do curl -s -o /dev/null -w '%{http_code}\n' -X POST "$U" -H 'content-type: application/json' --data '{}'; done | sort | uniq -c
+```
+
+- V2 或 V4 不是 400 `unsupported_schema`：`$WR rollback --name smart-reports-proxy`，選上一版（或在儀表板的 Deployments 選上一版）。
+- V8 沒有 429：限流沒生效，先補 WAF 規則或 binding。
+- 再到儀表板看一次 Observability 和限流，把部署前後兩次的結果記進 `woowtech/README.md` 的驗證紀錄。兩項都確認過，隱私權政策才能發佈網頁版那一段（「轉送程式只用來源決定要不要回應，不轉給回報服務，也不保存」；草稿在 `plans/web-server-20261026/privacy-391-web-draft.md`）。
+- 最後 `$WR logout`。
 
 ## 日常
 
@@ -80,7 +138,7 @@ cd woowtech/ai-content-report-cloudrun
 node --test        # Node 22；不需要 npm install
 ```
 
-涵蓋服務、Firestore 儲存（用假的 Firestore）、admin、Worker（假的 fetch）、部署腳本（假的 gcloud／curl／openssl）、警示範本。CI 目前只跑 `woowtech/*.test.mjs`，不含子資料夾。
+涵蓋服務、Firestore 儲存（用假的 Firestore）、admin、Worker（假的 fetch）、部署腳本（假的 gcloud／curl／openssl）、警示範本。CI 也跑這些測試（`.github/workflows/ci.yml` 的 “Test the AI content report receiver”）。
 
 ## 還沒做、或要知道的
 

@@ -1,7 +1,7 @@
 // Cloudflare Worker `smart-reports-proxy` for reports.woowtech.io: the only public way into the
 // AI content report receiver (Cloud Run service smart-reports, project woowtech-smart). It is
 // smart-push-proxy (push.woowtech.io) with another path, another size limit and CORS for the
-// desktop App.
+// desktop App and the web app, whose reports are both cross-origin requests.
 //
 // - Serves only POST /v1/ai-content-reports on reports.woowtech.io (other paths 404, other methods
 //   405). Its workers.dev and Preview URLs get 404 too: they are outside the woowtech.io zone, so
@@ -10,9 +10,11 @@
 // - Takes only application/json (415) and refuses bodies over 12,288 bytes (413) before
 //   forwarding. The number is MAX_BODY_BYTES of the report contract; a test keeps them equal.
 // - The phone Apps send no Origin header. A request with an Origin is answered 403, except from an
-//   origin listed in ALLOWED_ORIGINS: the desktop App's page is woowtech-smart://app, and its
-//   fetch is cross-origin, so the browser engine sends a preflight (OPTIONS) first and needs the
-//   CORS headers on every answer. Matching is exact; "*" and "null" never match.
+//   allowed origin: the desktop App's page is woowtech-smart://app and the web app's is
+//   https://smart.woowtech.io. Both fetches are cross-origin, so the browser engine sends a
+//   preflight (OPTIONS) first and needs the CORS headers on every answer. Matching is exact;
+//   "*" and "null" never match. The Origin only decides whether to answer with CORS: requests
+//   without one are taken, so the per-IP limit and the receiver's daily cap stop abuse, not this.
 // - Forwards the body, and nothing else of the client, to RELAY_ORIGIN with the edge key the
 //   receiver requires, so calling the run.app URL directly cannot bypass the limits applied here.
 //   The receiver therefore never sees an Origin and refuses one.
@@ -27,15 +29,19 @@
 // Settings: RELAY_ORIGIN (text: https://smart-reports-....run.app), EDGE_KEY (secret, the value
 // of Secret Manager secret smart-reports-edge-key; while a rotation leaves "old new" in it, the
 // new key only: the whole pair is sent as one key and every request gets 403), ALLOWED_ORIGINS
-// (optional text, origins separated by commas or spaces; unset means the desktop App's origin,
-// empty means none), IP_RATE_LIMITER (optional binding).
+// (optional text, origins separated by commas or spaces; unset means the desktop App's and the
+// web app's origins, empty means none, any other value replaces the whole list; a wrangler deploy
+// drops a value set in the dashboard), IP_RATE_LIMITER (optional binding).
 
 const PUBLIC_HOST = "reports.woowtech.io";
 const REPORT_PATH = "/v1/ai-content-reports";
 const MAX_BODY_BYTES = 12288;
 // The desktop App loads its pages from this custom scheme (packages/desktop/src/main.ts,
 // APP_SCHEME), and the daemon lists the same origin (packages/server/src/server/bootstrap.ts).
-const DEFAULT_ALLOWED_ORIGINS = ["woowtech-smart://app"];
+// The hosted web app (Cloudflare Pages) is https://smart.woowtech.io (owner decision D4,
+// 2026-10-26); packages/protocol/src/brand-web-app.ts holds the same address, and
+// woowtech/web-deploy.test.mjs checks that this list includes it.
+const DEFAULT_ALLOWED_ORIGINS = ["woowtech-smart://app", "https://smart.woowtech.io"];
 const PREFLIGHT_MAX_AGE_SECONDS = 600;
 const IP_RETRY_AFTER_SECONDS = 60;
 // The app waits for the answer; a cold Cloud Run instance plus a Firestore transaction is a few
