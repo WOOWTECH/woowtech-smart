@@ -207,14 +207,23 @@ test("homes created with an earlier default app.baseUrl get the web app link; ot
   assert.ok(link.startsWith(`${chosen}/#offer=`), `a chosen app.baseUrl became ${link}`);
 });
 
-test("a new home lets no web app origin in", () => {
+// The hosted web app may reach the daemon directly (owner decision D3): new homes get it in
+// config.json, so "[]" there turns it off. The daemon never adds it while resolving the config.
+test("a new home lets in the hosted web app and no other web origin", () => {
   const home = daemonHome();
-  assert.deepEqual(loadConfig(home, { env: {} }).corsAllowedOrigins, []);
+  assert.deepEqual(loadConfig(home, { env: {} }).corsAllowedOrigins, [WEB_APP_ORIGIN]);
   const written = readFileSync(path.join(home, "config.json"), "utf8");
   assert.doesNotMatch(written, UPSTREAM_WEB_APP, "the config.json a new home gets");
   // The CLI reads the defaults without creating the home (daemon pair, onboard).
   const cliDefaults = readPersistedConfig(daemonHome(), { defaultsIfMissing: true });
+  assert.deepEqual(cliDefaults.daemon.cors.allowedOrigins, [WEB_APP_ORIGIN], "the CLI's defaults");
   assert.doesNotMatch(JSON.stringify(cliDefaults), UPSTREAM_WEB_APP, "the CLI's defaults");
+  const turnedOff = daemonHome({ version: 1, daemon: { cors: { allowedOrigins: [] } } });
+  assert.deepEqual(
+    loadConfig(turnedOff, { env: {} }).corsAllowedOrigins,
+    [],
+    '"[]" in config.json',
+  );
 });
 
 // Internal test builds wrote upstream's web app into config.json's CORS allowlist. The daemon
@@ -229,7 +238,11 @@ test("homes from internal test builds no longer let upstream's web app in", () =
   });
   assert.deepEqual(loadConfig(home, { env: {} }).corsAllowedOrigins, [kept]);
   const env = { PASEO_CORS_ORIGINS: upstreamOrigins.join(",") };
-  assert.deepEqual(loadConfig(daemonHome(), { env }).corsAllowedOrigins, [], "PASEO_CORS_ORIGINS");
+  assert.deepEqual(
+    loadConfig(daemonHome(), { env }).corsAllowedOrigins,
+    [WEB_APP_ORIGIN],
+    "PASEO_CORS_ORIGINS",
+  );
   // Only the resolved config drops it: config.json keeps what the build wrote.
   const written = JSON.parse(readFileSync(path.join(home, "config.json"), "utf8"));
   assert.deepEqual(written.daemon.cors.allowedOrigins, [
@@ -309,6 +322,17 @@ test("onboard names the hosted web app as the second next step", () => {
     onboard.includes('import { BRAND_WEB_APP } from "@getpaseo/protocol/brand-web-app";'),
     `${onboardPath} does not import BRAND_WEB_APP`,
   );
+});
+
+// The origins bootstrap.ts always lets in, whatever config.json says. The hosted web app stays
+// out of them, so "[]" in config.json still turns it off.
+test("the daemon's fixed CORS origins leave the hosted web app out", () => {
+  const bootstrapPath = "packages/server/src/server/bootstrap.ts";
+  const bootstrap = readFileSync(path.join(repoRoot, bootstrapPath), "utf8");
+  const fixed = /^ {2}const fixedAllowedOrigins = \[[\s\S]*?^ {2}\];$/m.exec(bootstrap)?.[0];
+  assert.ok(fixed, `fixedAllowedOrigins is gone from ${bootstrapPath}`);
+  assert.ok(fixed.includes('"woowtech-smart://app"'), "the desktop app's origin moved");
+  assert.doesNotMatch(fixed, /smart\.woowtech\.io|BRAND_WEB_APP/);
 });
 
 test("host labels use normal server_info with hydration and generation guards", () => {
