@@ -1,8 +1,14 @@
 import Constants from "expo-constants";
 import * as ExpoCrypto from "expo-crypto";
 import { Platform } from "react-native";
+import { getIsElectron } from "@/constants/platform";
 import { resolveAppVersion } from "@/utils/app-version";
-import { sendReport, type AiReportReceipt, type ReportTransport } from "./ai-content-report-logic";
+import {
+  reportPlatform,
+  sendReport,
+  type AiReportReceipt,
+  type ReportTransport,
+} from "./ai-content-report-logic";
 export type { AiReportReceipt } from "./ai-content-report-logic";
 
 export const AI_REPORT_REASONS = [
@@ -57,13 +63,12 @@ export async function submitAiContentReport(
       clearTimeout(timeout);
     }
   };
-  const platform = Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "web";
   return sendReport(
     {
       schemaVersion: 1,
       reportId: (injected?.generateId ?? ExpoCrypto.randomUUID)(),
       reason: input.reason,
-      platform,
+      platform: reportPlatform(Platform.OS, getIsElectron()),
       appVersion: resolveAppVersion() ?? "unknown",
       locale: input.locale || "en",
       reportedContent: input.reportedContent,

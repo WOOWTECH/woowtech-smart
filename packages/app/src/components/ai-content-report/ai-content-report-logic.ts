@@ -10,6 +10,17 @@ export interface ReportTransportResponse {
 }
 export type ReportTransport = (body: string) => Promise<ReportTransportResponse>;
 
+// The report's platform field. The desktop App (Electron) and the hosted web app are both
+// Platform.OS "web"; the receivers' contract has "desktop" for the first
+// (woowtech/ai-content-report-service/contract.mjs, REPORT_PLATFORMS).
+export function reportPlatform(
+  os: string,
+  electron: boolean,
+): "ios" | "android" | "desktop" | "web" {
+  if (os === "ios" || os === "android") return os;
+  return electron ? "desktop" : "web";
+}
+
 export function isAiReportReceipt(value: unknown): value is AiReportReceipt {
   if (!value || typeof value !== "object") return false;
   return (
