@@ -47,7 +47,8 @@ const ENABLED = ["ci.yml"];
 // Disabled in GitHub: Actions → the workflow → ··· → Disable workflow.
 const DISABLED_IN_UI = {
   "android-apk-release.yml": "builds on upstream's EAS project and uploads to a GitHub release",
-  "deploy-app.yml": "deploys the web app to upstream's Cloudflare Pages project",
+  "deploy-app.yml":
+    "runs deploy:web, which now calls woowtech/scripts/deploy-web.sh (needs the owner's wrangler login on the Mac)",
   "deploy-relay.yml": "deploys upstream's relay config; ours is deployed by hand",
   "deploy-website.yml": "deploys paseo.sh to upstream's Cloudflare account",
   "desktop-release.yml": "builds on macOS and Windows runners and publishes a GitHub release",
