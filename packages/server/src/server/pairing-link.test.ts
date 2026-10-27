@@ -128,6 +128,19 @@ describe("app.baseUrl in an existing config.json", () => {
     expect(splitPairingLink(await pairingLinkOf(home)).base).toBe(`${chosen}/`);
   });
 
+  // Only the exact strings an earlier release wrote count: no trimming, case folding or prefixes.
+  test.each([
+    " woowtech-smart:///",
+    "woowtech-smart:/// ",
+    "WOOWTECH-SMART:///",
+    "woowtech-smart://",
+    "https://app.paseo.sh//",
+  ])("%j is not an earlier default and stays", async (chosen) => {
+    const home = await homeWithConfig({ version: 1, app: { baseUrl: chosen } });
+
+    expect(loadConfig(home, { env: {} }).appBaseUrl).toBe(chosen);
+  });
+
   test("PASEO_APP_BASE_URL still wins over config.json", async () => {
     const home = await homeWithConfig({ version: 1, app: { baseUrl: "https://app.paseo.sh" } });
 
