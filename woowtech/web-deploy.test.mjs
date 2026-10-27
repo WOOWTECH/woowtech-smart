@@ -7,6 +7,7 @@
 //   node --test woowtech/web-deploy.test.mjs
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   closeSync,
@@ -100,6 +101,17 @@ const OWNER_LOGIN = {
   accounts: [{ id: ACCOUNT_ID, name: "WOOWTECH" }],
   tokenPermissions: ["account:read", "user:read", "pages:write", "offline_access"],
 };
+// The files whose change since production's commit deploy-web.sh makes someone acknowledge (exit 7).
+const GUARD_FILES = [
+  "woowtech/web/export-baseline.json",
+  "woowtech/web/_headers",
+  "woowtech/web/check-export.mjs",
+  "woowtech/web/verify-live.mjs",
+  "woowtech/scripts/deploy-web.sh",
+];
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+const sha256 = (data) => createHash("sha256").update(data).digest("hex");
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Writes a small export: index.html, the entry bundle and two assets, plus `files` (null deletes). */
 function writeExport(dir, { files = {}, bundle = BUNDLE, headers = true } = {}) {
@@ -131,58 +143,108 @@ const SH_LOG_ENV = (names) => `for name in ${names.join(" ")}; do
     if [ "$isset" = set ]; then printf 'ENV %s=%s\\n' "$name" "$value"; fi
   done`;
 
-// wrangler: records each call (arguments, working directory, the Cloudflare environment) and
-// answers like wrangler 4.149.0 does with --json. FAKE_* variables change the answers.
+// What wrangler reads from the environment that could carry the login somewhere else, or take the
+// place of it: none of these may reach it (README section 27).
+const WRANGLER_ENV_NAMES = [
+  "CLOUDFLARE_ACCOUNT_ID",
+  "XDG_CONFIG_HOME",
+  "WRANGLER_CACHE_DIR",
+  "WRANGLER_SEND_METRICS",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_API_KEY",
+  "CLOUDFLARE_EMAIL",
+  "CF_API_TOKEN",
+  "CF_ACCOUNT_ID",
+  "WRANGLER_CF_AUTHORIZATION_TOKEN",
+  "CLOUDFLARE_API_BASE_URL",
+  "CF_API_BASE_URL",
+  "CLOUDFLARE_COMPLIANCE_REGION",
+  "WRANGLER_API_ENVIRONMENT",
+  "WRANGLER_AUTH_DOMAIN",
+  "WRANGLER_AUTH_URL",
+  "WRANGLER_TOKEN_URL",
+  "WRANGLER_REVOKE_URL",
+  "WRANGLER_CLIENT_ID",
+  "NODE_OPTIONS",
+];
+const HOSTILE_WRANGLER_ENV = {
+  CLOUDFLARE_API_TOKEN: "not-the-owner-login",
+  CLOUDFLARE_API_KEY: "key",
+  CLOUDFLARE_EMAIL: "someone@example.invalid",
+  CF_API_TOKEN: "old-name",
+  CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+  WRANGLER_CF_AUTHORIZATION_TOKEN: "token",
+  CLOUDFLARE_API_BASE_URL: "https://api.example.invalid",
+  CF_API_BASE_URL: "https://api.example.invalid",
+  CLOUDFLARE_COMPLIANCE_REGION: "fedramp_high",
+  WRANGLER_API_ENVIRONMENT: "staging",
+  WRANGLER_AUTH_DOMAIN: "auth.example.invalid",
+  WRANGLER_AUTH_URL: "https://auth.example.invalid/auth",
+  WRANGLER_TOKEN_URL: "https://auth.example.invalid/token",
+  WRANGLER_REVOKE_URL: "https://auth.example.invalid/revoke",
+  WRANGLER_CLIENT_ID: "client",
+  NODE_OPTIONS: "--max-old-space-size=2048",
+};
+
+// wrangler: records each call (arguments, working directory, whether stdin is a terminal, the
+// Cloudflare environment) and answers like wrangler 4.149.0 does with --json. FAKE_* variables
+// change the answers; `logout` makes `whoami --json` say loggedIn false from then on.
 const FAKE_WRANGLER = `#!/bin/sh
 log="$FAKE_LOG/wrangler.log"
 deployed="$FAKE_LOG/wrangler-deployed"
+loggedout="$FAKE_LOG/wrangler-logged-out"
+whoamis="$FAKE_LOG/wrangler-whoami-count"
 {
   printf 'CALL\\n'
   for arg in "$@"; do printf 'ARG %s\\n' "$arg"; done
   printf 'CWD %s\\n' "$PWD"
   printf 'CWD_ENTRIES %s\\n' "$(ls -A . | wc -l | tr -d ' ')"
+  if [ -t 0 ]; then printf 'STDIN tty\\n'; else printf 'STDIN not-tty\\n'; fi
   if [ -n "\${WRANGLER_CACHE_DIR:-}" ] && [ -d "$WRANGLER_CACHE_DIR" ]; then
     printf 'CACHE_ENTRIES %s\\n' "$(ls -A "$WRANGLER_CACHE_DIR" | wc -l | tr -d ' ')"
   fi
-  ${SH_LOG_ENV([
-    "CLOUDFLARE_ACCOUNT_ID",
-    "XDG_CONFIG_HOME",
-    "WRANGLER_CACHE_DIR",
-    "WRANGLER_SEND_METRICS",
-    "CLOUDFLARE_API_TOKEN",
-    "CLOUDFLARE_API_KEY",
-    "CLOUDFLARE_EMAIL",
-    "CF_API_TOKEN",
-    "CF_ACCOUNT_ID",
-  ])}
+  ${SH_LOG_ENV(WRANGLER_ENV_NAMES)}
 } >>"$log"
 login='${JSON.stringify(OWNER_LOGIN)}'
 projects='[{"Project Name":"woowtech-smart-web","Project Domains":"woowtech-smart-web.pages.dev"}]'
 case "$*" in
   --version) echo "\${FAKE_WRANGLER_VERSION:-4.149.0}"; exit 0 ;;
-  "whoami --json") printf '%s\\n' "\${FAKE_WHOAMI:-$login}"; exit "\${FAKE_WHOAMI_EXIT:-0}" ;;
+  "whoami --json")
+    count=$(cat "$whoamis" 2>/dev/null || echo 0)
+    count=$((count + 1))
+    echo "$count" >"$whoamis"
+    if [ -f "$loggedout" ]; then printf '{"loggedIn":false}\\n'; exit 1; fi
+    if [ "$count" -ge 2 ] && [ -n "\${FAKE_WHOAMI_LATER:-}" ]; then printf '%s\\n' "$FAKE_WHOAMI_LATER"; exit 0; fi
+    printf '%s\\n' "\${FAKE_WHOAMI:-$login}"
+    exit "\${FAKE_WHOAMI_EXIT:-0}" ;;
+  logout)
+    if [ -z "\${FAKE_LOGOUT_KEEPS:-}" ]; then : >"$loggedout"; fi
+    echo "Successfully logged out."
+    exit 0 ;;
   "pages project list --json") printf '%s\\n' "\${FAKE_PROJECTS:-$projects}"; exit 0 ;;
 esac
 if [ "$1 $2" = "pages deploy" ]; then
   branch=""
   hash=""
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --branch) branch=$2 ;;
-      --commit-hash) hash=$2 ;;
+  for arg in "$@"; do
+    case "$arg" in
+      --branch=*) branch=\${arg#--branch=} ;;
+      --commit-hash=*) hash=\${arg#--commit-hash=} ;;
     esac
-    shift
   done
+  rm -rf "$FAKE_LOG/uploaded"
+  cp -R "$3" "$FAKE_LOG/uploaded"
   printf '%s %s\\n' "$branch" "\${FAKE_DEPLOYED_SHA:-$hash}" >"$deployed"
   exit "\${FAKE_DEPLOY_EXIT:-0}"
 fi
 if [ "$1 $2 $3" = "pages deployment list" ]; then
+  if [ -n "\${FAKE_LIST_FAIL:-}" ]; then echo "stand-in wrangler: the deployment list failed" >&2; exit 1; fi
   if [ ! -f "$deployed" ]; then printf '%s\\n' "\${FAKE_PREVIOUS:-[]}"; exit 0; fi
   read -r branch hash <"$deployed"
   environment=Preview
   if [ "$branch" = main ]; then environment=Production; fi
   short=$(printf '%s' "$hash" | cut -c 1-7)
-  printf '[{"Id":"d1","Environment":"%s","Branch":"%s","Source":"%s","Deployment":"https://0123abcd.woowtech-smart-web.pages.dev","Status":"now"}]\\n' "$environment" "$branch" "$short"
+  printf '[{"Id":"d1","Environment":"%s","Branch":"%s","Source":"%s","Deployment":"https://0123abcd.woowtech-smart-web.pages.dev","Status":"now"}]\\n' "\${FAKE_DEPLOYED_ENV:-$environment}" "\${FAKE_DEPLOYED_BRANCH:-$branch}" "$short"
 fi
 exit 0
 `;
@@ -219,12 +281,16 @@ exit 0
 
 // npx: the build's \`npx expo export\`. Records its arguments, directory and the build's
 // environment, then copies FAKE_TEMPLATE to --output-dir instead of building (FAKE_SPARSE adds a
-// 26 MiB sparse file).
+// 26 MiB sparse file). FAKE_BUILD_* make the build do what a build in a shared worktree could:
+// fail, edit a tracked file, commit, leave a .env file, or make ~/.wrangler.
 const FAKE_NPX = `#!/bin/sh
 {
   printf 'CALL\\n'
   for arg in "$@"; do printf 'ARG %s\\n' "$arg"; done
   printf 'CWD %s\\n' "$PWD"
+  if [ -n "\${FAKE_FINAL_OUT:-}" ]; then
+    if [ -d "$FAKE_FINAL_OUT" ]; then printf 'ENV FINAL_OUT=yes\\n'; else printf 'ENV FINAL_OUT=no\\n'; fi
+  fi
   ${SH_LOG_ENV([
     "APP_VARIANT",
     "WOOWTECH_AI_CONTENT_REPORT_URL",
@@ -238,6 +304,7 @@ const FAKE_NPX = `#!/bin/sh
     "CLOUDFLARE_API_TOKEN",
   ])}
 } >>"$FAKE_LOG/npx.log"
+if [ -n "\${FAKE_BUILD_FAIL:-}" ]; then echo "stand-in npx: the build failed" >&2; exit 1; fi
 out=""
 previous=""
 for arg in "$@"; do
@@ -253,13 +320,21 @@ cp -R "$FAKE_TEMPLATE/." "$out/"
 if [ -n "\${FAKE_SPARSE:-}" ]; then
   dd if=/dev/zero of="$out/$FAKE_SPARSE" bs=1 count=0 seek=27262976 2>/dev/null
 fi
+if [ -n "\${FAKE_BUILD_TOUCH:-}" ]; then echo "// edited during the build" >>"$FAKE_BUILD_TOUCH"; fi
+if [ -n "\${FAKE_BUILD_COMMIT:-}" ]; then
+  git -c user.name=Other -c user.email=other@example.invalid commit -q --allow-empty -m "Moved during the build"
+fi
+if [ -n "\${FAKE_BUILD_ENV_FILE:-}" ]; then echo "EXPO_PUBLIC_LOCAL_DAEMON=localhost:6768" >"$PWD/.env"; fi
+if [ -n "\${FAKE_BUILD_WRANGLER_DIR:-}" ]; then mkdir -p "$HOME/.wrangler"; fi
 exit 0
 `;
 
-// verify-live.mjs in the fixture repository: records how deploy-web.sh calls it.
+// verify-live.mjs in the fixture repository: records how deploy-web.sh calls it and ends as
+// FAKE_VERIFY_EXIT (the deployment's own address) or FAKE_VERIFY_SITE_EXIT (smart.woowtech.io) say.
 const FAKE_VERIFY = `import { appendFileSync } from "node:fs";
 appendFileSync(process.env.FAKE_LOG + "/verify.jsonl", JSON.stringify({ args: process.argv.slice(2) }) + "\\n");
-process.exit(Number(process.env.FAKE_VERIFY_EXIT ?? 0));
+const site = process.argv[2].includes("smart.woowtech.io");
+process.exit(Number((site ? process.env.FAKE_VERIFY_SITE_EXIT : process.env.FAKE_VERIFY_EXIT) ?? 0));
 `;
 
 function git(cwd, args, env) {
@@ -276,9 +351,9 @@ function writeTool(file, source) {
 /**
  * A repository with deploy-web.sh, check-export.mjs and _headers from this checkout, a stand-in
  * verify-live.mjs, a baseline that fits the stand-in export, and a bare origin it is pushed to.
- * `linked` adds a linked worktree of it, where the script then runs.
+ * `linked` adds a linked worktree of it, where the script then runs; `subject` is the commit's.
  */
-function deployFixture(t, { linked = false } = {}) {
+function deployFixture(t, { linked = false, subject = "Ship the web app" } = {}) {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "woowtech-deploy-web-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const dirs = Object.fromEntries(
@@ -305,7 +380,7 @@ function deployFixture(t, { linked = false } = {}) {
   git(repo, ["init", "-q", "-b", "main"], gitEnv);
   git(repo, ["add", "-A"], gitEnv);
   const identity = ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid"];
-  git(repo, [...identity, "commit", "-q", "-m", "Ship the web app"], gitEnv);
+  git(repo, [...identity, "commit", "-q", "-m", subject], gitEnv);
   git(root, ["init", "-q", "--bare", "origin.git"], gitEnv);
   git(repo, ["remote", "add", "origin", path.join(root, "origin.git")], gitEnv);
   git(repo, ["push", "-q", "origin", "main"], gitEnv);
@@ -322,11 +397,22 @@ function deployFixture(t, { linked = false } = {}) {
   writeExport(dirs.template, { headers: false });
   const sha = git(repo, ["rev-parse", "HEAD"], gitEnv);
   const short = git(repo, ["rev-parse", "--short=12", "HEAD"], gitEnv);
-  const out = path.join(dirs.home, ".local/share/woowtech-smart/web-dist", short);
-  return { ...dirs, root, checkout, gitEnv, identity, sha, out };
+  const outRoot = path.join(dirs.home, ".local/share/woowtech-smart/web-dist");
+  const loginHome = path.join(dirs.home, ".local/share/woowtech-smart/wrangler-pages");
+  return {
+    ...dirs,
+    root,
+    checkout,
+    gitEnv,
+    identity,
+    sha,
+    outRoot,
+    loginHome,
+    out: path.join(outRoot, short),
+  };
 }
 
-/** A stand-in's calls: { args, cwd, cwdEntries, cacheEntries, env } from its CALL/ARG/... lines. */
+/** A stand-in's calls: { args, cwd, cwdEntries, cacheEntries, stdin, env } from its CALL/ARG/... lines. */
 function readCalls(fixture, name) {
   const file = path.join(fixture.log, name);
   if (!existsSync(file)) return [];
@@ -339,6 +425,7 @@ function readCalls(fixture, name) {
     else if (kind === "CWD") call.cwd = rest;
     else if (kind === "CWD_ENTRIES") call.cwdEntries = Number(rest);
     else if (kind === "CACHE_ENTRIES") call.cacheEntries = Number(rest);
+    else if (kind === "STDIN") call.stdin = rest;
     else if (kind === "ENV")
       call.env[rest.slice(0, rest.indexOf("="))] = rest.slice(rest.indexOf("=") + 1);
   }
@@ -354,10 +441,13 @@ function readJsonLines(fixture, name) {
     .map((line) => JSON.parse(line));
 }
 
-/** Runs deploy-web.sh in the fixture with only the variables it needs, and what the tools saw. */
-function deploy(fixture, { args = [], env = {}, shell = null } = {}) {
+function resetLogs(fixture) {
   for (const name of readdirSync(fixture.log))
-    rmSync(path.join(fixture.log, name), { force: true });
+    rmSync(path.join(fixture.log, name), { recursive: true, force: true });
+}
+
+/** The variables deploy-web.sh gets: only what it needs, and what the stand-in tools read. */
+function runEnv(fixture, env) {
   const fullEnv = {
     PATH: `${fixture.bin}:/usr/bin:/bin:/usr/sbin:/sbin`,
     HOME: fixture.home,
@@ -373,13 +463,37 @@ function deploy(fixture, { args = [], env = {}, shell = null } = {}) {
   };
   for (const [name, value] of Object.entries(fullEnv))
     if (value === undefined) delete fullEnv[name];
-  const script = path.join(fixture.checkout, DEPLOY_SCRIPT);
-  const result = shell
-    ? spawnSync(shell, [script, ...args], { env: fullEnv, encoding: "utf8" })
-    : spawnSync(script, args, { env: fullEnv, encoding: "utf8" });
+  return fullEnv;
+}
+
+/** What deploy-web.sh prints as the hash of the guard files' diff from `from` to HEAD. */
+function guardHash(fixture, from) {
+  const diff = spawnSync(
+    "git",
+    [
+      "-c",
+      "core.quotepath=false",
+      "diff",
+      "--no-color",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      "--full-index",
+      from,
+      "HEAD",
+      "--",
+      ...GUARD_FILES,
+    ],
+    { cwd: fixture.checkout, env: fixture.gitEnv },
+  );
+  assert.equal(diff.status, 0, String(diff.stderr));
+  return sha256(diff.stdout).slice(0, 12);
+}
+
+function collect(fixture, status, output) {
   return {
-    status: result.status,
-    output: `${result.stdout}\n${result.stderr}`,
+    status,
+    output,
     wrangler: readCalls(fixture, "wrangler.log"),
     heavy: readCalls(fixture, "heavy.log"),
     npm: readCalls(fixture, "npm.log"),
@@ -388,10 +502,46 @@ function deploy(fixture, { args = [], env = {}, shell = null } = {}) {
   };
 }
 
+/**
+ * Runs deploy-web.sh in the fixture and returns what the tools saw. A production upload is a first
+ * deploy unless FAKE_PREVIOUS says otherwise, so it comes with the acknowledgement of the guard
+ * diff (exit 7) unless `ack` is null or the environment brings its own.
+ */
+function deploy(fixture, { args = [], env = {}, shell = null, ack = "first" } = {}) {
+  resetLogs(fixture);
+  const production =
+    !args.includes("--preview") && !args.includes("--logout") && env.WOOW_DRY_RUN === undefined;
+  const acknowledged =
+    production && ack === "first" && !("WOOW_ACK_GUARD_DIFF" in env)
+      ? { WOOW_ACK_GUARD_DIFF: guardHash(fixture, EMPTY_TREE) }
+      : {};
+  const fullEnv = runEnv(fixture, { ...acknowledged, ...env });
+  const script = path.join(fixture.checkout, DEPLOY_SCRIPT);
+  const result = shell
+    ? spawnSync(shell, [script, ...args], { env: fullEnv, encoding: "utf8" })
+    : spawnSync(script, args, { env: fullEnv, encoding: "utf8" });
+  return collect(fixture, result.status, `${result.stdout}\n${result.stderr}`);
+}
+
 const uploads = (run) =>
   run.wrangler.filter((call) => call.args[0] === "pages" && call.args[1] === "deploy");
 const builds = (run) => run.heavy.filter((call) => call.args.join(" ").includes("expo export"));
 const npmCi = (run) => run.npm.filter((call) => call.args.includes("ci"));
+/** The wrangler subcommands in order; an upload is just "pages deploy". */
+const kinds = (run) =>
+  run.wrangler.map(({ args }) =>
+    args[0] === "pages"
+      ? args
+          .slice(0, 3)
+          .join(" ")
+          .replace(/^pages deploy .*/, "pages deploy")
+      : args.slice(0, 2).join(" "),
+  );
+const uploadedTree = (fixture) => listTree(path.join(fixture.log, "uploaded"));
+const stagesLeft = (fixture) =>
+  existsSync(fixture.outRoot)
+    ? readdirSync(fixture.outRoot).filter((name) => name.startsWith(".stage-"))
+    : [];
 
 function listTree(dir, prefix = "") {
   return readdirSync(dir, { withFileTypes: true })
@@ -409,19 +559,67 @@ function assertRefused(run, status, pattern) {
   assert.deepEqual(uploads(run), [], "it uploaded anyway");
 }
 
+/** The upload directory a run gave wrangler: a copy under the script's own temporary directory. */
+function assertUploadCopy(fixture, run) {
+  const dir = uploads(run)[0].args[2];
+  assert.match(
+    dir,
+    new RegExp(`^${escapeRegExp(fixture.tmp)}/woowtech-deploy-web\\.[A-Za-z0-9]+/upload$`),
+  );
+  assert.notEqual(dir, fixture.out);
+  return dir;
+}
+
+/** A commit on top of the fixture's, pushed: `files` are written, `subject` is its subject. */
+function commitOnTop(fixture, subject, files = {}) {
+  for (const [relative, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(fixture.repo, relative)), { recursive: true });
+    writeFileSync(path.join(fixture.repo, relative), content);
+  }
+  git(fixture.repo, ["add", "-A"], fixture.gitEnv);
+  git(
+    fixture.repo,
+    [...fixture.identity, "commit", "-q", "--allow-empty", "-m", subject],
+    fixture.gitEnv,
+  );
+  git(fixture.repo, ["push", "-q", "origin", "main"], fixture.gitEnv);
+  return git(fixture.repo, ["rev-parse", "HEAD"], fixture.gitEnv);
+}
+
+/** What `wrangler pages deployment list --json` says production runs: `sha` as its 7-character Source. */
+const productionRuns = (sha, id = "d0") =>
+  JSON.stringify([
+    {
+      Id: id,
+      Environment: "Production",
+      Branch: "main",
+      Source: sha.slice(0, 7),
+      Deployment: "https://old.woowtech-smart-web.pages.dev",
+    },
+  ]);
+
+test("deploy-web.sh asks for a guard diff of the files this test hashes, and its prompt gives up", () => {
+  const script = read(DEPLOY_SCRIPT);
+  assert.deepEqual(/^GUARD_FILES="([^"]+)"$/m.exec(script)?.[1].split(" "), GUARD_FILES);
+  for (const file of GUARD_FILES) assert.ok(existsSync(path.join(repoRoot, file)), file);
+  // A person who walks away from the prompt, or an agent that runs the script in a terminal
+  // without WOOW_CONFIRM_SHA, would wait for ever.
+  assert.match(script, /IFS= read -r -t 600 answer/);
+});
+
 test(
-  "a dry run builds through heavy.sh with the production settings and runs no wrangler",
+  "a dry run builds into a stage, through heavy.sh with the production settings, and runs no wrangler",
   { skip: needsNode22 },
   (t) => {
     const fixture = deployFixture(t);
     const run = deploy(fixture, {
       env: {
         WOOW_DRY_RUN: "1",
-        // A caller's local daemon, dev label and Electron platform must not reach the bundle.
-        EXPO_PUBLIC_LOCAL_DAEMON: "localhost:6768",
+        // A caller's dev label and Electron platform must not reach the bundle.
         EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL: "dev",
         PASEO_WEB_PLATFORM: "electron",
         CLOUDFLARE_API_TOKEN: "not-the-owner-login",
+        FAKE_FINAL_OUT: fixture.out,
       },
     });
 
@@ -434,6 +632,8 @@ test(
       ["run", "web-export", "--"],
       "heavy.sh's default label",
     );
+    // EXPO_PUBLIC_LOCAL_DAEMON is refused when it is set (below); it is unset for the build anyway.
+    assert.ok(builds(run)[0].args.join(" ").includes("-u EXPO_PUBLIC_LOCAL_DAEMON"));
     // The build command line, run as written, with npm and npx standing in.
     assert.deepEqual(
       run.npm.map((call) => call.args),
@@ -441,17 +641,13 @@ test(
     );
     assert.equal(run.npx.length, 1);
     const [exporter] = run.npx;
-    assert.deepEqual(exporter.args, [
-      "expo",
-      "export",
-      "--platform",
-      "web",
-      "--output-dir",
-      fixture.out,
-      "--clear",
-      "--max-workers",
-      "2",
-    ]);
+    // The export is built in a stage of its own and moved to its place afterwards.
+    assert.equal(exporter.args.slice(0, 5).join(" "), "expo export --platform web --output-dir");
+    assert.match(
+      exporter.args[5],
+      new RegExp(`^${escapeRegExp(fixture.outRoot)}/\\.stage-[0-9a-f]{12}\\.[A-Za-z0-9]+/export$`),
+    );
+    assert.deepEqual(exporter.args.slice(6), ["--clear", "--max-workers", "2"]);
     assert.equal(exporter.cwd, path.join(fixture.checkout, "packages/app"));
     assert.equal(exporter.env.APP_VARIANT, "production");
     assert.equal(
@@ -468,13 +664,19 @@ test(
     ]) {
       assert.equal(exporter.env[name], undefined, `${name} reached the build`);
     }
+    assert.equal(exporter.env.FINAL_OUT, "no", "no export existed yet");
+    assert.deepEqual(stagesLeft(fixture), [], "the stage was left behind");
     // The export plus _headers: deploy-web.sh writes its build record next to OUT, not into it.
     assert.deepEqual(listTree(fixture.out), [...listTree(fixture.template), "_headers"].sort());
-    assert.ok(existsSync(`${fixture.out}.build.json`));
     assert.equal(
       readFileSync(path.join(fixture.out, "_headers"), "utf8"),
       readFileSync(HEADERS, "utf8"),
     );
+    // The record has the SHA-256 of every exported file.
+    const info = JSON.parse(readFileSync(`${fixture.out}.build.json`, "utf8"));
+    assert.deepEqual(Object.keys(info.files), listTree(fixture.out));
+    assert.equal(info.files[ENTRY], sha256(BUNDLE));
+    assert.equal(info.dirty, false);
   },
 );
 
@@ -490,25 +692,24 @@ test(
   },
 );
 
-/** Every wrangler call: WOOWTECH's account, the wrangler-pages login, an empty cache and directory. */
-function assertWranglerEnvironment(fixture, run) {
+/**
+ * Every wrangler call: WOOWTECH's account, the login directory `home`, an empty cache and working
+ * directory, no credentials or endpoints from the caller, and no standard input to ask questions of.
+ */
+function assertWranglerEnvironment(fixture, run, home = "wrangler-pages") {
   assert.ok(run.wrangler.length > 0, "wrangler never ran");
   for (const call of run.wrangler) {
     const where = call.args.join(" ");
     assert.equal(call.env.CLOUDFLARE_ACCOUNT_ID, ACCOUNT_ID, where);
     assert.equal(
       call.env.XDG_CONFIG_HOME,
-      path.join(fixture.home, ".local/share/woowtech-smart/wrangler-pages"),
+      path.join(fixture.home, ".local/share/woowtech-smart", home),
       where,
     );
-    assert.equal(
-      call.env.CLOUDFLARE_API_TOKEN,
-      undefined,
-      `${where}: the caller's API token reached wrangler`,
-    );
-    assert.equal(call.env.CF_API_TOKEN, undefined, where);
-    assert.equal(call.env.CLOUDFLARE_API_KEY, undefined, where);
     assert.equal(call.env.WRANGLER_SEND_METRICS, "false", where);
+    for (const name of Object.keys(HOSTILE_WRANGLER_ENV)) {
+      assert.equal(call.env[name], undefined, `${where}: the caller's ${name} reached wrangler`);
+    }
     assert.ok(
       call.env.WRANGLER_CACHE_DIR.startsWith(`${fixture.tmp}/`),
       `${where}: cache ${call.env.WRANGLER_CACHE_DIR}`,
@@ -516,6 +717,7 @@ function assertWranglerEnvironment(fixture, run) {
     assert.equal(call.cacheEntries, 0, `${where}: the cache directory was not empty`);
     assert.ok(call.cwd.startsWith(`${fixture.tmp}/`), `${where}: ran in ${call.cwd}`);
     assert.equal(call.cwdEntries, 0, `${where}: its directory was not empty`);
+    assert.equal(call.stdin, "not-tty", `${where}: stdin was a terminal`);
   }
   assert.equal(
     existsSync(run.wrangler[0].env.WRANGLER_CACHE_DIR),
@@ -525,54 +727,59 @@ function assertWranglerEnvironment(fixture, run) {
 }
 
 test(
-  "a production deploy from an agent: checks, uploads, verifies, and stays logged in",
+  "a production deploy from an agent: checks twice, uploads a copy, verifies, and stays logged in",
   { skip: needsNode22 },
   (t) => {
     const fixture = deployFixture(t);
-    const run = deploy(fixture, {
-      env: { CLOUDFLARE_API_TOKEN: "not-the-owner-login", CF_API_TOKEN: "old-name" },
-    });
+    const run = deploy(fixture, { env: HOSTILE_WRANGLER_ENV });
 
     assert.equal(run.status, 0, run.output);
     assertWranglerEnvironment(fixture, run);
-    assert.deepEqual(
-      run.wrangler.map((call) => call.args.slice(0, 3).join(" ")),
-      [
-        "--version",
-        "whoami --json",
-        "pages project list",
-        "pages deployment list",
-        `pages deploy ${fixture.out}`,
-        "pages deployment list",
-      ],
-    );
-    assert.deepEqual(uploads(run)[0].args, [
+    assert.deepEqual(kinds(run), [
+      // before the build
+      "--version",
+      "whoami --json",
+      "pages project list",
+      // production's newest deployment, for the checks on where this commit comes from
+      "pages deployment list",
+      // right before the upload
+      "--version",
+      "whoami --json",
+      "pages project list",
+      "pages deploy",
+      "pages deployment list",
+    ]);
+    // Each value shares its argument with its flag, and --cwd is the empty directory wrangler runs in.
+    const [upload] = uploads(run);
+    const dir = assertUploadCopy(fixture, run);
+    assert.deepEqual(upload.args, [
       "pages",
       "deploy",
-      fixture.out,
-      "--project-name",
-      "woowtech-smart-web",
-      "--branch",
-      "main",
-      "--commit-hash",
-      fixture.sha,
-      "--commit-message",
-      "Ship the web app",
+      dir,
+      "--project-name=woowtech-smart-web",
+      "--branch=main",
+      `--commit-hash=${fixture.sha}`,
+      "--commit-message=Ship the web app",
       "--commit-dirty=false",
+      `--cwd=${upload.cwd}`,
     ]);
+    // What was uploaded is the export plus _headers, and the copy is not where the export lives.
+    assert.deepEqual(uploadedTree(fixture), [...listTree(fixture.template), "_headers"].sort());
     // O12: the login stays for the next deploy.
     assert.deepEqual(
       run.wrangler.filter((call) => call.args[0] === "logout"),
       [],
     );
     assert.match(run.output, /without a confirmation/);
-    // No custom domain on the project yet: the check runs against pages.dev.
-    assert.deepEqual(run.verify, [{ args: ["https://woowtech-smart-web.pages.dev", fixture.out] }]);
+    // No custom domain on the project yet: the deployment's own address is the only one checked.
+    assert.deepEqual(run.verify, [
+      { args: ["https://0123abcd.woowtech-smart-web.pages.dev", dir] },
+    ]);
   },
 );
 
 test(
-  "once smart.woowtech.io is on the project, production is checked there",
+  "once smart.woowtech.io is on the project, production is checked there too",
   { skip: needsNode22 },
   (t) => {
     const fixture = deployFixture(t);
@@ -585,7 +792,87 @@ test(
     const run = deploy(fixture, { env: { FAKE_PROJECTS: JSON.stringify(projects) } });
 
     assert.equal(run.status, 0, run.output);
-    assert.deepEqual(run.verify, [{ args: ["https://smart.woowtech.io", fixture.out] }]);
+    // The Bulk Redirect makes woowtech-smart-web.pages.dev answer 301: that address is never checked.
+    const dir = assertUploadCopy(fixture, run);
+    assert.deepEqual(run.verify, [
+      { args: ["https://0123abcd.woowtech-smart-web.pages.dev", dir] },
+      { args: ["https://smart.woowtech.io", dir] },
+    ]);
+  },
+);
+
+test(
+  "a custom domain that is listed but not answering yet is its own failure, without rollback advice",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    const projects = JSON.stringify([
+      {
+        "Project Name": "woowtech-smart-web",
+        "Project Domains": "woowtech-smart-web.pages.dev, smart.woowtech.io",
+      },
+    ]);
+    // Production already runs this commit (deployment d0), so the rollback text has a target.
+    const env = {
+      FAKE_PROJECTS: projects,
+      FAKE_PREVIOUS: productionRuns(fixture.sha),
+      WOOW_VERIFY_ATTEMPTS: "2",
+    };
+
+    const notActive = deploy(fixture, { env: { ...env, FAKE_VERIFY_SITE_EXIT: "3" } });
+    assert.equal(notActive.status, 8, notActive.output);
+    assert.match(notActive.output, /smart\.woowtech\.io is on the project and does not answer/);
+    assert.doesNotMatch(notActive.output, /Rollback to this deployment/);
+    assert.equal(uploads(notActive).length, 1);
+    assert.deepEqual(
+      notActive.verify.map((call) => call.args[0]),
+      [
+        "https://0123abcd.woowtech-smart-web.pages.dev",
+        "https://smart.woowtech.io",
+        "https://smart.woowtech.io",
+      ],
+    );
+
+    // Answering with the wrong content is a real exit 6, with the rollback text.
+    const wrong = deploy(fixture, { env: { ...env, FAKE_VERIFY_SITE_EXIT: "1" } });
+    assert.equal(wrong.status, 6, wrong.output);
+    assert.match(wrong.output, /Rollback to this deployment/);
+
+    // The deployment's own address failing is exit 6 too, and the domain is not tried.
+    const own = deploy(fixture, { env: { ...env, FAKE_VERIFY_EXIT: "1" } });
+    assert.equal(own.status, 6, own.output);
+    assert.deepEqual(
+      own.verify.map((call) => call.args[0]),
+      Array(2).fill("https://0123abcd.woowtech-smart-web.pages.dev"),
+    );
+  },
+);
+
+test(
+  "once the domain-attached marker exists, a project without smart.woowtech.io is an error",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    mkdirSync(fixture.loginHome, { recursive: true });
+    writeFileSync(path.join(fixture.loginHome, "domain-attached"), "");
+
+    const detached = deploy(fixture);
+    assertRefused(
+      detached,
+      4,
+      /smart\.woowtech\.io is not on the Pages project woowtech-smart-web any more/,
+    );
+    assert.match(detached.output, /incident steps in woowtech\/README\.md section 27/);
+    assert.deepEqual(builds(detached), [], "it built before it looked at the project");
+
+    const projects = [
+      {
+        "Project Name": "woowtech-smart-web",
+        "Project Domains": "woowtech-smart-web.pages.dev, smart.woowtech.io",
+      },
+    ];
+    const attached = deploy(fixture, { env: { FAKE_PROJECTS: JSON.stringify(projects) } });
+    assert.equal(attached.status, 0, attached.output);
   },
 );
 
@@ -594,13 +881,28 @@ test(
   { skip: needsNode22 },
   (t) => {
     const fixture = deployFixture(t);
-    // A terminal answer is never asked for in preview.
-    const run = deploy(fixture, { args: ["--preview"], env: { WOOW_TTY: "/nonexistent" } });
+    // A terminal answer is never asked for in preview, and production's checks do not apply:
+    // the preview branch does not replace anything, and the guard diff is for production.
+    const run = deploy(fixture, {
+      args: ["--preview"],
+      env: { WOOW_TTY: "/nonexistent", FAKE_PREVIOUS: productionRuns("0".repeat(40)) },
+    });
 
     assert.equal(run.status, 0, run.output);
-    assert.equal(uploads(run)[0].args[uploads(run)[0].args.indexOf("--branch") + 1], "preview");
+    assert.deepEqual(kinds(run), [
+      "--version",
+      "whoami --json",
+      "pages project list",
+      "--version",
+      "whoami --json",
+      "pages project list",
+      "pages deploy",
+      "pages deployment list",
+    ]);
+    const dir = assertUploadCopy(fixture, run);
+    assert.equal(uploads(run)[0].args.includes("--branch=preview"), true);
     assert.deepEqual(run.verify, [
-      { args: ["https://0123abcd.woowtech-smart-web.pages.dev", fixture.out, "--allow-access"] },
+      { args: ["https://0123abcd.woowtech-smart-web.pages.dev", dir, "--allow-access"] },
     ]);
     assert.deepEqual(
       run.wrangler.filter((call) => call.args[0] === "logout"),
@@ -626,6 +928,7 @@ test("WOOW_CONFIRM_SHA confirms the commit without a prompt", { skip: needsNode2
 
   assert.equal(run.status, 0, run.output);
   assert.equal(uploads(run).length, 1);
+  assert.match(run.output, /WOOW_CONFIRM_SHA confirms/);
 });
 
 test(
@@ -634,26 +937,19 @@ test(
   (t) => {
     const fixture = deployFixture(t);
     const previous = fixture.sha;
-    writeFileSync(path.join(fixture.repo, "packages/app/added.txt"), "new\n");
-    git(fixture.repo, ["add", "-A"], fixture.gitEnv);
-    git(fixture.repo, [...fixture.identity, "commit", "-q", "-m", "Add a file"], fixture.gitEnv);
-    git(fixture.repo, ["push", "-q", "origin", "main"], fixture.gitEnv);
-    const live = [
-      {
-        Environment: "Production",
-        Branch: "main",
-        Source: previous.slice(0, 7),
-        Deployment: "https://x.pages.dev",
-      },
-    ];
-    const run = deploy(fixture, { env: { FAKE_PREVIOUS: JSON.stringify(live) } });
+    commitOnTop(fixture, "Add a file", { "packages/app/added.txt": "new\n" });
+    // No guard file changed since production's commit, so nothing has to be acknowledged.
+    const run = deploy(fixture, { ack: null, env: { FAKE_PREVIOUS: productionRuns(previous) } });
 
     assert.equal(run.status, 0, run.output);
     assert.match(
       run.output,
-      new RegExp(`production runs ${previous.slice(0, 7)} now; changes since then`),
+      new RegExp(
+        `production runs ${previous.slice(0, 7)} now \\(deployment d0\\); changes since then`,
+      ),
     );
     assert.match(run.output, /packages\/app\/added\.txt/);
+    assert.match(run.output, /the guard files are unchanged/);
   },
 );
 
@@ -721,6 +1017,102 @@ test(
 );
 
 test(
+  "an export that is not what its record says is built again, and what is uploaded is the copy",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    assert.equal(deploy(fixture, { env: { WOOW_DRY_RUN: "1" } }).status, 0);
+    // Someone changes the shared export between the dry run and the upload.
+    writeFileSync(path.join(fixture.out, ENTRY), `${BUNDLE}// not what was built\n`);
+    const run = deploy(fixture);
+
+    assert.equal(run.status, 0, run.output);
+    assert.match(run.output, /building again/);
+    assert.equal(builds(run).length, 1);
+    assert.equal(
+      readFileSync(path.join(fixture.log, "uploaded", ENTRY), "utf8"),
+      BUNDLE,
+      "the changed file was uploaded",
+    );
+    assertUploadCopy(fixture, run);
+  },
+);
+
+test(
+  "a failed build leaves the export that was there, and no stage",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    assert.equal(deploy(fixture, { env: { WOOW_DRY_RUN: "1" } }).status, 0);
+    const before = readFileSync(`${fixture.out}.build.json`, "utf8");
+    const run = deploy(fixture, {
+      env: { WOOW_DRY_RUN: "1", FAKE_BUILD_FAIL: "1", FAKE_FINAL_OUT: fixture.out },
+    });
+
+    assert.equal(run.status, 3, run.output);
+    assert.match(run.output, /the web export failed/);
+    assert.equal(run.npx[0].env.FINAL_OUT, "yes", "the old export was removed before the build");
+    assert.equal(readFileSync(`${fixture.out}.build.json`, "utf8"), before);
+    assert.deepEqual(listTree(fixture.out), [...listTree(fixture.template), "_headers"].sort());
+    assert.deepEqual(stagesLeft(fixture), []);
+  },
+);
+
+test(
+  "what changes during the build is found afterwards, and the export is not put in place",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    const cases = [
+      [
+        { FAKE_BUILD_TOUCH: path.join(fixture.repo, "packages/app/package.json") },
+        2,
+        /the worktree has changes after the build/,
+      ],
+      [{ FAKE_BUILD_COMMIT: "1" }, 2, /no longer [0-9a-f]{12}, after the build/],
+      [{ FAKE_BUILD_ENV_FILE: "1" }, 2, /packages\/app\/\.env exists after the build/],
+      [{ FAKE_BUILD_WRANGLER_DIR: "1" }, 4, /\.wrangler exists/],
+    ];
+    for (const [env, status, pattern] of cases) {
+      git(fixture.repo, ["checkout", "-q", "--", "."], fixture.gitEnv);
+      git(fixture.repo, ["reset", "-q", "--hard", fixture.sha], fixture.gitEnv);
+      rmSync(path.join(fixture.repo, "packages/app/.env"), { force: true });
+      rmSync(path.join(fixture.home, ".wrangler"), { recursive: true, force: true });
+      const run = deploy(fixture, { env });
+      assertRefused(run, status, pattern);
+      assert.equal(
+        existsSync(fixture.out),
+        false,
+        `${JSON.stringify(env)}: the export was put in place`,
+      );
+      assert.deepEqual(stagesLeft(fixture), []);
+    }
+  },
+);
+
+test(
+  "files git is told not to look at are refused, because git status does not show them",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    for (const flag of ["--skip-worktree", "--assume-unchanged"]) {
+      git(fixture.repo, ["update-index", flag, "packages/app/package.json"], fixture.gitEnv);
+      writeFileSync(path.join(fixture.repo, "packages/app/package.json"), '{ "name": "edited" }\n');
+      assert.equal(git(fixture.repo, ["status", "--porcelain"], fixture.gitEnv), "", flag);
+      const run = deploy(fixture);
+      assertRefused(run, 2, /assume-unchanged or skip-worktree/);
+      assert.deepEqual(builds(run), []);
+      git(
+        fixture.repo,
+        ["update-index", `--no-${flag.slice(2)}`, "packages/app/package.json"],
+        fixture.gitEnv,
+      );
+      git(fixture.repo, ["checkout", "-q", "--", "packages/app/package.json"], fixture.gitEnv);
+    }
+  },
+);
+
+test(
   "an unclean, unpushed or .env-carrying checkout is refused before the build",
   { skip: needsNode22 },
   (t) => {
@@ -731,12 +1123,17 @@ test(
     assert.deepEqual(builds(dirty), []);
     rmSync(path.join(fixture.repo, "stray.txt"));
 
-    writeFileSync(
-      path.join(fixture.repo, "packages/app/.env"),
-      "EXPO_PUBLIC_LOCAL_DAEMON=localhost:6768\n",
-    );
-    assertRefused(deploy(fixture), 2, /packages\/app\/\.env exists/);
-    rmSync(path.join(fixture.repo, "packages/app/.env"));
+    // Expo reads every one of these; .gitignore hides them from git status.
+    for (const name of [".env", ".env.local", ".env.production"]) {
+      writeFileSync(
+        path.join(fixture.repo, "packages/app", name),
+        "EXPO_PUBLIC_LOCAL_DAEMON=localhost:6768\n",
+      );
+      const refused = deploy(fixture);
+      assertRefused(refused, 2, new RegExp(`packages/app/${escapeRegExp(name)} exists`));
+      assert.deepEqual(builds(refused), []);
+      rmSync(path.join(fixture.repo, "packages/app", name));
+    }
 
     git(
       fixture.repo,
@@ -744,6 +1141,43 @@ test(
       fixture.gitEnv,
     );
     assertRefused(deploy(fixture), 2, /is on no origin branch/);
+  },
+);
+
+test(
+  "HEAD on a branch that is gone from origin is not on origin: fetch prunes",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    git(fixture.repo, ["checkout", "-q", "-b", "feature"], fixture.gitEnv);
+    commitOnTop(fixture, "Feature work");
+    git(fixture.repo, ["push", "-q", "origin", "feature"], fixture.gitEnv);
+    git(path.join(fixture.root, "origin.git"), ["branch", "-D", "feature"], fixture.gitEnv);
+    // The remote-tracking branch is still here, and still holds HEAD.
+    assert.match(
+      git(fixture.repo, ["branch", "-r", "--contains", "HEAD"], fixture.gitEnv),
+      /origin\/feature/,
+    );
+
+    assertRefused(deploy(fixture), 2, /is on no origin branch/);
+  },
+);
+
+test(
+  "EXPO_PUBLIC_LOCAL_DAEMON is refused whatever its value: it would be built into every visitor's browser",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    for (const [value, env] of [
+      ["localhost:6768", { WOOW_DRY_RUN: "1" }],
+      ["", { WOOW_DRY_RUN: "1" }],
+      ["localhost:6768", {}],
+    ]) {
+      const run = deploy(fixture, { env: { ...env, EXPO_PUBLIC_LOCAL_DAEMON: value } });
+      assertRefused(run, 2, /EXPO_PUBLIC_LOCAL_DAEMON is set/);
+      assert.deepEqual(builds(run), [], `built with it set to "${value}"`);
+      assert.deepEqual(run.npx, []);
+    }
   },
 );
 
@@ -763,6 +1197,18 @@ test("the switches refuse what they are not for", { skip: needsNode22 }, (t) => 
     2,
     /WOOW_DRY_RUN must be 1 or unset/,
   );
+  assertRefused(
+    deploy(fixture, { env: { WOOW_ALLOW_DOWNGRADE: "2" } }),
+    2,
+    /WOOW_ALLOW_DOWNGRADE must be 1 or unset/,
+  );
+  assertRefused(
+    deploy(fixture, { env: { WOOW_ACK_GUARD_DIFF: "yes" } }),
+    2,
+    /WOOW_ACK_GUARD_DIFF must be the 12 hexadecimal characters/,
+  );
+  assertRefused(deploy(fixture, { args: ["--logout", "--preview"] }), 2, /--logout stands alone/);
+  assertRefused(deploy(fixture, { args: ["--nope"] }), 2, /unknown argument --nope/);
 });
 
 test("a wrong confirmation, or one it cannot read, uploads nothing", { skip: needsNode22 }, (t) => {
@@ -777,9 +1223,12 @@ test("a wrong confirmation, or one it cannot read, uploads nothing", { skip: nee
   assertRefused(
     deploy(fixture, { env: { WOOW_TTY: "/nonexistent" } }),
     2,
-    /cannot read the confirmation/,
+    /cannot read the answer/,
   );
-  assertRefused(deploy(fixture, { env: { WOOW_CONFIRM_SHA: "0000000" } }), 2, /is not this commit/);
+  // Before anything is built: a typo in WOOW_CONFIRM_SHA does not cost a build.
+  const typo = deploy(fixture, { env: { WOOW_CONFIRM_SHA: "0000000" } });
+  assertRefused(typo, 2, /is not this commit/);
+  assert.deepEqual(builds(typo), []);
   assertRefused(
     deploy(fixture, { env: { WOOW_CONFIRM_SHA: fixture.sha.slice(0, 6) } }),
     2,
@@ -803,6 +1252,11 @@ test(
         },
         /scopes beyond .*workers_scripts:write/,
       ],
+      // Nothing beyond the allowed scopes, but not the one that deploys.
+      [
+        { FAKE_WHOAMI: login({ tokenPermissions: ["account:read", "user:read"] }) },
+        /the login has no pages:write scope/,
+      ],
       [
         { FAKE_WHOAMI: login({ accounts: [{ id: "0123456789abcdef0123456789abcdef" }] }) },
         /cannot use the WOOWTECH account/,
@@ -811,11 +1265,34 @@ test(
       [{ FAKE_PROJECTS: "[]" }, /has no Pages project woowtech-smart-web/],
       [{ FAKE_WRANGLER_VERSION: "4.105.0" }, /wrangler is "4\.105\.0", not 4\.149\.0/],
     ];
-    for (const [env, pattern] of cases) assertRefused(deploy(fixture, { env }), 4, pattern);
+    for (const [env, pattern] of cases) {
+      const run = deploy(fixture, { env });
+      assertRefused(run, 4, pattern);
+      assert.deepEqual(builds(run), [], "it built before it looked at the login");
+    }
 
     // wrangler would read a login in ~/.wrangler instead of wrangler-pages.
     mkdirSync(path.join(fixture.home, ".wrangler"));
-    assertRefused(deploy(fixture), 4, /\.wrangler exists/);
+    const legacy = deploy(fixture);
+    assertRefused(legacy, 4, /\.wrangler exists/);
+    assert.deepEqual(legacy.wrangler, [], "wrangler ran with ~/.wrangler there");
+  },
+);
+
+test(
+  "the login is checked again right before the upload, after a build of about 20 minutes",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    const broader = JSON.stringify({
+      ...OWNER_LOGIN,
+      tokenPermissions: [...OWNER_LOGIN.tokenPermissions, "workers_scripts:write"],
+    });
+    const run = deploy(fixture, { env: { FAKE_WHOAMI_LATER: broader } });
+
+    assertRefused(run, 4, /scopes beyond .*workers_scripts:write/);
+    assert.equal(builds(run).length, 1, "the first check passed and the build ran");
+    assert.equal(run.wrangler.filter((call) => call.args[0] === "whoami").length, 2);
   },
 );
 
@@ -846,25 +1323,55 @@ test("an export check-export.mjs rejects is never uploaded", { skip: needsNode22
     3,
     /over Pages' 25 MiB limit/,
   );
+  // The export that failed the check is still there for --write-baseline and for a person to look at.
+  assert.ok(existsSync(path.join(fixture.out, "index.html")));
 });
 
 test(
-  "a failed upload, an old deployment or a site that does not match exits 5 or 6",
+  "a failed upload, an old deployment or a site that does not match exits 5 or 6, with what to roll back to",
   { skip: needsNode22 },
   (t) => {
     const fixture = deployFixture(t);
-    const failed = deploy(fixture, { env: { FAKE_DEPLOY_EXIT: "1" } });
-    assert.equal(failed.status, 5, failed.output);
+    // Production runs this very commit as deployment d0: nothing to acknowledge.
+    const env = { FAKE_PREVIOUS: productionRuns(fixture.sha, "d0") };
 
-    const stale = deploy(fixture, { env: { FAKE_DEPLOYED_SHA: "0".repeat(40) } });
+    const failed = deploy(fixture, { env: { ...env, FAKE_DEPLOY_EXIT: "1" } });
+    assert.equal(failed.status, 5, failed.output);
+    // The exact deployment production ran before this upload, its commit and its dashboard page.
+    assert.match(
+      failed.output,
+      new RegExp(`production ran deployment d0 \\(commit ${fixture.sha.slice(0, 7)}\\)`),
+    );
+    assert.match(
+      failed.output,
+      new RegExp(`https://dash\\.cloudflare\\.com/${ACCOUNT_ID}/pages/view/woowtech-smart-web/d0`),
+    );
+    assert.match(failed.output, /Rollback to this deployment/);
+    assert.match(failed.output, /wrangler may have made the deployment before it failed/);
+
+    const first = deploy(fixture, { env: { FAKE_DEPLOY_EXIT: "1" } });
+    assert.equal(first.status, 5, first.output);
+    assert.match(first.output, /nothing to roll back to/);
+
+    const stale = deploy(fixture, { env: { ...env, FAKE_DEPLOYED_SHA: "0".repeat(40) } });
     assert.equal(stale.status, 6, stale.output);
     assert.match(stale.output, /Rollback to this deployment/);
 
-    const mismatch = deploy(fixture, { env: { FAKE_VERIFY_EXIT: "1", WOOW_VERIFY_ATTEMPTS: "2" } });
+    // The right commit, but not as the production deployment of the main branch.
+    for (const change of [{ FAKE_DEPLOYED_ENV: "Preview" }, { FAKE_DEPLOYED_BRANCH: "other" }]) {
+      const run = deploy(fixture, { env: { ...env, ...change } });
+      assert.equal(run.status, 6, `${JSON.stringify(change)}: ${run.output}`);
+      assert.match(run.output, /the latest production deployment is not [0-9a-f]{7} on main/);
+      assert.match(run.output, /Rollback to this deployment/);
+    }
+
+    const mismatch = deploy(fixture, {
+      env: { ...env, FAKE_VERIFY_EXIT: "1", WOOW_VERIFY_ATTEMPTS: "2" },
+    });
     assert.equal(mismatch.status, 6, mismatch.output);
     assert.equal(mismatch.verify.length, 2, "verify-live.mjs was not retried");
     assert.match(mismatch.output, /does not serve this export/);
-    for (const run of [failed, stale, mismatch]) {
+    for (const run of [failed, first, stale, mismatch]) {
       assert.deepEqual(
         run.wrangler.filter((call) => call.args[0] === "logout"),
         [],
@@ -878,6 +1385,280 @@ test("heavy.sh giving up exits 75", { skip: needsNode22 }, (t) => {
   const run = deploy(fixture, { env: { WOOW_DRY_RUN: "1", FAKE_HEAVY_EXIT: "75" } });
   assert.equal(run.status, 75, run.output);
 });
+
+test(
+  "production only goes forward: what it runs now must be an ancestor, or a person at a terminal says otherwise",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    const sha7 = fixture.sha.slice(0, 7);
+    // A commit that exists here and is not an ancestor of HEAD: work on a side branch.
+    git(fixture.repo, ["checkout", "-q", "-b", "side"], fixture.gitEnv);
+    const side = commitOnTop(fixture, "Side work");
+    git(fixture.repo, ["checkout", "-q", "main"], fixture.gitEnv);
+    const answer = (text) => {
+      const file = path.join(fixture.root, "answer");
+      writeFileSync(file, `${text}\n`);
+      return file;
+    };
+    const sideways = { FAKE_PREVIOUS: productionRuns(side) };
+    const allow = { WOOW_ALLOW_DOWNGRADE: "1" };
+
+    const refused = deploy(fixture, { env: sideways });
+    assertRefused(refused, 2, /not an ancestor of HEAD/);
+    assert.match(refused.output, /WOOW_ALLOW_DOWNGRADE=1/);
+    // The switch needs a terminal: an agent without one cannot downgrade production, and
+    // WOOW_CONFIRM_SHA is not an answer typed by a person.
+    assertRefused(
+      deploy(fixture, { env: { ...sideways, ...allow, WOOW_CONFIRM_SHA: fixture.sha } }),
+      2,
+      /needs a terminal to answer at/,
+    );
+    // A terminal without the switch is not enough either.
+    assertRefused(
+      deploy(fixture, { env: { ...sideways, WOOW_TTY: answer(sha7) } }),
+      2,
+      /not an ancestor of HEAD/,
+    );
+    assertRefused(
+      deploy(fixture, { env: { ...sideways, ...allow, WOOW_TTY: answer("0000000") } }),
+      2,
+      /is not [0-9a-f]{7}: nothing was uploaded/,
+    );
+    const allowed = deploy(fixture, { env: { ...sideways, ...allow, WOOW_TTY: answer(sha7) } });
+    assert.equal(allowed.status, 0, allowed.output);
+    assert.equal(uploads(allowed).length, 1);
+
+    // A commit this repository does not have, even after the fetch.
+    const unknown = { FAKE_PREVIOUS: productionRuns("abcdef0") };
+    assertRefused(deploy(fixture, { env: unknown }), 2, /a commit this repository does not have/);
+    const unknownAllowed = deploy(fixture, {
+      env: { ...unknown, ...allow, WOOW_TTY: answer(sha7) },
+    });
+    assert.equal(unknownAllowed.status, 0, unknownAllowed.output);
+
+    // A list wrangler printed that cannot be read says nothing about the commit either.
+    assertRefused(
+      deploy(fixture, { env: { FAKE_PREVIOUS: "not json" } }),
+      2,
+      /could not read which commit production runs/,
+    );
+    // A newest deployment without a commit, too.
+    assertRefused(
+      deploy(fixture, { env: { FAKE_PREVIOUS: JSON.stringify([{ Id: "d0", Source: "" }]) } }),
+      2,
+      /could not read which commit production runs/,
+    );
+
+    // Going forward, or redeploying the same commit, asks for nothing.
+    const same = deploy(fixture, { env: { FAKE_PREVIOUS: productionRuns(fixture.sha) } });
+    assert.equal(same.status, 0, same.output);
+  },
+);
+
+test(
+  "a production upload stops until a change to the guard files is acknowledged, and says how",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    const first = deploy(fixture, { ack: null });
+    const hash = guardHash(fixture, EMPTY_TREE);
+
+    // The first deploy has no earlier commit to compare with: every guard file is new.
+    assert.equal(first.status, 7, first.output);
+    assert.deepEqual(uploads(first), []);
+    assert.match(first.output, /there is no earlier production commit/);
+    for (const file of GUARD_FILES) {
+      assert.match(first.output, new RegExp(`A\\s+${escapeRegExp(file)}`));
+    }
+    assert.match(first.output, new RegExp(`guard diff hash: ${hash}\\b`));
+    assert.match(first.output, /show the diff above to the owner in chat and wait for a yes/);
+    assert.match(first.output, new RegExp(`WOOW_ACK_GUARD_DIFF=${hash}`));
+
+    const second = deploy(fixture, { ack: null, env: { WOOW_ACK_GUARD_DIFF: hash } });
+    assert.equal(second.status, 0, second.output);
+    assert.match(
+      second.output,
+      new RegExp(`WOOW_ACK_GUARD_DIFF acknowledges the guard diff ${hash}`),
+    );
+    assertRefused(
+      deploy(fixture, { ack: null, env: { WOOW_ACK_GUARD_DIFF: "0".repeat(12) } }),
+      7,
+      /is not this diff's hash/,
+    );
+
+    // A guard file that changed since the commit production runs.
+    const previous = fixture.sha;
+    const runs = { FAKE_PREVIOUS: productionRuns(previous) };
+    const newSha = commitOnTop(fixture, "Loosen the checks", {
+      "woowtech/web/verify-live.mjs": `${FAKE_VERIFY}// weaker\n`,
+    });
+    const changedHash = guardHash(fixture, previous);
+    const changed = deploy(fixture, { ack: null, env: runs });
+    assert.equal(changed.status, 7, changed.output);
+    assert.deepEqual(uploads(changed), []);
+    assert.match(
+      changed.output,
+      new RegExp(`changed since production \\(${previous.slice(0, 7)}\\)`),
+    );
+    assert.match(changed.output, /M\s+woowtech\/web\/verify-live\.mjs/);
+    assert.match(changed.output, /^\+\/\/ weaker$/m);
+    assert.match(changed.output, new RegExp(`guard diff hash: ${changedHash}\\b`));
+
+    // At a terminal the hash can be typed instead; WOOW_CONFIRM_SHA covers the commit's own prompt.
+    const typed = path.join(fixture.root, "typed");
+    writeFileSync(typed, `${changedHash}\n`);
+    const confirmed = { WOOW_TTY: typed, WOOW_CONFIRM_SHA: newSha.slice(0, 9) };
+    const prompted = deploy(fixture, { ack: null, env: { ...runs, ...confirmed } });
+    assert.equal(prompted.status, 0, prompted.output);
+    writeFileSync(typed, `${"0".repeat(12)}\n`);
+    assertRefused(
+      deploy(fixture, { ack: null, env: { ...runs, ...confirmed } }),
+      7,
+      /is not [0-9a-f]{12}: nothing was uploaded/,
+    );
+
+    // A long diff is cut for the screen; the hash still covers all of it.
+    const long = Array.from({ length: 400 }, (_, index) => `// line ${index}`).join("\n");
+    commitOnTop(fixture, "Much more", {
+      "woowtech/web/verify-live.mjs": `${FAKE_VERIFY}${long}\n`,
+    });
+    const cut = deploy(fixture, { ack: null, env: runs });
+    assert.equal(cut.status, 7, cut.output);
+    assert.match(cut.output, /\.\.\. \(\d+ more lines; the hash covers the whole diff\)/);
+    assert.match(cut.output, new RegExp(`guard diff hash: ${guardHash(fixture, previous)}\\b`));
+  },
+);
+
+test(
+  "a commit subject that starts with a dash is refused, and any other subject reaches wrangler as one argument",
+  { skip: needsNode22 },
+  (t) => {
+    // wrangler reads "--commit-message --cwd=<dir>" as two options: --cwd would make it build
+    // <dir>/functions into a Worker in front of the site.
+    const dash = deployFixture(t, { subject: "--cwd=/tmp/elsewhere" });
+    const refused = deploy(dash);
+    assertRefused(refused, 2, /the commit subject starts with "-"/);
+    assert.deepEqual(builds(refused), []);
+    assert.deepEqual(refused.wrangler, []);
+
+    const subject = 'Ship "the" web app: v2 | 渥屋 $HOME `date` --branch=evil';
+    const odd = deployFixture(t, { subject });
+    const run = deploy(odd);
+    assert.equal(run.status, 0, run.output);
+    const { args } = uploads(run)[0];
+    assert.equal(args.length, 9);
+    assert.deepEqual(
+      args.filter((arg) => arg.startsWith("--commit-message=")),
+      [`--commit-message=${subject}`],
+    );
+    assert.equal(args.filter((arg) => arg.startsWith("--branch")).length, 1);
+  },
+);
+
+// --- at a terminal (macOS's script(1) gives the script a pseudo-terminal) ---
+
+// Runs the command on a pseudo-terminal with `ANSWER` already waiting as its input. The input is
+// held open until the command is done: closing it earlier ends it with ^D, which the prompt reads.
+const PTY_RUN = `#!/bin/sh
+flag=$1
+log=$2
+shift 2
+{
+  printf '%s\\n' "$ANSWER"
+  i=0
+  while [ ! -e "$flag" ] && [ "$i" -lt 3000 ]; do
+    i=$((i + 1))
+    sleep 0.2
+  done
+} | {
+  script -q /dev/null "$@" >"$log" 2>&1
+  rc=$?
+  : >"$flag"
+  exit "$rc"
+}
+`;
+const ptySkip =
+  needsNode22 ||
+  (process.platform !== "darwin" && "the pseudo-terminal test drives macOS's script(1)") ||
+  (!existsSync("/usr/bin/script") && "script(1) is missing: no pseudo-terminal test");
+
+function deployAtTerminal(fixture, answer, env = {}) {
+  resetLogs(fixture);
+  const helper = path.join(fixture.root, "pty-run.sh");
+  writeTool(helper, PTY_RUN);
+  const flag = path.join(fixture.root, `pty-done-${Date.now()}`);
+  const log = path.join(fixture.root, `pty-${Date.now()}.log`);
+  const fullEnv = runEnv(fixture, {
+    WOOW_ACK_GUARD_DIFF: guardHash(fixture, EMPTY_TREE),
+    ...env,
+    ANSWER: answer,
+  });
+  const result = spawnSync(
+    "/bin/sh",
+    [helper, flag, log, path.join(fixture.checkout, DEPLOY_SCRIPT)],
+    { env: fullEnv, encoding: "utf8", timeout: 300_000 },
+  );
+  return collect(fixture, result.status, readFileSync(log, "utf8").replaceAll("\r", ""));
+}
+
+test(
+  "at a terminal the script asks for the commit, and no wrangler call gets the terminal",
+  { skip: ptySkip },
+  (t) => {
+    const fixture = deployFixture(t);
+    const sha7 = fixture.sha.slice(0, 7);
+
+    const wrong = deployAtTerminal(fixture, "0000000");
+    assert.match(
+      wrong.output,
+      new RegExp(`type the first 7 characters of ${fixture.sha} to upload it to production`),
+    );
+    assertRefused(wrong, 2, /"0000000" is not [0-9a-f]{7}: nothing was uploaded/);
+    assert.ok(wrong.wrangler.length > 0);
+    // wrangler on a terminal would be interactive: an expired login would start wrangler's own
+    // login with its broad default scopes instead of failing.
+    assertWranglerEnvironment(fixture, wrong);
+
+    const right = deployAtTerminal(fixture, sha7);
+    assert.equal(right.status, 0, right.output);
+    assert.equal(uploads(right).length, 1);
+    assertWranglerEnvironment(fixture, right);
+    assert.doesNotMatch(right.output, /without a confirmation/);
+  },
+);
+
+test(
+  "--logout ends the login in the clean environment and proves it",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t);
+    // A logout is for emergencies: it does not care about the worktree.
+    writeFileSync(path.join(fixture.repo, "stray.txt"), "x\n");
+    const pages = deploy(fixture, { args: ["--logout"], env: HOSTILE_WRANGLER_ENV });
+    assert.equal(pages.status, 0, pages.output);
+    assert.deepEqual(kinds(pages), ["logout", "whoami --json"]);
+    assertWranglerEnvironment(fixture, pages);
+    assert.match(pages.output, /has no login now/);
+    assert.deepEqual(builds(pages), []);
+
+    const reports = deploy(fixture, { args: ["--logout", "reports"], env: HOSTILE_WRANGLER_ENV });
+    assert.equal(reports.status, 0, reports.output);
+    assertWranglerEnvironment(fixture, reports, "wrangler-reports");
+
+    // A logout that does not take is not a logout.
+    const kept = deploy(fixture, { args: ["--logout"], env: { FAKE_LOGOUT_KEEPS: "1" } });
+    assert.equal(kept.status, 4, kept.output);
+    assert.match(kept.output, /still reports a login/);
+
+    // With ~/.wrangler there, wrangler would log out of that one and report success.
+    mkdirSync(path.join(fixture.home, ".wrangler"));
+    const legacy = deploy(fixture, { args: ["--logout"] });
+    assert.equal(legacy.status, 4, legacy.output);
+    assert.match(legacy.output, /\.wrangler exists/);
+    assert.deepEqual(legacy.wrangler, []);
+  },
+);
 
 // --- _headers ---
 
@@ -1290,6 +2071,84 @@ test("verify-live skips a preview behind Cloudflare Access only when told it may
   const refused = await verifyLive(base, dir);
   assert.equal(refused.status, 1);
   assert.ok(refused.summary.failures.some((failure) => /status 302, not 200/.test(failure)));
+});
+
+test("verify-live also asks for a file that does not exist under /_expo/static/js/web/", async (t) => {
+  // _headers cannot tell Pages' fallback HTML from a chunk: this answer gets the immutable header
+  // and no no-transform, so an injection could be in it while the two pages above stay clean.
+  const dir = exportFor(t);
+  const asked = [];
+  const { status, summary } = await verifyLive(
+    await servePages(t, dir, (answer) => asked.push(answer.pathname)),
+    dir,
+  );
+  assert.equal(status, 0, JSON.stringify(summary));
+  assert.equal(
+    asked.filter((pathname) =>
+      /^\/_expo\/static\/js\/web\/verify-live-missing-[0-9a-f]+\.js$/.test(pathname),
+    ).length,
+    1,
+    asked.join(" "),
+  );
+});
+
+test("verify-live finds an injection that only the answer for a missing chunk carries", async (t) => {
+  const dir = exportFor(t);
+  const injectIntoFallback = (answer) => {
+    if (answer.pathname.startsWith("/_expo/static/js/web/verify-live-missing-")) {
+      answer.body = Buffer.from(
+        String(answer.body).replace(
+          "</body>",
+          '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></body>',
+        ),
+      );
+    }
+  };
+  const { status, summary } = await verifyLive(await servePages(t, dir, injectIntoFallback), dir);
+  assert.equal(status, 1, JSON.stringify(summary));
+  assert.ok(
+    summary.failures.some((failure) =>
+      /verify-live-missing-[0-9a-f]+\.js: has challenge-platform \(injected into the answer for a missing file\)/.test(
+        failure,
+      ),
+    ),
+    JSON.stringify(summary.failures),
+  );
+  // The two pages were clean: only the fallback probe saw it.
+  assert.ok(summary.failures.every((failure) => /verify-live-missing-/.test(failure)));
+});
+
+test("verify-live exits 3 when the site does not answer at all, and 1 when it answers wrongly", async (t) => {
+  const dir = exportFor(t);
+  const badGateway = (answer) => {
+    answer.status = 502;
+    answer.body = Buffer.from("bad gateway");
+  };
+  const gateway = await verifyLive(await servePages(t, dir, badGateway), dir);
+  assert.equal(gateway.status, 3, JSON.stringify(gateway.summary));
+  assert.equal(gateway.summary.unreachable, true);
+
+  // Nothing is listening: a custom domain whose certificate is not ready fails like this.
+  const closed = createServer();
+  await new Promise((resolve) => closed.listen(0, "127.0.0.1", resolve));
+  const { port } = closed.address();
+  await new Promise((resolve) => closed.close(resolve));
+  const refused = await verifyLive(`http://127.0.0.1:${port}`, dir);
+  assert.equal(refused.status, 3, JSON.stringify(refused.summary));
+  assert.ok(
+    refused.summary.failures.some((failure) => /ECONNREFUSED/.test(failure)),
+    JSON.stringify(refused.summary.failures),
+  );
+
+  // One page failing is a site that answers, wrongly.
+  const half = await verifyLive(
+    await servePages(t, dir, (answer) => {
+      if (answer.pathname === "/") answer.status = 500;
+    }),
+    dir,
+  );
+  assert.equal(half.status, 1, JSON.stringify(half.summary));
+  assert.equal(half.summary.unreachable, undefined);
 });
 
 test("hosted-web-smoke.mjs refuses to start without a pairing link", () => {

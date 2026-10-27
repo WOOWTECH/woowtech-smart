@@ -15,12 +15,19 @@
 //    some visitors.
 // 4. /_headers does not serve the _headers file itself.
 // 5. Neither page has challenge-platform, cloudflareinsights or /cdn-cgi/ in it.
+// 6. A file that does not exist under /_expo/static/js/web/ (the SPA fallback answers with
+//    index.html, and the /_expo/static/* rule of _headers gives that answer the immutable
+//    Cache-Control and no no-transform) has none of them either. _headers cannot tell the
+//    fallback HTML from a real chunk, so a zone setting could inject into these answers while
+//    the two pages above stay clean.
 //
 // --allow-access: a preview deployment behind Cloudflare Access redirects to the Access login;
 // the checks are then skipped instead of failed.
 //
-// Prints a JSON summary. Exits 1 when a check fails, 2 on bad usage.
-import { createHash } from "node:crypto";
+// Prints a JSON summary. Exit codes: 0 the site serves the export; 1 a check failed; 2 bad
+// usage; 3 the site did not answer: both pages failed to connect or answered 5xx, such as a
+// custom domain that is not Active yet. deploy-web.sh does not roll back for a 3.
+import { createHash, randomBytes } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -34,6 +41,7 @@ const EXACT_HEADERS = [
   "permissions-policy",
 ];
 const INJECTED = ["challenge-platform", "cloudflareinsights", "/cdn-cgi/"];
+const FALLBACK_DIR = "/_expo/static/js/web/";
 const TIMEOUT_MS = 30_000;
 const PARALLEL = 8;
 
@@ -90,6 +98,12 @@ function listFiles(root, dir = "") {
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** A thrown fetch error as text: "fetch failed" alone does not say why. */
+function describe(error) {
+  const cause = error?.cause?.code ?? error?.cause?.message;
+  return cause ? `${error.message} (${cause})` : String(error?.message ?? error);
 }
 
 async function get(origin, pathname) {
@@ -165,7 +179,7 @@ async function checkFiles(origin, exportDir, files, failures) {
       try {
         await checkFile(origin, exportDir, relative, failures);
       } catch (error) {
-        failures.push(`/${relative}: ${error.message}`);
+        failures.push(`/${relative}: ${describe(error)}`);
       }
     }
   };
@@ -185,20 +199,27 @@ async function main() {
   const expected = { index, headers: rootHeaders(headersFile) };
   const failures = [];
   const pages = [];
+  let notAnswering = 0;
   for (const pathname of PAGES) {
     let response;
     try {
       response = await get(origin, pathname);
     } catch (error) {
-      failures.push(`${origin}${pathname}: ${error.message}`);
+      failures.push(`${origin}${pathname}: ${describe(error)}`);
+      notAnswering += 1;
       continue;
     }
     if (allowAccess && behindAccess(response)) {
       console.log(JSON.stringify({ base: origin, ok: true, skipped: "behind Cloudflare Access" }));
       return;
     }
+    if (response.status >= 500) notAnswering += 1;
     pages.push(response);
     checkPage(response, expected, failures);
+  }
+  if (notAnswering === PAGES.length) {
+    console.log(JSON.stringify({ base: origin, ok: false, unreachable: true, failures }, null, 2));
+    process.exit(3);
   }
   try {
     const headersResponse = await get(origin, "/_headers");
@@ -206,7 +227,21 @@ async function main() {
       failures.push(`${headersResponse.url}: serves the _headers file itself`);
     }
   } catch (error) {
-    failures.push(`${origin}/_headers: ${error.message}`);
+    failures.push(`${origin}/_headers: ${describe(error)}`);
+  }
+  const missing = `${FALLBACK_DIR}verify-live-missing-${randomBytes(6).toString("hex")}.js`;
+  try {
+    const fallback = await get(origin, missing);
+    const text = fallback.body.toString("utf8");
+    for (const needle of INJECTED) {
+      if (text.includes(needle)) {
+        failures.push(
+          `${fallback.url}: has ${needle} (injected into the answer for a missing file)`,
+        );
+      }
+    }
+  } catch (error) {
+    failures.push(`${origin}${missing}: ${describe(error)}`);
   }
   const files = listFiles(exportDir).filter((file) => file !== "_headers" && file !== "index.html");
   await checkFiles(origin, exportDir, files, failures);

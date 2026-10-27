@@ -1596,12 +1596,13 @@ node --test woowtech/*.test.mjs
 
 建置：
 
-- `woowtech/scripts/deploy-web.sh` 經 heavy.sh 跑 `npm run build:app-deps`，再在 `packages/app` 跑 `npx expo export --platform web --output-dir <OUT> --clear --max-workers 2`。
+- `woowtech/scripts/deploy-web.sh` 經 heavy.sh 跑 `npm run build:app-deps`，再在 `packages/app` 跑 `npx expo export --platform web --output-dir <STAGE>/export --clear --max-workers 2`。`<STAGE>` 是 `web-dist/` 底下每次新建的 `.stage-<sha 前 12 碼>.*` 目錄（下面）。
 - 帶 `APP_VARIANT=production`、`WOOWTECH_AI_CONTENT_REPORT_URL=https://reports.woowtech.io/v1/ai-content-reports`、`NODE_OPTIONS=--max-old-space-size=4096`，拿掉呼叫端的 `EXPO_PUBLIC_LOCAL_DAEMON`、`EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL`、`PASEO_WEB_PLATFORM`、`PASEO_FDROID_BUILD`、`PASEO_PROFILE_BUILD`。收件網址只能在建置時寫進 bundle（`app.config.js` 的 `extra.aiContentReportUrl` → `APP_MANIFEST`），`check-export.mjs` 建置後檢查它在不在。
 - `--clear`：Metro 的 transform 快取可能留著舊的內嵌 manifest。`--max-workers 2`：這台 Mac 只有 8 GB。
-- 輸出在 repo 外面：`~/.local/share/woowtech-smart/web-dist/<sha 前 12 碼>`，才不會蓋掉 `packages/app/dist`（daemon 自帶的網頁介面和桌面版用的）。旁邊的 `<OUT>.build.json` 記下 commit、`package-lock.json` 的 SHA-256、是否在 `npm ci` 的安裝上建置、工作樹是否乾淨；它放在匯出的外面，因為匯出裡的每個檔都會上傳成公開檔。
-- 上傳時遇到同一個 commit、同一個 lockfile、乾淨的工作樹建出來的匯出，直接重用（檢查照樣重跑），所以可以先 dry-run 建好，再上傳；加了 `WOOW_FRESH_INSTALL=1` 時，只重用在 `npm ci` 的安裝上建的。dry-run 一律重建。
-- 不准有 `packages/app/.env*`：Expo 會自動讀這些檔，例如 `EXPO_PUBLIC_LOCAL_DAEMON` 會被寫進 bundle。這些檔被 `.gitignore` 忽略，`git status` 看不到，所以腳本另外檢查。
+- 輸出在 repo 外面：`~/.local/share/woowtech-smart/web-dist/<sha 前 12 碼>`（下面叫 `<OUT>`），才不會蓋掉 `packages/app/dist`（daemon 自帶的網頁介面和桌面版用的）。建置先寫進 `web-dist/.stage-<sha 前 12 碼>.*` 這個新目錄；建置成功、建置後的來源檢查（下面）也過了，才搬成 `<OUT>`。建置失敗或來源檢查沒過時，原來的 `<OUT>` 原封不動，stage 也會刪掉（被 kill 而留下一天以上的 stage，下次建置時清掉）。所以同一個 sha 的另一次執行（例如本機 E2E 的 dry-run）不會在上傳到一半時刪掉或改寫正在用的匯出。旁邊的 `<OUT>.build.json` 記下 commit、`package-lock.json` 的 SHA-256、是否在 `npm ci` 的安裝上建置、工作樹是否乾淨，以及匯出裡**每個檔的 SHA-256**；它放在匯出的外面，因為匯出裡的每個檔都會上傳成公開檔。
+- 上傳的不是 `<OUT>` 本身，是腳本自己暫存目錄裡的一份複本（`upload/`）：複本的每個檔都要跟 `<OUT>.build.json` 的清單相同，`check-export.mjs` 跑在複本上，`wrangler pages deploy` 和 `verify-live.mjs` 用的也是這份複本。檢查過的位元組就是上傳的位元組，上傳前後有人改 `<OUT>` 也影響不到。複本跟清單對不上時，當作沒有這個匯出，重建。
+- 上傳時遇到同一個 commit、同一個 lockfile、乾淨的工作樹建出來、而且清單對得上的匯出，直接重用（檢查照樣重跑），所以可以先 dry-run 建好，再上傳（第一次部署前也先 dry-run，才不必等建置才發現護欄檔案要核准）；加了 `WOOW_FRESH_INSTALL=1` 時，只重用在 `npm ci` 的安裝上建的。dry-run 一律重建。
+- 不准有 `packages/app/.env*`，環境裡也不准設 `EXPO_PUBLIC_LOCAL_DAEMON`（連空字串也算；代碼 2）：Expo 會自動讀這些檔，也會把 `EXPO_PUBLIC_*` 寫進 bundle，而 `EXPO_PUBLIC_LOCAL_DAEMON` 會讓每位訪客的瀏覽器每秒探測那個位址、永不停止（O2 的「公開網域不自動探測」管不到它；Lane B 的資安審查提出）。這些檔被 `.gitignore` 忽略，`git status` 看不到，所以腳本另外檢查，建置指令裡也再拿掉一次。
 
 `deploy-web.sh`：
 
@@ -1611,40 +1612,53 @@ woowtech/scripts/deploy-web.sh --preview        # 上傳到 preview 分支
 woowtech/scripts/deploy-web.sh                  # 上傳到正式站（main 分支）；npm run deploy:web 一樣
 ```
 
-- 登入一次就一直有效（O12，2026-10-27）：上傳用 owner 在 `~/.local/share/woowtech-smart/wrangler-pages` 這個獨立目錄做的 wrangler 登入（下面），腳本每次用 `whoami --json` 檢查 scopes，**結束時不登出**；正式站的上傳不要求終端機確認，agent 可以在 owner 登入後部署。**owner 接受的代價：登入有效期間，這台 Mac 上任何 agent 都能部署到正式站。**腳本仍然擋住：沒提交或沒推上去的程式、多出來的第三方程式碼、別的帳戶、權限更大的登入。
-- 可選的確認：`WOOW_CONFIRM_SHA=<HEAD 的前 7 碼以上>` 不問就確認；從終端機跑正式上傳時，先印出這次的 commit、正式站目前的 commit 和之間的 `git diff --stat`，再要你輸入 sha 的前 7 碼。兩者都沒有（agent）就不問，直接上傳。
+- 登入一次就一直有效（O12，2026-10-27）：上傳用 owner 在 `~/.local/share/woowtech-smart/wrangler-pages` 這個獨立目錄做的 wrangler 登入（下面），腳本每次用 `whoami --json` 檢查 scopes，**結束時不登出**；正式站的上傳不要求終端機確認，agent 可以在 owner 登入後部署。**owner 接受的代價：登入有效期間，這台 Mac 上任何 agent 都能部署到正式站。**這組登入（`pages:write`）做得到的也不只是部署：它能刪掉部署（回復要用的那幾版）、把自訂網域從專案拿掉、刪掉整個 Pages 專案；後兩者會讓 daemon 設定裡永久寫著的 `smart.woowtech.io` 變成懸空的 CNAME（見「這個網域的承諾」）。`--help` 也這麼寫。
+- 腳本擋的是意外，不是刻意的 agent（agent 讀得到腳本，也能自己跑 wrangler）。它仍然擋住：沒提交或沒推上去的程式、建置途中被改掉的程式、把線上正式站退回舊版或別的分支、沒人看過就改了的護欄檔案、別的帳戶、權限更大的登入、多出來的第三方程式碼。
+- 正式站的來源檢查（代碼 2；預覽不檢查）：`git fetch --prune origin` 之後，HEAD 要在某個 `origin/*` 分支上（GitHub 上已刪掉的分支留在本機的舊 ref 不算）；而且線上正式站現在跑的 commit（`pages deployment list` 最新一筆的 `Source`，7 碼）要是 HEAD 的祖先（`git merge-base --is-ancestor`，同一個 commit 也算）。第一次部署（還沒有 production 部署）不受限。線上那個 commit 不是祖先（退版、換到別的分支）、本機沒有那個 commit（fetch 之後也沒有）或讀不出來時就退出；真的要這樣做，要同時設 `WOOW_ALLOW_DOWNGRADE=1` **和**在終端機輸入 HEAD 的前 7 碼（沒有終端機的 agent 做不到，`WOOW_CONFIRM_SHA` 也不算）。「在 origin 上」只是前提，不等於有人審過，也不等於是最新的。注意：在儀表板按過 Rollback 之後，`deployment list` 最新一筆不是目前上線的那版；這個檢查會往安全的方向拒絕，回復之後的修正要走 `WOOW_ALLOW_DOWNGRADE=1`，由 owner 在場。
+- 護欄檔案的 diff（代碼 7；只有正式站）：`woowtech/web/export-baseline.json`、`woowtech/web/_headers`、`woowtech/web/check-export.mjs`、`woowtech/web/verify-live.mjs`、`woowtech/scripts/deploy-web.sh` 這五個檔跟線上正式站那版的 commit 有任何差異，或根本沒有線上那版（第一次部署，五個檔都算新的），腳本就先印出檔案清單、diff（最多 200 行，完整的指令一併印出）和它的 12 碼 sha256，然後退出（代碼 7）。要設 `WOOW_ACK_GUARD_DIFF=<那 12 碼>`，或在終端機輸入那 12 碼，才會往下；diff 又變了，雜湊就對不上。agent 要做的是：把這個 diff 貼給 owner 看，等 owner 說好，再用 `WOOW_ACK_GUARD_DIFF` 跑第二次。**這只擋意外的自我核准，擋不住刻意的 agent**：任何 agent 都能自己算出雜湊，或自己改護欄檔案再核准；基準檔也只抓得到意外多出來的第三方程式碼和 `eval` 類呼叫，抓不到有意寫進 bundle 的程式（外掛系統本身就是 `eval`，見下面）。第一次部署之前，owner 要自己看過真正的基準檔。
+- 可選的確認：`WOOW_CONFIRM_SHA=<HEAD 的前 7 碼以上>` 不問就確認（打錯會在建置前就退出）；從終端機跑正式上傳時，先印出這次的 commit、正式站目前的 commit 和之間的 `git diff --stat`，再要你輸入 sha 的前 7 碼（等 10 分鐘，沒答就退出）。兩者都沒有、也沒有終端機（agent）就不問，直接上傳。**在終端機裡跑腳本的 agent（Omnigent 終端、tmux 都算終端機）一定要設 `WOOW_CONFIRM_SHA`，否則會停在提示，等 10 分鐘後失敗。**
 - `WOOW_FRESH_INSTALL=1`：先在這個 worktree 跑 `npm ci`（經 heavy.sh，這台約 21 分鐘），除非 `node_modules/.woow-npm-ci` 記著這個 lockfile 已經是 `npm ci` 裝的。`npm ci` 會整個換掉 `node_modules`，所以只准在 linked worktree 裡用，例如 `git worktree add --detach ~/projects/woowtech-smart-web-deploy <sha>`，不准在主 checkout。這是選做：不設時，就用 worktree 現有的 `node_modules` 建置。
-- 其他設定：`WOOW_ALLOW_DIRTY=1`（只能配 dry-run，給本機 E2E 跳過「乾淨」和「已推上」）、`WOOW_HEAVY_LABEL`（heavy.sh 的 label，預設 `web-export`；本機 E2E 用自己外層的 label，heavy.sh 同一個 label 才會直接放行）、`WOOW_NODE22_BIN`（node 不是 22 時放到 PATH 前面的目錄）、`WOOW_VERIFY_ATTEMPTS`、`WOOW_VERIFY_WAIT`（上傳後檢查幾次、隔幾秒，預設 3 次、20 秒）。`WOOW_HEAVY`、`WOOW_WRANGLER`、`WOOW_TTY` 只給測試換掉工具用。`--help` 印出這些設定、退出代碼和 O12 的取捨（英文）。
+- 其他設定：`WOOW_ALLOW_DIRTY=1`（只能配 dry-run，給本機 E2E 跳過「乾淨」和「已推上」）、`WOOW_HEAVY_LABEL`（heavy.sh 的 label，預設 `web-export`；本機 E2E 用自己外層的 label，heavy.sh 同一個 label 才會直接放行）、`WOOW_NODE22_BIN`（node 不是 22 時放到 PATH 前面的目錄）、`WOOW_VERIFY_ATTEMPTS`、`WOOW_VERIFY_WAIT`（上傳後檢查幾次、隔幾秒，預設 3 次、20 秒）、`WOOW_ACK_GUARD_DIFF`、`WOOW_ALLOW_DOWNGRADE`（上面）。`WOOW_HEAVY`、`WOOW_WRANGLER`、`WOOW_TTY` 只給測試換掉工具用。`--help` 印出這些設定、退出代碼和 O12 的取捨（英文）。
 - 依序檢查，任何一項失敗就退出，什麼都不上傳：
-  1. node 是 22 版；`git fetch origin` 之後工作樹乾淨，HEAD 在某個 `origin/*` 分支上；沒有 `packages/app/.env*`（代碼 2）。「在 origin 上」只是前提，不等於有人審過。
-  2. 上傳模式：wrangler 正好是 4.149.0；沒有 `~/.wrangler`（有的話 wrangler 會改讀那裡的登入）；`whoami --json` 是 owner 的 OAuth 登入，`tokenPermissions` 只有 `account:read`、`user:read`、`pages:write`、`offline_access`，而且能用 WOOWTECH 的帳戶；帳戶裡有 `woowtech-smart-web` 專案（代碼 4，同時印出登入和建專案的指令）。這一步在建置之前，登入過期時幾秒就知道，不必等建置。
+  1. node 是 22 版；commit 的標題不是 `-` 開頭（見第 7 步）；`WOOW_CONFIRM_SHA` 對得上；環境沒有 `EXPO_PUBLIC_LOCAL_DAEMON`；`git fetch --prune origin` 之後，HEAD 沒變、工作樹乾淨、沒有被設成 assume-unchanged 或 skip-worktree 的追蹤檔（`git status` 看不到它們）、沒有 `packages/app/.env*`，HEAD 在某個 `origin/*` 分支上（代碼 2）。
+  2. 上傳模式：沒有 `~/.wrangler`（有的話 wrangler 會改讀那裡的登入）；wrangler 正好是 4.149.0；`whoami --json` 是 owner 的 OAuth 登入，`tokenPermissions` 只有 `account:read`、`user:read`、`pages:write`、`offline_access`，而且能用 WOOWTECH 的帳戶；帳戶裡有 `woowtech-smart-web` 專案；有標記檔 `domain-attached` 時，專案要列著 `smart.woowtech.io`（下面；代碼 4，同時印出登入和建專案的指令）。這一步在建置之前，登入過期時幾秒就知道，不必等建置。
   3. `WOOW_FRESH_INSTALL=1` 不在主 checkout（代碼 2）；`npm ci` 和建置（代碼 3）。
-  4. 複製 `woowtech/web/_headers`，跑 `check-export.mjs`（代碼 3）。dry-run 到這裡結束，印出 `OUT`。
-  5. 確認（上面；不符是代碼 2）。
-  6. `wrangler pages deploy <OUT> --project-name woowtech-smart-web --branch main|preview --commit-hash <sha> --commit-message <主旨> --commit-dirty=false`（代碼 5）。
-  7. `pages deployment list` 最新一筆是這個 commit、環境和分支正確；`verify-live.mjs` 對正式站（專案掛上 smart.woowtech.io 之後）或 `woowtech-smart-web.pages.dev`（之前）比對每個檔；預覽對這次部署的網址，被 Access 保護時印出 `skipped`。沒過是代碼 6，同時印出回復的方法。
-- 退出代碼：0 完成，2 建置前的檢查或確認，3 `npm ci`、建置或 `check-export`，4 wrangler（版本、登入、scopes、帳戶、專案），5 上傳，6 上傳後的檢查，75 heavy.sh 等不到鎖。
-- 每一次 wrangler 都在一個新的空目錄裡跑，`CLOUDFLARE_ACCOUNT_ID` 固定是 WOOWTECH 的帳戶，`WRANGLER_CACHE_DIR` 是空的暫存目錄（`pages project list` 和 `pages deployment list` 會先讀快取的帳戶 id，快取還會往上找 `node_modules/.cache`），`WRANGLER_SEND_METRICS=false`。呼叫端的 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_API_KEY`、`CLOUDFLARE_EMAIL` 和舊名的 `CF_*` 都拿掉：只用 owner 的 OAuth 登入，CI 不部署（`woowtech/workflows.test.mjs`）。
+  4. 建置後：HEAD、工作樹、`.env*`、`~/.wrangler` 再查一次（代碼 2 或 4）；通過才把 stage 搬成 `<OUT>`（匯出裡已放進 `woowtech/web/_headers`）；再複製一份、對照清單，在複本上跑 `check-export.mjs`（代碼 3）。dry-run 到這裡結束，印出 `<OUT>`。
+  5. 正式站：來源檢查、護欄檔案的 diff、確認（上面；代碼 2 或 7）。
+  6. 上傳前：HEAD、工作樹、`.env*`、`~/.wrangler`，以及 wrangler 的版本、登入的 scopes 和帳戶、專案，全部再查一次（確認提示可能讓人想了很久；代碼 2 或 4）。
+  7. `wrangler pages deploy <複本> --project-name=woowtech-smart-web --branch=main|preview --commit-hash=<sha> --commit-message=<主旨> --commit-dirty=false --cwd=<空目錄>`（代碼 5）。每個值都跟它的旗標在同一個參數裡（`--flag=value`）：以 `-` 開頭的主旨若是獨立的參數，wrangler 會把它當成選項，例如 `--cwd=<目錄>` 會讓它把 `<目錄>/functions` 編成 Pages Functions，跑在網站前面，`check-export.mjs` 看不到。主旨以 `-` 開頭的 commit 腳本直接拒絕。
+  8. `pages deployment list` 最新一筆是這個 commit、環境和分支正確；`verify-live.mjs` 一律對這次部署自己的網址（`<hash>.woowtech-smart-web.pages.dev`）比對每個檔，用的是上傳的那份複本；正式站在專案的 `Project Domains` 列著 `smart.woowtech.io` 時，也對它比對一次。`woowtech-smart-web.pages.dev` 本身不是檢查對象：O6 的 Bulk Redirect 開了之後它回 301，而 `<hash>.…pages.dev`（沒開 Include subdomains）仍回 200。部署自己的網址沒過是代碼 6，同時印出回復的方法；`smart.woowtech.io` 已在專案裡卻連不上（連線失敗或 5xx，通常是網域還沒 Active）是代碼 8，不印回復的方法（部署本身是好的），等 Active 後手動跑 `verify-live.mjs`；它回了但內容或標頭不對，是代碼 6。預覽對這次部署的網址，被 Access 保護時印出 `skipped`。
+- 退出代碼：0 完成，2 建置前的檢查、來源檢查或確認，3 `npm ci`、建置或 `check-export`，4 wrangler（版本、登入、scopes、帳戶、專案、少了自訂網域、登出沒成功），5 上傳，6 上傳後的檢查，7 護欄檔案的 diff 還沒核准，8 已上傳、部署自己的網址檢查過了，但 `smart.woowtech.io` 在專案裡卻連不上，75 heavy.sh 等不到鎖。
+- 自訂網域的標記檔：掛好網域、狀態變成 Active 之後，建一個空檔 `~/.local/share/woowtech-smart/wrangler-pages/domain-attached`（`touch` 就好）。有了它，專案的 `Project Domains` 裡缺 `smart.woowtech.io` 就是硬失敗（代碼 4，指向事故流程）：有人把網域拿掉了。沒有它（第一次部署）時，網域不在清單裡不算錯，只檢查部署自己的網址。
+- 每一次 wrangler 都在一個新的空目錄裡跑，**標準輸入是 `/dev/null`**，`CLOUDFLARE_ACCOUNT_ID` 固定是 WOOWTECH 的帳戶，`WRANGLER_CACHE_DIR` 是空的暫存目錄（`pages project list` 和 `pages deployment list` 會先讀快取的帳戶 id，快取還會往上找 `node_modules/.cache`），`WRANGLER_SEND_METRICS=false`。呼叫端的 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_API_KEY`、`CLOUDFLARE_EMAIL`、`WRANGLER_CF_AUTHORIZATION_TOKEN` 和舊名的 `CF_*` 都拿掉：只用 owner 的 OAuth 登入，CI 不部署（`woowtech/workflows.test.mjs`）。能把 API 請求或 refresh token 送去別處的 `CLOUDFLARE_API_BASE_URL`（舊名 `CF_API_BASE_URL`）、`WRANGLER_TOKEN_URL`、`WRANGLER_REVOKE_URL`、`WRANGLER_AUTH_URL`、`WRANGLER_AUTH_DOMAIN`、`WRANGLER_CLIENT_ID`、`WRANGLER_API_ENVIRONMENT`、`CLOUDFLARE_COMPLIANCE_REGION`，以及能在 wrangler 行程裡插程式的 `NODE_OPTIONS`，也一律拿掉。
+- 為什麼關掉標準輸入：wrangler 在 stdin 和 stdout 都是終端機時算「互動」。登入的 refresh 失敗時（建置要約 20 分鐘，heavy.sh 又可能排很久，登入可能在這段時間過期或被撤銷），互動的 wrangler 會自己開瀏覽器登入，用它預設那一大串 scopes，並把那個 token 存進 `wrangler-pages`。`pages deploy` 是唯一輸出直接印在終端機上的呼叫，所以只有它會踩到。stdin 是 `/dev/null` 時，過期的登入直接失敗（代碼 5），不會換成權限更大的登入；確認提示讀的是 `/dev/tty`，不受影響。
+- **不要把 `$HOME` 當成 wrangler 的工作目錄**：wrangler 會在工作目錄建 `.wrangler`（專案快取）。從 `$HOME` 跑就建出 `~/.wrangler`；wrangler 看到 `~/.wrangler` 是目錄，就把它當舊式的全域設定目錄，不再看 `XDG_CONFIG_HOME`，回報「未登入」，`wrangler logout` 也會登出那個目錄、報告成功，`wrangler-pages` 的 refresh token 卻還有效（2026-10-27 真的發生過）。所以腳本每次在新的空目錄裡跑 wrangler，`~/.wrangler` 存在時拒絕往下（代碼 4），這份 README 裡每一個 wrangler 指令也都這樣寫。
+- `deploy-web.sh --logout [pages|reports]`：在上面那個乾淨的環境裡對 `wrangler-pages`（預設）或 `wrangler-reports` 跑 `wrangler logout`，`~/.wrangler` 存在時拒絕，最後一定要 `wrangler whoami --json` 回 `loggedIn:false` 才算成功（沒成功是代碼 4）。不看工作樹，緊急時也能用。
 - 腳本要能在 macOS 的 `/bin/bash` 3.2 跑（`deploy:web` 用 `bash` 叫它）：不用陣列、`mapfile`、`${x,,}`，`set -e` 下不用 `&&` 當 if。
 - 已停用的 `deploy-app.yml`（第 18 節）被打開也部署不了：CI 上沒有 owner 的登入，腳本在建置前就停下（代碼 2 或 4）。
 
-wrangler 登入（owner；一次）：
+wrangler 登入（owner；一次）。每一行都從空的暫存目錄跑，而且在 `~/.wrangler` 存在時不跑（見上面「不要把 `$HOME` 當成 wrangler 的工作目錄」）：
 
 ```bash
-export XDG_CONFIG_HOME=$HOME/.local/share/woowtech-smart/wrangler-pages
-cd "$(mktemp -d)"
-npx --yes wrangler@4.149.0 login --device --scopes account:read user:read pages:write   # 在任何裝置上按允許，代碼 5 分鐘內有效
-CLOUDFLARE_ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974 WRANGLER_CACHE_DIR=$(mktemp -d) npx --yes wrangler@4.149.0 whoami --json
+test ! -d ~/.wrangler && cd "$(mktemp -d)" && XDG_CONFIG_HOME=$HOME/.local/share/woowtech-smart/wrangler-pages npx --yes wrangler@4.149.0 login --device --scopes account:read user:read pages:write   # 在任何裝置上按允許，代碼 5 分鐘內有效
+test ! -d ~/.wrangler && cd "$(mktemp -d)" && CLOUDFLARE_ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974 XDG_CONFIG_HOME=$HOME/.local/share/woowtech-smart/wrangler-pages WRANGLER_CACHE_DIR=$(mktemp -d) npx --yes wrangler@4.149.0 whoami --json
 #   loggedIn: true；accounts 有 9c27f623…；tokenPermissions 只有 account:read、user:read、pages:write、offline_access
 ```
 
 - owner 常透過 Omnigent 遠端操作，所以用 `--device`（4.119.0 起才有）。登入、部署都用 4.149.0（2026-10-08），它有 `login --device`、`login --scopes`、`whoami --json`。不再用 `packages/app` 的 4.105.0。
 - 兩個登入目錄，各自只有自己的 scopes：`wrangler-pages`（上面三個；不能改 DNS、加 Worker 或路由）和 `wrangler-reports`（回報 Worker 用的 `account:read user:read workers_scripts:write workers_routes:write zone:read`，見 `woowtech/ai-content-report-cloudrun/README.md`）。舊的 `wrangler-home` 不再使用，也不要在那裡重新登入：它是 wrangler 預設的一大串 scopes（Workers 腳本和路由、Tunnel、Secrets Store、憑證、Email Routing）。
-- wrangler 一定帶 `offline_access`，refresh token 存在 `wrangler-pages` 的檔案裡，這台 Mac 上同一個使用者的程式都讀得到。所以 scopes 只給 Pages：拿到它的人能部署網站，但不能在 zone 加一條 Worker 路由繞過所有部署檢查。要撤銷：`XDG_CONFIG_HOME=…/wrangler-pages npx --yes wrangler@4.149.0 logout`，再到 Cloudflare 儀表板撤銷 wrangler 的授權。
+- wrangler 一定帶 `offline_access`，refresh token 存在 `wrangler-pages` 的檔案裡，這台 Mac 上同一個使用者的程式都讀得到。所以 scopes 只給 Pages：拿到它的人能部署網站，也能刪部署、拿掉自訂網域、刪專案，但不能在 zone 加一條 Worker 路由繞過所有部署檢查。
+- 撤銷：`woowtech/scripts/deploy-web.sh --logout`（回報 Worker 的那組用 `--logout reports`），再到 Cloudflare 儀表板撤銷 wrangler 的 OAuth 授權。儀表板那一步不能省：`wrangler logout` 把 refresh token 送去撤銷，但不看對方的回應就清掉本機的檔案。為什麼不直接敲 `wrangler logout`：`~/.wrangler` 存在時 wrangler 不看 `XDG_CONFIG_HOME`，會「成功」登出錯的那個目錄，`wrangler-pages` 的 refresh token 還有效；環境裡設了 `CLOUDFLARE_API_TOKEN` 時它什麼都不做就回報成功。`--logout` 在乾淨的環境裡跑，最後要 `whoami --json` 回 `loggedIn:false` 才算成功。手動做的話，每個目錄（`wrangler-pages`、`wrangler-reports`）各做兩行，第二行要印出 `loggedIn: false`：
+
+  ```bash
+  test ! -d ~/.wrangler && cd "$(mktemp -d)" && XDG_CONFIG_HOME=$HOME/.local/share/woowtech-smart/wrangler-pages env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.149.0 logout
+  test ! -d ~/.wrangler && cd "$(mktemp -d)" && CLOUDFLARE_ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974 XDG_CONFIG_HOME=$HOME/.local/share/woowtech-smart/wrangler-pages WRANGLER_CACHE_DIR=$(mktemp -d) env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.149.0 whoami --json   # {"loggedIn": false}
+  ```
+
 - 建專案（一次；這會佔用 `woowtech-smart-web.pages.dev`，Direct Upload 的專案之後不能改接 Git）：
 
   ```bash
-  cd "$(mktemp -d)"
+  test ! -d ~/.wrangler && cd "$(mktemp -d)" && \
   CLOUDFLARE_ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974 XDG_CONFIG_HOME=$HOME/.local/share/woowtech-smart/wrangler-pages WRANGLER_CACHE_DIR=$(mktemp -d) \
     npx --yes wrangler@4.149.0 pages project create woowtech-smart-web --production-branch main
   ```
@@ -1692,15 +1706,15 @@ CLOUDFLARE_ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974 WRANGLER_CACHE_DIR=$(mkte
   - Lane C 提交的是空的（`origins`、`scriptUrls`、`sinks` 都空），空的基準一律以「not initialized」失敗，所以第一次真的部署之前，一定要先跑一次真的 dry-run 寫好它。
   - 寫入：`node woowtech/web/check-export.mjs <匯出> --write-baseline`（其他檢查都過才寫），再 `npm run format:files -- woowtech/web/export-baseline.json`，提交。
   - 寫完要逐一看：每個 `scriptUrls` 都要是不會被載入的說明連結，或已知被 CSP 擋下的 jsQR（`https://cdn.jsdelivr.net/npm/jsqr@1.2.0/dist/jsQR.min.js`）；上游的 bundle 也有一個說明連結 `https://github.com/jquery/jquery/blob/master/src/event.js`。`serviceWorker` 的次數記下來：fork 在網頁上也匯入整個 `expo-notifications`，它的 `getDevicePushTokenAsync.web.js` 有 `navigator.serviceWorker.register`；`app.config.js` 沒設 `notification.serviceWorkerPath`，那段程式只會丟錯、不會註冊（守門檢查）。來源清單很長（上游約 100 個，多半是說明連結），只看新出現的。看過的結果寫進下面的驗證紀錄。
-  - 之後每次有新增，部署前先更新並提交：基準檔的 diff 會出現在確認時的 `git diff --stat` 裡。
-- `woowtech/web/verify-live.mjs <網址> <匯出>`（部署腳本上傳後跑；手動也可以）：`/` 和 `/settings/general`（SPA fallback）回 200 `text/html`、跟匯出的 `index.html` 逐 byte 相同、帶 `_headers` 的每一個標頭、`Cache-Control` 有 `no-transform`；匯出的每一個檔用同樣的路徑去抓，SHA-256 相同，`/_expo/static/` 底下沒有 `no-transform`；`/_headers` 不會回那個檔本身；頁面裡沒有 `challenge-platform`、`cloudflareinsights`、`/cdn-cgi/`。輸出 JSON，有問題就非 0。它能發現檢查當下 Worker 路由或 zone 設定改了內容，擋不住只對部分訪客動手的情況。
+  - 之後每次有變動（新增或減少），部署前先更新並提交。基準檔是五個護欄檔案之一：它跟線上正式站那版的 commit 有任何差異，`deploy-web.sh` 就停在代碼 7，要 owner 看過 diff（上面）。
+- `woowtech/web/verify-live.mjs <網址> <匯出>`（部署腳本上傳後跑；手動也可以）：`/` 和 `/settings/general`（SPA fallback）回 200 `text/html`、跟匯出的 `index.html` 逐 byte 相同、帶 `_headers` 的每一個標頭、`Cache-Control` 有 `no-transform`；匯出的每一個檔用同樣的路徑去抓，SHA-256 相同，`/_expo/static/` 底下沒有 `no-transform`；`/_headers` 不會回那個檔本身；頁面裡沒有 `challenge-platform`、`cloudflareinsights`、`/cdn-cgi/`。另外要一個 `/_expo/static/js/web/` 底下不存在的檔：SPA fallback 回的是 `index.html`，在 `/_expo/static/*` 的規則下拿到 immutable 的 `Cache-Control`、沒有 `no-transform`，zone 的 JavaScript Detections 可能只注入這種回應，兩個頁面卻乾淨；`_headers` 分不出 fallback 的 HTML 跟真的 chunk，這個缺口只有這個探測在擋（抓到注入時回到 O4）。輸出 JSON。退出代碼：0 通過，1 有檢查沒過，2 用法錯誤，3 網站根本沒回應（兩個頁面都連不上或都是 5xx，例如自訂網域還沒 Active）。它能發現檢查當下 Worker 路由或 zone 設定改了內容，擋不住只對部分訪客動手的情況。
 - Cloudflare 的設定：Pages 的 Web Analytics 保持關閉（開了之後下次部署會自動注入，也違反隱私權政策「沒有分析或追蹤工具」）；不開 Zaraz、Rocket Loader，不替 smart.woowtech.io 加 Cache Rules。
 - Workers 路由：zone 裡任何會比對到 smart.woowtech.io 的 Worker 路由（`smart.woowtech.io/*`，或儀表板選了 Zone 時預填的 `*.woowtech.io/*`）都會跑在 Pages 前面，可以送任意 JS 給所有訪客，完全不經過部署檢查；Cloudflare 沒有路由變更的通知。部署用的登入沒有路由權限，owner 每次部署 session 在儀表板看一次（下面）。
 
 owner 在 Cloudflare 的步驟：
 
 - 建好專案後：確認 Web Analytics 沒開；Notifications → Add → Pages 的「Project updates」，專案選 `woowtech-smart-web`，Deployment started、failed、success 都寄給 owner。
-- 自訂網域：Workers & Pages → `woowtech-smart-web` → Custom domains → Set up a domain → `smart.woowtech.io` → Activate domain，CNAME 會自動建立。**不要**先手動建 CNAME（會變成 522）。woowtech.io 沒有 CAA。驗證：`dig +short A smart.woowtech.io`、`curl -sSI https://smart.woowtech.io/`、`openssl s_client` 看憑證。
+- 自訂網域：Workers & Pages → `woowtech-smart-web` → Custom domains → Set up a domain → `smart.woowtech.io` → Activate domain，CNAME 會自動建立。**不要**先手動建 CNAME（會變成 522）。woowtech.io 沒有 CAA。驗證：`dig +short A smart.woowtech.io`、`curl -sSI https://smart.woowtech.io/`、`openssl s_client` 看憑證。狀態變成 Active 之後，建標記檔 `touch ~/.local/share/woowtech-smart/wrangler-pages/domain-attached`（上面）；再啟用 pages.dev 的 Bulk Redirect（下面 O6）。第一次部署在這之前，所以它檢查的是部署自己的網址。
 - 每次部署 session：Websites → woowtech.io → Workers Routes，確認沒有任何 pattern 比對到 smart.woowtech.io（包括 `*.woowtech.io/*`、`*woowtech.io/*`；這個 zone 已經有 bni-events、emqx-mcp、emqx-mcp-oauth、simon-sales 的路由），清單記進驗證紀錄；之後看 Manage Account → Audit Log 有沒有不是自己做的 Pages、Workers、DNS 變更。
 - 選做（O6）：Pages 的 Settings → General → Enable access policy 保護預覽部署；Bulk Redirect 把 `woowtech-smart-web.pages.dev` 轉到正式網址；定期刪掉舊部署（每次部署的網址會一直公開）。CORS 和回報的 Worker 都不放行 pages.dev，在那裡 relay 照樣能用，但憑證會存在另一個 origin。
 - O4：只有在 `verify-live.mjs` 加了 `no-transform` 之後仍看到 `challenge-platform` 時才要決定：關掉整個 zone 的 JavaScript Detections（aiot 等站也受影響），或保留並在隱私權政策加一句 Cloudflare 會加入安全檢查程式。
@@ -1710,13 +1724,14 @@ owner 在 Cloudflare 的步驟：
 回復：
 
 - Pages：儀表板 Deployments → ⋯ → Rollback to this deployment，立即生效，只限成功的 production 部署；或 API `POST https://api.cloudflare.com/client/v4/accounts/9c27f623ee596e0b67be56263bcb1974/pages/projects/woowtech-smart-web/deployments/<id>/rollback`。wrangler 沒有 Pages 的 rollback 指令。
+- 要回到哪一版：腳本在正式站上傳前讀下線上最新一筆 production 部署的 Id 和 commit。上傳（代碼 5）或上傳後的檢查（代碼 6）失敗時，它印出那個 Id、commit 和儀表板的網址（`https://dash.cloudflare.com/<帳戶>/pages/view/woowtech-smart-web/<Id>`）。沒有自動重傳：重傳也是部署，要有人決定。注意 `deployment list` 排的是建立時間：在儀表板按過 Rollback 之後，最新一筆不一定是正在上線的那版。上傳失敗時先看 Deployments 清單，wrangler 可能已經建好部署才在等它完成時失敗。
 - 第一次部署沒有上一版可以回：部署另一個 commit，或部署維護頁（只有 `index.html` 和 `_headers`，寫「維護中」；它過不了 `check-export.mjs` 的入口檢查，所以由 owner 用上面的登入在暫存目錄手動 `wrangler pages deploy`）。
 - daemon 的預設（第 19 節）發佈之後只能再出一版。使用者的暫時做法：`PASEO_APP_BASE_URL`，以及 `woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`。
 
 事故流程（網站、Cloudflare 帳號或部署登入疑似被入侵）：
 
 1. 回復到最後一個確定乾淨的 production 部署。
-2. 撤銷登入：`wrangler-pages`、`wrangler-reports` 都 `wrangler logout`；儀表板撤銷 wrangler 的 OAuth 授權；換 Cloudflare 密碼、檢查 2FA；看 audit log、Workers Routes 和 Pages 的部署清單。
+2. 撤銷登入：`woowtech/scripts/deploy-web.sh --logout` 和 `woowtech/scripts/deploy-web.sh --logout reports`（`wrangler-pages`、`wrangler-reports` 兩個都做；各自要 `whoami --json` 回 `loggedIn:false` 才算成功，腳本會檢查）。沒有腳本可用時，照上面「撤銷」的手動兩行對兩個目錄各做一次，一樣要看到 `loggedIn: false`：直接敲 `wrangler logout` 在 `~/.wrangler` 存在時會登出錯的目錄，`wrangler-pages` 的 refresh token 還有效。然後到儀表板撤銷 wrangler 的 OAuth 授權；換 Cloudflare 密碼、檢查 2FA；看 audit log、Workers Routes 和 Pages 的部署清單（部署被刪、網域被拿掉、專案被刪，都是 `pages:write` 做得到的）。
 3. 找 service worker：在攻擊者那一版的部署檔案裡搜尋 `serviceWorker`，記下 worker 腳本的路徑。回復之後那個路徑會被 SPA fallback 回成 `text/html`，瀏覽器的更新檢查因為 MIME 不符而失敗，舊的 worker 可能繼續攔截導覽，所以光回復不夠。
 4. 部署「清除版」：同一個乾淨的 commit，`_headers` 的 `/*` 加 `Clear-Site-Data: "cache", "storage"`；找到 worker 路徑的話，在那個路徑放一支自我解除的 worker（`install` 時 `skipWaiting()`，`activate` 時 `registration.unregister()`，再把所有 client 重新導覽一次），那個路徑的回應也帶 `Clear-Site-Data`。至少放 30 天（瀏覽器至少每 24 小時檢查一次 worker 更新）。代價：所有網頁版使用者都要重新配對。平常的 `_headers` 不准有 `Clear-Site-Data`（守門），所以清除版由 owner 手動上傳，或在事故分支上連測試一起改。
 5. 通知使用者（版本說明、支援頁、LINE 官方帳號）：曾在網頁版配對過的人照第 19 節輪替 daemon 金鑰、用 `woowtech-smart daemon set-password` 換掉直連密碼；不再需要網頁直連的人設回 `'[]'`。偷走的 offer 沒有期限，只有輪替金鑰才能撤銷。
@@ -1748,12 +1763,12 @@ owner 在 Cloudflare 的步驟：
 
 - `woowtech/web-deploy.test.mjs`（CI 會跑；不建置、不登入、不連網）：
   - 只有 `deploy:web` 部署到 Pages，而且它正好是 `bash ../../woowtech/scripts/deploy-web.sh`（上游那行會用我們的登入在 WOOWTECH 的帳戶建出 `paseo-app` 專案）。
-  - `deploy-web.sh` 在一個暫存 repo（本機的 bare repo 當 origin）裡用假的 wrangler、heavy.sh、npm、npx 跑：dry-run 不跑 wrangler、建置指令和環境、heavy.sh 的 label；正式上傳的每一個 wrangler 參數、帳戶、登入目錄、空的快取和工作目錄、不登出、沒有終端機也上傳、掛上網域後改對正式站檢查；預覽；`/bin/bash` 跑完整的正式上傳和確認；`WOOW_CONFIRM_SHA`；確認時列出正式站的 commit 和 diff；`WOOW_FRESH_INSTALL=1` 一個 lockfile 只 `npm ci` 一次、之後重用匯出；重用 dry-run 的匯出但不重用不乾淨的；以及每一種拒絕：不乾淨、沒推、`.env`、設定用錯地方、確認不符或讀不到、沒登入、scopes 太多、別的帳戶、API token、沒有專案、wrangler 版本不對、`~/.wrangler`、`check-export` 擋下的匯出（inline script、`404.html`、第二個 HTML、`app.paseo.sh`、超過 25 MiB 的 sparse file）、上傳失敗、最新部署不是這個 commit、線上內容不符、heavy.sh 的 75。假工具都是 POSIX sh：這台 Mac 忙的時候 node 要一秒才啟動。需要 node 22 的項目在沒有 node 22 的機器上顯示 skipped（這台 Mac 和 CI 都有，看到 skipped 就是沒跑到）。
+  - `deploy-web.sh` 在一個暫存 repo（本機的 bare repo 當 origin）裡用假的 wrangler、heavy.sh、npm、npx 跑：dry-run 在 stage 裡建置、不跑 wrangler、建置指令和環境、heavy.sh 的 label；正式上傳的每一個 wrangler 參數（`--flag=value` 的形式，`--cwd` 是空目錄）、帳戶、登入目錄、空的快取和工作目錄、stdin 不是終端機、呼叫端的憑證和端點變數都沒傳下去、不登出、上傳的是複本、沒有終端機也上傳、掛上網域後多對 `smart.woowtech.io` 檢查（`woowtech-smart-web.pages.dev` 本身不檢查）、網域列著卻連不上是代碼 8 而且沒有回復提示、標記檔存在而專案沒有網域是代碼 4；預覽（不做來源檢查和護欄 diff）；`/bin/bash` 跑完整的正式上傳和確認；`WOOW_CONFIRM_SHA`（打錯在建置前就退出）；確認時列出正式站的 commit 和 diff；來源檢查（祖先才放行；退版、本機沒有的 commit、讀不出的清單都拒絕；`WOOW_ALLOW_DOWNGRADE=1` 加終端機的答案才放行；被 `--prune` 清掉的遠端分支不算在 origin 上）；護欄檔案的 diff（第一次部署、改過、雜湊對不上、在終端機輸入雜湊、超長的 diff 被截斷而雜湊算全部）；`WOOW_FRESH_INSTALL=1` 一個 lockfile 只 `npm ci` 一次、之後重用匯出；重用 dry-run 的匯出，但不重用不乾淨的，也不重用清單對不上的（被改過的匯出會重建，上傳的是複本）；建置失敗時留下舊的匯出、沒有 stage；建置途中改了追蹤檔、換了 HEAD、冒出 `.env`、冒出 `~/.wrangler`，都在建置後被發現、匯出沒有被放到位；assume-unchanged 和 skip-worktree 的檔；`--logout`；`-` 開頭的 commit 標題，和含引號、`$`、反引號、`--branch=` 的標題；在 pseudo-terminal 裡跑（macOS 的 `script`，其他平台顯示 skipped）：提示出現、錯的答案被拒、wrangler 的 stdin 都不是終端機；以及每一種拒絕：不乾淨、沒推、`.env`、`EXPO_PUBLIC_LOCAL_DAEMON`、設定用錯地方、確認不符或讀不到、沒登入、scopes 太多、只有 `account:read` 加 `user:read`（沒有 `pages:write`）、建置後 scopes 變多、別的帳戶、API token、沒有專案、wrangler 版本不對、`~/.wrangler`、`check-export` 擋下的匯出（inline script、`404.html`、第二個 HTML、`app.paseo.sh`、超過 25 MiB 的 sparse file）、上傳失敗（印出前一個部署的 Id、commit 和儀表板網址）、最新部署不是這個 commit、環境或分支不對、線上內容不符、heavy.sh 的 75。假工具都是 POSIX sh：這台 Mac 忙的時候 node 要一秒才啟動。需要 node 22 的項目在沒有 node 22 的機器上顯示 skipped（這台 Mac 和 CI 都有，看到 skipped 就是沒跑到）。
   - `_headers`：四個 `'none'`、script-src 沒有主機或 scheme 來源而且是對等版、connect-src 有 `https:` `wss:` `ws:`、沒有 `upgrade-insecure-requests`、XFO、HSTS、COOP、Permissions-Policy 沒關掉麥克風和區域網路、HTML 有 `no-transform` 而 JS 先卸掉、沒有 `Clear-Site-Data`、規則數和行長。
   - `packages/app/public/` 沒有 Pages 的設定檔，`public/index.html` 沒有 `<script>`。
   - Expo 的 SPA 匯出（`serializeHtml.js` 的 `htmlFromSerialAssets`）只寫 `<script src=… defer>`，唯一的 inline `<script type="module">` 只給 hydrate；`app.config.js` 的 `web.output` 仍是 `"single"`。真正的檢查是 `check-export.mjs` 看實際的產物。
   - `check-export.mjs` 的小匯出：React Navigation 的 `segment.replace` 和 Expo 的 `importScripts(ASYNC_WORKER_BASE)` 會過；不在基準裡的 jsQR 網址失敗、列進去就過；空的基準失敗；`serviceWorker` 變多、像 worker 的檔名失敗；`app.config.js` 沒有 `serviceWorkerPath`；新的來源、多一個 `eval(` 失敗，`--write-baseline` 寫出的檔再檢查會過；第二個 HTML、source map、symlink、超過 25 MiB（用磁碟上的大小）、少了必要的字串都失敗。
-  - `verify-live.mjs` 對一個照 Pages 的方式服務匯出的本機伺服器（檔案、SPA fallback、`_headers` 的規則；ephemeral port）：照實服務時通過；HTML 被注入 `/cdn-cgi/`、bundle 被改、SPA fallback 少了 CSP、JS 帶 `no-transform` 都失敗；被 Access 轉址的預覽只有加 `--allow-access` 才略過。`hosted-web-smoke.mjs` 沒有配對連結就不啟動（smoke 本身要真的匯出和 daemon，在本機 E2E 和正式站跑）。
+  - `verify-live.mjs` 對一個照 Pages 的方式服務匯出的本機伺服器（檔案、SPA fallback、`_headers` 的規則；ephemeral port）：照實服務時通過；HTML 被注入 `/cdn-cgi/`、bundle 被改、SPA fallback 少了 CSP、JS 帶 `no-transform` 都失敗；`/_expo/static/js/web/` 底下不存在的檔會被要一次，只有那個回應被注入也會失敗；兩個頁面都連不上或都是 5xx 是代碼 3，一個頁面壞掉仍是 1；被 Access 轉址的預覽只有加 `--allow-access` 才略過。`hosted-web-smoke.mjs` 沒有配對連結就不啟動（smoke 本身要真的匯出和 daemon，在本機 E2E 和正式站跑）。
   - 一致性：`deploy-web.sh` 的 `SITE_ORIGIN`、smoke 的預設網址、`BRAND_WEB_APP.origin` 相同，回報 Worker 的 `DEFAULT_ALLOWED_ORIGINS` 包含它；`deploy-web.sh` 的 `WRANGLER_VERSION` 跟這一節、`woowtech/ai-content-report-cloudrun/README.md` 和 `cloudflare-worker-smart-reports.wrangler.jsonc` 寫的相同，三處的 wrangler 指令都釘到完整的版本號。這兩項要 protocol 的 `brand-web-app.ts` 和回報 Worker 的改動都合併後才會過。
 - `woowtech/workflows.test.mjs`：`deploy-app.yml` 仍在 GitHub 停用，CI 不拿部署憑證。
 - 改了腳本後：`node --test --test-concurrency=1 woowtech/web-deploy.test.mjs woowtech/workflows.test.mjs woowtech/update-sources.test.mjs`，加上 `bash -n` 和 `/bin/bash -n woowtech/scripts/deploy-web.sh`。
@@ -2574,8 +2589,8 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 網頁版 smart.woowtech.io（第 19、27 節；web-spec.md 第 6 節），照這個順序：
   1. Lane A、B、D、C 依序合併進 `woowtech/web-1026`，每合併一條跑一次守門；全部合併後跑本機 E2E（web-spec.md 7.3：dry-run 匯出、`check-export.mjs`、`wrangler pages dev`、`hosted-web-smoke.mjs`），用那次真的 dry-run 寫好 `woowtech/web/export-baseline.json`，逐一看過再提交（第 27 節「基準檔」）。推 origin 的 `woowtech/web-1026`，不推 main。
   2. 【owner】在 `wrangler-pages` 登入一次、建 Pages 專案、加部署通知（第 27 節）。
-  3. 第一次部署：先 dry-run（可以加 `WOOW_FRESH_INSTALL=1`，在 `~/projects/woowtech-smart-web-deploy` 這個 linked worktree 裡跑），再上傳；上傳後 `verify-live.mjs` 對 pages.dev 檢查，再對 pages.dev 跑 smoke 的 S1–S4、S8–S10（S5、S6 在 pages.dev 上不會過：CORS 和回報 Worker 都不放行那個來源）。
-  4. 【owner】掛 smart.woowtech.io，看 Workers Routes 和 audit log。
+  3. 第一次部署：先 dry-run（可以加 `WOOW_FRESH_INSTALL=1`，在 `~/projects/woowtech-smart-web-deploy` 這個 linked worktree 裡跑），再上傳。第一次上傳沒有線上的 commit 可比，會停在代碼 7：把腳本印出的護欄檔案 diff 和真正的基準檔給 owner 看，owner 說好才用 `WOOW_ACK_GUARD_DIFF=<雜湊>` 跑第二次（第 27 節）。上傳後 `verify-live.mjs` 對這次部署自己的網址（`<hash>.woowtech-smart-web.pages.dev`）檢查；smoke 的 S1–S4、S8–S10 打 `woowtech-smart-web.pages.dev`（S5、S6 在那裡不會過：CORS 和回報 Worker 都不放行那個來源）。步驟 4 開了 pages.dev 的 Bulk Redirect 之後它會回 301，之後的 smoke 打 `smart.woowtech.io`。
+  4. 【owner】掛 smart.woowtech.io，等 Active，建標記檔 `domain-attached`（第 27 節），啟用 pages.dev 的 Bulk Redirect（`~/.local/share/woowtech-smart/plans/web-server-20261026/pages-dev-redirect.md`），看 Workers Routes 和 audit log。
   5. 正式站的部署後檢查（第 27 節）。沒過就不能做第 8 步。
   6. 【owner】回報 Worker 重新部署並跑 V1–V5、V8（`woowtech/ai-content-report-cloudrun/README.md`；可以在第 2～5 步之前做）。
   7. 【owner】隱私權政策（Odoo 391）：P1–P4 必要，P5–P8 建議，P9 看 O4；文字先給 owner 看。P3（「也不保存」）要等回報 Worker 的 Observability 和限流兩項都確認過才發佈。發佈後在第 10 節補一句哪一天為網頁版改了政策。舊頁 `/woowtech-smart/privacy(-en)` 要轉址到 391 還是更新（O7）。
