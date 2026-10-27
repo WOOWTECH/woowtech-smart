@@ -86,6 +86,7 @@ import {
   observeHostLabelServerInfo,
   type HostLabelServerInfo,
 } from "./woowtech-host-label";
+import { confirmProbedHost } from "./woowtech-host-confirmations";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
 export type HostRegistryStatus = "loading" | "ready";
@@ -1787,6 +1788,13 @@ export class HostRuntimeStore {
       host: probeHost,
       connection: input.connection,
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+    });
+    // woowtech smart: a probe cannot prove who answered (runtime/woowtech-host-confirmations.ts).
+    await confirmProbedHost({
+      serverId,
+      connection: input.connection,
+      savedHosts: this.hosts,
+      client,
     });
     const profile = await this.upsertHostConnection({
       serverId,
