@@ -9,10 +9,10 @@
 //   well, in the Worker's Settings > Domains & Routes.
 // - Takes only application/json (415) and refuses bodies over 12,288 bytes (413) before
 //   forwarding. The number is MAX_BODY_BYTES of the report contract; a test keeps them equal.
-// - The phone Apps send no Origin header. A request with an Origin is answered 403, except from an
-//   allowed origin: the desktop App's page is woowtech-smart://app and the web app's is
-//   https://smart.woowtech.io. Both fetches are cross-origin, so the browser engine sends a
-//   preflight (OPTIONS) first and needs the CORS headers on every answer. Matching is exact;
+// - The phone Apps send no Origin header. A POST with an Origin is answered 403 and a preflight
+//   405, except from an allowed origin: the desktop App's page is woowtech-smart://app and the web
+//   app's is https://smart.woowtech.io. Both fetches are cross-origin, so the browser engine sends
+//   a preflight (OPTIONS) first and needs the CORS headers on every answer. Matching is exact;
 //   "*" and "null" never match. The Origin only decides whether to answer with CORS: requests
 //   without one are taken, so the per-IP limit and the receiver's daily cap stop abuse, not this.
 // - Forwards the body, and nothing else of the client, to RELAY_ORIGIN with the edge key the
@@ -31,7 +31,8 @@
 // new key only: the whole pair is sent as one key and every request gets 403), ALLOWED_ORIGINS
 // (optional text, origins separated by commas or spaces; unset means the desktop App's and the
 // web app's origins, empty means none, any other value replaces the whole list; a wrangler deploy
-// drops a value set in the dashboard), IP_RATE_LIMITER (optional binding).
+// drops a text value set in the dashboard but keeps one stored as a secret), IP_RATE_LIMITER
+// (optional binding).
 
 const PUBLIC_HOST = "reports.woowtech.io";
 const REPORT_PATH = "/v1/ai-content-reports";
