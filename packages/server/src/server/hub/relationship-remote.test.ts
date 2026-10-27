@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo, Socket } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -615,6 +615,11 @@ async function connectController(
 ): Promise<HubRelationshipController> {
   const paseoHome = await mkdtemp(path.join(tmpdir(), "paseo-hub-socket-"));
   openPaseoHomes.push(paseoHome);
+  // woowtech smart: Hub connections are off unless config.json turns them on (woowtech-hub-gate.ts).
+  await writeFile(
+    path.join(paseoHome, "config.json"),
+    JSON.stringify({ version: 1, daemon: { hub: { enabled: true } } }),
+  );
   const controller = new HubRelationshipController({
     paseoHome,
     hostname: "test-daemon.local",

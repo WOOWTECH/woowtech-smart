@@ -19,6 +19,7 @@ import type {
 } from "./relationship-remote.js";
 import { HubEnrollmentRejectedError } from "./relationship-remote.js";
 import { BoundedExponentialHubRetryPolicy } from "./relationship-retry.js";
+import { WoowtechHubGate } from "./woowtech-hub-gate.js";
 
 const FILE_NAME = "hub-relationship.json";
 const HubOriginSchema = z
@@ -224,9 +225,12 @@ export class HubRelationshipController implements HubRelationshipManagement {
   private retryAttempt = 0;
   private readonly inFlightEnrollments = new Set<Promise<void>>();
   private executionAgents: { daemonId: string; value: HubExecutionAgents } | null = null;
+  // woowtech smart: Hub connections are off unless config.json turns them on (woowtech-hub-gate.ts).
+  private readonly hubGate: WoowtechHubGate;
 
   constructor(private readonly options: HubRelationshipControllerOptions) {
     this.filePath = path.join(options.paseoHome, FILE_NAME);
+    this.hubGate = new WoowtechHubGate(options);
     this.clock = options.clock ?? systemClock;
     this.retryPolicy = options.retryPolicy ?? new BoundedExponentialHubRetryPolicy();
     this.record = this.load();
@@ -246,6 +250,7 @@ export class HubRelationshipController implements HubRelationshipManagement {
   }
 
   async start(): Promise<void> {
+    if (!this.hubGate.allowsStart(this.record)) return;
     if (this.record?.state === "active") this.openSocket(this.record, false);
     if (this.record?.state === "pending") {
       const enrollmentGeneration = this.beginEnrollmentAttempt();
@@ -270,14 +275,14 @@ export class HubRelationshipController implements HubRelationshipManagement {
   }
 
   status(): HubRelationshipStatus {
-    return {
+    return this.hubGate.status({
       state: this.state,
       daemonId: this.record?.relationship.daemonId ?? null,
       hubOrigin: this.record?.relationship.hubOrigin ?? null,
       permissions: this.record?.relationship.permissions.slice() ?? [],
       connectedAt: this.connectedAt,
       lastError: this.lastError,
-    };
+    });
   }
 
   async connect(input: {
@@ -285,6 +290,7 @@ export class HubRelationshipController implements HubRelationshipManagement {
     token: string;
     permissions: readonly string[];
   }): Promise<HubRelationshipStatus> {
+    this.hubGate.assertEnabled();
     const permissions = parseDaemonPermissions(input.permissions);
     if (this.record?.state === "pending") {
       if (normalizeHubUrl(input.hubUrl) !== this.record.relationship.hubOrigin) {
@@ -327,6 +333,7 @@ export class HubRelationshipController implements HubRelationshipManagement {
     grant: readonly string[];
     revoke: readonly string[];
   }): Promise<HubRelationshipStatus> {
+    this.hubGate.assertEnabled();
     if (!this.record || this.record.state !== "active") {
       throw new Error("This daemon is not connected to a Hub");
     }

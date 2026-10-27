@@ -292,6 +292,13 @@ export const PersistedConfigSchema = z
           .strict()
           .optional(),
         auth: DaemonAuthSchema.optional(),
+        // woowtech smart: Hub connections are off unless enabled is true (hub/woowtech-hub-gate.ts).
+        hub: z
+          .object({
+            enabled: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .transform(({ allowedHosts, ...daemon }) => {
