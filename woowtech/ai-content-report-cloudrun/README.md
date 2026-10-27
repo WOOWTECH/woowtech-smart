@@ -61,7 +61,7 @@ cd woowtech/ai-content-report-cloudrun
 
 - 要在乾淨、已提交的 checkout 上執行（映像檔標籤是 commit）；用專案擁有者的帳號登入 gcloud；`alert` 步驟要 `gcloud beta`（Cloud Shell 有；別處先 `gcloud components install beta`）。
 - 可重複執行：已存在的不重建，edge key 永遠不重生、不印出。
-- 腳本最後印出 Cloud Run 網址和 Cloudflare 要做的事（Worker、`reports.woowtech.io`、關 workers.dev 與 Preview、每 IP 限流、帳號要 Workers Paid）以及 edge key 輪替步驟。輪替看腳本輸出的 “To rotate the key later”，Worker 的 `EDGE_KEY` 永遠只放新的那一把。Worker 用 wrangler 部署時，版本和指令照下面的「只更新 Worker」，不要照腳本印的那一行（`RELAY_ORIGIN` 用 `--var` 帶，不改設定檔）。
+- 腳本最後印出 Cloud Run 網址和 Cloudflare 要做的事（Worker、`reports.woowtech.io`、關 workers.dev 與 Preview、每 IP 限流、帳號要 Workers Paid）以及 edge key 輪替步驟。輪替看腳本輸出的 “To rotate the key later”，Worker 的 `EDGE_KEY` 永遠只放新的那一把。Worker 用 wrangler 部署時，登入、版本和指令照下面的「只更新 Worker」，腳本印的第 1 步也指到那裡（`RELAY_ORIGIN` 用 `--var` 帶，不改設定檔）。`deploy-script.test.mjs` 檢查腳本印的 wrangler 版本跟 wrangler 設定檔寫的相同。
 - 驗證不寫資料：對 Worker 送 `{}` 應得 `400 {"error":"unsupported_schema"}`（腳本結尾有指令）。信件要用一則真的回報才能證明。
 - 通知管道若顯示 UNVERIFIED，要點 Google 寄到信箱的確認信，否則收不到警示。Email 管道建好時沒有回報驗證狀態，不用點信也收得到（10/14）。
 - 新建的東西要幾分鐘才生效：`logs` 步驟的排除規則約 5–7 分鐘後才擋得住請求日誌，這段時間的請求（含 IP）會留在 Cloud Logging 到保存期滿，所以部署後先別讓真流量進來；警示政策建好後一分鐘內的第一則回報沒有寄信。
@@ -95,19 +95,19 @@ CFG=$REPO/woowtech/ai-content-report-cloudrun/deploy/cloudflare-worker-smart-rep
 export XDG_CONFIG_HOME=$HOME/.local/share/woowtech-smart/wrangler-reports
 export CLOUDFLARE_ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974 WRANGLER_CACHE_DIR=$(mktemp -d)
 cd "$(mktemp -d)"
-WR="npx --yes wrangler@4.149.0"
-$WR login --device --scopes account:read user:read workers_scripts:write workers_routes:write zone:read
-$WR whoami --json                                 # tokenPermissions 只有上面五項和 offline_access
-$WR deployments list --name smart-reports-proxy   # 上一次是從儀表板還是 wrangler 部署的
+wr() { npx --yes wrangler@4.149.0 "$@"; }       # 用函式：zsh 不會把放著整行指令的變數拆開來執行
+wr login --device --scopes account:read user:read workers_scripts:write workers_routes:write zone:read
+wr whoami --json                                 # tokenPermissions 只有上面五項和 offline_access
+wr deployments list --name smart-reports-proxy   # 上一次是從儀表板還是 wrangler 部署的
 RUN_URL=$(gcloud --project woowtech-smart run services describe smart-reports --region asia-east1 --format='value(status.url)')
 echo "$RUN_URL"   # RELAY_ORIGIN 是 Text 時要跟儀表板上的值相同，不同就停下來查
-$WR deploy --config "$CFG" --var "RELAY_ORIGIN:$RUN_URL" --dry-run
-$WR deploy --config "$CFG" --var "RELAY_ORIGIN:$RUN_URL"
+wr deploy --config "$CFG" --var "RELAY_ORIGIN:$RUN_URL" --dry-run
+wr deploy --config "$CFG" --var "RELAY_ORIGIN:$RUN_URL"
 ```
 
 - `RUN_URL` 一律取自 gcloud，不要照抄儀表板：Worker 會把每則回報和 edge key 送到這個網址，而任何回 400 `unsupported_schema` 的上游都能讓下面的 V2 通過。
-- 用 wrangler 部署時（依據是這台快取的較舊版 wrangler 原始碼，4.149.0 本身沒看過）：
-  - wrangler 先把新版以 100% 上線，再套用設定，最後才處理 custom domain 和 workers.dev。印出 `Uploaded` 時，新版已經在服務 reports.woowtech.io；之後的步驟報錯也一樣，先照樣跑下面的檢查、套用處理規則，再決定要不要加 scopes。不確定時，`$WR deployments list --name smart-reports-proxy` 最新的一筆就是線上的版本。
+- 用 wrangler 部署時（依據是 wrangler 4.149.0 的原始碼，2026-10-27 在這台 Mac 的 npx 快取裡讀過；沒有實際部署過）：
+  - wrangler 先把新版以 100% 上線，再套用設定，最後才處理 custom domain 和 workers.dev。印出 `Uploaded` 時，新版已經在服務 reports.woowtech.io；之後的步驟報錯也一樣，先照樣跑下面的檢查、套用處理規則，再決定要不要加 scopes。不確定時，`wr deployments list --name smart-reports-proxy` 最新的一筆就是線上的版本。
   - 儀表板上設的 Text 變數（例如 `ALLOWED_ORIGINS`）會被換掉；Secret 都留著，包括 `EDGE_KEY`。會加上 `IP_RATE_LIMITER`（namespace 4102）。
   - 設定檔要求關掉 Observability 和 Logpush，但這一步失敗時 wrangler 只印一句不相干的警告（`Could not apply service and environment tags…`），然後照樣繼續。看到這句就當作沒有關，部署後到儀表板關掉。設定檔沒有 Tail Worker 的設定，已經掛上的會留著。
 - `RELAY_ORIGIN` 是 Secret，或部署時出現 binding 名稱衝突：改用儀表板的 Edit code，貼上新的 `cloudflare-worker-smart-reports.js` 再按 Deploy。這樣設定和 secret 都不變：`ALLOWED_ORIGINS` 要照上面先處理；不會有 `IP_RATE_LIMITER`，要靠 WAF 規則限流；Observability 和 Tail Worker 也維持原樣，一定要人工確認。
@@ -138,13 +138,13 @@ for i in $(seq 1 40); do curl -s -o /dev/null -w '%{http_code}\n' -X POST "$U" -
 不符合時：
 
 - V1–V5 有一項得到 429：被限流了，等一分鐘再跑那一項。
-- V1 不是 204，或 V2 是 403 `origin_not_allowed`：網頁版沒被放行。不要 rollback：上一版也擋網頁版，手機和桌面版不受影響（看 V3、V4）。先看 `ALLOWED_ORIGINS`，和 `$WR deployments list` 最新的一筆是不是這一次。
-- V2（上面那種 403 除外）或 V4 不是 400 `unsupported_schema`：所有平台都送不出回報（500 `edge_misconfigured` 是 `RELAY_ORIGIN` 或 `EDGE_KEY` 沒設好，403 `forbidden` 是服務不認這把 edge key，503 是連不到服務）。執行 `$WR rollback --name smart-reports-proxy`，選上一版（或在儀表板的 Deployments 選上一版）。
+- V1 不是 204，或 V2 是 403 `origin_not_allowed`：網頁版沒被放行。不要 rollback：上一版也擋網頁版，手機和桌面版不受影響（看 V3、V4）。先看 `ALLOWED_ORIGINS`，和 `wr deployments list` 最新的一筆是不是這一次。
+- V2（上面那種 403 除外）或 V4 不是 400 `unsupported_schema`：所有平台都送不出回報（500 `edge_misconfigured` 是 `RELAY_ORIGIN` 或 `EDGE_KEY` 沒設好，403 `forbidden` 是服務不認這把 edge key，503 是連不到服務）。執行 `wr rollback --name smart-reports-proxy`，選上一版（或在儀表板的 Deployments 選上一版）。
 - V3 不是 204：已發佈的桌面版（0.8.1）送不出回報。rollback，再看 `ALLOWED_ORIGINS`。
 - V5 有一行不是 `POST 403 OPTIONS 405 ACAO 0`，或 V1、V3 是 204 但標頭跟上面寫的不同：線上跑的不是測過的程式。rollback。
 - V8 沒有 429：限流沒生效，隱私權政策網頁版那一段（P3）不能發佈，先補 WAF 規則或 binding。
 - 都符合之後，再到儀表板看一次 Observability（含 Tail Worker）和限流，把部署的 commit、部署前後兩次的結果記進 `woowtech/README.md` 的驗證紀錄。兩項都確認過、V8 也看到 429，隱私權政策才能發佈網頁版那一段（「轉送程式只用來源決定要不要回應，不轉給回報服務，也不保存」；草稿在 `plans/web-server-20261026/privacy-391-web-draft.md`）。
-- 最後 `$WR logout`。
+- 最後 `wr logout`。
 
 ## 日常
 
