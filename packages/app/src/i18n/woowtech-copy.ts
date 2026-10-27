@@ -1318,6 +1318,78 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   },
 };
 
+// The question before a pairing link, a probe or a direct connection adds a host
+// (hosts/woowtech-host-confirmation-sheet.tsx) and the welcome screen's "Connect to this computer"
+// (hosts/woowtech-this-computer-action.ts). The first seven are upstream's
+// pairing.hostConfirmation text word for word (364e6456e). The text names no web address: the
+// web app's address is written in one place (protocol/src/brand-web-app.ts).
+const PAIRING_CONFIRMATION_ENGLISH = {
+  title: "Connect to this host?",
+  description:
+    "This host will be able to run code in this app and reach your other connected hosts. Only connect if you recognize it.",
+  descriptionChanged:
+    "This link changes how you connect to this host. The host will be able to run code in this app and reach your other connected hosts. Only connect if you recognize it.",
+  hostLabel: "Host",
+  fingerprintLabel: "Key fingerprint",
+  relayLabel: "Relay",
+  connect: "Connect",
+  otherRelay:
+    "This link uses a relay other than woowtech smart's ({{relay}}). Continue only if you set up that relay yourself.",
+  compareFingerprint:
+    "Compare the key fingerprint with the one shown under Pair device on your computer.",
+  savedRelayLabel: "Saved relay",
+  endpointLabel: "Address",
+  webWarning:
+    "In a browser, the hosts you add are kept in this browser: anyone who can use it can control them. A host you approve can also reach daemons on this computer that let this site connect directly. Only pair in your own browser.",
+  keyChangedTitle: "This host's key has changed",
+  keyChangedDescription:
+    'The key in this link is not the one saved for "{{label}}", so nothing was changed. If you reset the daemon on that computer, remove this host in Settings first, then pair again.',
+  savedHostTitle: 'Add this connection to "{{label}}"?',
+  savedHostDescription:
+    '{{endpoint}} says it is your saved host "{{label}}". A direct connection has no key, so this cannot be checked. Add it only if you are sure this address is that computer: the host will be able to run code in this app.',
+  thisComputer: "Connect to this computer",
+  thisComputerFailedTitle: "No daemon found on this computer",
+  thisComputerFailed:
+    "Start the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow.",
+};
+
+const PAIRING_CONFIRMATION_ZH_TW: typeof PAIRING_CONFIRMATION_ENGLISH = {
+  title: "要連線到這台主機嗎？",
+  description:
+    "這台主機將可以在渥屋智能裡執行程式，也能存取你其他已連線的主機。只有在你認得這台主機時才連線。",
+  descriptionChanged:
+    "這個連結會改變你連到這台主機的方式。這台主機將可以在渥屋智能裡執行程式，也能存取你其他已連線的主機。只有在你認得這台主機時才連線。",
+  hostLabel: "主機",
+  fingerprintLabel: "金鑰指紋",
+  relayLabel: "中繼",
+  connect: "連線",
+  otherRelay:
+    "這個連結用的不是渥屋智能的中繼（{{relay}}）。除非那是你自己架設的中繼，否則不要繼續。",
+  compareFingerprint: "請和你電腦上「配對裝置」畫面顯示的金鑰指紋比對。",
+  savedRelayLabel: "已存的中繼",
+  endpointLabel: "位址",
+  webWarning:
+    "在瀏覽器裡，你加入的主機會存在這個瀏覽器：能使用這個瀏覽器的人，都能控制這些主機。你核准的主機，也能操作這台電腦上允許這個網站直接連線的 daemon。只在你自己的瀏覽器配對。",
+  keyChangedTitle: "這台主機的金鑰變了",
+  keyChangedDescription:
+    "這個連結裡的金鑰，跟這裡為「{{label}}」存的不一樣，所以什麼都沒有改。如果你重設過那台電腦上的 daemon，請先在設定裡移除這台主機，再重新配對。",
+  savedHostTitle: "要替「{{label}}」加入這條連線嗎？",
+  savedHostDescription:
+    "{{endpoint}} 說它是你已存的主機「{{label}}」。直接連線沒有金鑰，無法確認這件事。只有在你確定這個位址就是那台電腦時才加入：加入後，這台主機可以在渥屋智能裡執行程式。",
+  thisComputer: "連到這台電腦",
+  thisComputerFailedTitle: "這台電腦上找不到 daemon",
+  thisComputerFailed:
+    "請先打開渥屋智能桌面版或啟動 daemon（localhost:6770），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。",
+};
+
+// The pairing confirmation, apart from woowtechCopyFor so it stays within the complexity limit.
+function pairingCopyFor(language: string) {
+  return {
+    pairingConfirmation:
+      language === "zh-TW" ? PAIRING_CONFIRMATION_ZH_TW : PAIRING_CONFIRMATION_ENGLISH,
+  };
+}
+
 /** The app's text for English the daemon sends: reasons, readiness sentences, default names. */
 function daemonTextCopyFor(language: string) {
   const traditionalChinese = language === "zh-TW";
@@ -1370,5 +1442,6 @@ export function woowtechCopyFor(language: string) {
     ...daemonTextCopyFor(language),
     ...legalCopyFor(language),
     ...agentStreamCopyFor(language),
+    ...pairingCopyFor(language),
   };
 }

@@ -10,6 +10,7 @@ import { useHostMutations } from "@/runtime/host-runtime";
 import { decodeOfferFragmentPayload, normalizeHostPort } from "@/utils/daemon-endpoints";
 import { connectToDaemon } from "@/utils/test-daemon-connection";
 import { ConnectionOfferSchema } from "@getpaseo/protocol/connection-offer";
+import { confirmPairingLink } from "@/runtime/woowtech-pairing-confirmation";
 import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
 import { isWeb } from "@/constants/platform";
 import { BackHeader } from "@/components/headers/back-header";
@@ -174,6 +175,8 @@ export default function PairScanScreen() {
         const encoded = offerUrl.slice(idx + "#offer=".length).trim();
         const offerPayload = decodeOfferFragmentPayload(encoded);
         const offer = ConnectionOfferSchema.parse(offerPayload);
+        // woowtech smart: ask before connecting (runtime/woowtech-pairing-confirmation.ts).
+        if (!(await confirmPairingLink(offerUrl))) return;
 
         const { client, hostname } = await connectToDaemon(
           {
@@ -191,7 +194,8 @@ export default function PairScanScreen() {
 
         navigateToPairedHost(profile.serverId);
       } catch (error) {
-        lastScannedRef.current = null;
+        // woowtech smart: lastScannedRef stays, so the code still in front of the camera is not
+        // retried and asked about again on every frame.
         const message = error instanceof Error ? error.message : t("pairing.scan.unableToPair");
         Alert.alert(t("pairing.scan.errorTitle"), message);
       } finally {
