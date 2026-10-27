@@ -1505,10 +1505,11 @@ export class HostRuntimeStore {
       }
     }
 
+    // woowtech smart: runtime/woowtech-localhost-probe-policy.ts decides, the override included.
+    if (!shouldAutoProbeLocalhost()) return;
     if (override) {
       this.bootstrapConfiguredOverride(override);
-    } else if (shouldAutoProbeLocalhost()) {
-      // woowtech smart: runtime/woowtech-localhost-probe-policy.ts
+    } else {
       await this.bootstrapDefaultLocalhost();
     }
   }
@@ -1797,6 +1798,7 @@ export class HostRuntimeStore {
       connection: input.connection,
       savedHosts: this.hosts,
       client,
+      background: input.timeoutMs !== undefined,
     });
     const profile = await this.upsertHostConnection({
       serverId,

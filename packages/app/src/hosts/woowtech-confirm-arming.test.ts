@@ -32,6 +32,9 @@ afterEach(() => {
 });
 
 const WEB = webArmingEnvironment(window, document);
+// jsdom matches :focus-visible on anything focused, so the browser's answer is stated here.
+const KEYBOARD_FOCUS: ArmingEnvironment = { ...WEB, focusCameFromKeyboard: () => true };
+const POINTER_FOCUS: ArmingEnvironment = { ...WEB, focusCameFromKeyboard: () => false };
 const MOUSE_DOWN = { nativeEvent: { type: "mousedown" } };
 const TOUCH_START = { nativeEvent: { type: "touchstart" } };
 const KEY_DOWN = { nativeEvent: { type: "keydown", repeat: false } };
@@ -69,6 +72,34 @@ function pointer(arming: Arming, kind: "move" | "down", pointerType: string): vo
 function press(arming: Arming, pressIn: unknown): boolean {
   arming.result.current.onConnectPressIn(pressIn);
   return arming.result.current.acceptPress();
+}
+
+function appState(initial: AppStateStatus) {
+  const listeners = new Set<(state: AppStateStatus) => void>();
+  const fake = {
+    currentState: initial,
+    addEventListener(_type: "change", listener: (state: AppStateStatus) => void) {
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    },
+    change(next: AppStateStatus) {
+      fake.currentState = next;
+      act(() => {
+        for (const listener of listeners) listener(next);
+      });
+    },
+    listening: () => listeners.size,
+  };
+  return fake;
+}
+
+/** Connect's onFocus for a focus that reached `target`; true when the sheet takes the focus back. */
+function focusConnect(arming: Arming, target: object = {}): boolean {
+  let release = false;
+  act(() => {
+    release = arming.result.current.onConnectFocus({ target });
+  });
+  return release;
 }
 
 describe("arming Connect", () => {
@@ -161,7 +192,7 @@ describe("a press of Connect", () => {
     expect(arming.result.current.acceptPress()).toBe(false);
   });
 
-  it("does not count without a press-in, as a click sent by a script has none", () => {
+  it("does not count without a press-in in a browser, as a click sent by a script has none", () => {
     const arming = sheet();
     wait(ARMING_DELAY_MS);
     pointer(arming, "move", "mouse");
@@ -226,26 +257,138 @@ describe("a press of Connect", () => {
   });
 });
 
-describe("on a phone", () => {
-  function appState(initial: AppStateStatus) {
-    const listeners = new Set<(state: AppStateStatus) => void>();
-    const fake = {
-      currentState: initial,
-      addEventListener(_type: "change", listener: (state: AppStateStatus) => void) {
-        listeners.add(listener);
-        return { remove: () => listeners.delete(listener) };
-      },
-      change(next: AppStateStatus) {
-        fake.currentState = next;
-        act(() => {
-          for (const listener of listeners) listener(next);
-        });
-      },
-      listening: () => listeners.size,
-    };
-    return fake;
-  }
+describe("a press that never had a press-in", () => {
+  // A screen reader's or a keyboard's activation reaches onPress with no onPressIn (Pressability's
+  // onClick for accessibility clicks; react-native-web's click handler).
+  it("counts on a phone once Connect is armed, and not before", () => {
+    const arming = sheet(nativeArmingEnvironment(appState("active")));
+    expect(arming.result.current.acceptPress()).toBe(false);
 
+    wait(ARMING_DELAY_MS - 1);
+    expect(arming.result.current.acceptPress()).toBe(false);
+    wait(1);
+    expect(arming.result.current.acceptPress()).toBe(true);
+  });
+
+  it("does not count on a phone after the app left the foreground", () => {
+    const state = appState("active");
+    const arming = sheet(nativeArmingEnvironment(state));
+    wait(ARMING_DELAY_MS);
+
+    state.change("background");
+    expect(arming.result.current.acceptPress()).toBe(false);
+    state.change("active");
+    expect(arming.result.current.acceptPress()).toBe(false);
+    wait(ARMING_DELAY_MS);
+    expect(arming.result.current.acceptPress()).toBe(true);
+  });
+
+  it("counts in a browser only after the keyboard focused Connect once it was armed", () => {
+    const arming = sheet(KEYBOARD_FOCUS);
+    wait(ARMING_DELAY_MS);
+    expect(arming.result.current.acceptPress()).toBe(false);
+
+    expect(focusConnect(arming)).toBe(false);
+    expect(arming.result.current.acceptPress()).toBe(true);
+  });
+
+  it("does not count in a browser when a click or a script focused Connect", () => {
+    const arming = sheet(POINTER_FOCUS);
+    wait(ARMING_DELAY_MS);
+
+    expect(focusConnect(arming)).toBe(false);
+    pointer(arming, "move", "mouse");
+    expect(arming.result.current.acceptPress()).toBe(false);
+  });
+
+  it("forgets the keyboard focus when Connect loses it, and when the sheet disarms", () => {
+    const arming = sheet(KEYBOARD_FOCUS);
+    wait(ARMING_DELAY_MS);
+
+    focusConnect(arming);
+    act(() => arming.result.current.onConnectBlur());
+    expect(arming.result.current.acceptPress()).toBe(false);
+
+    focusConnect(arming);
+    windowEvent("blur");
+    wait(ARMING_DELAY_MS);
+    expect(arming.result.current.acceptPress()).toBe(false);
+  });
+
+  it("does not count when the press-in began before Connect was armed", () => {
+    const arming = sheet(KEYBOARD_FOCUS);
+    wait(ARMING_DELAY_MS / 2);
+    arming.result.current.onConnectPressIn(KEY_DOWN);
+
+    wait(ARMING_DELAY_MS);
+    focusConnect(arming);
+    expect(arming.result.current.acceptPress()).toBe(false);
+    // The press-in was used up by that press: a later activation is judged on its own.
+    expect(arming.result.current.acceptPress()).toBe(true);
+  });
+});
+
+describe("the focus Connect takes", () => {
+  it("goes back to Cancel while Connect is not armed: a click focuses a disabled button", () => {
+    for (const environment of [KEYBOARD_FOCUS, POINTER_FOCUS]) {
+      const arming = sheet(environment);
+      expect(focusConnect(arming)).toBe(true);
+      wait(ARMING_DELAY_MS - 1);
+      expect(focusConnect(arming)).toBe(true);
+      wait(1);
+      expect(focusConnect(arming)).toBe(false);
+      arming.unmount();
+    }
+  });
+
+  it("goes back to Cancel again after the window lost and regained the focus", () => {
+    const arming = sheet(KEYBOARD_FOCUS);
+    wait(ARMING_DELAY_MS);
+    expect(focusConnect(arming)).toBe(false);
+
+    windowEvent("blur");
+    expect(focusConnect(arming)).toBe(true);
+  });
+});
+
+describe("telling a keyboard's focus from a click's", () => {
+  it("asks the browser whether the focus is visible", () => {
+    const matches = vi.fn((selector: string) => selector === ":focus-visible");
+    expect(WEB.focusCameFromKeyboard({ matches })).toBe(true);
+    expect(matches).toHaveBeenCalledWith(":focus-visible");
+    expect(WEB.focusCameFromKeyboard({ matches: () => false })).toBe(false);
+  });
+
+  it("says no for anything it cannot ask, and for a browser that does not know the selector", () => {
+    expect(WEB.focusCameFromKeyboard(null)).toBe(false);
+    expect(WEB.focusCameFromKeyboard(undefined)).toBe(false);
+    expect(WEB.focusCameFromKeyboard({})).toBe(false);
+    expect(WEB.focusCameFromKeyboard("button")).toBe(false);
+    expect(
+      WEB.focusCameFromKeyboard({
+        matches: () => {
+          throw new SyntaxError("not a valid selector");
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("asks a real element in the page", () => {
+    const button = document.createElement("button");
+    document.body.append(button);
+    button.focus();
+
+    // jsdom answers :focus-visible as :focus; a browser answers by how the focus came.
+    expect(WEB.focusCameFromKeyboard(button)).toBe(true);
+    button.remove();
+  });
+
+  it("never comes from the keyboard on a phone", () => {
+    expect(nativeArmingEnvironment(appState("active")).focusCameFromKeyboard({})).toBe(false);
+  });
+});
+
+describe("on a phone", () => {
   it("arms after a second in the foreground and starts again after the app comes back", () => {
     const state = appState("active");
     const arming = sheet(nativeArmingEnvironment(state));

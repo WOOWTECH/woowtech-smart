@@ -161,9 +161,10 @@ function sheetMounted(layout) {
 }
 
 // (e) The probe asks after it learns who answered and before it saves; the boot probe of
-// localhost runs only where the policy says so.
-const GUARDED_BOOT_PROBE =
-  /if \(shouldAutoProbeLocalhost\(\)\) \{\s*(?:\/\/[^\n]*\n\s*)*await this\.bootstrapDefaultLocalhost\(\);/g;
+// localhost, and the configured daemon's (EXPO_PUBLIC_LOCAL_DAEMON), run only where the policy
+// says so.
+const POLICY_RETURN = "if (!shouldAutoProbeLocalhost()) return;";
+const BOOT_PROBES = ["this.bootstrapDefaultLocalhost(", "this.bootstrapConfiguredOverride("];
 
 function hostRuntimeHooks(runtime) {
   const problems = [];
@@ -187,11 +188,15 @@ function hostRuntimeHooks(runtime) {
     problems.push("runBoot is gone");
   } else {
     const code = withoutCommentLines(runtime);
-    const calls = count(code, "this.bootstrapDefaultLocalhost(");
-    const guarded = withoutCommentLines(boot).match(GUARDED_BOOT_PROBE)?.length ?? 0;
-    if (guarded === 0) problems.push("runBoot does not ask shouldAutoProbeLocalhost()");
-    if (calls !== guarded) {
-      problems.push(`bootstrapDefaultLocalhost runs ${calls - guarded} time(s) without the policy`);
+    const bootCode = withoutCommentLines(boot);
+    const policy = bootCode.indexOf(POLICY_RETURN);
+    if (policy === -1) problems.push("runBoot does not ask shouldAutoProbeLocalhost()");
+    for (const call of BOOT_PROBES) {
+      if (count(code, call) !== count(bootCode, call)) {
+        problems.push(`${call} is also called outside runBoot, without the policy`);
+      }
+      const first = bootCode.indexOf(call);
+      if (first !== -1 && first < policy) problems.push(`runBoot calls ${call} before the policy`);
     }
   }
   return problems;
@@ -360,18 +365,34 @@ test("the host runtime asks after a probe and probes localhost at boot only by t
   const early = HOST_RUNTIME.replace(hookText, "").replace(connect, `${hookText}${connect}`);
   assert.notDeepEqual(hostRuntimeHooks(early), [], "asks before it knows who answered");
 
-  const guard = "    } else if (shouldAutoProbeLocalhost()) {";
-  assert.notDeepEqual(
-    hostRuntimeHooks(replaceOnce(HOST_RUNTIME, guard, "    } else {")),
-    [],
-    "unconditional",
+  const policy = "    if (!shouldAutoProbeLocalhost()) return;\n";
+  const unconditional = replaceOnce(HOST_RUNTIME, policy, "");
+  assert.notDeepEqual(hostRuntimeHooks(unconditional), [], "unconditional");
+  // The old shape guarded the default probe only; the configured daemon probed on every page.
+  const defaultOnly = replaceOnce(
+    unconditional,
+    "    } else {\n      await this.bootstrapDefaultLocalhost();",
+    "    } else if (shouldAutoProbeLocalhost()) {\n      await this.bootstrapDefaultLocalhost();",
   );
+  assert.notDeepEqual(hostRuntimeHooks(defaultOnly), [], "the configured daemon is not covered");
+  const late = replaceOnce(
+    HOST_RUNTIME,
+    `${policy}    if (override) {\n      this.bootstrapConfiguredOverride(override);`,
+    `    if (override) {\n      this.bootstrapConfiguredOverride(override);\n    }\n${policy}    if (override) {\n      this.bootstrapConfiguredOverride(override);`,
+  );
+  assert.notDeepEqual(hostRuntimeHooks(late), [], "the policy comes after a probe");
   const extra = replaceOnce(
     HOST_RUNTIME,
-    "    if (override) {\n      this.bootstrapConfiguredOverride(override);",
-    "    void this.bootstrapDefaultLocalhost();\n    if (override) {\n      this.bootstrapConfiguredOverride(override);",
+    policy,
+    `    void this.bootstrapDefaultLocalhost();\n${policy}`,
   );
-  assert.notDeepEqual(hostRuntimeHooks(extra), [], "another unguarded call");
+  assert.notDeepEqual(hostRuntimeHooks(extra), [], "another call before the policy");
+  const elsewhere = replaceOnce(
+    HOST_RUNTIME,
+    "  private markHostRegistryLoaded(): void {",
+    "  private warm(): void {\n    void this.bootstrapDefaultLocalhost();\n  }\n\n  private markHostRegistryLoaded(): void {",
+  );
+  assert.notDeepEqual(hostRuntimeHooks(elsewhere), [], "another call outside runBoot");
 });
 
 test("the direct and SSH forms close quietly when the user says no", () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type Ref } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore, type Ref } from "react";
 import {
   Pressable,
   Text,
@@ -20,9 +20,12 @@ import {
   type DirectConnectionToSavedHostRequest,
   type HostConfirmationRequest,
   type HostConfirmations,
+  type HostIdChangedRequest,
   type KeyChangedRequest,
+  type KeyUnverifiedRequest,
   type NewDirectHostRequest,
   type NewHostRequest,
+  type RelayShown,
 } from "@/runtime/woowtech-host-confirmations";
 import { isBrowserRuntime } from "@/runtime/woowtech-localhost-probe-policy";
 import { displayText } from "@/runtime/woowtech-offer-link";
@@ -31,10 +34,10 @@ import { useConnectArming } from "./woowtech-confirm-arming";
 
 // woowtech smart (fork-owned; woowtech/README.md, 19): the sheet for the question the app is
 // waiting on (runtime/woowtech-host-confirmations.ts). Layout and test ids follow upstream's
-// HostConfirmationSheet (364e6456e). The fork adds the saved host's name and relays, the blocked
-// key change, the two direct-connection questions, the relay and browser warnings, and the
-// arming of Connect (woowtech-confirm-arming.ts). Every value from a link, a daemon or saved data
-// goes through displayText.
+// HostConfirmationSheet (364e6456e). The fork adds the saved host's name and relays, the two
+// blocked key questions, the direct-connection and changed-id questions, the relay and browser
+// warnings, and the arming of Connect (woowtech-confirm-arming.ts). Every value from a link, a
+// daemon or saved data goes through displayText.
 
 const COPY = "woowtech.pairingConfirmation";
 
@@ -95,20 +98,26 @@ function fingerprintRow(t: TFunction, keyFingerprint: string): DetailRowModel {
   };
 }
 
-function relayRow(t: TFunction, relayEndpoint: string): DetailRowModel {
+/** The relay's address, and that the connection to it is not encrypted when it is not. */
+function relayText(t: TFunction, relay: RelayShown): string {
+  const endpoint = displayText(relay.endpoint);
+  return relay.useTls ? endpoint : t(`${COPY}.relayNoTls`, { endpoint });
+}
+
+function relayRow(t: TFunction, relay: RelayShown): DetailRowModel {
   return {
     label: t(`${COPY}.relayLabel`),
-    value: displayText(relayEndpoint),
+    value: relayText(t, relay),
     testID: "host-confirmation-relay",
   };
 }
 
-function savedRelayRows(t: TFunction, savedRelayEndpoints: string[]): DetailRowModel[] {
-  if (savedRelayEndpoints.length === 0) return [];
+function savedRelayRows(t: TFunction, savedRelays: RelayShown[]): DetailRowModel[] {
+  if (savedRelays.length === 0) return [];
   return [
     {
       label: t(`${COPY}.savedRelayLabel`),
-      value: displayText(savedRelayEndpoints.join(", ")),
+      value: savedRelays.map((relay) => relayText(t, relay)).join(", "),
       testID: "host-confirmation-saved-relay",
     },
   ];
@@ -135,7 +144,7 @@ function newHostModel(t: TFunction, request: NewHostRequest): SheetModel {
     rows: [
       serverIdRow(t, request.serverId),
       fingerprintRow(t, request.keyFingerprint),
-      relayRow(t, request.relayEndpoint),
+      relayRow(t, { endpoint: request.relayEndpoint, useTls: request.relayUseTls }),
     ],
     otherRelay: otherRelayWarning(t, request.usesProductRelay),
     canConnect: true,
@@ -152,8 +161,8 @@ function changedConnectionModel(t: TFunction, request: ChangedConnectionRequest)
       savedLabelRow(t, request.savedLabel),
       serverIdRow(t, request.serverId),
       fingerprintRow(t, request.keyFingerprint),
-      ...savedRelayRows(t, request.savedRelayEndpoints),
-      relayRow(t, request.relayEndpoint),
+      ...savedRelayRows(t, request.savedRelays),
+      relayRow(t, { endpoint: request.relayEndpoint, useTls: request.relayUseTls }),
     ],
     otherRelay: otherRelayWarning(t, request.usesProductRelay),
     canConnect: true,
@@ -169,6 +178,47 @@ function keyChangedModel(t: TFunction, request: KeyChangedRequest): SheetModel {
     rows: [],
     otherRelay: null,
     canConnect: false,
+  };
+}
+
+function keyUnverifiedModel(t: TFunction, request: KeyUnverifiedRequest): SheetModel {
+  return {
+    title: t(`${COPY}.keyUnverifiedTitle`),
+    description: t(`${COPY}.keyUnverifiedDescription`, { label: displayText(request.savedLabel) }),
+    descriptionTestID: "host-confirmation-key-unverified",
+    note: null,
+    rows: [],
+    otherRelay: null,
+    canConnect: false,
+  };
+}
+
+function hostIdChangedModel(t: TFunction, request: HostIdChangedRequest): SheetModel {
+  const label = displayText(request.savedLabel);
+  return {
+    title: t(`${COPY}.hostIdChangedTitle`, { label }),
+    description: t(`${COPY}.hostIdChangedDescription`, {
+      label,
+      endpoint: displayText(request.endpoint),
+    }),
+    descriptionTestID: "host-confirmation-description",
+    note: null,
+    rows: [
+      savedLabelRow(t, request.savedLabel),
+      {
+        label: t(`${COPY}.savedServerIdLabel`),
+        value: displayText(request.savedServerId),
+        testID: "host-confirmation-saved-server-id",
+      },
+      {
+        label: t(`${COPY}.reportedServerIdLabel`),
+        value: displayText(request.serverId),
+        testID: "host-confirmation-server-id",
+      },
+      endpointRow(t, request.endpoint),
+    ],
+    otherRelay: null,
+    canConnect: true,
   };
 }
 
@@ -208,8 +258,12 @@ function sheetModel(t: TFunction, request: HostConfirmationRequest): SheetModel 
       return changedConnectionModel(t, request);
     case "keyChanged":
       return keyChangedModel(t, request);
+    case "keyUnverified":
+      return keyUnverifiedModel(t, request);
     case "directConnectionToSavedHost":
       return savedHostModel(t, request);
+    case "hostIdChanged":
+      return hostIdChangedModel(t, request);
     case "newDirectHost":
       return newDirectHostModel(t, request);
   }
@@ -242,10 +296,17 @@ interface ConfirmationSheetProps {
 
 function ConfirmationSheet({ request, confirmations }: ConfirmationSheetProps) {
   const { t } = useTranslation();
-  const { armed, onPointerMove, onPointerDown, onConnectPressIn, acceptPress } = useConnectArming(
-    request.id,
-  );
-  const dismissRef = useRef<View>(null);
+  const {
+    armed,
+    onPointerMove,
+    onPointerDown,
+    onConnectPressIn,
+    onConnectFocus,
+    onConnectBlur,
+    acceptPress,
+  } = useConnectArming(request.id);
+  const dismissRef = useRef<View | null>(null);
+  const focusedDismiss = useRef(false);
   const model = useMemo(() => sheetModel(t, request), [t, request]);
   const header = useMemo<SheetHeader>(() => ({ title: model.title }), [model.title]);
   const inBrowser = isBrowserRuntime();
@@ -258,10 +319,23 @@ function ConfirmationSheet({ request, confirmations }: ConfirmationSheetProps) {
     if (acceptPress()) confirmations.answer(request.id, true);
   }, [acceptPress, confirmations, request.id]);
 
-  useEffect(() => {
-    // A key held down or pressed as the sheet appears lands on Cancel, not Connect.
-    if (isWeb) dismissRef.current?.focus();
+  // A key held down or pressed as the sheet appears lands on Cancel, not Connect. Cancel takes the
+  // focus when it mounts, once per question: a compact layout mounts the sheet's content after the
+  // sheet is presented, so a focus call made when this component mounts finds no button yet.
+  const attachDismiss = useCallback((node: View | null) => {
+    dismissRef.current = node;
+    if (!node || !isWeb || focusedDismiss.current) return;
+    focusedDismiss.current = true;
+    node.focus();
   }, []);
+  // Connect is disabled until it arms, but a click still focuses it; a later Enter would then land
+  // on Connect. Whatever focuses it before it arms is sent back to Cancel.
+  const handleConnectFocus = useCallback(
+    (event: unknown) => {
+      if (onConnectFocus(event) && isWeb) dismissRef.current?.focus();
+    },
+    [onConnectFocus],
+  );
 
   const dismiss = model.canConnect ? CANCEL : CLOSE;
 
@@ -295,7 +369,7 @@ function ConfirmationSheet({ request, confirmations }: ConfirmationSheetProps) {
         ) : null}
         <View style={styles.actions}>
           <SheetButton
-            buttonRef={dismissRef}
+            buttonRef={attachDismiss}
             label={t(dismiss.labelKey)}
             testID={dismiss.testID}
             onPress={decline}
@@ -307,6 +381,8 @@ function ConfirmationSheet({ request, confirmations }: ConfirmationSheetProps) {
               label={t(`${COPY}.connect`)}
               testID="host-confirmation-connect"
               onPressIn={onConnectPressIn}
+              onFocus={handleConnectFocus}
+              onBlur={onConnectBlur}
               onPress={connect}
             />
           ) : null}
@@ -346,6 +422,8 @@ interface SheetButtonProps {
   primary?: boolean;
   disabled?: boolean;
   onPressIn?: (event: GestureResponderEvent) => void;
+  onFocus?: (event: unknown) => void;
+  onBlur?: () => void;
   /** A Pressable rather than the shared Button, which takes no ref: Cancel takes the focus. */
   buttonRef?: Ref<View>;
 }
@@ -357,6 +435,8 @@ function SheetButton({
   primary = false,
   disabled = false,
   onPressIn,
+  onFocus,
+  onBlur,
   buttonRef,
 }: SheetButtonProps) {
   const accessibilityState = useMemo(() => ({ disabled }), [disabled]);
@@ -378,6 +458,8 @@ function SheetButton({
       accessibilityState={accessibilityState}
       disabled={disabled}
       onPressIn={onPressIn}
+      onFocus={onFocus}
+      onBlur={onBlur}
       onPress={onPress}
       style={pressableStyle}
     >

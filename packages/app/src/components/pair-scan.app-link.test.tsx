@@ -5,8 +5,18 @@
 // here because Expo Router treats every file in src/app as a route.
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import React from "react";
-import { Linking } from "react-native";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { Alert, Linking } from "react-native";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
+import { PairingOfferError } from "@/runtime/woowtech-offer-link";
 
 const scanner = vi.hoisted(() => ({
   onBarcodeScanned: null as ((result: { type: string; data: string }) => unknown) | null,
@@ -18,16 +28,17 @@ const scanner = vi.hoisted(() => ({
   permissionRequests: 0,
 }));
 
-// The user's answer to the host confirmation (runtime/woowtech-pairing-confirmation.ts), and the
-// codes it was asked about.
+// The user's answer to the host confirmation (runtime/woowtech-pairing-confirmation.ts), or the
+// error it throws for a link it cannot use, and the codes it was asked about.
 const confirmation = vi.hoisted(() => ({
-  answer: true,
+  answer: true as boolean | Error,
   asked: [] as string[],
 }));
 
 vi.mock("@/runtime/woowtech-pairing-confirmation", () => ({
   confirmPairingLink: async (link: string) => {
     confirmation.asked.push(link);
+    if (confirmation.answer instanceof Error) throw confirmation.answer;
     return confirmation.answer;
   },
 }));
@@ -102,6 +113,7 @@ const PROBE = {
 };
 
 let screen: typeof import("@/app/pair-scan");
+let alert: MockInstance<typeof Alert.alert>;
 const linksGivenToUrl: string[] = [];
 
 beforeAll(async () => {
@@ -132,11 +144,14 @@ beforeEach(() => {
   confirmation.answer = true;
   confirmation.asked = [];
   linksGivenToUrl.length = 0;
+  // react-native-web's Alert.alert does nothing; the spy records what the scanner showed.
+  alert = vi.spyOn(Alert, "alert").mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** The camera's next frame shows `data`. */
@@ -182,6 +197,26 @@ describe("scanning a pairing QR code in the app", () => {
     await frame(WEB_LINK);
 
     expect(confirmation.asked).toEqual([WEB_LINK]);
+    expect(scanner.probes).toEqual([]);
+    expect(scanner.imports).toEqual([]);
+    expect(scanner.routes).toEqual([]);
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it("shows why a code cannot be used, connects to nothing, and does not ask again about it", async () => {
+    confirmation.answer = new PairingOfferError(
+      "Invalid pairing offer: the relay is not host:port",
+    );
+    await scan(WEB_LINK);
+    await frame(WEB_LINK);
+    await frame(WEB_LINK);
+
+    expect(confirmation.asked).toEqual([WEB_LINK]);
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert).toHaveBeenCalledWith(
+      expect.any(String),
+      "Invalid pairing offer: the relay is not host:port",
+    );
     expect(scanner.probes).toEqual([]);
     expect(scanner.imports).toEqual([]);
     expect(scanner.routes).toEqual([]);

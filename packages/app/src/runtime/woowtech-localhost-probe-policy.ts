@@ -94,7 +94,8 @@ export function isMobileBrowser(navigatorLike: NavigatorLike | undefined): boole
 }
 
 function currentLocation(): ProbePolicyInput["location"] {
-  return typeof window === "undefined" ? null : window.location;
+  // React Native sets window, but a release build has no window.location.
+  return typeof window === "undefined" ? null : (window.location ?? null);
 }
 
 function currentNavigator(): NavigatorLike | undefined {

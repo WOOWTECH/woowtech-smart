@@ -1,4 +1,5 @@
 import type { ConnectionOffer } from "@getpaseo/protocol/connection-offer";
+import type { HostProfile } from "@/types/host-connection";
 import { getHostRuntimeStore, type HostRuntimeStore } from "./host-runtime";
 import { hostConfirmations, type HostConfirmations } from "./woowtech-host-confirmations";
 import { readPairingOffer, validatePairingOffer } from "./woowtech-offer-link";
@@ -11,8 +12,11 @@ import { readPairingOffer, validatePairingOffer } from "./woowtech-offer-link";
 /** The part of the host store a pairing confirmation reads. */
 export type PairingHostRegistry = Pick<
   HostRuntimeStore,
-  "isHostRegistryLoaded" | "subscribeHostList" | "getHosts"
+  "isHostRegistryLoaded" | "subscribeHostList" | "getHosts" | "getSnapshot"
 >;
+
+// Long enough for a slow link, short enough that nobody waits a minute for a question.
+const DAEMON_KEY_TIMEOUT_MS = 8_000;
 
 export interface PairingConfirmationOptions {
   /** Defaults to the app's host store. */
@@ -38,6 +42,30 @@ export function whenHostRegistryLoaded(
   });
 }
 
+/**
+ * The key a saved host's own daemon uses, asked over the connection the host is online on (the RPC
+ * the desktop "Pair device" screen uses). null when the host is not online, the daemon is too old
+ * for the RPC, its relay is off (it then has no pairing link to give), the call fails, or the
+ * daemon answers as another host.
+ */
+async function readDaemonKey(
+  hosts: Pick<HostRuntimeStore, "getSnapshot">,
+  saved: HostProfile,
+): Promise<string | null> {
+  const snapshot = hosts.getSnapshot(saved.serverId);
+  const client = snapshot?.client ?? null;
+  if (!client || snapshot?.connectionStatus !== "online") return null;
+  if (client.getLastServerInfoMessage()?.features?.daemonStatusRpc !== true) return null;
+  try {
+    const pairing = await client.getDaemonPairingOffer({ timeout: DAEMON_KEY_TIMEOUT_MS });
+    if (!pairing.relayEnabled || pairing.url === "") return null;
+    const own = readPairingOffer(pairing.url);
+    return own.serverId === saved.serverId ? own.daemonPublicKeyB64.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 /** validatePairingOffer → wait for the saved hosts → HostConfirmations.confirmLink. */
 export async function confirmPairingOffer(
   offer: ConnectionOffer,
@@ -46,7 +74,9 @@ export async function confirmPairingOffer(
   validatePairingOffer(offer);
   const hosts = options.hosts ?? getHostRuntimeStore();
   await whenHostRegistryLoaded(hosts);
-  return (options.confirmations ?? hostConfirmations).confirmLink(offer, hosts.getHosts());
+  return (options.confirmations ?? hostConfirmations).confirmLink(offer, hosts.getHosts(), {
+    readDaemonKey: (saved) => readDaemonKey(hosts, saved),
+  });
 }
 
 /** readPairingOffer(link) → confirmPairingOffer. Throws PairingOfferError for a link it cannot use. */

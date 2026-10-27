@@ -32,30 +32,58 @@ interface RequestBase {
   serverId: string;
 }
 
+/** A relay as the sheet shows it: where it is, and whether the connection to it is encrypted. */
+export interface RelayShown {
+  endpoint: string;
+  useTls: boolean;
+}
+
 export interface NewHostRequest extends RequestBase {
   kind: "newHost";
   keyFingerprint: string;
   relayEndpoint: string;
+  relayUseTls: boolean;
   usesProductRelay: boolean;
 }
 
 export interface ChangedConnectionRequest extends RequestBase {
   kind: "changedConnection";
   savedLabel: string;
-  savedRelayEndpoints: string[];
+  savedRelays: RelayShown[];
   keyFingerprint: string;
   relayEndpoint: string;
+  relayUseTls: boolean;
   usesProductRelay: boolean;
 }
 
-/** Shown, never approved: the answer is always no. */
+/** Shown, never approved: the link's key is not the key the saved host has, or reports itself. */
 export interface KeyChangedRequest extends RequestBase {
   kind: "keyChanged";
   savedLabel: string;
 }
 
+/**
+ * Shown, never approved: the saved host has no key to compare the link's with, and its own daemon
+ * could not give one just now.
+ */
+export interface KeyUnverifiedRequest extends RequestBase {
+  kind: "keyUnverified";
+  savedLabel: string;
+}
+
 export interface DirectConnectionToSavedHostRequest extends RequestBase {
   kind: "directConnectionToSavedHost";
+  savedLabel: string;
+  endpoint: string;
+}
+
+/**
+ * A connection a saved host already has now comes with another host id (`serverId`). The store
+ * merges by connection too, so saving would give that saved host the new id.
+ */
+export interface HostIdChangedRequest extends RequestBase {
+  kind: "hostIdChanged";
+  savedServerId: string;
   savedLabel: string;
   endpoint: string;
 }
@@ -69,7 +97,9 @@ export type HostConfirmationRequest =
   | NewHostRequest
   | ChangedConnectionRequest
   | KeyChangedRequest
+  | KeyUnverifiedRequest
   | DirectConnectionToSavedHostRequest
+  | HostIdChangedRequest
   | NewDirectHostRequest;
 
 type WithoutId<Request> = Request extends unknown ? Omit<Request, "id"> : never;
@@ -91,9 +121,14 @@ export interface ProbedConnectionInput {
   serverId: string;
   connection: HostConnection;
   savedHosts: HostProfile[];
+  /**
+   * The app probes by itself (the boot probe, the configured daemon, the initial connection hint):
+   * a refusal is then remembered, since these retry. What the user starts is asked every time.
+   */
+  background?: boolean;
   /** The app runs in a browser tab (isBrowserRuntime). */
   browser: boolean;
-  /** window.location.hostname; null without a window. */
+  /** window.location.hostname; null without a window or a location. */
   pageHostname: string | null;
 }
 
@@ -103,15 +138,35 @@ export interface ProbedHostInput {
   savedHosts: HostProfile[];
   /** The probe's open client. */
   client: { close(): Promise<void> };
+  /** See ProbedConnectionInput.background. */
+  background?: boolean;
+}
+
+export interface ConfirmLinkOptions {
+  /**
+   * The key the saved host's own daemon reports, or null when that cannot be read now. Asked only
+   * for a saved host with no relay connection, which has no key of its own to compare with.
+   */
+  readDaemonKey?: (saved: HostProfile) => Promise<string | null>;
 }
 
 export interface HostConfirmationsOptions {
   blockKeyChange?: boolean;
 }
 
+interface Outcome {
+  approved: boolean;
+  /** false: a newer question took this one's place, so the user never said no. */
+  answered: boolean;
+}
+
 interface PendingConfirmation {
   request: HostConfirmationRequest;
-  resolve: (approved: boolean) => void;
+  settle: (outcome: Outcome) => void;
+}
+
+function isBlockedKind(request: HostConfirmationRequest): boolean {
+  return request.kind === "keyChanged" || request.kind === "keyUnverified";
 }
 
 /**
@@ -124,7 +179,7 @@ export class HostConfirmations {
   private pending: PendingConfirmation | null = null;
   private nextRequestId = 1;
   private readonly listeners = new Set<() => void>();
-  /** serverId|connection id pairs the user refused in this run. */
+  /** serverId|connection id pairs the user refused to a background probe in this run. */
   private readonly declinedProbes = new Set<string>();
   private readonly blockKeyChange: boolean;
 
@@ -149,70 +204,94 @@ export class HostConfirmations {
     if (!current || current.request.id !== requestId) return;
     this.pending = null;
     this.emit();
-    current.resolve(approved && current.request.kind !== "keyChanged");
+    current.settle({ approved: approved && !isBlockedKind(current.request), answered: true });
   }
 
   /** Resolves true without asking when the link matches a saved host exactly. */
-  confirmLink(offer: ConnectionOffer, savedHosts: HostProfile[]): Promise<boolean> {
+  async confirmLink(
+    offer: ConnectionOffer,
+    savedHosts: HostProfile[],
+    options: ConfirmLinkOptions = {},
+  ): Promise<boolean> {
     const connection = relayConnectionFromOffer(offer);
+    const holder = holderOfConnection(savedHosts, offer.serverId, connection);
+    if (holder) return this.ask(hostIdChangedQuestion(offer.serverId, holder, connection));
+
     const saved = savedHosts.find((host) => host.serverId === offer.serverId);
     const shown = {
       serverId: offer.serverId,
       keyFingerprint: formatDaemonKeyFingerprint(connection.daemonPublicKeyB64),
       relayEndpoint: connection.relayEndpoint,
+      relayUseTls: connection.useTls === true,
       usesProductRelay: isProductRelay(connection),
     };
     if (!saved) return this.ask({ kind: "newHost", ...shown });
-    if (hostHasConnection(saved, connection)) return Promise.resolve(true);
+    if (hostHasConnection(saved, connection)) return true;
 
     const savedRelays = saved.connections.filter(isRelayConnection);
     // A relay connection's id has no key in it, so approving a new key replaces the saved key
     // with the link's: whoever holds the new key then answers as the saved host.
-    const keyChanged =
-      savedRelays.length > 0 &&
-      savedRelays.every((relay) => relay.daemonPublicKeyB64 !== connection.daemonPublicKeyB64);
-    if (keyChanged && this.blockKeyChange) {
+    let key: KeyVerdict = "same";
+    if (this.blockKeyChange) {
+      key =
+        savedRelays.length > 0
+          ? keyAmongRelays(savedRelays, connection)
+          : await keyOfSavedDaemon(saved, connection, options);
+    }
+    if (key === "different") {
       return this.ask({ kind: "keyChanged", serverId: offer.serverId, savedLabel: saved.label });
+    }
+    if (key === "unknown") {
+      return this.ask({ kind: "keyUnverified", serverId: offer.serverId, savedLabel: saved.label });
     }
     return this.ask({
       kind: "changedConnection",
       ...shown,
       savedLabel: saved.label,
-      savedRelayEndpoints: savedRelays.map((relay) => relay.relayEndpoint),
+      savedRelays: savedRelays.map(relayShown),
     });
   }
 
   /**
    * Asks before a probe's connection joins a saved host (the daemon's reported id is all that
-   * ties them) and before a browser adds a new host on another machine. A pair refused once is
-   * refused again without asking for the rest of this run.
+   * ties them), before a connection a saved host has takes another id, and before a browser adds
+   * a new host on another machine. A pair refused to a background probe is refused again without
+   * asking for the rest of this run; anything the user starts asks every time.
    */
   async confirmProbedConnection(input: ProbedConnectionInput): Promise<boolean> {
     const saved = input.savedHosts.find((host) => host.serverId === input.serverId);
     if (saved && hostHasConnection(saved, input.connection)) return true;
+    const background = input.background === true;
     const declinedKey = `${input.serverId}|${input.connection.id}`;
-    if (this.declinedProbes.has(declinedKey)) return false;
-    const question = probedConnectionQuestion(input, saved);
+    if (background && this.declinedProbes.has(declinedKey)) return false;
+    const holder = holderOfConnection(input.savedHosts, input.serverId, input.connection);
+    const question = holder
+      ? hostIdChangedQuestion(input.serverId, holder, input.connection)
+      : probedConnectionQuestion(input, saved);
     if (!question) return true;
-    const approved = await this.ask(question);
-    if (!approved) this.declinedProbes.add(declinedKey);
-    return approved;
+    const outcome = await this.askForOutcome(question);
+    if (!outcome.approved && outcome.answered && background) this.declinedProbes.add(declinedKey);
+    return outcome.approved;
   }
 
   resetForTests(): void {
     const open = this.pending;
     this.pending = null;
     this.declinedProbes.clear();
-    open?.resolve(false);
+    open?.settle({ approved: false, answered: false });
     this.emit();
   }
 
-  private ask(question: HostConfirmationQuestion): Promise<boolean> {
+  private async ask(question: HostConfirmationQuestion): Promise<boolean> {
+    return (await this.askForOutcome(question)).approved;
+  }
+
+  private askForOutcome(question: HostConfirmationQuestion): Promise<Outcome> {
     // One question at a time: a newer one answers the unanswered one with no.
-    this.pending?.resolve(false);
+    this.pending?.settle({ approved: false, answered: false });
     const request: HostConfirmationRequest = { ...question, id: this.nextRequestId++ };
-    return new Promise<boolean>((resolve) => {
-      this.pending = { request, resolve };
+    return new Promise<Outcome>((resolve) => {
+      this.pending = { request, settle: resolve };
       this.emit();
     });
   }
@@ -227,12 +306,66 @@ export class HostConfirmations {
 /** The app's one confirmation store: the sheet at the app root shows its questions. */
 export const hostConfirmations = new HostConfirmations();
 
+type KeyVerdict = "same" | "different" | "unknown";
+
+// host-runtime.ts's isPlaceholderServerId: the stand-in id of a host whose daemon has not said who
+// it is. The probe that learns the real id is meant to replace it.
+const PLACEHOLDER_SERVER_ID_PREFIX = "local:";
+
+/**
+ * Saving merges by connection as well as by id, and gives the merged host the id just learned. The
+ * saved host that has `connection` under another id, if any: not a placeholder, which is meant to
+ * take the real id.
+ */
+function holderOfConnection(
+  savedHosts: HostProfile[],
+  serverId: string,
+  connection: HostConnection,
+): HostProfile | undefined {
+  return savedHosts.find(
+    (host) =>
+      host.serverId !== serverId &&
+      !host.serverId.startsWith(PLACEHOLDER_SERVER_ID_PREFIX) &&
+      hostHasConnection(host, connection),
+  );
+}
+
 function isRelayConnection(connection: HostConnection): connection is RelayHostConnection {
   return connection.type === "relay";
 }
 
+function relayShown(relay: RelayHostConnection): RelayShown {
+  return { endpoint: relay.relayEndpoint, useTls: relay.useTls === true };
+}
+
 function isProductRelay(connection: RelayHostConnection): boolean {
   return connection.relayEndpoint === BRAND_RELAY.endpoint && connection.useTls === true;
+}
+
+/** Whether the link's key is one the saved host's relay connections already hold. */
+function keyAmongRelays(savedRelays: RelayHostConnection[], link: RelayHostConnection): KeyVerdict {
+  return savedRelays.some((relay) => relay.daemonPublicKeyB64 === link.daemonPublicKeyB64)
+    ? "same"
+    : "different";
+}
+
+/**
+ * A saved host with only direct connections saved no key, so its own daemon is asked for the key
+ * it uses. Nothing to ask with, or no answer, is "unknown": the link is not trusted for it.
+ */
+async function keyOfSavedDaemon(
+  saved: HostProfile,
+  link: RelayHostConnection,
+  options: ConfirmLinkOptions,
+): Promise<KeyVerdict> {
+  let daemonKey: string | null = null;
+  try {
+    daemonKey = (await options.readDaemonKey?.(saved)) ?? null;
+  } catch {
+    daemonKey = null;
+  }
+  if (daemonKey === null) return "unknown";
+  return daemonKey === link.daemonPublicKeyB64 ? "same" : "different";
 }
 
 /** The relay connection an offer saves: built exactly as HostRuntimeStore.upsertConnectionFromOffer does. */
@@ -246,6 +379,20 @@ export function relayConnectionFromOffer(offer: ConnectionOffer): RelayHostConne
     relayEndpoint,
     useTls,
     daemonPublicKeyB64: offer.daemonPublicKeyB64.trim(),
+  };
+}
+
+function hostIdChangedQuestion(
+  reportedServerId: string,
+  holder: HostProfile,
+  connection: HostConnection,
+): HostConfirmationQuestion {
+  return {
+    kind: "hostIdChanged",
+    serverId: reportedServerId,
+    savedServerId: holder.serverId,
+    savedLabel: holder.label,
+    endpoint: describeConnection(connection),
   };
 }
 
@@ -301,22 +448,32 @@ function describeConnection(connection: HostConnection): string {
 
 function currentPageHostname(): string | null {
   if (typeof window === "undefined") return null;
-  return window.location.hostname || null;
+  // React Native sets window, but a release build has no window.location.
+  return window.location?.hostname || null;
 }
 
 /**
  * HostRuntimeStore.probeAndUpsertConnection's hook, between learning the daemon's id and saving:
  * asks when needed; on "no" closes the probe's client and throws HostConfirmationDeclinedError.
- * The client stays open while the user decides, for the store to use after a yes.
+ * The client stays open while the user decides, for the store to use after a yes. If anything
+ * here throws, the client is closed too: the probe is dropped and nothing else holds it.
  */
 export async function confirmProbedHost(input: ProbedHostInput): Promise<void> {
-  const approved = await hostConfirmations.confirmProbedConnection({
-    serverId: input.serverId,
-    connection: input.connection,
-    savedHosts: input.savedHosts,
-    browser: isBrowserRuntime(),
-    pageHostname: currentPageHostname(),
-  });
+  let approved: boolean;
+  try {
+    const browser = isBrowserRuntime();
+    approved = await hostConfirmations.confirmProbedConnection({
+      serverId: input.serverId,
+      connection: input.connection,
+      savedHosts: input.savedHosts,
+      background: input.background,
+      browser,
+      pageHostname: browser ? currentPageHostname() : null,
+    });
+  } catch (error) {
+    await input.client.close().catch(() => undefined);
+    throw error;
+  }
   if (approved) return;
   await input.client.close().catch(() => undefined);
   throw new HostConfirmationDeclinedError();

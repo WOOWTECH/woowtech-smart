@@ -8,7 +8,8 @@ import { isWeb } from "@/constants/platform";
 // just opened the pairing link, and the second press lands on Connect. Connect arms once the sheet
 // has been visible and focused for a second, any change in focus or visibility starts that again,
 // and a press counts only when it began armed after a new gesture inside the sheet. A touch or
-// pen press is its own gesture: touch screens have no hover to move.
+// pen press is its own gesture: touch screens have no hover to move. A screen reader's or a
+// keyboard's activation arrives as a press with no press-in; see ArmingEnvironment.
 
 export const ARMING_DELAY_MS = 1000;
 
@@ -29,13 +30,24 @@ export interface ArmingEnvironment {
   subscribeKeyboardGestures(onGesture: () => void): () => void;
   /** What a press-in without an event type came from. */
   defaultPressKind: ConnectPressKind;
+  /**
+   * What a press that never had a press-in is worth: a screen reader's activation, or a click a
+   * script sent. "armed": it counts (phones, where only the person holding the device sends one).
+   * "keyboardFocus": it counts only after Connect took the focus from the keyboard once it was
+   * armed (browsers, where a script can send one).
+   */
+  activationWithoutPressIn: "armed" | "keyboardFocus";
+  /** Whether the focus that has just reached `target` came from the keyboard. */
+  focusCameFromKeyboard(target: unknown): boolean;
 }
 
 /** Disarms on every change and arms again after ARMING_DELAY_MS of visibility and focus. */
 class ConnectArming {
   private armed = false;
   private gestured = false;
+  private pressedIn = false;
   private pressCounts = false;
+  private keyboardFocus = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly listeners = new Set<() => void>();
 
@@ -67,21 +79,46 @@ class ConnectArming {
 
   pressIn(press: ConnectPress): void {
     const isOwnGesture = press.kind === "touch" || press.kind === "pen";
+    this.pressedIn = true;
     this.pressCounts = this.armed && !press.repeat && (this.gestured || isOwnGesture);
   }
 
-  /** Whether the press now ending began armed after a gesture. Each press-in counts once. */
-  takePress(): boolean {
-    const counts = this.armed && this.pressCounts;
+  /**
+   * Connect took the focus. Returns true when it must not keep it: Connect is disabled until it
+   * arms, so only a click or a script can focus it before then, and a later Enter must land on
+   * Cancel. Once armed, the focus counts for a press with no press-in if the keyboard brought it.
+   */
+  focusConnect(fromKeyboard: boolean): boolean {
+    if (!this.armed) return true;
+    this.keyboardFocus = fromKeyboard;
+    return false;
+  }
+
+  blurConnect(): void {
+    this.keyboardFocus = false;
+  }
+
+  /**
+   * Whether the press now ending counts. One that had a press-in counts if that began armed
+   * after a gesture; one that never had a press-in counts as `withoutPressIn` says. Each
+   * press-in counts once.
+   */
+  takePress(withoutPressIn: ArmingEnvironment["activationWithoutPressIn"]): boolean {
+    const counts = this.pressedIn
+      ? this.pressCounts
+      : withoutPressIn === "armed" || this.keyboardFocus;
+    this.pressedIn = false;
     this.pressCounts = false;
-    return counts;
+    return this.armed && counts;
   }
 
   stop(): void {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
     this.gestured = false;
+    this.pressedIn = false;
     this.pressCounts = false;
+    this.keyboardFocus = false;
     this.setArmed(false);
   }
 
@@ -120,7 +157,32 @@ export function webArmingEnvironment(win: Window, doc: Document): ArmingEnvironm
       };
     },
     defaultPressKind: "mouse",
+    activationWithoutPressIn: "keyboardFocus",
+    focusCameFromKeyboard: isKeyboardFocus,
   };
+}
+
+interface Matchable {
+  matches(selector: string): boolean;
+}
+
+function isMatchable(target: unknown): target is Matchable {
+  return (
+    typeof target === "object" &&
+    target !== null &&
+    "matches" in target &&
+    typeof target.matches === "function"
+  );
+}
+
+/** :focus-visible is the browser's own answer to whether the keyboard brought the focus here. */
+function isKeyboardFocus(target: unknown): boolean {
+  if (!isMatchable(target)) return false;
+  try {
+    return target.matches(":focus-visible");
+  } catch {
+    return false;
+  }
 }
 
 interface AppStateSource {
@@ -138,6 +200,8 @@ export function nativeArmingEnvironment(appState: AppStateSource): ArmingEnviron
     },
     subscribeKeyboardGestures: () => () => {},
     defaultPressKind: "touch",
+    activationWithoutPressIn: "armed",
+    focusCameFromKeyboard: () => false,
   };
 }
 
@@ -150,6 +214,10 @@ function eventField(event: unknown, field: string): unknown {
   const nativeEvent: unknown = event.nativeEvent;
   if (typeof nativeEvent !== "object" || nativeEvent === null) return undefined;
   return Reflect.get(nativeEvent, field);
+}
+
+function eventTarget(event: unknown): unknown {
+  return typeof event === "object" && event !== null ? Reflect.get(event, "target") : null;
 }
 
 /**
@@ -180,6 +248,10 @@ export interface ConnectArmingHandle {
   onPointerDown: (event: PointerEventLike) => void;
   /** Connect's onPressIn. */
   onConnectPressIn: (event: unknown) => void;
+  /** Connect's onFocus. True when the sheet must take the focus back to Cancel: Connect is not armed. */
+  onConnectFocus: (event: unknown) => boolean;
+  /** Connect's onBlur. */
+  onConnectBlur: () => void;
   /** In Connect's onPress: whether this press counts. */
   acceptPress: () => boolean;
 }
@@ -219,7 +291,23 @@ export function useConnectArming(
     (event: unknown) => arming.pressIn(pressOf(event, env.defaultPressKind)),
     [arming, env],
   );
-  const acceptPress = useCallback(() => arming.takePress(), [arming]);
+  const onConnectFocus = useCallback(
+    (event: unknown) => arming.focusConnect(env.focusCameFromKeyboard(eventTarget(event))),
+    [arming, env],
+  );
+  const onConnectBlur = useCallback(() => arming.blurConnect(), [arming]);
+  const acceptPress = useCallback(
+    () => arming.takePress(env.activationWithoutPressIn),
+    [arming, env],
+  );
 
-  return { armed, onPointerMove, onPointerDown, onConnectPressIn, acceptPress };
+  return {
+    armed,
+    onPointerMove,
+    onPointerDown,
+    onConnectPressIn,
+    onConnectFocus,
+    onConnectBlur,
+    acceptPress,
+  };
 }

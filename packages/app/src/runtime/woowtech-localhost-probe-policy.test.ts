@@ -155,6 +155,13 @@ describe("reading the runtime", () => {
     });
     expect(isBrowserRuntime()).toBe(false);
   });
+
+  it("does not throw where window has no location, as in a React Native release build", () => {
+    vi.stubGlobal("window", {});
+    expect(() => shouldAutoProbeLocalhost()).not.toThrow();
+    expect(shouldAutoProbeLocalhost()).toBe(true);
+    expect(shouldOfferThisComputerAction()).toBe(false);
+  });
 });
 
 describe("phone browsers", () => {

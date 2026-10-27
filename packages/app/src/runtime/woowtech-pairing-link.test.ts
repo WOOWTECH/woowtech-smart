@@ -26,6 +26,7 @@ const LOADED_HOSTS: PairingHostRegistry = {
   isHostRegistryLoaded: () => true,
   subscribeHostList: () => () => undefined,
   getHosts: () => [],
+  getSnapshot: () => null,
 };
 
 interface ListenerOptions {
