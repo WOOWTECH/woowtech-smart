@@ -3,11 +3,20 @@
 // session (the CLI, a paired app, the hosted web app talking to the daemon directly, or plugin
 // code running in that web app's origin) connect the daemon to a Hub at any URL, and the daemon
 // then reconnects to that Hub on every start: one request leaves a lasting remote-control
-// channel. WOOWTECH runs no Hub. A merge can flip the default, drop the gate's hooks in
-// relationship-controller.ts, manage Hub relationships somewhere else, or let an RPC change the
-// switch. These checks run the controller and the config code from source through tsx against
-// a Hub that records what it is asked, and read the hooks from the sources. The server's imports
-// from other packages read their dist, so build them first: npm run build:server.
+// channel. WOOWTECH runs no Hub.
+//
+// The switch is not a boundary against an owner session. A session that can write files or run
+// code (the file write RPC takes any directory and needs only workspace.write; terminals, agents
+// and plugins run code) can edit config.json, ask for a restart and then connect a Hub. What the
+// switch does is keep the app and the CLI from tying the daemon to a Hub by accident: while it is
+// off, the daemon refuses the Hub requests and does not resume a stored relationship at start.
+//
+// A merge can flip the default, drop the gate's hooks in relationship-controller.ts or
+// daemon-session.ts, manage Hub relationships somewhere else, or let the daemon config RPC or an
+// environment variable change the switch. These checks run the controller and the config code
+// from source through tsx against a Hub that records what it is asked, and read the hooks from
+// the sources. The server's imports from other packages read their dist, so build them first:
+// npm run build:server.
 //
 //   node --test woowtech/hub-gate.test.mjs
 import assert from "node:assert/strict";
@@ -31,6 +40,7 @@ const { hubEnabledInConfig } = await importSource(
 );
 
 const CONTROLLER_SOURCE = "packages/server/src/server/hub/relationship-controller.ts";
+const DAEMON_SESSION_SOURCE = "packages/server/src/server/session/daemon/daemon-session.ts";
 const GATE_SOURCE = "packages/server/src/server/hub/woowtech-hub-gate.ts";
 const HUB_ORIGIN = "https://hub.example.test";
 const SOCKET_URL = "wss://hub.example.test/daemon";
@@ -123,7 +133,9 @@ test("a new home keeps Hub connections off: connecting fails before the Hub or t
   const hub = recordingHub();
   await assert.rejects(controllerIn(home, hub).connect(CONNECT), (error) => {
     assert.equal(error.code, "hub_disabled");
-    assert.match(error.message, /daemon config set daemon\.hub\.enabled true/);
+    // The CLI edits ~/.woowtech-smart unless told which home, so the command carries this one.
+    assert.match(error.message, /daemon config set daemon\.hub\.enabled true --home /);
+    assert.ok(error.message.includes(`--home ${JSON.stringify(home)}`), error.message);
     return true;
   });
   assert.deepEqual(hub.requests, [], "requests that reached the Hub");
@@ -185,6 +197,22 @@ test("the gate's hooks stay first in the Hub controller", () => {
   for (const [hook, what] of hooks) assert.match(controller, hook, `${CONTROLLER_SOURCE}: ${what}`);
 });
 
+// The RPC layer turns every failure into code "handler_error". Without this hook a client cannot
+// tell "Hub connections are off on this daemon" from a failed enrollment.
+test("a refused Hub request reaches the client with its own code", () => {
+  const session = read(DAEMON_SESSION_SOURCE);
+  assert.match(
+    session,
+    /^import \{ HubDisabledError \} from "\.\.\/\.\.\/hub\/woowtech-hub-gate\.js";$/m,
+    `${DAEMON_SESSION_SOURCE}: imports HubDisabledError`,
+  );
+  assert.match(
+    session,
+    /code: error instanceof HubDisabledError \? error\.code : "handler_error",/,
+    `${DAEMON_SESSION_SOURCE}: handleHubRelationshipRequest sends the refusal's own code`,
+  );
+});
+
 // The daemon manages Hub relationships through one HubRelationshipController, which bootstrap.ts
 // builds and session.ts reaches through the daemon session. A new Hub management request, or a
 // second implementation, could connect a Hub past the gate.
@@ -212,10 +240,12 @@ test("the gated controller is the daemon's only way to manage Hub relationships"
   ]);
 });
 
-// The switch lives in config.json only, where `daemon config get` shows it. An RPC that could set
-// it would let the session asking for a Hub connection switch Hub connections on first, and an
-// environment variable would be a second switch that config.json does not show.
-test("no RPC and no environment variable turns Hub connections on", () => {
+// The switch lives in config.json only, where `daemon config get` shows it. The daemon config RPC
+// that could set it would let the session asking for a Hub connection switch Hub connections on
+// first, and an environment variable would be a second switch that config.json does not show.
+// This keeps those two doors shut; it does not keep an owner session out of config.json, which
+// the file write RPC and terminals can edit (see the header).
+test("the daemon config RPC and the environment cannot turn Hub connections on", () => {
   const store = read("packages/server/src/server/daemon-config-store.ts");
   const pick = /function pickSupportedPatchFields\([\s\S]*?^\}$/m.exec(store)?.[0];
   assert.ok(pick, "pickSupportedPatchFields is gone from daemon-config-store.ts");

@@ -11,6 +11,7 @@ import { DaemonSelfUpdateSessionController } from "./daemon-self-update-session-
 import type { ManagedAgent } from "../../agent/agent-manager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
+import { HubDisabledError } from "../../hub/woowtech-hub-gate.js";
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
 import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
@@ -164,7 +165,8 @@ export class DaemonSession {
           requestId: msg.requestId,
           requestType: msg.type,
           error: error instanceof Error ? error.message : String(error),
-          code: "handler_error",
+          // woowtech smart: a request the Hub switch refuses keeps its own code (woowtech-hub-gate.ts).
+          code: error instanceof HubDisabledError ? error.code : "handler_error",
         },
       });
     }

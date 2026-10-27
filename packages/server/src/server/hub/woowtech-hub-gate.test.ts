@@ -6,6 +6,7 @@ import pino from "pino";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { loadConfig } from "../config.js";
+import { resolvePaseoHome } from "../paseo-home.js";
 import { editPersistedConfig } from "../persisted-config.js";
 import type { HubExecutionAgents } from "./daemon-executions.js";
 import {
@@ -22,11 +23,13 @@ import type {
   HubSocketConnection,
   HubSocketCredentials,
 } from "./relationship-remote.js";
-import { HUB_DISABLED_MESSAGE, HubDisabledError } from "./woowtech-hub-gate.js";
+import { HubDisabledError, WoowtechHubGate, hubDisabledMessage } from "./woowtech-hub-gate.js";
 
 // woowtech smart keeps Hub connections off unless config.json turns them on
 // (daemon.hub.enabled). Upstream lets any owner session connect the daemon to a Hub at any URL,
-// and the daemon then reconnects to that Hub on every start. WOOWTECH runs no Hub.
+// and the daemon then reconnects to that Hub on every start. WOOWTECH runs no Hub. The switch is
+// no boundary against an owner session that can write files or run code (see the gate's header);
+// these tests pin what it does: what the daemon refuses and does not resume while it is off.
 const HUB_ORIGIN = "https://hub.example.test";
 const SOCKET_URL = "wss://hub.example.test/daemon";
 const CONNECT = { hubUrl: HUB_ORIGIN, token: "enrollment-token", permissions: ["hub.execute"] };
@@ -89,6 +92,9 @@ const idleClock: HubRelationshipClock & HubRelationshipRetryPolicy = {
 const unusedExecutionAgents: HubExecutionAgents = {
   create: async () => {
     throw new Error("Unexpected Hub agent create");
+  },
+  control: async () => {
+    throw new Error("Unexpected Hub agent control");
   },
   subscribe: () => () => undefined,
   invalidateAuthority: async () => undefined,
@@ -186,16 +192,18 @@ describe("Hub connections in a new home", () => {
     },
   );
 
-  test("the error has its own code, and it and the status name the key that turns them on", async () => {
-    const controller = controllerIn(await newHome(), new RecordingHub());
+  test("the error has its own code, and it and the status name the command that turns them on in this home", async () => {
+    const home = await newHome();
+    const controller = controllerIn(home, new RecordingHub());
+    const message = hubDisabledMessage(home);
 
     await expect(controller.connect(CONNECT)).rejects.toMatchObject({
       name: "HubDisabledError",
       code: "hub_disabled",
-      message: HUB_DISABLED_MESSAGE,
+      message,
     });
-    expect(HUB_DISABLED_MESSAGE).toContain(
-      "woowtech-smart daemon config set daemon.hub.enabled true",
+    expect(message).toContain(
+      `woowtech-smart daemon config set daemon.hub.enabled true --home ${JSON.stringify(home)}`,
     );
     expect(controller.status()).toEqual({
       state: "not_connected",
@@ -203,7 +211,7 @@ describe("Hub connections in a new home", () => {
       hubOrigin: null,
       permissions: [],
       connectedAt: null,
-      lastError: HUB_DISABLED_MESSAGE,
+      lastError: message,
     });
   });
 
@@ -274,13 +282,14 @@ describe("a Hub relationship stored in hub-relationship.json", () => {
       expect(await filesIn(home)).toEqual(files);
       expect(warnings()).toHaveLength(1);
       expect(warnings()[0]).toContain("daemon.hub.enabled");
+      expect(warnings()[0]).toContain(HUB_ORIGIN);
       expect(controller.status()).toEqual({
         state: "not_connected",
         daemonId: "daemon-stored",
         hubOrigin: HUB_ORIGIN,
         permissions: ["hub.execute"],
         connectedAt: null,
-        lastError: HUB_DISABLED_MESSAGE,
+        lastError: hubDisabledMessage(home),
       });
     },
   );
@@ -327,7 +336,7 @@ describe("a Hub relationship stored in hub-relationship.json", () => {
     expect(status).toMatchObject({ state: "not_connected", daemonId: null, hubOrigin: null });
   });
 
-  test("is resumed at startup once Hub connections are on", async () => {
+  test("is resumed at startup once Hub connections are on, and one warning names the Hub and the key", async () => {
     const home = await homeWithRelationship(STORED_ACTIVE);
     turnHubOn(home);
     const hub = new RecordingHub();
@@ -337,7 +346,76 @@ describe("a Hub relationship stored in hub-relationship.json", () => {
     await controller.start();
 
     expect(hub.requests).toEqual([`open socket ${SOCKET_URL}`]);
-    expect(warnings()).toEqual([]);
+    expect(warnings()).toHaveLength(1);
+    expect(warnings()[0]).toContain(HUB_ORIGIN);
+    expect(warnings()[0]).toContain("daemon.hub.enabled");
     expect(controller.status()).toMatchObject({ state: "connecting", lastError: null });
   });
+});
+
+describe("the gate at startup", () => {
+  function gateIn(home: string) {
+    const { logger, warnings } = warningLogger();
+    return { gate: new WoowtechHubGate({ paseoHome: home, logger }), warnings };
+  }
+
+  async function homesWithHubOffAndOn(): Promise<{ off: string; on: string }> {
+    const on = await newHome();
+    turnHubOn(on);
+    return { off: await newHome(), on };
+  }
+
+  // A pending relationship is resumed too: startup asks the Hub to finish the enrollment.
+  test.each([
+    ["an active", STORED_ACTIVE],
+    ["a pending", STORED_PENDING],
+  ])(
+    "%s relationship gets one warning naming the Hub and the key, off or on",
+    async (_kind, record) => {
+      const switched = await homesWithHubOffAndOn();
+      const off = gateIn(switched.off);
+      const on = gateIn(switched.on);
+
+      expect(off.gate.allowsStart(record)).toBe(false);
+      expect(on.gate.allowsStart(record)).toBe(true);
+
+      for (const { warnings } of [off, on]) {
+        expect(warnings()).toHaveLength(1);
+        expect(warnings()[0]).toContain(HUB_ORIGIN);
+        expect(warnings()[0]).toContain("daemon.hub.enabled");
+      }
+      expect(off.warnings()[0]).toContain("Not resuming");
+      expect(on.warnings()[0]).toContain("Resuming");
+    },
+  );
+
+  test.each([
+    ["nothing is stored", null],
+    ["the stored relationship is revoked", { ...STORED_ACTIVE, state: "revoked" }],
+  ])("says nothing, off or on, when %s", async (_what, record) => {
+    const switched = await homesWithHubOffAndOn();
+
+    for (const home of [switched.off, switched.on]) {
+      const { gate, warnings } = gateIn(home);
+      expect(gate.allowsStart(record)).toBe(gate.enabled);
+      expect(warnings()).toEqual([]);
+    }
+  });
+});
+
+describe("the refusal's command", () => {
+  const COMMAND = "woowtech-smart daemon config set daemon.hub.enabled true";
+
+  test("needs no --home in the home the CLI uses by default", () => {
+    expect(hubDisabledMessage(resolvePaseoHome({}))).toContain(`\`${COMMAND}\``);
+  });
+
+  // The CLI edits the default home unless it is told which one, so a daemon in another home
+  // would keep refusing after the user followed the command.
+  test.each(["/srv/woowtech-smart", "/srv/smart home", '/srv/say "hi"'])(
+    "names the home %s with --home",
+    (home) => {
+      expect(hubDisabledMessage(home)).toContain(`\`${COMMAND} --home ${JSON.stringify(home)}\``);
+    },
+  );
 });
