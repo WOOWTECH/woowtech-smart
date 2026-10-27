@@ -1883,7 +1883,7 @@ owner 在 Cloudflare 的步驟：
 
 ### 28. Hub 連線預設關閉（daemon.hub.enabled）
 
-為什麼：上游讓任何 owner 連線（CLI、配對過的 App、直連 daemon 的網頁版、跑在網頁版來源裡的外掛程式碼）都能要求 daemon 連到任意 http(s) 網址的 Hub（`hub.management.daemon.connect.request`，權限 `tunnel.manage`）。daemon 把這段關係存在 `$PASEO_HOME/hub-relationship.json`，之後每次啟動都重連，一次請求就留下長期的遠端控制通道。渥屋不營運 Hub，`hub.paseo.sh` 是上游的服務。新 home 放行網頁版直連（第 19 節）之後，這條路更容易被碰到。owner 在 2026-10-27 知道並同意加這個開關（A-HUB）。
+為什麼：上游讓任何 owner 連線（CLI、配對過的 App、直連 daemon 的網頁版、跑在網頁版來源裡的外掛程式碼）都能要求 daemon 連到任意 http(s) 網址的 Hub（`hub.management.daemon.connect.request`，權限 `tunnel.manage`）。daemon 把這段關係存在 `$PASEO_HOME/hub-relationship.json`，之後每次啟動都重連，一次請求就留下長期的遠端控制通道。渥屋不營運 Hub，`hub.paseo.sh` 是上游的服務。新 home 放行網頁版直連（第 19 節）之後，這條路更容易被碰到。owner 在 2026-10-27 已被告知這個開關（A-HUB）；原先的說法是「擋住持久後門」，說過頭了，審查後已更正，也已告訴 owner。
 
 規則：
 
