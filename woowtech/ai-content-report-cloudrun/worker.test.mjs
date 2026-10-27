@@ -13,6 +13,16 @@ const EDGE_KEY = "edge-key-for-the-worker-tests-0123456789abcdef";
 const RELAY = "https://smart-reports-test.invalid";
 const ENV = Object.freeze({ RELAY_ORIGIN: RELAY, EDGE_KEY });
 const DESKTOP = "woowtech-smart://app";
+// The hosted web app (Cloudflare Pages, owner decision D4).
+const WEB = "https://smart.woowtech.io";
+// Origins that look like the web app's and must not pass for it.
+const WEB_LOOKALIKES = [
+  `${WEB}/`,
+  "http://smart.woowtech.io",
+  "https://www.smart.woowtech.io",
+  "https://smart.woowtech.io.evil.invalid",
+  "https://woowtech-smart-web.pages.dev",
+];
 const BODY = JSON.stringify({ schemaVersion: 1 });
 
 const stored = () =>
@@ -115,6 +125,7 @@ test("a phone sends no Origin; a request with an Origin is refused unless the or
     "WOOWTECH-SMART://app",
     "woowtech-smart://other",
     "https://reports.woowtech.io",
+    ...WEB_LOOKALIKES,
   ]) {
     const { response, relayed, text } = await call(REPORT_PATH, post({ headers: { origin } }));
     assert.equal(response.status, 403, origin);
@@ -123,20 +134,28 @@ test("a phone sends no Origin; a request with an Origin is refused unless the or
     assert.deepEqual(relayed, []);
   }
 
-  // The desktop App's origin is listed by default.
-  const desktop = await call(REPORT_PATH, post({ headers: { origin: DESKTOP } }));
-  assert.equal(desktop.response.status, 201);
+  // The desktop App's and the web app's origins are listed by default.
+  for (const origin of [DESKTOP, WEB]) {
+    const listed = await call(REPORT_PATH, post({ headers: { origin } }));
+    assert.equal(listed.response.status, 201, origin);
+    assert.equal(listed.response.headers.get("access-control-allow-origin"), origin);
+    assert.equal(listed.relayed.length, 1, origin);
+  }
 
   // ALLOWED_ORIGINS replaces the list: empty means no browser at all.
-  const none = await call(REPORT_PATH, post({ headers: { origin: DESKTOP } }), {
-    env: { ...ENV, ALLOWED_ORIGINS: "" },
-  });
-  assert.equal(none.response.status, 403);
+  for (const origin of [DESKTOP, WEB]) {
+    const none = await call(REPORT_PATH, post({ headers: { origin } }), {
+      env: { ...ENV, ALLOWED_ORIGINS: "" },
+    });
+    assert.equal(none.response.status, 403, origin);
+    assert.equal(none.response.headers.get("access-control-allow-origin"), null, origin);
+  }
   const two = { ...ENV, ALLOWED_ORIGINS: "https://a.invalid, https://b.invalid" };
   for (const [origin, status] of [
     ["https://a.invalid", 201],
     ["https://b.invalid", 201],
     [DESKTOP, 403],
+    [WEB, 403],
   ]) {
     const answered = await call(REPORT_PATH, post({ headers: { origin } }), { env: two });
     assert.equal(answered.response.status, status, origin);
@@ -155,27 +174,31 @@ test("a phone sends no Origin; a request with an Origin is refused unless the or
   assert.equal(phone.response.status, 201);
 });
 
-test("a preflight from the desktop App is answered by the Worker, anyone else's is not", async () => {
-  const { response, relayed } = await call(REPORT_PATH, {
-    method: "OPTIONS",
-    headers: {
-      origin: DESKTOP,
-      "access-control-request-method": "POST",
-      "access-control-request-headers": "content-type",
-    },
-  });
-  assert.equal(response.status, 204);
-  assert.equal(response.headers.get("access-control-allow-origin"), DESKTOP);
-  assert.equal(response.headers.get("access-control-allow-methods"), "POST");
-  assert.equal(response.headers.get("access-control-allow-headers"), "content-type, accept");
-  assert.equal(response.headers.get("access-control-max-age"), "600");
-  assert.match(response.headers.get("vary"), /Origin/);
-  assert.deepEqual(relayed, [], "a preflight never reaches the receiver");
+test("a preflight from the desktop App or the web app is answered by the Worker, anyone else's is not", async () => {
+  for (const origin of [DESKTOP, WEB]) {
+    const { response, relayed } = await call(REPORT_PATH, {
+      method: "OPTIONS",
+      headers: {
+        origin,
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+    assert.equal(response.status, 204, origin);
+    assert.equal(response.headers.get("access-control-allow-origin"), origin);
+    assert.equal(response.headers.get("access-control-allow-methods"), "POST");
+    assert.equal(response.headers.get("access-control-allow-headers"), "content-type, accept");
+    assert.equal(response.headers.get("access-control-max-age"), "600");
+    assert.equal(response.headers.get("access-control-expose-headers"), "retry-after");
+    assert.match(response.headers.get("vary"), /Origin/);
+    assert.deepEqual(relayed, [], "a preflight never reaches the receiver");
+  }
 
   for (const headers of [
     { origin: "https://example.invalid", "access-control-request-method": "POST" },
     { origin: "null", "access-control-request-method": "POST" },
     { "access-control-request-method": "POST" },
+    ...WEB_LOOKALIKES.map((origin) => ({ origin, "access-control-request-method": "POST" })),
   ]) {
     const refused = await call(REPORT_PATH, { method: "OPTIONS", headers });
     assert.equal(refused.response.status, 405, JSON.stringify(headers));
@@ -196,53 +219,61 @@ test("a preflight from the desktop App is answered by the Worker, anyone else's 
   });
   assert.equal(elsewhere.response.status, 404);
 
-  const noBrowsers = await call(
-    REPORT_PATH,
-    { method: "OPTIONS", headers: { origin: DESKTOP, "access-control-request-method": "POST" } },
-    { env: { ...ENV, ALLOWED_ORIGINS: "" } },
-  );
-  assert.equal(noBrowsers.response.status, 405);
+  for (const origin of [DESKTOP, WEB]) {
+    const noBrowsers = await call(
+      REPORT_PATH,
+      { method: "OPTIONS", headers: { origin, "access-control-request-method": "POST" } },
+      { env: { ...ENV, ALLOWED_ORIGINS: "" } },
+    );
+    assert.equal(noBrowsers.response.status, 405, origin);
+    assert.equal(noBrowsers.response.headers.get("access-control-allow-origin"), null, origin);
+  }
 });
 
-test("every answer to the desktop App's origin carries the CORS headers, errors included", async () => {
-  const fromDesktop = (headers = {}) => post({ headers: { origin: DESKTOP, ...headers } });
-  const cases = [
-    ["stored", fromDesktop(), {}, 201],
-    ["wrong content type", fromDesktop({ "content-type": "text/plain" }), {}, 415],
-    ["declared too large", fromDesktop({ "content-length": String(MAX_BODY_BYTES + 1) }), {}, 413],
-    [
-      "receiver says capacity",
-      fromDesktop(),
-      {
-        upstream: () =>
-          new Response('{"error":"capacity"}', { status: 429, headers: { "retry-after": "120" } }),
-      },
-      429,
-    ],
-    [
-      "receiver unreachable",
-      fromDesktop(),
-      {
-        upstream: () => {
-          throw new Error("down");
+test("every answer to the desktop App's or the web app's origin carries the CORS headers, errors included", async () => {
+  for (const origin of [DESKTOP, WEB]) {
+    const from = (headers = {}) => post({ headers: { origin, ...headers } });
+    const cases = [
+      ["stored", from(), {}, 201],
+      ["wrong content type", from({ "content-type": "text/plain" }), {}, 415],
+      ["declared too large", from({ "content-length": String(MAX_BODY_BYTES + 1) }), {}, 413],
+      [
+        "receiver says capacity",
+        from(),
+        {
+          upstream: () =>
+            new Response('{"error":"capacity"}', {
+              status: 429,
+              headers: { "retry-after": "120" },
+            }),
         },
-      },
-      503,
-    ],
-    ["misconfigured", fromDesktop(), { env: { ...ENV, EDGE_KEY: "short" } }, 500],
-  ];
-  for (const [name, init, options, status] of cases) {
-    const { response } = await call(REPORT_PATH, init, options);
-    assert.equal(response.status, status, name);
-    assert.equal(response.headers.get("access-control-allow-origin"), DESKTOP, name);
-    assert.equal(response.headers.get("access-control-expose-headers"), "retry-after", name);
-    assert.match(response.headers.get("vary"), /Origin/, name);
+        429,
+      ],
+      [
+        "receiver unreachable",
+        from(),
+        {
+          upstream: () => {
+            throw new Error("down");
+          },
+        },
+        503,
+      ],
+      ["misconfigured", from(), { env: { ...ENV, EDGE_KEY: "short" } }, 500],
+    ];
+    for (const [name, init, options, status] of cases) {
+      const { response } = await call(REPORT_PATH, init, options);
+      assert.equal(response.status, status, `${origin} ${name}`);
+      assert.equal(response.headers.get("access-control-allow-origin"), origin, name);
+      assert.equal(response.headers.get("access-control-expose-headers"), "retry-after", name);
+      assert.match(response.headers.get("vary"), /Origin/, name);
+    }
+    // The App reads retry-after on a 429, so it has to come through.
+    const limited = await call(REPORT_PATH, from(), {
+      upstream: () => new Response("{}", { status: 429, headers: { "retry-after": "120" } }),
+    });
+    assert.equal(limited.response.headers.get("retry-after"), "120", origin);
   }
-  // The App reads retry-after on a 429, so it has to come through.
-  const limited = await call(REPORT_PATH, fromDesktop(), {
-    upstream: () => new Response("{}", { status: 429, headers: { "retry-after": "120" } }),
-  });
-  assert.equal(limited.response.headers.get("retry-after"), "120");
 });
 
 test("only JSON is taken", async () => {

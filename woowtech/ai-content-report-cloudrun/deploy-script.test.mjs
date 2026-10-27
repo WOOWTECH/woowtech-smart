@@ -641,6 +641,29 @@ test("the Cloudflare steps turn off the Worker's workers.dev and Preview URLs", 
   assert.ok(cloudflare.includes('"error":"unsupported_schema"'), cloudflare);
 });
 
+test("the Cloudflare steps name the Worker config's wrangler and pass the URL with --var", () => {
+  const box = sandbox();
+  const { script } = cleanCheckout(box.dir);
+
+  const { status, output } = run(box, script, []);
+
+  assert.equal(status, 0, output);
+  const cloudflare = output.slice(output.indexOf("Next, in Cloudflare")).replace(/\s+/g, " ");
+  // The wrangler config and the README pin one wrangler. The step printed here names the same one:
+  // an open-ended "4.36+" lets any release in, and the config's RELAY_ORIGIN placeholder is left
+  // alone because the URL goes in with --var.
+  const config = readFileSync(
+    here("./deploy/cloudflare-worker-smart-reports.wrangler.jsonc"),
+    "utf8",
+  );
+  const pinned = [...new Set([...config.matchAll(/wrangler@(\d+\.\d+\.\d+)/g)].map((m) => m[1]))];
+  assert.equal(pinned.length, 1, `the wrangler config pins ${pinned.length} versions`);
+  assert.ok(cloudflare.includes(`wrangler ${pinned[0]}`), cloudflare);
+  assert.doesNotMatch(cloudflare, /wrangler \d+\.\d+\+/, cloudflare);
+  assert.ok(cloudflare.includes('--var "RELAY_ORIGIN:'), cloudflare);
+  assert.ok(cloudflare.includes("ai-content-report-cloudrun/README.md"), cloudflare);
+});
+
 test('the rotation steps give the Worker the new key alone, never the "old new" pair', () => {
   const box = sandbox();
   const { script } = cleanCheckout(box.dir);

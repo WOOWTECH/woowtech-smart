@@ -3,12 +3,24 @@
 // secret, add the custom domain reports.woowtech.io, and a WAF rate limiting rule for the per-IP
 // limit). Use this file when a binding is wanted: the IP_RATE_LIMITER binding below makes the
 // Worker apply 10 requests a minute per IP itself (counted per Cloudflare location, no burst
-// setting). Such bindings can only be set through wrangler 4.36+.
+// setting). Such bindings can only be set through wrangler, not in the dashboard.
 //
-// Before deploying, replace RELAY_ORIGIN with the run.app URL that woowtech-smart-reports-deploy.sh
-// prints (the placeholder is not an https URL, so the Worker answers 500 until it is set), then:
-//   npx wrangler@4 secret put EDGE_KEY --config deploy/cloudflare-worker-smart-reports.wrangler.jsonc
-//   npx wrangler@4 deploy --config deploy/cloudflare-worker-smart-reports.wrangler.jsonc
+// Do not edit the RELAY_ORIGIN placeholder: pass the Cloud Run URL with --var, taken from gcloud
+// (run services describe smart-reports, value(status.url); woowtech-smart-reports-deploy.sh
+// prints the same). The placeholder is not an https URL, so a Worker deployed without it answers
+// 500. Use wrangler 4.149.0, logged in with its own profile,
+// XDG_CONFIG_HOME=~/.local/share/woowtech-smart/wrangler-reports, and only the scopes
+// account:read user:read workers_scripts:write workers_routes:write zone:read. There is no
+// account_id here: set CLOUDFLARE_ACCOUNT_ID to the account that has the woowtech.io zone. Run
+// wrangler as ../README.md does: in an empty directory, with WRANGLER_CACHE_DIR set to another
+// empty one (wrangler reads an account cached there first), and this file passed by its absolute
+// path, $CFG. The first time:
+//   npx --yes wrangler@4.149.0 secret put EDGE_KEY --config "$CFG"
+//   npx --yes wrangler@4.149.0 deploy --config "$CFG" --var "RELAY_ORIGIN:<Cloud Run URL>"
+// A wrangler deploy replaces the variables set in the dashboard (ALLOWED_ORIGINS among them) with
+// the ones here and on the command line. It keeps every secret: EDGE_KEY, and an ALLOWED_ORIGINS
+// stored as one. Updating the Worker alone (from a clean, pushed checkout, with the checks before
+// and after and what to do when one fails) is in ../README.md, section "只更新 Worker".
 // EDGE_KEY is one key. While a rotation leaves "old new" in the Secret Manager secret, give it the
 // new key only (the deploy script's rotation steps print how); the pair would make every request 403.
 // namespace_id must be an integer, as a string, and unique among rate limiting namespaces in the

@@ -554,10 +554,13 @@ if selected deploy || selected check; then
 
 Done${DONE_NOTE}. Cloud Run URL: ${RUN_URL}
 Next, in Cloudflare (the account that holds the woowtech.io zone):
- 1. Worker smart-reports-proxy: paste deploy/cloudflare-worker-smart-reports.js into a new Worker, or
-    deploy it with wrangler 4.36+ and deploy/cloudflare-worker-smart-reports.wrangler.jsonc, which also
-    adds the per-IP limit binding. Set its RELAY_ORIGIN to that URL, and its EDGE_KEY secret to the
-    output of
+ 1. Worker smart-reports-proxy: paste deploy/cloudflare-worker-smart-reports.js into a new Worker and
+    set its RELAY_ORIGIN to that URL, or deploy it with wrangler 4.149.0 and
+    deploy/cloudflare-worker-smart-reports.wrangler.jsonc, which also adds the per-IP limit binding.
+    With wrangler the URL goes in as --var "RELAY_ORIGIN:${RUN_URL}" and the placeholder in the file
+    stays as it is. The login, the exact commands and the checks to run before and after are in
+    woowtech/ai-content-report-cloudrun/README.md, section "只更新 Worker". Either way, set its
+    EDGE_KEY secret to the output of
       gcloud --project ${PROJECT_ID} secrets versions access latest --secret ${SECRET}
     pasted straight into the Cloudflare secret field (not into chat or documents). That output is one
     key, except while the key is being rotated (below).

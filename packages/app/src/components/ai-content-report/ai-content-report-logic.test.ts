@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { sendReport } from "./ai-content-report-logic";
+import { reportPlatform, sendReport } from "./ai-content-report-logic";
+
+describe("reportPlatform", () => {
+  it("names the phone platforms after the OS", () => {
+    expect(reportPlatform("ios", false)).toBe("ios");
+    expect(reportPlatform("android", false)).toBe("android");
+  });
+  it("tells the desktop App (Electron) from the web app in a browser", () => {
+    expect(reportPlatform("web", true)).toBe("desktop");
+    expect(reportPlatform("web", false)).toBe("web");
+  });
+});
 
 describe("sendReport", () => {
   it("passes the exact serialized request to an injected transport", async () => {
