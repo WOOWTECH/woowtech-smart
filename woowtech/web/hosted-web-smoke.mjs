@@ -17,17 +17,25 @@
 //              the real receiver, which answers 400 without storing anything (V6).
 // --headed     a visible window: use it when S2 sees Connect stay disabled (headless focus).
 //
+// On a public https page (S1, S8) any request or WebSocket to a loopback host (any port), 0.0.0.0,
+// a private, shared (Tailscale), link-local or unique-local address or a .local name fails
+// before anyone has pressed anything: a probe of localhost:6767 or of the LAN would pass a check
+// that only looks for localhost:6770. The pairing link is a credential: "#offer=..." and the link
+// itself are replaced by [redacted] in the summary and in error messages.
+//
 // Uses playwright-core with the installed Google Chrome (channel "chrome"). Prints a JSON
 // summary and exits 1 when a scenario fails, 2 on bad usage.
 import { randomBytes } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_BASE = "https://smart.woowtech.io";
 const REPORT_URL = "https://reports.woowtech.io/v1/ai-content-reports";
 const RELAY_HOST = "relay.woowtech.io";
 const CHANGELOG_HOST = "raw.githubusercontent.com";
 const REGISTRY_KEY = "@paseo:daemon-registry";
-const LOCAL_DAEMON_PORT = "6770";
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+// Pairing credentials that must not reach the summary: filled in once the link is parsed.
+const SECRETS = [];
 // B2: Connect arms after the sheet has been visible and focused for 1000 ms.
 const ARMING_MS = 1000;
 
@@ -82,6 +90,7 @@ function validate(options) {
   if (options.direct && !/^(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+):\d{1,5}$/.test(options.direct)) {
     usage(`--direct must be host:port, not ${options.direct}`);
   }
+  SECRETS.push(options.pairUrl, offer.payload);
   return { ...options, base: base.origin, offer };
 }
 
@@ -109,7 +118,67 @@ function encodeOffer(offer) {
 
 function isPublicHttps(base) {
   const url = new URL(base);
-  return url.protocol === "https:" && !LOOPBACK_HOSTS.has(url.hostname);
+  return url.protocol === "https:" && !isLocalOrPrivateHost(url.hostname);
+}
+
+function isLocalIpv4([first, second]) {
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 100 && second >= 64 && second <= 127) ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
+function isLocalIpv6(host) {
+  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+  if (mapped) {
+    const high = Number.parseInt(mapped[1], 16);
+    const low = Number.parseInt(mapped[2], 16);
+    return isLocalIpv4([high >> 8, high & 255, low >> 8, low & 255]);
+  }
+  return (
+    host === "::1" ||
+    host === "::" ||
+    /^f[cd][0-9a-f]{2}:/.test(host) ||
+    /^fe[89ab][0-9a-f]:/.test(host)
+  );
+}
+
+/**
+ * A host a public page has no reason to reach before anyone presses anything: loopback (any
+ * port), 0.0.0.0, a private (RFC 1918), shared (RFC 6598, Tailscale), link-local or unique-local
+ * address, or a .local name. `hostname` is URL.hostname, so IPv6 comes in brackets.
+ */
+export function isLocalOrPrivateHost(hostname) {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+  if (host.includes(":")) return isLocalIpv6(host);
+  const octets = host.split(".");
+  if (octets.length !== 4 || !octets.every((octet) => /^\d{1,3}$/.test(octet))) return false;
+  return isLocalIpv4(octets.map(Number));
+}
+
+function isLoopbackHost(hostname) {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+  );
+}
+
+/** `text` with the pairing link, its payload and every "#offer=..." replaced. */
+export function redact(text, secrets = SECRETS) {
+  let redacted = String(text);
+  for (const secret of secrets) {
+    if (secret) redacted = redacted.split(secret).join("[redacted]");
+  }
+  return redacted.replace(/#offer=[^\s"'<>),\]\\]+/g, "#offer=[redacted]");
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -232,11 +301,17 @@ async function waitForWelcome(page) {
   await page.getByTestId("welcome-screen").waitFor({ state: "visible", timeout: 15_000 });
 }
 
-/** Hosts a page may reach (S1): the site, our relay and receiver, loopback, the changelog. */
-function unexpectedHosts(urls, base) {
-  const site = new URL(base).host;
-  const allowed = new Set([site, RELAY_HOST, CHANGELOG_HOST, "reports.woowtech.io"]);
-  const hosts = new Set();
+/**
+ * Hosts a page reached (S1): `unexpected` are hosts beyond the site, our relay and receiver and the
+ * changelog. `local` are loopback or private addresses; a public page may not reach any, while the
+ * local E2E page (http://127.0.0.1) reaches its own daemon and is not asked.
+ */
+export function classifyHosts(urls, base) {
+  const site = new URL(base);
+  const allowed = new Set([site.host, RELAY_HOST, CHANGELOG_HOST, "reports.woowtech.io"]);
+  const checkLocal = isPublicHttps(base);
+  const unexpected = new Set();
+  const local = new Set();
   for (const url of urls) {
     let parsed;
     try {
@@ -245,10 +320,11 @@ function unexpectedHosts(urls, base) {
       continue;
     }
     if (!/^(?:https?|wss?):$/.test(parsed.protocol)) continue;
-    if (LOOPBACK_HOSTS.has(parsed.hostname) || allowed.has(parsed.host)) continue;
-    hosts.add(parsed.host);
+    if (allowed.has(parsed.host)) continue;
+    if (checkLocal && isLocalOrPrivateHost(parsed.hostname)) local.add(parsed.host);
+    else if (!isLoopbackHost(parsed.hostname)) unexpected.add(parsed.host);
   }
-  return [...hosts];
+  return { unexpected: [...unexpected], local: [...local] };
 }
 
 function relaySocket(seen, serverId) {
@@ -270,11 +346,16 @@ async function s1(browser, options) {
     await waitForWelcome(page);
     await sleep(3000);
     const csp = await cspViolations(page, seen);
-    const hosts = unexpectedHosts(
+    const { unexpected, local } = classifyHosts(
       [...seen.requests, ...seen.sockets.map((s) => s.url)],
       options.base,
     );
-    return { ok: csp.length === 0 && hosts.length === 0, csp, unexpectedHosts: hosts };
+    return {
+      ok: csp.length === 0 && unexpected.length === 0 && local.length === 0,
+      csp,
+      unexpectedHosts: unexpected,
+      localRequests: local,
+    };
   } finally {
     await context.close();
   }
@@ -524,11 +605,12 @@ async function s7(browser, options) {
   }
 }
 
-function probesLocalDaemon(seen) {
+/** Every request or WebSocket to a loopback or private address, whatever its port. */
+function localRequests(seen) {
   return [...seen.requests, ...seen.sockets.map((socket) => socket.url)].filter((url) => {
     try {
       const parsed = new URL(url);
-      return LOOPBACK_HOSTS.has(parsed.hostname) && parsed.port === LOCAL_DAEMON_PORT;
+      return /^(?:https?|wss?):$/.test(parsed.protocol) && isLocalOrPrivateHost(parsed.hostname);
     } catch {
       return false;
     }
@@ -543,7 +625,7 @@ async function s8(browser, options, devices) {
     await waitForWelcome(page);
     await sleep(10_000);
     desktopResult = {
-      probes: probesLocalDaemon(seen),
+      probes: localRequests(seen),
       thisComputerButton: (await page.getByTestId("welcome-this-computer").count()) > 0,
     };
   } finally {
@@ -556,7 +638,7 @@ async function s8(browser, options, devices) {
     await waitForWelcome(page);
     await sleep(3000);
     phoneResult = {
-      probes: probesLocalDaemon(seen),
+      probes: localRequests(seen),
       thisComputerButton: (await page.getByTestId("welcome-this-computer").count()) > 0,
     };
   } finally {
@@ -596,6 +678,7 @@ async function s10(options, state) {
     ...options.offer.value,
     daemonPublicKeyB64: randomBytes(32).toString("base64"),
   });
+  SECRETS.push(forged);
   const { page } = await openPage(state.pairedContext, `${options.base}/#offer=${forged}`);
   const before = (await savedHost(page, serverId))?.connections ?? null;
   await page
@@ -617,7 +700,7 @@ async function run(name, results, scenario) {
     const result = await scenario();
     results.push({ scenario: name, seconds: (Date.now() - startedAt) / 1000, ...result });
   } catch (error) {
-    results.push({ scenario: name, ok: false, error: String(error?.message ?? error) });
+    results.push({ scenario: name, ok: false, error: redact(error?.message ?? error) });
   }
 }
 
@@ -653,8 +736,14 @@ async function main() {
     await browser.close();
   }
   const ok = results.every((result) => result.ok);
-  console.log(JSON.stringify({ base: options.base, ok, results }, null, 2));
+  console.log(redact(JSON.stringify({ base: options.base, ok, results }, null, 2)));
   if (!ok) process.exit(1);
 }
 
-await main();
+// Run as a script, not when the tests import the helpers above.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  await main().catch((error) => {
+    console.error(`hosted-web-smoke: ${redact(error?.stack ?? error)}`);
+    process.exit(1);
+  });
+}

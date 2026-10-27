@@ -4,21 +4,30 @@
 //
 //   node woowtech/web/check-export.mjs <export dir> [--baseline <file>] [--write-baseline]
 //
-// - index.html is the only HTML file. It has no inline <script>, loads scripts only from this
-//   site, and loads exactly one entry bundle (/_expo/static/js/web/index-*.js).
-// - No 404.html, _redirects, _worker.js, _routes.json or functions/ (they change how Pages
-//   serves the site), no source maps, no .env files, no symlinks, and no file named like a
-//   service worker script: a deployment must never leave a worker behind (README section 27).
+// - index.html is the only HTML file. Every <script> in it has an attribute named exactly src (a
+//   data-src does not count), no tag has an on* attribute or a javascript: URL, and each script
+//   URL, resolved against https://smart.woowtech.io, is on this site or in the baseline. Exactly
+//   one of them is the entry bundle (/_expo/static/js/web/index-*.js).
+// - JavaScript is only in _expo/static/js/web/. No 404.html, _redirects, _worker.js, _routes.json
+//   or functions/ (they change how Pages serves the site), no source maps, no .env files, no
+//   symlinks, and no file named like a service worker script: a deployment must never leave a
+//   worker behind (README section 27).
+// - Every other file is a kind of data Expo exports: an image, font, sound, video, CSS, JSON or
+//   text file (ALLOWED_EXTENSIONS). Anything else (an .svg or .xml document can hold a script, a
+//   .wasm file is code, a file without an extension is unknown) fails unless the baseline lists
+//   its path and SHA-256 under "files".
 // - No file is over Pages' 25 MiB limit (23 MiB warns), and there are at most 20,000 files.
 // - _headers is woowtech/web/_headers, with at most 100 rules and lines of 2,000 characters.
 // - The bundle names our report receiver, relay and web app, and none of upstream's hosts or an
 //   analytics or error-reporting service.
-// - Against export-baseline.json (--baseline picks another file): no absolute http(s) origin and
-//   no script URL the baseline does not list, and no more eval(, new Function(, importScripts(
-//   or serviceWorker than it counts. An empty baseline fails: it has not been initialized.
+// - Against export-baseline.json (--baseline picks another file): no absolute http(s) or ws(s)
+//   origin and no script URL the baseline does not list, and eval(, new Function(, importScripts(
+//   and serviceWorker appear exactly as often as it counts, up or down: a count that may only
+//   fall leaves room for a later addition. An empty baseline fails: it has not been initialized.
 //   --write-baseline writes what this export has into the baseline file, for a person to check
 //   and commit (README section 27 lists what to look at). It writes nothing when another check
 //   fails.
+import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,7 +42,38 @@ const MAX_HEADER_LINE = 2000;
 const HEADERS_SOURCE = fileURLToPath(new URL("_headers", import.meta.url));
 const BASELINE_SOURCE = fileURLToPath(new URL("export-baseline.json", import.meta.url));
 
+// The address of the site. deploy-web.sh's SITE_ORIGIN and BRAND_WEB_APP say the same
+// (woowtech/web-deploy.test.mjs checks that).
+const SITE_ORIGIN = "https://smart.woowtech.io";
+const JS_DIR = "_expo/static/js/web/";
 const ENTRY_BUNDLE = /^\/_expo\/static\/js\/web\/index-[^/]+\.js$/;
+// What Expo exports besides code: images, fonts, sounds, video, styles, JSON and text. Not .svg,
+// .xml, .xhtml or .wasm (documents and code), and nothing without an extension. A real export
+// of the upstream app holds .png, .ico, .css, .json and .txt.
+const ALLOWED_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "avif",
+  "bmp",
+  "ico",
+  "ttf",
+  "otf",
+  "woff",
+  "woff2",
+  "wav",
+  "mp3",
+  "ogg",
+  "m4a",
+  "mp4",
+  "webm",
+  "css",
+  "json",
+  "txt",
+]);
+const SCRIPT_EXTENSIONS = new Set(["js", "mjs", "cjs"]);
 // Host names only: template strings such as `https://${HOST}` are not always folded into one
 // literal by the minifier. The report URL is a JSON string inside the embedded app manifest.
 const REQUIRED_STRINGS = [
@@ -57,7 +97,8 @@ const FORBIDDEN_STRINGS = [
   "api.segment.io",
 ];
 const SINKS = ["eval(", "new Function(", "importScripts(", "serviceWorker"];
-const ORIGIN = /https?:\/\/[A-Za-z0-9.-]+/g;
+// ws and wss too: connect-src allows any host for them.
+const ORIGIN = /(?:https?|wss?):\/\/[A-Za-z0-9.-]+/g;
 // Backticks end a URL too: template strings carry URLs as well.
 const SCRIPT_URL = /https?:\/\/[^\s"'<>`]+\.m?js\b/g;
 const CDN_URL =
@@ -123,6 +164,9 @@ function forbiddenFileReason(relative) {
   return null;
 }
 
+const extensionOf = (relative) => path.posix.extname(relative).slice(1).toLowerCase();
+
+/** The files whose type is not on the list above, which the baseline has to name. */
 function checkFiles(exportDir, listing, report) {
   for (const link of listing.links) report.fail(`${link} is a symlink`);
   for (const relative of [...listing.dirs, ...listing.files]) {
@@ -148,13 +192,75 @@ function checkFiles(exportDir, listing, report) {
     }
   }
   if (sizeProblem) report.sizeTable(sizes);
+  const unlisted = [];
+  for (const relative of listing.files) {
+    if (relative === "_headers" || relative === "index.html" || forbiddenFileReason(relative)) {
+      continue;
+    }
+    const extension = extensionOf(relative);
+    if (SCRIPT_EXTENSIONS.has(extension)) {
+      if (extension !== "js" || !relative.startsWith(JS_DIR)) {
+        report.fail(
+          `${relative} must not be in the export: JavaScript belongs only in ${JS_DIR}, as .js`,
+        );
+      }
+    } else if (!/^html?$/.test(extension) && !ALLOWED_EXTENSIONS.has(extension)) {
+      unlisted.push(relative);
+    }
+  }
+  return unlisted;
 }
 
 function toMiB(bytes) {
   return (bytes / MiB).toFixed(2);
 }
 
-function checkIndex(exportDir, listing, report) {
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+/** The tags of an HTML text, with their attributes: quoted values may hold ">". */
+function parseTags(html) {
+  const tags = [];
+  const tag = /<([A-Za-z][^\s/>]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+  const attribute = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  for (const [, name, rest] of html.matchAll(tag)) {
+    const attributes = [];
+    for (const [, key, double, single, bare] of rest.matchAll(attribute)) {
+      attributes.push([key.toLowerCase(), double ?? single ?? bare ?? ""]);
+    }
+    tags.push({ name: name.toLowerCase(), attributes });
+  }
+  return tags;
+}
+
+/** An attribute value with the character references a browser reads before it reads the URL. */
+function decodeReferences(value) {
+  const code = (digits, radix) => {
+    try {
+      return String.fromCodePoint(Number.parseInt(digits, radix));
+    } catch {
+      return "";
+    }
+  };
+  return value
+    .replace(/&#x([0-9a-f]+);?/gi, (_, digits) => code(digits, 16))
+    .replace(/&#(\d+);?/g, (_, digits) => code(digits, 10))
+    .replace(/&colon;/gi, ":")
+    .replace(/&tab;/gi, "\t")
+    .replace(/&newline;/gi, "\n");
+}
+
+function isJavascriptUrl(value) {
+  // URL parsing drops control characters and spaces before the scheme, and tabs and newlines in it.
+  const plain = [...decodeReferences(value)]
+    .filter((char) => {
+      const code = char.codePointAt(0);
+      return code > 0x20 && (code < 0x7f || code > 0x9f);
+    })
+    .join("");
+  return plain.toLowerCase().startsWith("javascript:");
+}
+
+function checkIndex(exportDir, listing, baseline, report) {
   if (!listing.files.includes("index.html")) {
     report.fail("index.html is missing");
     return;
@@ -162,18 +268,38 @@ function checkIndex(exportDir, listing, report) {
   const html = readFileSync(path.join(exportDir, "index.html"), "utf8");
   const sources = [];
   let inline = 0;
-  for (const [, attributes] of html.matchAll(/<script\b([^>]*)>/gi)) {
-    const src = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(attributes);
-    if (src) sources.push(src[1] ?? src[2] ?? src[3]);
+  for (const tag of parseTags(html)) {
+    for (const [name, value] of tag.attributes) {
+      if (name.startsWith("on")) {
+        report.fail(`index.html has an event handler attribute, ${name}, on <${tag.name}>`);
+      }
+      if (isJavascriptUrl(value)) {
+        report.fail(`index.html has a javascript: URL in ${name} on <${tag.name}>`);
+      }
+    }
+    if (tag.name !== "script") continue;
+    const src = tag.attributes.find(([name]) => name === "src");
+    if (src) sources.push(src[1]);
     else inline += 1;
   }
-  if (inline > 0) report.fail(`index.html has ${inline} inline <script> (no src)`);
+  if (inline > 0) report.fail(`index.html has ${inline} inline <script> (no src attribute)`);
+  const entries = [];
   for (const source of sources) {
-    if (!source.startsWith("/") || source.startsWith("//")) {
-      report.fail(`index.html loads a script that is not on this site: ${source}`);
+    let url;
+    try {
+      url = new URL(source, SITE_ORIGIN);
+    } catch {
+      report.fail(`index.html loads a script whose address is not a URL: ${source}`);
+      continue;
+    }
+    if (url.origin !== SITE_ORIGIN) {
+      if (!baseline.scriptUrls.includes(url.href)) {
+        report.fail(`index.html loads a script that is not on this site: ${source}`);
+      }
+    } else if (ENTRY_BUNDLE.test(url.pathname)) {
+      entries.push(url.pathname);
     }
   }
-  const entries = sources.filter((source) => ENTRY_BUNDLE.test(source));
   if (entries.length !== 1) {
     report.fail(
       `index.html loads ${entries.length} entry bundles (/_expo/static/js/web/index-*.js), not 1`,
@@ -213,8 +339,8 @@ function normalizeOrigin(origin) {
   return origin.replace(/[.-]+$/, "").toLowerCase();
 }
 
-/** What the baseline tracks, from the export's scripts. */
-function collect(scripts) {
+/** What the baseline tracks: the scripts' origins, script URLs and sinks, and the odd files. */
+function collect(exportDir, scripts, unlisted) {
   const origins = new Set();
   const scriptUrls = new Set();
   const sinks = Object.fromEntries(SINKS.map((sink) => [sink, 0]));
@@ -224,7 +350,10 @@ function collect(scripts) {
     for (const [url] of text.matchAll(CDN_URL)) scriptUrls.add(url);
     for (const sink of SINKS) sinks[sink] += countOccurrences(text, sink);
   }
-  return { origins: [...origins].sort(), scriptUrls: [...scriptUrls].sort(), sinks };
+  const files = Object.fromEntries(
+    [...unlisted].sort().map((file) => [file, sha256(readFileSync(path.join(exportDir, file)))]),
+  );
+  return { origins: [...origins].sort(), scriptUrls: [...scriptUrls].sort(), sinks, files };
 }
 
 function checkBundleStrings(scripts, report) {
@@ -253,8 +382,17 @@ function readBaseline(file) {
     baseline?.sinks !== null &&
     typeof baseline?.sinks === "object" &&
     Object.values(baseline.sinks).every((value) => Number.isInteger(value) && value >= 0);
-  if (!strings(baseline?.origins) || !strings(baseline?.scriptUrls) || !counts) {
-    usage(`${file} is not a baseline: { "origins": [...], "scriptUrls": [...], "sinks": {...} }`);
+  const files =
+    baseline?.files === undefined ||
+    (baseline.files !== null &&
+      typeof baseline.files === "object" &&
+      Object.values(baseline.files).every(
+        (value) => typeof value === "string" && /^[0-9a-f]{64}$/.test(value),
+      ));
+  if (!strings(baseline?.origins) || !strings(baseline?.scriptUrls) || !counts || !files) {
+    usage(
+      `${file} is not a baseline: { "origins": [...], "scriptUrls": [...], "sinks": {...}, "files": {...} }`,
+    );
   }
   return baseline;
 }
@@ -282,12 +420,29 @@ function compareBaseline(found, baseline, file, report) {
     if (found.sinks[sink] > allowed) {
       report.fail(`"${sink}" appears ${found.sinks[sink]} times; the baseline allows ${allowed}`);
     } else if (found.sinks[sink] < allowed) {
-      report.note(`"${sink}" appears ${found.sinks[sink]} times; the baseline allows ${allowed}`);
+      report.fail(
+        `"${sink}" appears ${found.sinks[sink]} times, fewer than the ${allowed} the baseline counts: ` +
+          "after checking why, lower the baseline (a count that may only fall leaves room for a later addition)",
+      );
+    }
+  }
+  const known = baseline.files ?? {};
+  for (const [relative, hash] of Object.entries(found.files)) {
+    if (!(relative in known)) {
+      report.fail(
+        `${relative} is a kind of file this check does not allow (${extensionOf(relative) ? `.${extensionOf(relative)}` : "no extension"}): ` +
+          "if it belongs in the export, check it and list its path and SHA-256 in the baseline's files",
+      );
+    } else if (known[relative] !== hash) {
+      report.fail(
+        `${relative} is not the file the baseline lists (SHA-256 ${hash}, not ${known[relative]})`,
+      );
     }
   }
   const gone = [
     ...added(baseline.origins, found.origins),
     ...added(baseline.scriptUrls, found.scriptUrls),
+    ...Object.keys(known).filter((relative) => !(relative in found.files)),
   ];
   if (gone.length > 0) report.note(`in the baseline but not in this export: ${gone.join(" ")}`);
 }
@@ -322,14 +477,18 @@ function main() {
   } catch (error) {
     usage(`cannot read ${options.exportDir}: ${error.message}`);
   }
-  checkFiles(options.exportDir, listing, report);
-  checkIndex(options.exportDir, listing, report);
+  // Writing the baseline starts from an empty one: nothing outside the export may excuse it.
+  const baseline = options.writeBaseline
+    ? { origins: [], scriptUrls: [], sinks: {}, files: {} }
+    : readBaseline(options.baselinePath);
+  const unlisted = checkFiles(options.exportDir, listing, report);
+  checkIndex(options.exportDir, listing, baseline, report);
   checkHeaders(options.exportDir, listing, report);
   const scripts = listing.files
-    .filter((file) => /\.m?js$/.test(file))
+    .filter((file) => /\.(?:m|c)?js$/.test(file))
     .map((file) => ({ file, text: readFileSync(path.join(options.exportDir, file), "utf8") }));
   checkBundleStrings(scripts, report);
-  const found = collect(scripts);
+  const found = collect(options.exportDir, scripts, unlisted);
   if (options.writeBaseline) {
     printReport(report);
     if (report.failures.length > 0) {
@@ -339,13 +498,14 @@ function main() {
     writeFileSync(options.baselinePath, `${JSON.stringify(found, null, 2)}\n`);
     console.log(
       `check-export: wrote ${options.baselinePath}: ${found.origins.length} origins, ` +
-        `${found.scriptUrls.length} script URLs, sinks ${JSON.stringify(found.sinks)}. Check every ` +
-        "script URL and the serviceWorker count (woowtech/README.md section 27), then format " +
+        `${found.scriptUrls.length} script URLs, sinks ${JSON.stringify(found.sinks)}, ` +
+        `${Object.keys(found.files).length} listed files. Check every script URL, the ` +
+        "serviceWorker count and every listed file (woowtech/README.md section 27), then format " +
         "and commit it: npm run format:files -- woowtech/web/export-baseline.json",
     );
     return;
   }
-  compareBaseline(found, readBaseline(options.baselinePath), options.baselinePath, report);
+  compareBaseline(found, baseline, options.baselinePath, report);
   printReport(report);
   if (report.failures.length > 0) {
     console.error(`check-export: ${report.failures.length} problems in ${options.exportDir}`);

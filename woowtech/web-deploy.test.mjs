@@ -28,7 +28,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { importSource } from "./source-modules.mjs";
@@ -843,7 +843,10 @@ test(
     assert.equal(own.status, 6, own.output);
     assert.deepEqual(
       own.verify.map((call) => call.args[0]),
-      Array(2).fill("https://0123abcd.woowtech-smart-web.pages.dev"),
+      [
+        "https://0123abcd.woowtech-smart-web.pages.dev",
+        "https://0123abcd.woowtech-smart-web.pages.dev",
+      ],
     );
   },
 );
@@ -1842,18 +1845,6 @@ test("check-export fails a script URL the baseline does not list, such as expo-c
   assert.equal(listed.status, 0, listed.output);
 });
 
-test("check-export fails while the baseline is empty", (t) => {
-  const run = checkExport(t, { baseline: { origins: [], scriptUrls: [], sinks: {} } });
-  assert.equal(run.status, 1, run.output);
-  assert.match(run.output, /not initialized/);
-  // As committed, before the first real dry run.
-  assert.deepEqual(readJson("woowtech/web/export-baseline.json"), {
-    origins: [],
-    scriptUrls: [],
-    sinks: {},
-  });
-});
-
 test("check-export fails a new service worker registration or a worker-like file", (t) => {
   const registers = checkExport(t, {
     bundle: `${BUNDLE}navigator.serviceWorker.register('/sw.js');\n`,
@@ -1948,6 +1939,300 @@ test("check-export wants the report receiver, the relay and the web app in the b
       new RegExp(`does not contain "[^"]*${needle.replaceAll(".", "\\.")}`),
       needle,
     );
+  }
+});
+
+test("check-export refuses the files that change how Pages serves the site, whatever they hold", (t) => {
+  // wrangler deploys <export>/_worker.js as an Advanced Mode Worker in front of every request, and
+  // verify-live cannot see one that passes the content through unchanged.
+  const serving = "it changes how Pages serves the site";
+  for (const [file, reason] of [
+    ["_worker.js", serving],
+    ["_routes.json", serving],
+    ["_redirects", serving],
+    ["functions/index.js", "Pages Functions"],
+    [".env", "an .env file"],
+    ["assets/.env.local", "an .env file"],
+  ]) {
+    const run = checkExport(t, { files: { [file]: "x\n" } });
+    assert.equal(run.status, 1, `${file}: ${run.output}`);
+    assert.match(
+      run.output,
+      new RegExp(`${escapeRegExp(file)} must not be in the export: ${escapeRegExp(reason)}`),
+      file,
+    );
+  }
+});
+
+test("check-export wants JavaScript only in _expo/static/js/web/", (t) => {
+  for (const file of [
+    "assets/extra.js",
+    "extra.js",
+    "_expo/static/js/web/chunk.mjs",
+    "_expo/static/js/chunk.js",
+    "shell.cjs",
+  ]) {
+    const run = checkExport(t, { files: { [file]: "export {};\n" } });
+    assert.equal(run.status, 1, `${file}: ${run.output}`);
+    assert.match(
+      run.output,
+      new RegExp(`${escapeRegExp(file)} must not be in the export: JavaScript belongs only in`),
+      file,
+    );
+  }
+  // A lazy chunk next to the entry is what Expo writes.
+  const chunk = checkExport(t, {
+    files: { "_expo/static/js/web/native-store-0123abcd.js": "x;\n" },
+  });
+  assert.equal(chunk.status, 0, chunk.output);
+});
+
+test("check-export lets data files through, and names the rest in the baseline with their SHA-256", (t) => {
+  const data = {
+    "assets/a.PNG": "x",
+    "assets/b.woff2": "x",
+    "assets/c.ttf": "x",
+    "assets/d.jpeg": "x",
+    "assets/e.mp3": "x",
+    "_expo/static/css/f.css": "x",
+    "robots.txt": "x",
+    "favicon.ico": "x",
+    "metadata.json": "{}",
+  };
+  const plain = checkExport(t, { files: data });
+  assert.equal(plain.status, 0, plain.output);
+
+  // An .svg or .xml document can hold a script, a .wasm file is code, and nothing says what a
+  // file without an extension is.
+  for (const file of [
+    "assets/logo.svg",
+    "assets/data.xml",
+    "assets/engine.wasm",
+    "assets/LICENSE",
+  ]) {
+    const content = "<svg onload='x()'/>\n";
+    const unlisted = checkExport(t, { files: { [file]: content } });
+    assert.equal(unlisted.status, 1, `${file}: ${unlisted.output}`);
+    assert.match(
+      unlisted.output,
+      new RegExp(`${escapeRegExp(file)} is a kind of file this check does not allow`),
+    );
+    const listed = checkExport(t, {
+      files: { [file]: content },
+      baseline: { ...BASELINE, files: { [file]: sha256(content) } },
+    });
+    assert.equal(listed.status, 0, `${file}: ${listed.output}`);
+    const changed = checkExport(t, {
+      files: { [file]: content },
+      baseline: { ...BASELINE, files: { [file]: "0".repeat(64) } },
+    });
+    assert.equal(changed.status, 1, `${file}: ${changed.output}`);
+    assert.match(changed.output, /is not the file the baseline lists/);
+  }
+
+  // --write-baseline lists them, and what it wrote passes.
+  const written = checkExport(t, {
+    files: { "assets/logo.svg": "<svg/>\n" },
+    args: ["--write-baseline"],
+  });
+  assert.equal(written.status, 0, written.output);
+  assert.deepEqual(JSON.parse(readFileSync(written.baselineFile, "utf8")).files, {
+    "assets/logo.svg": sha256("<svg/>\n"),
+  });
+  const again = spawnSync(
+    process.execPath,
+    [CHECK_EXPORT, written.dir, "--baseline", written.baselineFile],
+    { encoding: "utf8" },
+  );
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+});
+
+// An index.html like the one Expo writes for the single-page export (its layout, not its words).
+const EXPO_INDEX_HTML = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>woowtech smart</title>
+    <!-- The \`react-native-web\` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+      @media (prefers-color-scheme: dark) { html, body { background-color: #181b1a; } }
+      #root { display: flex; width: 100%; height: 100%; flex: 1; }
+    </style>
+    <style>
+      button, a, input, [role="button"], [tabindex], [contenteditable="true"] { -webkit-app-region: no-drag !important; }
+      *:focus-visible { outline: 2px solid #20744a; outline-offset: 2px; }
+    </style>
+  <link rel="preload" href="/_expo/static/css/xterm-3bb1704bf6cb0876640973dc0244b4cb.css" as="style"><link rel="stylesheet" href="/_expo/static/css/xterm-3bb1704bf6cb0876640973dc0244b4cb.css"><link rel="icon" href="/favicon.ico" /></head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  <script src="/${ENTRY}" defer></script>
+</body>
+</html>
+`;
+
+test("check-export reads index.html's tags: the Expo layout passes, and no script, handler or URL hides", (t) => {
+  const entry = `<script src="/${ENTRY}" defer></script>`;
+  const page = (head, body = "", script = entry) =>
+    `<!DOCTYPE html><html><head>${head}</head><body>${body}<div id="root"></div>${script}</body></html>\n`;
+  const files = (html) => ({ files: { "index.html": html } });
+
+  const expo = checkExport(t, {
+    files: {
+      "index.html": EXPO_INDEX_HTML,
+      "_expo/static/css/xterm-3bb1704bf6cb0876640973dc0244b4cb.css": "x{}",
+    },
+  });
+  assert.equal(expo.status, 0, expo.output);
+  // The same site by its whole address is the same site.
+  const absolute = checkExport(t, {
+    ...files(page("", "", `<script src="https://smart.woowtech.io/${ENTRY}" defer></script>`)),
+  });
+  assert.equal(absolute.status, 0, absolute.output);
+
+  const cases = [
+    // data-src is not src: this script is inline code.
+    [page("", `<script data-src="/${ENTRY}">alert(1)</script>`), /1 inline <script>/],
+    [
+      page("", "", `<script src="/${ENTRY}" onload="x()" defer></script>`),
+      /event handler attribute, onload, on <script>/,
+    ],
+    [
+      page("", "", entry).replace("<body>", '<body onload="x()">'),
+      /event handler attribute, onload, on <body>/,
+    ],
+    // A ">" inside a quoted value does not end the tag, so the handler after it is still seen.
+    [page("", '<div title=">" onclick="x()"></div>'), /event handler attribute, onclick, on <div>/],
+    [page("", '<a href="javascript:alert(1)">x</a>'), /javascript: URL in href on <a>/],
+    [page("", '<a href=" \tJavaScript:alert(1)">x</a>'), /javascript: URL in href on <a>/],
+    [page("", '<a href="jav&#x09;ascript:alert(1)">x</a>'), /javascript: URL in href on <a>/],
+    [page("", '<a href="javascript&colon;alert(1)">x</a>'), /javascript: URL in href on <a>/],
+    [
+      page("", "", `${entry}<script src="https://evil.example.invalid/x.js"></script>`),
+      /not on this site: https:\/\/evil\.example\.invalid\/x\.js/,
+    ],
+    [
+      page("", "", `${entry}<script src="//evil.example.invalid/x.js"></script>`),
+      /not on this site: \/\/evil\.example\.invalid\/x\.js/,
+    ],
+    [
+      page("", "", `${entry}<script src="/\\evil.example.invalid/x.js"></script>`),
+      /not on this site/,
+    ],
+  ];
+  for (const [html, pattern] of cases) {
+    const run = checkExport(t, files(html));
+    assert.equal(run.status, 1, `${pattern}: ${run.output}`);
+    assert.match(run.output, pattern);
+  }
+  // A foreign script the baseline lists is the baseline's decision (the CSP still blocks it).
+  const listed = checkExport(t, {
+    ...files(page("", "", `${entry}<script src="https://cdn.example.invalid/x.js"></script>`)),
+    baseline: { ...BASELINE, scriptUrls: ["https://cdn.example.invalid/x.js"] },
+  });
+  assert.equal(listed.status, 0, listed.output);
+});
+
+test("check-export wants the counts of eval-like calls to match the baseline, up or down", (t) => {
+  const more = checkExport(t, { bundle: `${BUNDLE}eval(x);\n` });
+  assert.equal(more.status, 1, more.output);
+  assert.match(more.output, /"eval\(" appears 1 times; the baseline allows 0/);
+  // A baseline that only allows more leaves room for a later addition.
+  const fewer = checkExport(t, { baseline: withSinks({ "eval(": 2 }) });
+  assert.equal(fewer.status, 1, fewer.output);
+  assert.match(fewer.output, /"eval\(" appears 0 times, fewer than the 2 the baseline counts/);
+  const exact = checkExport(t, {
+    bundle: `${BUNDLE}eval(x);eval(y);\n`,
+    baseline: withSinks({ "eval(": 2 }),
+  });
+  assert.equal(exact.status, 0, exact.output);
+});
+
+test("check-export puts ws and wss hosts in the origin baseline", (t) => {
+  const bundle = `${BUNDLE}const a="ws://collector.example.invalid/ws",b="wss://stream.example.invalid";\n`;
+  const unlisted = checkExport(t, { bundle });
+  assert.equal(unlisted.status, 1, unlisted.output);
+  assert.match(
+    unlisted.output,
+    /origins not in the baseline: ws:\/\/collector\.example\.invalid wss:\/\/stream\.example\.invalid/,
+  );
+  const origins = [
+    ...BASELINE.origins,
+    "ws://collector.example.invalid",
+    "wss://stream.example.invalid",
+  ];
+  const listed = checkExport(t, { bundle, baseline: { ...BASELINE, origins } });
+  assert.equal(listed.status, 0, listed.output);
+});
+
+/** The CDN hosts a script URL must not come from, except the one jsQR URL the baseline may list. */
+const CDN_SCRIPT = /^https?:\/\/(?:cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com)\b/i;
+const JSQR_URL = "https://cdn.jsdelivr.net/npm/jsqr@1.2.0/dist/jsQR.min.js";
+
+/** Throws unless `baseline` is what check-export reads: empty, or a well-formed real one. */
+function assertBaselineShape(baseline) {
+  const strings = (value) =>
+    Array.isArray(value) && value.every((item) => typeof item === "string");
+  assert.deepEqual(
+    Object.keys(baseline).filter(
+      (key) => !["origins", "scriptUrls", "sinks", "files"].includes(key),
+    ),
+    [],
+    "unknown keys",
+  );
+  assert.ok(strings(baseline.origins), "origins are strings");
+  assert.ok(strings(baseline.scriptUrls), "scriptUrls are strings");
+  assert.ok(
+    baseline.sinks && typeof baseline.sinks === "object" && !Array.isArray(baseline.sinks),
+    "sinks is an object",
+  );
+  for (const [sink, count] of Object.entries(baseline.sinks)) {
+    assert.ok(Number.isInteger(count) && count >= 0, `${sink} is a count`);
+    assert.ok(Object.keys(NO_SINKS).includes(sink), `${sink} is a sink check-export counts`);
+  }
+  for (const [file, hash] of Object.entries(baseline.files ?? {})) {
+    assert.match(hash, /^[0-9a-f]{64}$/, `${file} has a SHA-256`);
+  }
+  assert.deepEqual(
+    baseline.scriptUrls.filter((url) => CDN_SCRIPT.test(url) && url !== JSQR_URL),
+    [],
+    "a script URL from a CDN other than the documented jsQR one",
+  );
+}
+
+test("check-export fails while the baseline is empty", (t) => {
+  const run = checkExport(t, { baseline: { origins: [], scriptUrls: [], sinks: {} } });
+  assert.equal(run.status, 1, run.output);
+  assert.match(run.output, /not initialized/);
+  // The committed baseline is empty until the first real dry run, and a well-formed one after it:
+  // committing the real baseline must not turn CI red (README section 27). Whether it is the right
+  // one is for the owner's review of its diff; this checks its shape.
+  assertBaselineShape(readJson("woowtech/web/export-baseline.json"));
+});
+
+test("the baseline shape check catches what it is there for", () => {
+  assertBaselineShape({ origins: [], scriptUrls: [], sinks: {} });
+  assertBaselineShape({
+    origins: ["https://smart.woowtech.io", "wss://relay.woowtech.io"],
+    scriptUrls: [JSQR_URL],
+    sinks: NO_SINKS,
+    files: { "assets/logo.svg": "a".repeat(64) },
+  });
+  for (const bad of [
+    { origins: "https://x", scriptUrls: [], sinks: {} },
+    { origins: [], scriptUrls: [], sinks: { "eval(": -1 } },
+    { origins: [], scriptUrls: [], sinks: { "eval(": 1.5 } },
+    { origins: [], scriptUrls: [], sinks: { "alert(": 1 } },
+    { origins: [], scriptUrls: ["https://unpkg.com/evil@1/x.js"], sinks: {} },
+    { origins: [], scriptUrls: [], sinks: {}, files: { "a.svg": "not a hash" } },
+    { origins: [], scriptUrls: [], sinks: {}, extra: 1 },
+  ]) {
+    assert.throws(() => assertBaselineShape(bad), JSON.stringify(bad));
   }
 });
 
@@ -2163,6 +2448,141 @@ test("hosted-web-smoke.mjs refuses to start without a pairing link", () => {
   assert.match(result.stderr, /--pair-url is required/);
 });
 
+const SMOKE = path.join(repoRoot, "woowtech/web/hosted-web-smoke.mjs");
+// Importing the smoke test only loads its helpers: it starts Chrome when it is the script run.
+const loadSmoke = () => import(pathToFileURL(SMOKE).href);
+
+test("hosted-web-smoke.mjs counts a loopback, private or .local host as local, whatever the port", async () => {
+  const { isLocalOrPrivateHost } = await loadSmoke();
+  const host = (text) => new URL(`http://${text}`).hostname;
+  for (const local of [
+    "localhost",
+    "app.localhost",
+    "127.0.0.1",
+    "127.8.8.8",
+    "0.0.0.0",
+    "[::1]",
+    "[::]",
+    "[::ffff:127.0.0.1]",
+    "10.0.0.1",
+    "172.16.0.1",
+    "172.31.255.255",
+    "192.168.1.5",
+    "169.254.169.254",
+    "100.64.0.1",
+    "100.127.255.255",
+    "[fe80::1]",
+    "[fd12:3456::1]",
+    "[fc00::1]",
+    "printer.local",
+    "2130706433",
+  ]) {
+    assert.equal(isLocalOrPrivateHost(host(local)), true, local);
+  }
+  for (const remote of [
+    "smart.woowtech.io",
+    "relay.woowtech.io",
+    "raw.githubusercontent.com",
+    "8.8.8.8",
+    "11.0.0.1",
+    "172.15.255.255",
+    "172.32.0.1",
+    "192.169.0.1",
+    "100.63.255.255",
+    "100.128.0.1",
+    "localhost.example.com",
+    "example.local.com",
+    "[2001:db8::1]",
+    "[::ffff:8.8.8.8]",
+  ]) {
+    assert.equal(isLocalOrPrivateHost(host(remote)), false, remote);
+  }
+});
+
+test("hosted-web-smoke.mjs fails S1 and S8 on a public page that reaches a local address before anyone presses anything", async () => {
+  const { classifyHosts } = await loadSmoke();
+  const urls = [
+    "https://smart.woowtech.io/",
+    "https://smart.woowtech.io/_expo/static/js/web/index-x.js",
+    "wss://relay.woowtech.io/ws?serverId=srv_x",
+    "https://raw.githubusercontent.com/WOOWTECH/x/CHANGELOG.md",
+    "data:text/plain,hello",
+    "blob:https://smart.woowtech.io/0000",
+  ];
+  const clean = classifyHosts(urls, "https://smart.woowtech.io");
+  assert.deepEqual(clean, { unexpected: [], local: [] });
+
+  // The old check looked at localhost:6770 and nothing else: a probe of upstream's port, of
+  // another loopback address or of the LAN passed it.
+  for (const probe of [
+    "ws://localhost:6767/ws",
+    "http://127.0.0.2:6770/",
+    "ws://[::1]:9/ws",
+    "http://0.0.0.0:6770/",
+    "http://192.168.1.20:6770/",
+    "http://10.1.2.3/",
+    "http://172.20.0.5/",
+    "http://169.254.1.1/",
+    "ws://nas.local:6770/ws",
+  ]) {
+    const seen = classifyHosts([...urls, probe], "https://smart.woowtech.io");
+    assert.deepEqual(seen.unexpected, [], probe);
+    assert.deepEqual(seen.local, [new URL(probe).host], probe);
+  }
+  const foreign = classifyHosts(
+    [...urls, "https://collector.example.invalid/x"],
+    "https://smart.woowtech.io",
+  );
+  assert.deepEqual(foreign, { unexpected: ["collector.example.invalid"], local: [] });
+
+  // The local E2E page is on loopback and reaches its own daemon there; the LAN is still not expected.
+  const local = classifyHosts(
+    [
+      "http://127.0.0.1:8788/",
+      "ws://127.0.0.1:6791/ws",
+      "ws://localhost:6770/ws",
+      "http://192.168.1.20/",
+    ],
+    "http://127.0.0.1:8788",
+  );
+  assert.deepEqual(local, { unexpected: ["192.168.1.20"], local: [] });
+});
+
+test("hosted-web-smoke.mjs prints no pairing link, in its summary or in an error", async () => {
+  const { redact } = await loadSmoke();
+  const payload = Buffer.from(
+    JSON.stringify({ serverId: "srv_secret", daemonPublicKeyB64: "k".repeat(43) }),
+  ).toString("base64url");
+  const link = `https://smart.woowtech.io/#offer=${payload}`;
+  for (const text of [
+    `page.goto: net::ERR_NAME_NOT_RESOLVED at ${link}`,
+    `locator.fill: Timeout 30000ms exceeded.\n  - fill("${link}")`,
+    `navigating to "${link}", waiting until "domcontentloaded"`,
+    `{"scenario":"S3","error":"${link}"}`,
+    `--pair-url ${link} --direct 127.0.0.1:6791`,
+  ]) {
+    const printed = redact(text, [link, payload]);
+    assert.ok(!printed.includes(payload), printed);
+    assert.ok(!printed.includes("srv_secret"), printed);
+  }
+  // A link the secrets list does not know (the forged one of S10) goes too, by its "#offer=".
+  assert.equal(
+    redact("at https://smart.woowtech.io/#offer=eyJh-_9=, then", []),
+    "at https://smart.woowtech.io/#offer=[redacted], then",
+  );
+  assert.equal(
+    redact("S1 ok: https://smart.woowtech.io/settings/general", []),
+    "S1 ok: https://smart.woowtech.io/settings/general",
+  );
+});
+
+test("check-export names the same site as deploy-web.sh and the smoke test", () => {
+  const checkExportOrigin = /^const SITE_ORIGIN = "([^"]+)";$/m.exec(
+    read("woowtech/web/check-export.mjs"),
+  )?.[1];
+  assert.equal(checkExportOrigin, scriptConstant("SITE_ORIGIN"));
+});
+
 // --- the same address and the same wrangler everywhere ---
 
 const scriptConstant = (name) => new RegExp(`^${name}=(\\S+)$`, "m").exec(read(DEPLOY_SCRIPT))?.[1];
@@ -2226,5 +2646,28 @@ test("deploy-web.sh's wrangler version is the one section 27 and the reports Wor
       `${name} names another wrangler`,
     );
     assert.doesNotMatch(text, /wrangler@4(?![.\d])/, `${name} runs an unpinned wrangler@4`);
+  }
+});
+
+test("section 27 documents every setting and exit code deploy-web.sh has, and the files it hashes", () => {
+  const script = read(DEPLOY_SCRIPT);
+  const section = readmeSection27();
+  const settings = new Set([...script.matchAll(/\bWOOW_[A-Z0-9_]+/g)].map(([name]) => name));
+  assert.deepEqual(
+    [...settings].filter((name) => !section.includes(name)),
+    [],
+    "settings the README does not mention",
+  );
+  const codes = new Set([...script.matchAll(/\bdie (\d+)\b/g)].map(([, code]) => code));
+  const exitLine = section.split("\n").find((line) => line.startsWith("- 退出代碼："));
+  assert.ok(exitLine, "section 27 has no line with the exit codes");
+  for (const code of ["0", ...codes]) {
+    assert.match(exitLine, new RegExp(`(?:：|，)${code} `), `exit code ${code} is not explained`);
+  }
+  for (const file of GUARD_FILES) {
+    assert.ok(section.includes(file), `${file} is not named in section 27`);
+  }
+  for (const word of ["domain-attached", "--logout", "WOOW_CONFIRM_SHA"]) {
+    assert.ok(section.includes(word), `${word} is not in section 27`);
   }
 });
