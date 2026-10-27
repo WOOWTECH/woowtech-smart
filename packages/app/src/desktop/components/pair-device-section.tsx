@@ -17,6 +17,7 @@ import { daemonPairingOfferQueryKey } from "@/data/daemon-pairing";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useHostRuntimeClient, useHostRuntimeSnapshot } from "@/runtime/host-runtime";
 import { RelayOffAction } from "@/desktop/components/relay-off-action";
+import { WoowtechPairingFingerprint } from "@/desktop/components/woowtech-pairing-fingerprint";
 import type { Theme } from "@/styles/theme";
 import {
   EditingTextInput as TextInput,
@@ -251,6 +252,7 @@ function PairingOffer(props: PairDeviceBodyProps & { offer: { url: string } }) {
       <View style={styles.qrTile}>
         <PairingQr svg={props.qrSvg} isError={props.qrError} />
       </View>
+      <WoowtechPairingFingerprint url={props.offer.url} />
       <View style={styles.linkRow}>
         <View style={styles.inputWrapper}>
           <TextInput
