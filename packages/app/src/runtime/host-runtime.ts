@@ -87,6 +87,7 @@ import {
   type HostLabelServerInfo,
 } from "./woowtech-host-label";
 import { confirmProbedHost } from "./woowtech-host-confirmations";
+import { shouldAutoProbeLocalhost } from "./woowtech-localhost-probe-policy";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
 export type HostRegistryStatus = "loading" | "ready";
@@ -1506,7 +1507,8 @@ export class HostRuntimeStore {
 
     if (override) {
       this.bootstrapConfiguredOverride(override);
-    } else {
+    } else if (shouldAutoProbeLocalhost()) {
+      // woowtech smart: runtime/woowtech-localhost-probe-policy.ts
       await this.bootstrapDefaultLocalhost();
     }
   }

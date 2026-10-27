@@ -185,3 +185,22 @@ describe("a direct connection that reports a saved host's id", () => {
     ]);
   });
 });
+
+describe("probing localhost at boot", () => {
+  it("does not probe from a public https page", async () => {
+    vi.stubGlobal("window", { location: { protocol: "https:", hostname: "web.example.test" } });
+    const f = storeWith({ savedHosts: [], endBootAfterLoad: false });
+
+    await f.store.boot();
+
+    expect(f.probedEndpoints).toEqual([]);
+  });
+
+  it("probes where upstream does, such as without a window", async () => {
+    const f = storeWith({ savedHosts: [], endBootAfterLoad: false });
+
+    await f.store.boot();
+
+    expect(f.probedEndpoints).toEqual(["localhost:6770"]);
+  });
+});
