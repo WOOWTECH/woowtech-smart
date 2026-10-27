@@ -429,7 +429,8 @@ function resolveCorsAllowedOrigins(
     ? env.PASEO_CORS_ORIGINS.split(",").map((s) => s.trim())
     : [];
   const persistedCorsOrigins = persisted.daemon?.cors?.allowedOrigins ?? [];
-  // woowtech smart: upstream's hosted web app never gets in (woowtech-cors-origins.ts).
+  // woowtech smart: upstream's hosted web app never gets in (woowtech-cors-origins.ts). Ours
+  // comes only from config.json's default (persisted-config.ts), so "[]" still turns it off.
   return withoutUpstreamWebApp(
     Array.from(new Set([...persistedCorsOrigins, ...envCorsOrigins].filter((s) => s.length > 0))),
   );

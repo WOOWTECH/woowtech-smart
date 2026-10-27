@@ -63,6 +63,7 @@ const HUB_ORIGIN = "https://hub.test";
 const SOCKET_URL = "wss://hub.test/daemon";
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "../../../../../..");
 const REMOVAL_RETRY_CODES = new Set(["EBUSY", "ENOTEMPTY", "EPERM"]);
+const HUB_ENABLED_CONFIG = `${JSON.stringify({ version: 1, daemon: { hub: { enabled: true } } })}\n`;
 
 async function removeDirectoryAfterWritesSettle(directory: string): Promise<void> {
   for (let retry = 0; retry < 10; retry += 1) {
@@ -1384,6 +1385,8 @@ export class HubRelationshipHarness {
     this.paseoHome = path.join(this.root, ".paseo");
     const staticDir = path.join(this.root, "static");
     await Promise.all([mkdir(this.paseoHome, { recursive: true }), mkdir(staticDir)]);
+    // woowtech smart: Hub connections are off unless config.json turns them on (woowtech-hub-gate.ts).
+    await writeFile(path.join(this.paseoHome, "config.json"), HUB_ENABLED_CONFIG);
     execFileSync("git", ["init", "-b", "main", this.root], { stdio: "ignore" });
     execFileSync("git", ["-C", this.root, "config", "user.email", "hub@test.invalid"]);
     execFileSync("git", ["-C", this.root, "config", "user.name", "Hub Test"]);

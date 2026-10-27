@@ -11,8 +11,8 @@ function linkBase(link: string | null): string | null {
   return link && index !== -1 ? link.slice(0, index) : null;
 }
 
-// woowtech smart's pairing links open the app itself (woowtech-smart:///#offer=…),
-// also in homes whose config.json still has upstream's default app.baseUrl.
+// woowtech smart's pairing links open its hosted web app (https://smart.woowtech.io/#offer=…),
+// also in homes whose config.json still has a default an earlier release wrote.
 describe("the link daemon pair prints", () => {
   let root: string;
 
@@ -24,25 +24,43 @@ describe("the link daemon pair prints", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("opens the app for a new home", async () => {
+  /** A daemon home whose config.json has `baseUrl` as app.baseUrl. */
+  async function homeWithAppBaseUrl(baseUrl: string): Promise<string> {
+    const home = path.join(root, "home");
+    await mkdir(home);
+    await writeFile(
+      path.join(home, "config.json"),
+      JSON.stringify({ version: 1, app: { baseUrl } }),
+    );
+    return home;
+  }
+
+  it("opens the web app for a new home", async () => {
     const offer = await resolveLocalPairingOffer({ paseoHome: path.join(root, "home") });
 
-    expect(linkBase(offer.url)).toBe("woowtech-smart:///");
+    expect(linkBase(offer.url)).toBe("https://smart.woowtech.io/");
     expect(parseConnectionOfferFromUrl(offer.url ?? "")?.relay.endpoint).toBe(
       "relay.woowtech.io:443",
     );
   });
 
-  it("opens the app for a home created with upstream's default", async () => {
-    const home = path.join(root, "home");
-    await mkdir(home);
-    await writeFile(
-      path.join(home, "config.json"),
-      JSON.stringify({ version: 1, app: { baseUrl: "https://app.paseo.sh" } }),
-    );
+  it("opens the web app for a home created with upstream's default", async () => {
+    const offer = await resolveLocalPairingOffer({
+      paseoHome: await homeWithAppBaseUrl("https://app.paseo.sh"),
+    });
 
-    const offer = await resolveLocalPairingOffer({ paseoHome: home });
+    expect(linkBase(offer.url)).toBe("https://smart.woowtech.io/");
+  });
 
-    expect(linkBase(offer.url)).toBe("woowtech-smart:///");
+  it("opens the web app for a home created by 0.8.1, which wrote the app's link scheme", async () => {
+    const offer = await resolveLocalPairingOffer({
+      paseoHome: await homeWithAppBaseUrl("woowtech-smart:///"),
+    });
+
+    expect(linkBase(offer.url)).toBe("https://smart.woowtech.io/");
+    expect(parseConnectionOfferFromUrl(offer.url ?? "")?.relay).toEqual({
+      endpoint: "relay.woowtech.io:443",
+      useTls: true,
+    });
   });
 });

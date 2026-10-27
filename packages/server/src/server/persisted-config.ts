@@ -14,6 +14,7 @@ import { PluginIdSchema, PluginSourceSchema } from "@getpaseo/protocol/plugin-co
 import { TerminalProfileSchema } from "@getpaseo/protocol/terminal-profile";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 import { BRAND_PAIRING } from "@getpaseo/protocol/brand-pairing";
+import { BRAND_WEB_APP } from "@getpaseo/protocol/brand-web-app";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
 export const LogFormatSchema = z.enum(["pretty", "json"]);
@@ -291,6 +292,13 @@ export const PersistedConfigSchema = z
           .strict()
           .optional(),
         auth: DaemonAuthSchema.optional(),
+        // woowtech smart: Hub connections are off unless enabled is true (hub/woowtech-hub-gate.ts).
+        hub: z
+          .object({
+            enabled: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .transform(({ allowedHosts, ...daemon }) => {
@@ -345,9 +353,10 @@ const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
   version: 1,
   daemon: {
     listen: "127.0.0.1:6770",
-    // woowtech smart's pairing links open the app, so no web app origin is let in.
+    // woowtech smart's hosted web app (BRAND_WEB_APP, smart.woowtech.io) may reach the daemon
+    // directly, as upstream lets its own in (owner decision D3, 2026-10-26).
     cors: {
-      allowedOrigins: [],
+      allowedOrigins: [BRAND_WEB_APP.origin],
     },
     // woowtech smart runs its own relay, so new homes start with it on.
     relay: {

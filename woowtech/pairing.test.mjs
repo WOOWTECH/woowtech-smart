@@ -1,14 +1,14 @@
-// woowtech smart's pairing links and QR codes open the app itself, not upstream's
-// hosted web app (owner decision 直接叫起 App; woowtech/README.md, 第 19 節). A link is
-// the app's root URL with the offer in its fragment: woowtech-smart:///#offer=<payload>.
-// A merge can bring upstream's web app back into the daemon's defaults
-// (persisted-config.ts, config.ts, pairing-offer.ts, bootstrap.ts), the CLI's onboarding
-// or the app's paste-a-link field, or drop the rules that move existing homes off
-// upstream's web app (app.baseUrl and the CORS allowlist). These checks run the daemon's
-// config and pairing code from source through tsx, ask expo-router and Expo's app config
-// how the app takes the link, and scan the shipped sources. The daemon's imports from
-// other packages read their dist (the link's base comes from @getpaseo/protocol), so
-// build them first: npm run build:server.
+// woowtech smart's pairing links and QR codes open its hosted web app, as upstream's open
+// upstream's (owner decision D2, 2026-10-26; woowtech/README.md, 第 19 節). A link is the web
+// app's root with the offer in its fragment: https://smart.woowtech.io/#offer=<payload>. The app
+// still opens the app links older QR codes carry (woowtech-smart:///#offer=<payload>).
+// A merge can bring upstream's web app back into the daemon's defaults (persisted-config.ts,
+// config.ts, pairing-offer.ts, bootstrap.ts), the CLI's onboarding or the app's paste-a-link
+// field, or drop the rules that move existing homes off earlier defaults (app.baseUrl and the
+// CORS allowlist). These checks run the daemon's config and pairing code from source through
+// tsx, ask expo-router and Expo's app config how the app takes the older links, and scan the
+// shipped sources. The daemon's imports from other packages read their dist (the link's base
+// comes from @getpaseo/protocol), so build them first: npm run build:server.
 //
 //   node --test woowtech/pairing.test.mjs
 import assert from "node:assert/strict";
@@ -33,9 +33,17 @@ const { getOrCreateServerId } = await importSource("packages/server/src/server/s
 const { parseConnectionOfferFromUrl } = await importSource(
   "packages/protocol/src/connection-offer.ts",
 );
+const { BRAND_PAIRING } = await importSource("packages/protocol/src/brand-pairing.ts");
+const { BRAND_WEB_APP } = await importSource("packages/protocol/src/brand-web-app.ts");
 
+const WEB_APP_ORIGIN = "https://smart.woowtech.io";
+const WEB_LINK_PREFIX = `${WEB_APP_ORIGIN}/#offer=`;
 const APP_SCHEME = "woowtech-smart";
-const APP_LINK_PREFIX = `${APP_SCHEME}:///#offer=`;
+// The app's root URL, the default app.baseUrl from 2026-09-25 to 2026-10-26 (0.8.1 included).
+const APP_LINK_ROOT = `${APP_SCHEME}:///`;
+const OFFER_MARKER = "#offer=";
+// The one shipped file that names the hosted web app's host: BRAND_WEB_APP.
+const WEB_APP_SOURCE = "packages/protocol/src/brand-web-app.ts";
 const UPSTREAM_WEB_APP = /app\.paseo\.sh/;
 // The one shipped file that names upstream's web app: it moves homes off its default, and
 // woowtech-cors-origins.ts imports the name from it.
@@ -93,23 +101,36 @@ async function pairingLinkOf(home) {
   return pairing.url;
 }
 
-test("pairing links from a new home open the app at its root with the offer", async () => {
+test("pairing links from a new home open the web app at its root with the offer", async () => {
   const home = daemonHome();
   const link = await pairingLinkOf(home);
 
-  assert.ok(link.startsWith(APP_LINK_PREFIX), `the daemon hands out ${link}`);
+  assert.ok(link.startsWith(WEB_LINK_PREFIX), `the daemon hands out ${link}`);
   assert.equal(parseConnectionOfferFromUrl(link).serverId, getOrCreateServerId(home, { env: {} }));
   const offerless = await generateLocalPairingOffer({ paseoHome: home, includeQr: false });
-  assert.ok(offerless.url.startsWith(APP_LINK_PREFIX), `without app.baseUrl: ${offerless.url}`);
+  assert.ok(offerless.url.startsWith(WEB_LINK_PREFIX), `without app.baseUrl: ${offerless.url}`);
 });
 
-test("the app registers the link's scheme and routes the link to its start screen", async () => {
+test("the web app gets the link at its start screen, with the offer only in the fragment", async () => {
+  // The web export is a single page: its root is the index route (src/app/index.tsx), and the
+  // fragment, which a browser never sends to the server, is the only place with the offer.
+  const link = new URL(await pairingLinkOf(daemonHome()));
+  assert.equal(link.origin, WEB_APP_ORIGIN);
+  assert.equal(link.pathname, "/");
+  assert.equal(link.search, "");
+  assert.ok(link.hash.startsWith(OFFER_MARKER), `the link's fragment is ${link.hash}`);
+  assert.ok(existsSync(path.join(repoRoot, "packages/app/src/app/index.tsx")));
+});
+
+test("app links on older QR codes still open the app at its start screen", async () => {
   // Expo Router turns a custom-scheme link into a route from its host and path and
   // leaves the fragment to OfferLinkListener. An empty path is the index route
   // (src/app/index.tsx), which exists before the app's stores are ready.
   const appRequire = createRequire(path.join(repoRoot, "packages/app/package.json"));
   const { extractExpoPathFromURL } = appRequire("expo-router/build/fork/extractPathFromURL");
-  const link = await pairingLinkOf(daemonHome());
+  const webLink = await pairingLinkOf(daemonHome());
+  const link = `${APP_LINK_ROOT}${webLink.slice(webLink.indexOf(OFFER_MARKER))}`;
+  assert.ok(parseConnectionOfferFromUrl(link), `no offer in ${link}`);
   assert.equal(extractExpoPathFromURL([], link), "", `Expo Router routes ${link} elsewhere`);
   assert.ok(existsSync(path.join(repoRoot, "packages/app/src/app/index.tsx")));
 
@@ -139,9 +160,10 @@ test("the app registers the link's scheme and routes the link to its start scree
 });
 
 // The app hands each link it is opened with to handlePairingLink (runtime/woowtech-pairing-link.ts,
-// which its unit tests cover). Upstream's own pairing links only ever reach its web app, so a merge
-// that limits OfferLinkListener to the web, or makes it parse links with the URL class, would stop
-// pairing through the phone's camera without failing anything else.
+// which its unit tests cover): the web app gets the new links, the phone app the app links of older
+// QR codes. Upstream's own pairing links only ever reach its web app, so a merge that limits
+// OfferLinkListener to the web, or makes it parse links with the URL class, would stop older QR
+// codes pairing through the phone's camera without failing anything else.
 test("the app hands every link it is opened with to handlePairingLink, on every platform", () => {
   const layoutPath = "packages/app/src/app/_layout.tsx";
   const layout = readFileSync(path.join(repoRoot, layoutPath), "utf8");
@@ -174,24 +196,34 @@ test("the app hands every link it is opened with to handlePairingLink, on every 
   );
 });
 
-test("homes created with upstream's default app.baseUrl get the app link; other values stay", async () => {
-  for (const upstreamDefault of ["https://app.paseo.sh", "https://app.paseo.sh/"]) {
-    const link = await pairingLinkOf(daemonHome({ version: 1, app: { baseUrl: upstreamDefault } }));
-    assert.ok(link.startsWith(APP_LINK_PREFIX), `${upstreamDefault} still hands out ${link}`);
+test("homes created with an earlier default app.baseUrl get the web app link; other values stay", async () => {
+  // Upstream's web app (internal test builds) and the app's own link scheme (0.8.1).
+  for (const earlierDefault of ["https://app.paseo.sh", "https://app.paseo.sh/", APP_LINK_ROOT]) {
+    const link = await pairingLinkOf(daemonHome({ version: 1, app: { baseUrl: earlierDefault } }));
+    assert.ok(link.startsWith(WEB_LINK_PREFIX), `${earlierDefault} still hands out ${link}`);
   }
   const chosen = "https://pair.example.test";
   const link = await pairingLinkOf(daemonHome({ version: 1, app: { baseUrl: chosen } }));
   assert.ok(link.startsWith(`${chosen}/#offer=`), `a chosen app.baseUrl became ${link}`);
 });
 
-test("a new home lets no web app origin in", () => {
+// The hosted web app may reach the daemon directly (owner decision D3): new homes get it in
+// config.json, so "[]" there turns it off. The daemon never adds it while resolving the config.
+test("a new home lets in the hosted web app and no other web origin", () => {
   const home = daemonHome();
-  assert.deepEqual(loadConfig(home, { env: {} }).corsAllowedOrigins, []);
+  assert.deepEqual(loadConfig(home, { env: {} }).corsAllowedOrigins, [WEB_APP_ORIGIN]);
   const written = readFileSync(path.join(home, "config.json"), "utf8");
   assert.doesNotMatch(written, UPSTREAM_WEB_APP, "the config.json a new home gets");
   // The CLI reads the defaults without creating the home (daemon pair, onboard).
   const cliDefaults = readPersistedConfig(daemonHome(), { defaultsIfMissing: true });
+  assert.deepEqual(cliDefaults.daemon.cors.allowedOrigins, [WEB_APP_ORIGIN], "the CLI's defaults");
   assert.doesNotMatch(JSON.stringify(cliDefaults), UPSTREAM_WEB_APP, "the CLI's defaults");
+  const turnedOff = daemonHome({ version: 1, daemon: { cors: { allowedOrigins: [] } } });
+  assert.deepEqual(
+    loadConfig(turnedOff, { env: {} }).corsAllowedOrigins,
+    [],
+    '"[]" in config.json',
+  );
 });
 
 // Internal test builds wrote upstream's web app into config.json's CORS allowlist. The daemon
@@ -206,7 +238,11 @@ test("homes from internal test builds no longer let upstream's web app in", () =
   });
   assert.deepEqual(loadConfig(home, { env: {} }).corsAllowedOrigins, [kept]);
   const env = { PASEO_CORS_ORIGINS: upstreamOrigins.join(",") };
-  assert.deepEqual(loadConfig(daemonHome(), { env }).corsAllowedOrigins, [], "PASEO_CORS_ORIGINS");
+  assert.deepEqual(
+    loadConfig(daemonHome(), { env }).corsAllowedOrigins,
+    [WEB_APP_ORIGIN],
+    "PASEO_CORS_ORIGINS",
+  );
   // Only the resolved config drops it: config.json keeps what the build wrote.
   const written = JSON.parse(readFileSync(path.join(home, "config.json"), "utf8"));
   assert.deepEqual(written.daemon.cors.allowedOrigins, [
@@ -257,6 +293,46 @@ test("no shipped source names upstream's web app", () => {
   assert.deepEqual(namedInMigration, [
     'export const UPSTREAM_DEFAULT_APP_BASE_URL = "https://app.paseo.sh";',
   ]);
+});
+
+// The pairing links, the web app the CLI names and the app's example link all come from
+// BRAND_WEB_APP (packages/protocol/src/brand-web-app.ts); the host is written out nowhere else.
+test("pairing links use the hosted web app's origin, and only brand-web-app.ts names its host", () => {
+  assert.equal(BRAND_WEB_APP.origin, WEB_APP_ORIGIN);
+  assert.equal(BRAND_PAIRING.appBaseUrl, BRAND_WEB_APP.origin);
+  assert.equal(BRAND_PAIRING.appSchemeRootUrl, APP_LINK_ROOT);
+  assert.deepEqual(
+    findInShippedSources([/smart\.woowtech\.io/], {
+      skipPaths: [WEB_APP_SOURCE],
+      skipComments: true,
+    }),
+    [],
+  );
+});
+
+// Upstream's onboard names its web app as the second next step; ours names our web app there.
+test("onboard names the hosted web app as the second next step", () => {
+  const onboardPath = "packages/cli/src/commands/onboard.ts";
+  const onboard = readFileSync(path.join(repoRoot, onboardPath), "utf8");
+  assert.ok(
+    onboard.includes("`2. Web app: ${BRAND_WEB_APP.origin}`,"),
+    `${onboardPath} no longer names the web app`,
+  );
+  assert.ok(
+    onboard.includes('import { BRAND_WEB_APP } from "@getpaseo/protocol/brand-web-app";'),
+    `${onboardPath} does not import BRAND_WEB_APP`,
+  );
+});
+
+// The origins bootstrap.ts always lets in, whatever config.json says. The hosted web app stays
+// out of them, so "[]" in config.json still turns it off.
+test("the daemon's fixed CORS origins leave the hosted web app out", () => {
+  const bootstrapPath = "packages/server/src/server/bootstrap.ts";
+  const bootstrap = readFileSync(path.join(repoRoot, bootstrapPath), "utf8");
+  const fixed = /^ {2}const fixedAllowedOrigins = \[[\s\S]*?^ {2}\];$/m.exec(bootstrap)?.[0];
+  assert.ok(fixed, `fixedAllowedOrigins is gone from ${bootstrapPath}`);
+  assert.ok(fixed.includes('"woowtech-smart://app"'), "the desktop app's origin moved");
+  assert.doesNotMatch(fixed, /smart\.woowtech\.io|BRAND_WEB_APP/);
 });
 
 test("host labels use normal server_info with hydration and generation guards", () => {

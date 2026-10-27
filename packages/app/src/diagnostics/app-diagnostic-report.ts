@@ -112,6 +112,7 @@ export function redactAppDiagnosticReport(report: string, hosts: HostProfile[]):
   }
   return redacted
     .replace(/(woowtech-smart|paseo):\/\/\S+/gi, "$1://[redacted]")
+    .replace(/#offer=[^\s"'<>]+/gi, "#offer=[redacted]")
     .replace(
       /([?&](?:password|token|secret|key|publicKey|daemonPublicKeyB64)=)[^&\s"']+/gi,
       "$1[redacted]",
