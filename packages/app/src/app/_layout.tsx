@@ -44,6 +44,7 @@ import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
 import { WorkspaceShortcutTargetsSubscriber } from "@/components/workspace-shortcut-targets-subscriber";
 import { FloatingPanelPortalHost } from "@/components/ui/floating-panel-portal";
 import { HostChooserModal, useHostChooser } from "@/hosts/host-chooser";
+import { WoowtechHostConfirmationSheet } from "@/hosts/woowtech-host-confirmation-sheet";
 import {
   getIsElectronRuntime,
   HEADER_INNER_HEIGHT,
@@ -597,6 +598,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <CommandCenter />
         <AddProjectFlowHost />
         <HostChooserModal />
+        <WoowtechHostConfirmationSheet />
         <ProviderSettingsHost />
         <WorkspaceSetupDialog />
         <KeyboardShortcutsDialog />
@@ -698,7 +700,7 @@ function OfferLinkListener({
 
   useEffect(() => {
     let cancelled = false;
-    // woowtech smart: pairing links open the app (runtime/woowtech-pairing-link.ts).
+    // woowtech smart: pairing links (runtime/woowtech-pairing-link.ts).
     const handleUrl = (url: string | null) =>
       void handlePairingLink(url, {
         importOffer: upsertDaemonFromOfferUrl,

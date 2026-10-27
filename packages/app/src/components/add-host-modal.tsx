@@ -12,6 +12,7 @@ import {
   serializeConnectionUriForStorage,
 } from "@/utils/daemon-endpoints";
 import { DaemonConnectionTestError } from "@/utils/test-daemon-connection";
+import { isHostConfirmationDeclined } from "@/runtime/woowtech-host-confirmations";
 import { AdaptiveModalSheet, AdaptiveTextInput, type SheetHeader } from "./adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 
@@ -395,6 +396,8 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
       onSaved?.({ profile, serverId, hostname, isNewHost });
       handleClose();
     } catch (error) {
+      // woowtech smart: the user said no to this host; the form stays as it was.
+      if (isHostConfirmationDeclined(error)) return;
       const {
         title,
         detail,

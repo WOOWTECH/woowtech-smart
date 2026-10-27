@@ -11,6 +11,7 @@ import { Field, FormTextInput } from "@/components/ui/form-field";
 import type { EditingTextInputHandle } from "@/components/ui/text-input";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { DaemonConnectionTestError } from "@/utils/test-daemon-connection";
+import { isHostConfirmationDeclined } from "@/runtime/woowtech-host-confirmations";
 import { AdaptiveModalSheet, type SheetHeader } from "./adaptive-modal-sheet";
 
 const FLEX_ONE_STYLE = { flex: 1 } as const;
@@ -96,6 +97,8 @@ export function AddRemoteSshHostModal({
       setErrorMessage("");
       result = await probeAndUpsertRemoteSshConnection(target);
     } catch (error) {
+      // woowtech smart: the user said no to this host; the form stays as it was.
+      if (isHostConfirmationDeclined(error)) return;
       const message =
         error instanceof DaemonConnectionTestError
           ? t("pairing.remoteSsh.errors.failedToConnect", { detail: error.message })

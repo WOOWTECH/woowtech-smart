@@ -25,6 +25,7 @@ const TRADITIONAL_CHINESE_ONLY_SURFACES = [
   "thirdPartyNotices.",
   "privacyPolicy.",
   "permissionActions.",
+  "pairingConfirmation.",
 ] as const;
 
 function isTraditionalChineseOnly(key: string): boolean {

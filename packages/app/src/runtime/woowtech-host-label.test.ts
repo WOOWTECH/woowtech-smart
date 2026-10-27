@@ -428,6 +428,9 @@ describe("woowtech host label at the real store/controller boundary", () => {
       },
       openProject: () => {},
       isCancelled: () => false,
+      // The user approves; the synthetic offer never reaches the confirmation's own checks.
+      confirm: async () => true,
+      clearLink: () => {},
     });
     await Promise.resolve();
     expect(imports).toEqual([]);
