@@ -23,7 +23,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 
   守門發現新的 workflow 檔時，push 之前先照第 18 節處理：GitHub 會啟用新的 workflow，觸發條件有 push 的話，加進它的那次 push 就會跑。
 
-  推播、T1 通知導頁和配對連結另外要跑的單元測試，分別列在第 16 節的「合併上游之後」和第 19 節的「上游合併後要再確認」。
+  推播、T1 通知導頁和配對連結另外要跑的單元測試，分別列在第 16 節的「合併上游之後」和第 19 節的「上游合併後要再確認」；網頁版的部署工具和守門在第 27 節，Hub 開關在第 28 節的「上游合併後要再確認」。
 
   只挑需要的修正時，照「上游同步紀錄」的做法，並在那一節記下拿了什麼、沒拿什麼。
 
@@ -335,8 +335,10 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - AI 內容回報：已完成的 AI 訊息提供 App 內回報入口，預設只送原因與版本／平台／語言；附加單則訊息需使用者選擇並檢查可編輯預覽。建置時以 `WOOWTECH_AI_CONTENT_REPORT_URL` 指定 HTTPS 收件網址。未設定時不可送出，不把本機草稿視為已送達。
   - 上線方案（2026-10-14 owner 決定照 aiot／platform 的做法，**同日已上線**）：Cloud Run 服務 `smart-reports` ＋ Firestore ＋ Cloudflare Worker（`reports.woowtech.io`），與 `smart-push` 同一套，專案 woowtech-smart、asia-east1。程式、部署腳本與維運手冊都在 `woowtech/ai-content-report-cloudrun`（先讀它的 `README.md`）。收件網址 `https://reports.woowtech.io/v1/ai-content-reports`，0.8.1 的正式建置帶這個網址。回報由 owner 處理：通知信一到就看，另外每週看一次 Firestore。
   - 通知與保存：收到回報時，Cloud Monitoring 的 log 警示寄信到 woowtech@designsmart.com.tw（信中只有收件編號；Google 限制每個警示政策每天最多 20 封）。回報保存 30 天，由 Firestore TTL 刪除（到期後通常 24 小時內，期間仍讀得到）；沒有備份；每天最多收 2000 筆，超過回 429。查看與刪除走 Firestore 主控台或該資料夾的 `admin.mjs`。
-  - 來源：手機 App 不帶 Origin；桌面版 `woowtech-smart://app`、網頁版 `https://smart.woowtech.io` 是跨來源請求，Worker 只對這兩個來源回 CORS（`DEFAULT_ALLOWED_ORIGINS`；`ALLOWED_ORIGINS` 會整份蓋掉它，而且下次 `wrangler deploy` 時會被清掉），其餘帶 Origin 的請求一律 403。網頁版的收件網址只能在 `expo export` 時寫進 bundle（`app.config.js` 的 `extra.aiContentReportUrl` → `APP_MANIFEST`）：`deploy-web.sh` 建置時帶這個網址，`check-export.mjs` 建置後檢查它在 bundle 裡（第 27 節）。
+  - 來源：手機 App 不帶 Origin；桌面版 `woowtech-smart://app`、網頁版 `https://smart.woowtech.io` 是跨來源請求，Worker 只對這兩個來源回 CORS（`DEFAULT_ALLOWED_ORIGINS`）。其他來源的 POST 回 403、預檢回 405，都不帶 CORS 標頭。Worker 的變數 `ALLOWED_ORIGINS` 會整份蓋掉這份清單：`wrangler deploy` 會清掉儀表板上設的 Text 值，設成 Secret 的卻會留著，儀表板貼程式的備案兩種都留著，所以每次重新部署前要先看線上有沒有設（步驟見 `woowtech/ai-content-report-cloudrun/README.md` 的「只更新 Worker」）。Origin 不是防濫用：不帶 Origin 的請求照樣收，防濫用靠每 IP 限流和每天 2000 筆的上限。網頁版的收件網址只能在 `expo export` 時寫進 bundle（`app.config.js` 的 `extra.aiContentReportUrl` → `APP_MANIFEST`）：`deploy-web.sh` 建置時帶這個網址，`check-export.mjs` 建置後檢查它在 bundle 裡（第 27 節）。
   - 上線時（10/14，owner 逐項核准）部署了服務與 Worker、實際收到警示信、把收件網址寫進建置，隱私權政策加了第 5 節「AI 內容回報」；兩個商店的揭露答案在 `plans/store-privacy-ai-report-1014.md`。之後改收件方式、保存期限或通知內容，政策與商店揭露要一起改。收件編號代表已寫入 Firestore，不代表已人工處理；逾時可能已送達，重試可能產生重複記錄。
+  - 網頁版回報的現況（D4）：Worker 的程式從 2026-10-27 起放行網頁版（`74b8710ae`），但線上跑的還是 2026-10-14 那一版（2026-10-27 17:14 CST 實測：網頁版來源的預檢得 405、沒有 CORS 標頭，桌面版來源得 204）。owner 照 `woowtech/ai-content-report-cloudrun/README.md` 的「只更新 Worker」重新部署並跑完 V1–V5、V8 之前，網頁版送不出回報。桌面版與網頁版的回報平台欄位分別是 `desktop` 與 `web`（D5，`2bd750531`；O10 未決，不要的話先 `git rm` 它的客戶端測試檔，再 `git revert 2bd750531`）。
+  - 回報 Worker 的 wrangler 登入：固定用 `XDG_CONFIG_HOME=~/.local/share/woowtech-smart/wrangler-reports`、wrangler 4.149.0，scopes 只有 `account:read user:read workers_scripts:write workers_routes:write zone:read`，用完一定 logout（O12 只放寬 Pages 的登入，因為這組 scopes 含 `workers_routes:write`，能改 zone 的 Worker 路由；第 27 節）。接收器 README 的指令寫成 shell 函式 `wr`，不是變數 `$WR`：zsh 不會把變數拆成指令和參數。Worker 更新流程的查證來源是 wrangler 4.149.0 自己的 `wrangler-dist/cli.js`（2026-10-27 唯讀讀過，沒有用它部署）；Tail Worker 在儀表板的哪裡看得到、這五個 scopes 夠不夠做 `custom_domain` 加 `ratelimits`，還沒確認，README 裡也這麼寫。
   - 第一版接收器（檔案佇列＋Gmail 通知）留在 `woowtech/ai-content-report-service`，**不是上線路徑**：它要常駐主機與持久磁碟，Gmail 通知要 OAuth，這兩樣都沒有。它的 `contract.mjs` 是兩個接收器共用的契約（Cloud Run 版有一份副本，`contract-sync.test.mjs` 檢查兩份一致；App 端的送出邏輯在 `packages/app/src/components/ai-content-report`），測試也保留。以下是它的細節，改用該方案時才用得上：
     - 獨立接收器位於 `woowtech/ai-content-report-service`，使用 Node 20 以上。`AI_REPORT_QUEUE_DIR` 必須是絕對路徑，目錄權限 0700、記錄 0600；預設僅監聽 loopback。`AI_REPORT_ALLOWED_ORIGINS` 是網頁來源的逗號分隔清單，不接受萬用字元。
     - 接收器附非 root `Dockerfile`，build context 為 repo 根目錄。單一 instance 使用私有持久化 volume；不能直接放到無持久磁碟或多 instance 的環境。`queue-admin.mjs show|delete <receipt>` 僅供受限管理終端使用；`show` 會顯示使用者選擇附加的內容，不能導入集中 log。刪除會同步目錄並確認記錄已消失。
@@ -353,6 +355,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 改政策就在 Odoo 改那篇文章。網址靠結尾的 391 找文章，標題改了，舊網址也會轉到新的。App 的資料流變了（例如加了分析或當機回報 SDK），政策和商店的隱私填答要一起改。
   - 守門 `woowtech/help-links.test.mjs`；測試 `woowtech-privacy-policy-row.test.tsx`（繁中、英文、點了開政策網址）。
     上游的外部連結開啟器只放行 http/https。現在 App 的 `utils/open-external-url.ts` 和桌面版的 `features/opener.ts` 多放行 `mailto:`，`file:`、`javascript:` 照樣擋掉。
+  - 網頁版的修改稿（owner 發佈；不在 repo 裡，在 `~/.local/share/woowtech-smart/plans/web-server-20261026/`）：`privacy-391-web-draft.md`；完整 HTML 是 `privacy-391-draft-required.html`（P1–P4）和 `privacy-391-draft-recommended.html`（P1–P8，P7 已補瀏覽器通知）。兩份都有 6 個待填記號（4 個日期、2 個包住 P3），P3（「也不保存」）要等 Worker 的 Observability（含 Tail Worker）、限流和 V8 看到 429 都確認後才保留。原內容備份在同一個資料夾的 `privacy-391-backup-20261027/content.html`。發佈後在本節加一行「政策於 <日期> 加入網頁版」。
 - 社群與快速求助：官網首頁 aiot.woowtech.io（`BRAND_LINKS.website`）。2026-09-26 起不再導向 LINE 官方帳號（擁有者決定）。
   - 說明選單的 Discord 改成「官方網站」。
   - 設定的「關於」頁和專案首頁底部，原本有 GitHub Star、贊助上游作者、Discord 三個按鈕，現在只留「官方網站」（地球圖示）。
@@ -369,7 +372,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 啟動失敗畫面的按鈕本來就是寫死的英文，「Open GitHub issue」改成「Email support」。
 - 還沒改的：
   - 外掛的相容性訊息和 `plugin init` 的範本仍連到 paseo.sh 的外掛文件。外掛 API 還是上游的，CLI 改名時決定保留。
-  - Hub（`hub.paseo.sh`）仍是上游的；daemon 的 Hub 關係預設關閉（`daemon.hub.enabled`，第 19 節）。配對連結打開我們自己的網頁版（第 19、27 節）。
+  - Hub（`hub.paseo.sh`）仍是上游的；daemon 的 Hub 關係預設關閉（`daemon.hub.enabled`，第 28 節）。配對連結打開我們自己的網頁版（第 19、27 節）。
   - e2e 測試（`packages/app/e2e/` 的瀏覽器與手機腳本、`packages/desktop/e2e/`）的預期值已改成我們的名稱、連結、port 和 scheme，但還沒實際跑過。
     e2e 用的隔離 daemon 不准用 6767 和 6770；手機 composer 腳本的預設 port 從 6770 改成 6771，因為 6770 現在是 woowtech smart 本身的 daemon。
     Maestro 流程（`packages/app/maestro/`）仍是上游的值。
@@ -554,7 +557,86 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
 - `packages/app/src/i18n/woowtech-copy.ts` 放 fork 自己的文字，也用來翻譯上游寫死在程式裡的英文。
   - 跟第 10 節的 `support-copy.ts` 一樣由 `i18n/brand.ts` 在載入翻譯時套用：放在每個語言的 `woowtech` 底下，元件用 `t("woowtech.…")` 取用。
   - 每種語言都提供相同的 key；既有文案保留各語系翻譯。新增專案與主機選擇器提供 zh-TW、zh-CN，其他語言使用英文。上游之後新增的語言先顯示英文。
-- 目前的內容：更新紀錄的空狀態（第 10 節）、設定頁的瀏覽器工具卡、「封存 PR 已合併的工作區」、終端機 Agent hooks 開關、「Unknown error」、側欄的「工作區」標題、配對畫面的「停用中繼」（第 11 節）。側欄的「顯示偏好」提示改用上游自己的 `sidebar.display.trigger`。
+- 目前的內容：更新紀錄的空狀態（第 10 節）、設定頁的瀏覽器工具卡、「封存 PR 已合併的工作區」、終端機 Agent hooks 開關、「Unknown error」、側欄的「工作區」標題、配對畫面的「停用中繼」（第 11 節）、配對確認畫面和「連到這台電腦」（`woowtech.pairingConfirmation`，第 19 節，文字列在下面）。側欄的「顯示偏好」提示改用上游自己的 `sidebar.display.trigger`。
+- 配對確認畫面和「連到這台電腦」的文字（`woowtech.pairingConfirmation`，B8；用法在第 19 節）：只有繁中和英文，其他語言用英文（`i18n/woowtech-copy.test.ts` 的 `TRADITIONAL_CHINESE_ONLY_SURFACES` 列著 `pairingConfirmation.`）。這是安全警語，**owner 在第一次部署前過目並定稿**。下面 26 個 key 都是這一輪新加的，沒有改到既有的 key；前 7 個（`title`、`description`、`descriptionChanged`、`hostLabel`、`fingerprintLabel`、`relayLabel`、`connect`）跟上游 `en.ts` 的 `pairing.hostConfirmation` 逐字相同。文字不寫網址（網頁版的網址只寫在 `protocol/src/brand-web-app.ts`）。取消和關閉用 `common.actions.cancel`、`common.actions.close`，連線中用 `common.connectionStatus.connecting`。`{{label}}`、`{{endpoint}}`、`{{relay}}` 是畫面代入的主機名稱、位址和中繼。
+  - `title`（新主機（`newHost`）、連線改變（`changedConnection`）和網頁版新增直連主機（`newDirectHost`）的標題）
+    - 繁中：要連線到這台主機嗎？
+    - English: Connect to this host?
+  - `description`（新主機和網頁版新增直連主機的說明）
+    - 繁中：這台主機將可以在渥屋智能裡執行程式，也能存取你其他已連線的主機。只有在你認得這台主機時才連線。
+    - English: This host will be able to run code in this app and reach your other connected hosts. Only connect if you recognize it.
+  - `descriptionChanged`（連線改變（同一把金鑰換 relay 或 TLS）的說明）
+    - 繁中：這個連結會改變你連到這台主機的方式。這台主機將可以在渥屋智能裡執行程式，也能存取你其他已連線的主機。只有在你認得這台主機時才連線。
+    - English: This link changes how you connect to this host. The host will be able to run code in this app and reach your other connected hosts. Only connect if you recognize it.
+  - `hostLabel`（「主機」列的標籤（主機 ID 或已存的主機名稱））
+    - 繁中：主機
+    - English: Host
+  - `fingerprintLabel`（金鑰指紋列的標籤）
+    - 繁中：金鑰指紋
+    - English: Key fingerprint
+  - `relayLabel`（中繼列的標籤）
+    - 繁中：中繼
+    - English: Relay
+  - `connect`（Connect 按鈕）
+    - 繁中：連線
+    - English: Connect
+  - `otherRelay`（用的不是渥屋智能的中繼時的警語；`{{relay}}` 是 `BRAND_RELAY.endpoint`）
+    - 繁中：這個連結用的不是渥屋智能的中繼（{{relay}}）。除非那是你自己架設的中繼，否則不要繼續。
+    - English: This link uses a relay other than woowtech smart's ({{relay}}). Continue only if you set up that relay yourself.
+  - `compareFingerprint`（新主機畫面說明下面的一行）
+    - 繁中：請和你電腦上「配對裝置」畫面顯示的金鑰指紋比對。
+    - English: Compare the key fingerprint with the one shown under Pair device on your computer.
+  - `savedRelayLabel`（連線改變畫面裡「已存的中繼」列的標籤）
+    - 繁中：已存的中繼
+    - English: Saved relay
+  - `endpointLabel`（位址列的標籤（直連、`hostIdChanged`））
+    - 繁中：位址
+    - English: Address
+  - `webWarning`（只在瀏覽器裡出現（testID `host-confirmation-web-warning`））
+    - 繁中：在瀏覽器裡，你加入的主機會存在這個瀏覽器：能使用這個瀏覽器的人，都能控制這些主機。你核准的主機，也能操作這台電腦上允許這個網站直接連線的 daemon。只在你自己的瀏覽器配對。
+    - English: In a browser, the hosts you add are kept in this browser: anyone who can use it can control them. A host you approve can also reach daemons on this computer that let this site connect directly. Only pair in your own browser.
+  - `keyChangedTitle`（金鑰改變（`keyChanged`，只能關閉）的標題）
+    - 繁中：這台主機的金鑰變了
+    - English: This host's key has changed
+  - `keyChangedDescription`（金鑰改變的說明；也用在「已存主機沒有金鑰、但它自己的 daemon 回報另一把金鑰」，那時「跟這裡為「X」存的不一樣」對沒存金鑰的主機不完全準確，owner 要的話可以拆一組文字）
+    - 繁中：這個連結裡的金鑰，跟這裡為「{{label}}」存的不一樣，所以什麼都沒有改。如果你重設過那台電腦上的 daemon，請先在設定裡移除這台主機，再重新配對。
+    - English: The key in this link is not the one saved for "{{label}}", so nothing was changed. If you reset the daemon on that computer, remove this host in Settings first, then pair again.
+  - `savedHostTitle`（直連撞到已存主機（`directConnectionToSavedHost`）的標題）
+    - 繁中：要替「{{label}}」加入這條連線嗎？
+    - English: Add this connection to "{{label}}"?
+  - `savedHostDescription`（直連撞到已存主機的說明）
+    - 繁中：{{endpoint}} 說它是你已存的主機「{{label}}」。直接連線沒有金鑰，無法確認這件事。只有在你確定這個位址就是那台電腦時才加入：加入後，這台主機可以在渥屋智能裡執行程式。
+    - English: {{endpoint}} says it is your saved host "{{label}}". A direct connection has no key, so this cannot be checked. Add it only if you are sure this address is that computer: the host will be able to run code in this app.
+  - `relayNoTls`（只在該中繼沒有 TLS 時，加在「中繼」和「已存的中繼」兩列；`{{endpoint}}` 是中繼的 host:port）
+    - 繁中：{{endpoint}}（無 TLS）
+    - English: {{endpoint}} (no TLS)
+  - `keyUnverifiedTitle`（核對不了金鑰（`keyUnverified`，只能關閉）的標題）
+    - 繁中：無法核對這個連結的金鑰
+    - English: This link's key could not be checked
+  - `keyUnverifiedDescription`（核對不了金鑰的說明；只有「關閉」鈕）
+    - 繁中：「{{label}}」加入時沒有金鑰，所以只能向那台電腦本身核對這個連結的金鑰，而剛才沒有成功。什麼都沒有改。請確認那台電腦已開機、並已連上這裡，再試一次。如果你重設過那台電腦上的 daemon，請先在設定裡移除這台主機，再重新配對。
+    - English: "{{label}}" was added without a key, so this link's key can only be checked with that computer itself, and that did not work just now. Nothing was changed. Make sure the computer is on and connected here, then try again. If you reset the daemon on it, remove this host in Settings first, then pair again.
+  - `hostIdChangedTitle`（主機 ID 改變（`hostIdChanged`）的標題）
+    - 繁中：這還是「{{label}}」嗎？
+    - English: Is this still "{{label}}"?
+  - `hostIdChangedDescription`（主機 ID 改變的說明）
+    - 繁中：這條連線（{{endpoint}}）原本存在「{{label}}」底下，但現在帶來的主機 ID 不一樣。如果你連線，「{{label}}」就會變成那台主機，並可以在渥屋智能裡執行程式。只有在你重設或重新安裝了這條連線後面的 daemon 時才連線。
+    - English: This connection ({{endpoint}}) is saved for "{{label}}", but it now comes with a different host ID. If you connect, "{{label}}" becomes that host, and it will be able to run code in this app. Connect only if you reset or reinstalled the daemon behind this connection.
+  - `savedServerIdLabel`（`hostIdChanged` 的「已存的主機 ID」列（testID `host-confirmation-saved-server-id`））
+    - 繁中：已存的主機 ID
+    - English: Saved host ID
+  - `reportedServerIdLabel`（`hostIdChanged` 的「現在的主機 ID」列（testID `host-confirmation-server-id`））
+    - 繁中：現在的主機 ID
+    - English: Host ID now
+  - `thisComputer`（歡迎頁「連到這台電腦」按鈕的標籤（testID `welcome-this-computer`））
+    - 繁中：連到這台電腦
+    - English: Connect to this computer
+  - `thisComputerFailedTitle`（找不到 daemon 時 toast 的第一行）
+    - 繁中：這台電腦上找不到 daemon
+    - English: No daemon found on this computer
+  - `thisComputerFailed`（找不到 daemon 時 toast 的第二行）
+    - 繁中：請先打開渥屋智能桌面版或啟動 daemon（localhost:6770），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。
+    - English: Start the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow.
 - `screens/settings/**` 寫死的英文已經全部盤點過，使用者看得到的 14 處都改用 `t()`。刻意沒改的：
   - `daemon-lifecycle.ts` 的技術性錯誤細節，顯示在已經翻譯的失敗訊息裡。
   - `plugins-page.tsx` 裡執行不到的離線錯誤。
@@ -1135,8 +1217,6 @@ secret 和外部服務：
 
 ### 19. 配對連結打開網頁版 smart.woowtech.io（2026-10-26；取代「直接叫起 App」）
 
-<!-- ALIGN(web-1026): 這一節照 web-spec.md 寫在 Lane A、B 合併之前。整合時把檔名、函式名、設定鍵、守門項目和測試數對齊實際合併的結果（lane 的 notes_for_readme），對齊完刪掉這行。 -->
-
 owner 2026-10-26 決定照上游的做法（D2）：配對連結和 QR Code 打開渥屋智能的網頁版 `https://smart.woowtech.io`（第 27 節），在瀏覽器裡就能用。這推翻 2026-09-25 的「直接叫起 App」，那時連結是 `woowtech-smart:///#offer=…`。原生 App 照樣接受任何含 `#offer=` 的連結：App 內掃描、貼上，以及舊 QR Code 的 `woowtech-smart:///#offer=…`。
 
 連結格式：
@@ -1155,32 +1235,36 @@ owner 2026-10-26 決定照上游的做法（D2）：配對連結和 QR Code 打�
 確認畫面（上游 364e6456e 有，fork 自己做一份對等的）：
 
 - 三個連結入口都在 probe 和存檔之前問：`handlePairingLink`（網頁版開連結、原生 App 被連結叫起）、`components/pair-link-modal.tsx`（網頁版和桌面版的「貼上配對連結」）、`app/pair-scan.tsx`（原生 App 的掃描器）。三個都經過 `runtime/woowtech-pairing-confirmation.ts` 的 `confirmPairingLink`。
-- 模組：`runtime/woowtech-offer-link.ts`（連結的定義、欄位驗證、金鑰指紋、`displayText`）、`runtime/woowtech-host-confirmations.ts`（確認的 store，全 App 一個 `hostConfirmations`）、`hosts/woowtech-host-confirmation-sheet.tsx`（畫面；`_layout.tsx` 在 `HostChooserModal` 後面掛一個，位置跟上游相同）、`hosts/woowtech-confirm-arming.ts`（防誤按）。型別和 API 名稱照上游的 `HostConfirmations`，日後挑上游時好換。
-- 分類：
-  - 新主機：問。畫面跟上游一樣列出主機 ID、金鑰指紋、中繼，另加一句請和電腦上「配對裝置」顯示的指紋比對。
+- 模組：`runtime/woowtech-offer-link.ts`（連結的定義、欄位驗證、金鑰指紋、`displayText`）、`runtime/woowtech-host-confirmations.ts`（確認的 store，全 App 一個 `hostConfirmations`）、`runtime/woowtech-pairing-confirmation.ts`（先驗證、等主機清單載入、再問；向已存主機自己的 daemon 要金鑰也在這裡）、`hosts/woowtech-host-confirmation-sheet.tsx`（畫面；`_layout.tsx` 在 `HostChooserModal` 後面掛一個，位置跟上游相同）、`hosts/woowtech-confirm-arming.ts`（防誤按）。型別和 API 名稱照上游的 `HostConfirmations`，日後挑上游時好換；fork 多了 `keyChanged`、`keyUnverified`、`hostIdChanged`、`newDirectHost` 幾種問題，`confirmLink` 也是非同步的（要向 daemon 要金鑰）。
+- 分類（`HostConfirmations.confirmLink`，依序判斷）：
+  - 別的已存主機已經有同一條連線、但主機 ID 不同（`hostIdChanged`）：問「這還是「X」嗎？」，列出主機名稱、已存的主機 ID、現在的主機 ID 和位址。存檔時 store 也依「完全相同的連線」合併，並把那台已存主機改成新的 id，所以同意就是把「X」換成另一台主機。所有平台都問（原生、桌面、SSH、loopback 也一樣）；id 以 `local:` 開頭的暫代主機不算（`HostRuntimeStore` 本來就要用探測到的真 id 取代它）。
+  - 沒存過（`newHost`）：問。畫面跟上游一樣列出主機 ID、金鑰指紋、中繼，另加一句請和電腦上「配對裝置」顯示的指紋比對。
   - 跟已存的連線完全相同：不問。
-  - 同一把金鑰，relay 或 TLS 不同：問，用更強的說明，並列出已存的標籤和新舊中繼。
-  - 金鑰不同：**不問、直接擋下**（O3，`BLOCK_KEY_CHANGE = true`），畫面只有「關閉」，請使用者先在設定裡移除這台主機再重新配對。理由：relay 連線的 id 不含金鑰，存檔又依 id 取代，同意就等於用另一把金鑰蓋掉真的那把，標籤和偏好的連線都不變。要改回上游的「問」，把常數改成 false。
-  - 已存的主機只有直連、沒有可比的金鑰：當成連線改變來問。
-- 欄位先驗證，不合格就顯示錯誤、不問：serverId 符合 `^[A-Za-z0-9_-]{1,64}$`；金鑰解碼後剛好 32 bytes；relay 端點是 ASCII 的主機名稱或中括號裡的 IPv6，加上 port。畫面上每一個來自連結、遠端或已存資料的值都經過 `displayText`：去掉控制字元、bidi 和零寬字元，合成單行，太長就截斷。
-- 用的不是 WOOWTECH 的中繼時，多一行警語。在瀏覽器裡（不是 Electron）再多一行：主機存在這個瀏覽器，別人用這個瀏覽器就能控制它；核准的主機也能操作這台電腦上允許這個網站直連的 daemon；只在自己的瀏覽器配對。
-- 防誤按（DoubleClickjacking）：畫面看得見而且有焦點連續 1000 ms，Connect 才「武裝」；blur、focus、visibilitychange、pagehide、pageshow、resize（原生是 AppState 的變化）任何一個發生都從頭計時，換題也是。武裝後還要一個新的手勢：畫面內的 pointermove（滑鼠）、觸控或筆的 pointerdown，或用 Tab 移動焦點。武裝前就開始的按壓、按住不放的鍵都不算。初始焦點在 Cancel，未武裝時 Connect 是停用的。COOP 不是這個攻擊的防護（攻擊頁導覽的是自己的分頁）。
-- 文字在 `i18n/woowtech-copy.ts` 的 `pairingConfirmation`（繁中和英文，其他語言用英文）；前 7 個 key 跟上游 en.ts 逐字相同。這是安全警語，owner 過目後定稿（B8）。
+  - 已存的主機有同一個 serverId、但沒有這條連線：先比金鑰。已存的主機有 relay 連線時，拿它們存的金鑰比（連結的金鑰是其中一把才算相同）；沒有 relay 連線（用「連到這台電腦」或直連表單加的），就沒有已存的金鑰可比，改向這台主機自己的 daemon 要金鑰：`client.getDaemonPairingOffer()`，也就是 `daemon.get_pairing_offer.request`，桌面版「配對裝置」用的同一個 RPC；走主機目前上線的那條連線，要 `server_info.features.daemonStatusRpc`，逾時 8 秒。結果有三種：
+    - 同一把金鑰，relay 或 TLS 不同（`changedConnection`）：問，用更強的說明，並列出已存的標籤和新舊中繼。
+    - 金鑰不同（`keyChanged`）：**不問、直接擋下**（O3，`BLOCK_KEY_CHANGE = true`），畫面只有「關閉」，請使用者先在設定裡移除這台主機再重新配對。理由：relay 連線的 id 不含金鑰，存檔又依 id 取代，同意就等於用另一把金鑰蓋掉真的那把，標籤和偏好的連線都不變。要改回上游的「問」，把常數改成 false；那時照上游問、不呼叫 RPC。
+    - 核對不了（`keyUnverified`）：也不問、只能關閉，畫面寫「無法核對這個連結的金鑰」。發生在要向 daemon 要金鑰、而主機沒上線、daemon 太舊、daemon 的 relay 關著（沒有配對連結可給）、呼叫失敗或逾時，或 daemon 回報的 id 不是這台。這一步是審查之後補的洞：沒有它，連結帶同一個 serverId 和別把金鑰，對沒存金鑰的主機只會得到普通的「連線改變」問題，同意就把對方的金鑰綁到這台主機。
+- 欄位先驗證，不合格就顯示錯誤、不問：serverId 符合 `^[A-Za-z0-9_-]{1,64}$`；金鑰（trim 後）只含 base64 或 base64url 的字元，解碼後剛好 32 bytes；relay 端點（trim 後）不含空白，是 ASCII 的主機名稱或中括號裡的 IPv6，加上 port。畫面上每一個來自連結、遠端或已存資料的值都經過 `displayText`：去掉控制字元、bidi 和零寬字元，換行變空白、合成單行，太長（預設 80 字）就截斷。錯誤訊息是英文，不含連結（那是憑證）。
+- 用的不是 WOOWTECH 的中繼時，多一行警語；該中繼沒有 TLS 時，「中繼」和「已存的中繼」兩列的位址後面加「（無 TLS）」，只把 TLS 關掉的連結不會再讓兩列看起來一樣。在瀏覽器裡（不是 Electron）再多一行：主機存在這個瀏覽器，別人用這個瀏覽器就能控制它；核准的主機也能操作這台電腦上允許這個網站直連的 daemon；只在自己的瀏覽器配對。
+- 防誤按（DoubleClickjacking）：畫面看得見而且有焦點連續 1000 ms，Connect 才「武裝」；blur、focus、visibilitychange、pagehide、pageshow、resize（原生是 AppState 的變化）任何一個發生都從頭計時，換題也是。武裝後還要一個新的手勢：畫面內的 pointermove（滑鼠）、觸控或筆的 pointerdown，或用 Tab 移動焦點（keydown 和 keyup 都算，因為焦點陷阱會吞掉繞回的 Tab 的 keydown）；觸控和原生的按壓本身就是手勢。武裝前就開始的按壓、按住不放的鍵都不算。沒有 press-in 就送到的 `onPress`（TalkBack、VoiceOver 的無障礙點擊，程式送的 click）：手機上 Connect 武裝後算；瀏覽器裡只有「Connect 是在武裝之後由鍵盤取得焦點」才算（用瀏覽器的 `:focus-visible` 判斷）。初始焦點在 Cancel（每題只在取消按鈕出現時聚焦一次，用 callback ref，所以緊湊版面裡比 sheet 晚掛上的內容也找得到），未武裝時 Connect 是停用的；Connect 在未武裝時取得焦點（例如雙擊的第二下點在停用的 Connect 上），焦點立刻移回 Cancel，之後的 Enter 只會按到取消。COOP 不是這個攻擊的防護（攻擊頁導覽的是自己的分頁）。
+- 文字在 `i18n/woowtech-copy.ts` 的 `pairingConfirmation`（繁中和英文，其他語言用英文）；前 7 個 key 跟上游 en.ts 逐字相同。這是安全警語，全部 26 個 key 的繁中和英文列在第 14 節，owner 過目後定稿（B8）。
 - 文字明講「這台主機將可以在渥屋智能裡執行程式」：核准一台主機之後，它在 `server_info` 宣告 `features.plugins`，App 就會用 `globalThis.eval` 執行它送來的外掛 client bundle（`plugins/evaluate.ts`）。上游一樣。
-- 指紋可以跟桌面版「配對裝置」QR Code 下方顯示的比對（`desktop/components/woowtech-pairing-fingerprint.tsx`）。CLI 的 `daemon pair` 這一輪不顯示指紋（「接下來」）。
+- 指紋可以跟桌面版「配對裝置」QR Code 下方顯示的比對（`desktop/components/woowtech-pairing-fingerprint.tsx`，testID `pair-device-fingerprint`，讀不出連結就不顯示）。CLI 的 `daemon pair` 這一輪不顯示指紋（「接下來」）。
 
 開機探測（O2）：
 
-- 公開的 https 網域（smart.woowtech.io、pages.dev、自架的）不在開機時探測 `localhost:6770`。桌面瀏覽器的歡迎頁多一顆「連到這台電腦」（`hosts/woowtech-this-computer-action.ts`，testID `welcome-this-computer`），按了才探測；手機瀏覽器不出這顆。原生 iOS、Android 的正式版也不探測，開發版照舊（iOS 模擬器和 Mac 共用 localhost）。
+- 公開的 https 網域（smart.woowtech.io、pages.dev、自架的）不在開機時探測 `localhost:6770`。桌面瀏覽器的歡迎頁多一顆「連到這台電腦」（`hosts/woowtech-this-computer-action.ts`，testID `welcome-this-computer`），按了才探測（呼叫 `probeAndUpsertDirectConnection`，端點跟開機探測的 `LOCALHOST_FALLBACK_ENDPOINT` 相同；連線中顯示「正在連線」且不重複送，被拒絕不提示，其他錯誤用 toast 顯示兩句說明）；手機瀏覽器（`userAgentData.mobile`、UA 含 Android、iPhone、iPad、iPod，或 MacIntel 而且 `maxTouchPoints` 大於 1）不出這顆。原生 iOS、Android 的正式版也不探測，開發版照舊（iOS 模擬器和 Mac 共用 localhost）。
 - dev server、http 的頁面（例如 daemon 自帶的網頁介面）、loopback 的頁面和沒有 `window` 的測試環境照上游探測。判斷看「https 而且不是 loopback」，不比對網址常數，pages.dev 和自架的網址也算公開。
-- 政策在 `runtime/woowtech-localhost-probe-policy.ts`（`decideLocalhostProbe`）；`host-runtime.ts` 的 `runBoot` 只多一個條件。
+- 政策在 `runtime/woowtech-localhost-probe-policy.ts`（`decideLocalhostProbe`）。`host-runtime.ts` 的 `runBoot` 在 initial connection hint 之後多一行 `if (!shouldAutoProbeLocalhost()) return;`，`EXPO_PUBLIC_LOCAL_DAEMON` 設定的位址和預設的 localhost 探測都在它後面，所以兩者都受政策管。`deploy-web.sh` 另外不准公開建置帶 `EXPO_PUBLIC_LOCAL_DAEMON`（第 27 節）。
+- 原生正式版沒有 `window.location`（React Native 設了 `window`，但 `app.config.js` 的 `router: {}` 沒有 origin，`@expo/metro-runtime` 就不裝 `location`）。政策的 `currentLocation()` 用 `window.location ?? null`，探測 hook 只在瀏覽器讀頁面的主機名稱，出任何例外都先關掉探測的 client 再丟出。
 - 理由：Chrome 151 起，網頁建立到本機位址的 WebSocket 就跳「存取這部裝置上的其他應用程式和服務」的提示，沒有 daemon 的訪客也會看到；同一支手機或電腦上的惡意程式先佔 `localhost:6770` 時，自動探測會零點擊把它加進來。能做的事不變：按「連到這台電腦」，或在直接連線表單填 localhost。
 - 要改回上游的自動探測：`PUBLIC_WEB_AUTO_PROBE`、`NATIVE_RELEASE_AUTO_PROBE` 改成 true。
 
 探測和直連的確認：
 
 - `host-runtime.ts` 的 `probeAndUpsertConnection` 在拿到對方的 serverId 之後、存檔之前呼叫 `confirmProbedHost`。開機探測、「連到這台電腦」、直連和 SSH 都走這裡，因為探測之前不知道對方是誰。
-- 回報的 serverId 撞到已存的主機、但那台主機沒有這條連線時問（直連沒有金鑰，無法確認對方是誰）；網頁版新增非 loopback 的直連主機時問。拒絕就關掉探測的 client，不合併、不切換連線；這次執行拒絕過的同一組不再問。原生和桌面版新增的直連主機照上游不問。
+- 問的情況：回報的 serverId 撞到已存的主機、但那台主機沒有這條連線（`directConnectionToSavedHost`；直連沒有金鑰，無法確認對方是誰）；別的已存主機已經有這條連線、但 id 不同（`hostIdChanged`，所有平台都問，同上面的分類）；網頁版新增非 loopback 的直連主機（`newDirectHost`；端點的主機等於頁面自己的主機名稱時不問，那是 daemon 自帶網頁介面的 initial hint）。原生和桌面版新增的直連主機、SSH 的新主機和 loopback 照上游不問。
+- 拒絕就關掉探測的 client，丟 `HostConfirmationDeclinedError`，不合併、不切換連線。拒絕只記在「App 自己發起、會重試」的探測（開機探測、`EXPO_PUBLIC_LOCAL_DAEMON`、initial connection hint）：同一組 serverId 加連線這次執行不再問。判斷方式是 `probeAndUpsertConnection` 有沒有帶 `timeoutMs`（這三個呼叫者都帶，直連表單、SSH 表單、「連到這台電腦」不帶），hook 傳 `background: input.timeoutMs !== undefined`。使用者發起的每次都再問；被新問題取代（使用者沒回答）的問題不算拒絕。
 - `add-host-modal.tsx`、`add-remote-ssh-host-modal.tsx` 遇到拒絕時不顯示「連線失敗」，視窗保持開著。
 
 網址列和歷史：
@@ -1202,6 +1286,8 @@ woowtech-smart daemon set-password   # 有設直連密碼的話，一起換掉
 - 舊的連結和 QR Code 從此連不上：relay 的加密對不上新金鑰。serverId 不變。
 - 每台裝置都要先在設定裡移除舊主機再配對：金鑰不同的連結會被確認畫面擋下（O3）。
 
+網站可能外洩之後，使用者在自己的電腦上要做的事：輪替金鑰只是第 1 步，後面還有 Hub、設定和重啟，寫在第 27 節事故流程的第 5 項。
+
 共用的瀏覽器：網頁版的主機、配對資訊和直連密碼都存在瀏覽器的 `@paseo:daemon-registry`（localStorage），確認畫面在瀏覽器裡會提醒。離開借用的電腦前，在設定裡逐台移除主機，或清除這個網站的瀏覽資料。「從這個瀏覽器移除所有主機」的按鈕還沒有（「接下來」）。
 
 原生 App 和桌面版：
@@ -1219,7 +1305,8 @@ woowtech-smart daemon set-password   # 有設直連密碼的話，一起換掉
 CORS（D3）：
 
 - 新 home 的 `daemon.cors.allowedOrigins` 是 `["https://smart.woowtech.io"]`：網頁版可以直接連這台電腦上的 daemon，跟上游放行自己的網頁版一樣。owner 已知道並接受風險：daemon 預設沒有密碼，網站一旦被入侵，就能操作訪客電腦上的 daemon（前提是訪客在 Chrome 或 Firefox 允許過本機連線）。
-- 這個來源不放進 `bootstrap.ts` 的固定清單，所以關得掉：`woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`，即時生效。`daemon config unset daemon.cors.allowedOrigins` 也是不放行（跟 relay 的 unset 回到預設「開」不同）。
+- 這個來源不放進 `bootstrap.ts` 的固定清單，所以關得掉：`woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`，**再執行 `woowtech-smart daemon restart`**。只改設定只擋新的連線，不是立即生效：白名單只在連線建立時檢查（WebSocket 升級和 HTTP 請求；`bootstrap.ts` 的 `cors.allowedOrigins` 處理只重填那個集合，`websocket-server.ts` 的 `verifyWsUpgrade` 才讀它），已經開著的連線不會被關，會一直是 owner 權限，直到它斷線或 daemon 重啟。`daemon config unset daemon.cors.allowedOrigins` 也是不放行（跟 relay 的 unset 回到預設「開」不同），一樣要重啟才會斷掉開著的連線。
+- 直連放行網頁版之後，網頁版的連線（包括跑在網頁版來源裡的外掛程式碼）就是 owner 連線，有所有權限，Hub 的開關擋不住它：能寫檔或跑程式的連線可以改 `config.json`、要求重啟，再連 Hub（下面和第 28 節）。
 - 既有的 home 不遷移：0.8.1 和之後的內部版寫的是 `[]`，2026-09-25 以前的內部版寫的是上游網頁版（解析時拿掉，第 11 節），這些 home 的網頁版只能走 relay。要開直連時合併原本的清單，不要整份蓋掉：
 
   ```bash
@@ -1230,13 +1317,12 @@ CORS（D3）：
 - 為什麼 `app.baseUrl` 遷移、CORS 不遷移：前者只決定連結長什麼樣子；CORS 是安全白名單，`[]` 是唯一關得掉的寫法，在解析時把它補成網頁版，就沒有人關得掉了。解析時只拿掉來源、不補上，白名單才查得清楚。
 - 瀏覽器實際能不能直連，看第 27 節「瀏覽器限制」：Chrome 和 Firefox 會先問；Safari 和所有 iOS 瀏覽器擋下 `ws://`，只能走 relay。
 
-<!-- ALIGN(web-1026): A-HUB 由 Lane A 同時實作。整合時對齊設定鍵、錯誤代碼、警告文字、守門檔名，對齊完刪掉這行。 -->
+Hub 關係預設關閉（A-HUB，owner 2026-10-27 已知悉；細節、限制和測試在第 28 節）：
 
-Hub 關係預設關閉（A-HUB，owner 2026-10-27 已知悉）：
-
-- daemon 新設定 `daemon.hub.enabled`，預設 `false`。關著的時候，`hub.management.daemon.connect` 回明確的錯誤、不連 Hub、不寫任何檔案；之前存下的 `$PASEO_HOME/hub-relationship.json` 不會在啟動時連出去，log 有一行警告指出這個設定鍵。打開之後照上游。
-- 理由：上游讓任何 owner session 都能叫 daemon 連到任意的 Hub 網址（`hubUrl` 可以是任何 http(s) 網址），daemon 把關係和憑證寫進 `hub-relationship.json`，之後每次啟動都主動連回去，連上的 socket 不檢查 daemon 密碼。D3 之後，直接連到訪客 daemon 的網頁版、任何配對過的裝置，或在網頁 origin 裡執行的外掛程式都是 owner session，這就成了一條長期的遠端控制通道。WOOWTECH 沒有經營 Hub；`hub.paseo.sh` 是上游的服務。
-- 真的要用 Hub 時：`woowtech-smart daemon config set daemon.hub.enabled true`。移除已有的關係：daemon 執行中用 `woowtech-smart hub disconnect --force`，停著時直接刪檔。
+- daemon 設定鍵 `daemon.hub.enabled`（boolean），預設關。關著的時候，`hub connect`、`hub init` 和 `hub permissions` 被拒（錯誤碼 `hub_disabled`），不對 Hub 發任何請求、不寫 `hub-relationship.json`；之前存下的關係不會在啟動時續連，`daemon.log` 有一行警告，點名 Hub 網址和這個設定鍵。打開之後照上游。
+- 理由：上游讓任何 owner 連線（CLI、配對過的 App、直連 daemon 的網頁版、跑在網頁版來源裡的外掛程式碼）都能要求 daemon 連到任意 http(s) 網址的 Hub；daemon 把關係存在 `$PASEO_HOME/hub-relationship.json`，之後每次啟動都重連，連上的 socket 不檢查 daemon 密碼。WOOWTECH 沒有經營 Hub，`hub.paseo.sh` 是上游的服務。D3 之後這條路更容易被碰到。
+- **這個開關不是擋 owner 連線的邊界**：owner 連線有所有權限，能寫檔或跑程式的連線可以改 `config.json`、要求重啟，再連 Hub。它防的是 App 和 CLI 在使用者沒注意時把 daemon 接上 Hub（包括上游託管的那個）。要連這條也擋，是 owner 另外要決定的事（第 28 節），這一輪沒做。
+- 真的要用 Hub 時：`woowtech-smart daemon config set daemon.hub.enabled true`，再 `woowtech-smart daemon restart`。移除已有的關係：daemon 執行中用 `woowtech-smart hub disconnect --force`（開關關著也能用），停著時直接刪 `$PASEO_HOME/hub-relationship.json`。
 
 文案：
 
@@ -1247,16 +1333,21 @@ Hub 關係預設關閉（A-HUB，owner 2026-10-27 已知悉）：
 
 - 手機相機掃新的 QR Code 會開瀏覽器，不是開 App，跟上游一樣，寫在版本說明裡。要讓手機 App 配對，在 App 裡掃描或貼上。在台灣，從 LINE 打開的連結會進 LINE 的內建瀏覽器，儲存跟一般瀏覽器分開。
 - 日後要做 universal links 和 App Links：同一個網域加 Associated Domains 和 `assetlinks.json`，App 加 `src/app/+native-intent.tsx`，把 `/#offer=` 改寫成 `/`（`expo-router/build/fork/extractPathFromURL` 對 https 連結會回傳 `#offer=…`）。上游也沒有。
-- 確認畫面跟上游 364e6456e 的差異：金鑰改變直接擋下、中繼警語、瀏覽器警語、防誤按、欄位驗證、兩種直連的確認、繁中文字、清 hash 和去重。
+- 確認畫面跟上游 364e6456e 的差異：金鑰改變直接擋下（已存主機沒有金鑰時，向它自己的 daemon 核對）、主機 ID 改變的確認、中繼警語和「（無 TLS）」標示、瀏覽器警語、防誤按、欄位驗證、兩種直連的確認、繁中文字、清 hash 和去重。
 
-接點（上游的檔）：
+已知限制（這一輪不處理）：
 
-<!-- ALIGN(web-1026): 整合時照實際的 diff 核對行數。 -->
+- Android 10–11（`minSdk` 29）上，有「顯示在其他應用程式上層」權限的 App 可以用會穿透觸控的覆蓋層，對確認畫面做點擊劫持；平台要到 Android 12 才擋穿透不受信任覆蓋層的觸控。要修需要原生程式（`filterTouchesWhenObscured`，或檢查 `MotionEvent.FLAG_WINDOW_IS_OBSCURED`）和實機測試。
+- 只有直連、沒有 relay 連線的已存主機，遇到同 serverId 的配對連結時要向它自己的 daemon 要金鑰；daemon 不回報 `server_info.features.daemonStatusRpc`（`protocol/src/messages.ts` 的 COMPAT 註解寫它是 v0.1.76 加的，所以只有更舊的 daemon 沒有）的話永遠核對不了，連結被擋成「無法核對這個連結的金鑰」，要先移除那台主機再重新配對。冷啟動的連結可能在直連主機上線之前就走到這一步，被擋一次，主機連上後再開就行。這個檢查最多等 8 秒才顯示畫面（貼上視窗會顯示儲存中；從網址列開的連結在這段時間什麼都不顯示）。
+- 「App 自己發起」和「使用者發起」的探測，靠 `probeAndUpsertConnection` 有沒有帶 `timeoutMs` 這個慣例區分。`woowtech-probe-guard.test.ts` 用真的 store 鎖住現在的行為，但上游若替表單的探測加了逾時，那個表單的拒絕就會又被記住。
+- `keyChangedDescription` 的文字也出現在「已存主機沒有金鑰、但它自己的 daemon 回報另一把金鑰」，寫的是「跟這裡為「X」存的不一樣」，對沒存金鑰的主機不完全準確；owner 要的話可以再拆一組文字（第 14 節）。
 
-- protocol：`connection-offer.ts`（1 行註解）。
-- server：`persisted-config.ts`（CORS 預設 2 行加 import；Hub 的設定鍵）、`config.ts`（只改註解）、`session/daemon/diagnostics.ts`（遮罩 1 行）、Hub 的接點（A-HUB）。`bootstrap.ts`（熱檔）的固定 CORS 清單不放網頁版。
-- CLI：`onboard.ts`（1 行加 import）。
-- App：`_layout.tsx`（熱檔，1 行 JSX 加 import）、`runtime/host-runtime.ts`（熱檔，`runBoot` 的條件和 `probeAndUpsertConnection` 的 hook，各 1 行加 import）、`components/pair-link-modal.tsx`、`app/pair-scan.tsx`（各 2 行；掃描器的 catch 拿掉 `lastScannedRef.current = null`，連線失敗後同一個 QR Code 不會每一格畫面都重問）、`components/welcome-screen.tsx`（「連到這台電腦」）、`components/add-host-modal.tsx`、`add-remote-ssh-host-modal.tsx`（各 1 行）、`desktop/components/pair-device-section.tsx`（1 行 JSX）、`diagnostics/app-diagnostic-report.ts`（遮罩 1 行）、`package.json`（`deploy:web`，第 27 節）。
+接點（上游的檔；行數是 `git diff acb733872` 的結果，以下 +新增／−刪除）：
+
+- protocol：`connection-offer.ts`（+1／−1，一行註解）。新檔 `brand-web-app.ts`；`brand-pairing.ts`（fork 的檔）。
+- server：`persisted-config.ts`（+11／−2：CORS 預設換成網頁版並加 import；`daemon.hub.enabled` 的 schema）、`config.ts`（+2／−1，只改註解）、`session/daemon/diagnostics.ts`（+1，遮罩）、`session/daemon/daemon-session.ts`（+3／−1，A-HUB 的 `hub_disabled` 碼）、`hub/relationship-controller.ts`（+9／−2，A-HUB）。`bootstrap.ts`（熱檔）的固定 CORS 清單不放網頁版，沒有改。
+- CLI：`onboard.ts`（+5／−3：加 import 和「Web app」一行，後面的編號順延）。
+- App：`_layout.tsx`（熱檔，+3／−1：import、一行 JSX、一行註解）、`runtime/host-runtime.ts`（熱檔，+12 行，全是新增、沒有改到上游的行：2 行 import、`runBoot` 的條件 2 行、`probeAndUpsertConnection` 的 hook 8 行）、`components/pair-link-modal.tsx`（+3）、`app/pair-scan.tsx`（+5／−1；掃描器的 catch 拿掉 `lastScannedRef.current = null`，連線失敗後同一個 QR Code 不會每一格畫面都重問）、`components/welcome-screen.tsx`（+5／−1，「連到這台電腦」）、`components/add-host-modal.tsx`、`add-remote-ssh-host-modal.tsx`（各 +3）、`desktop/components/pair-device-section.tsx`（+2）、`diagnostics/app-diagnostic-report.ts`（+1，遮罩）、`package.json`（`deploy:web` 一行，第 27 節）。
 
 連線後補主機名稱：
 
@@ -1267,15 +1358,20 @@ Hub 關係預設關閉（A-HUB，owner 2026-10-27 已知悉）：
 
 測試與守門：
 
-<!-- ALIGN(web-1026): 測試檔名和項目照 web-spec.md 2.3 節；整合時換成實際的檔名、項目和數量。 -->
-
-- protocol `brand-pairing.test.ts`：`appBaseUrl` 等於 `BRAND_WEB_APP.origin`，`new URL(origin).origin` 不變；範例文字；舊 scheme 連結仍解析得到 offer。
-- server：`pairing-link.test.ts`（新 home 的連結、三種舊預設值的遷移、`PASEO_APP_BASE_URL` 照用、`daemon config set` 後重新載入、自訂的值照用）；`cors-defaults.test.ts`（新 home 的值寫在三個地方；實際起 daemon，網頁版拿到 ACAO、WebSocket 能開，上游網頁版、結尾斜線、http、別的 port、子網域、長得像的網域和 pages.dev 都回 403；`[]` 和沒有 `daemon.cors` 都關得掉）；`woowtech-cors-origins.test.ts`（只拿掉上游網頁版，不補任何來源）；`session/daemon/woowtech-offer-redaction.test.ts`；A-HUB 的單元測試。
-- CLI：`commands/daemon/pair.app-link.test.ts`（新 home 和寫著 `woowtech-smart:///` 的 home 都產生網頁版連結）、`utils/daemon-target.app-link.test.ts`。
-- App：`runtime/woowtech-offer-link.test.ts`、`woowtech-host-confirmations.test.ts`、`woowtech-pairing-confirmation.test.ts`、`woowtech-pairing-link.test.ts`、`woowtech-pairing-address-bar.test.ts`、`woowtech-localhost-probe-policy.test.ts`、`woowtech-probe-guard.test.ts`（真的 `HostRuntimeStore`：撞到已存主機時問、拒絕時 registry 不變）、`woowtech-host-label.test.ts`；`hosts/woowtech-confirm-arming.test.ts`、`woowtech-host-confirmation-sheet.test.tsx`、`woowtech-this-computer-action.test.ts`；`desktop/components/woowtech-pairing-fingerprint.test.tsx`；`components/pair-link-modal.app-link.test.tsx`、`pair-scan.app-link.test.tsx`；`i18n/woowtech-copy.test.ts`；`diagnostics/woowtech-offer-redaction.test.ts`。熱檔測試 `host-runtime.test.ts` 不改，但整個檔要過。
-- 守門 `woowtech/pairing.test.mjs`：從原始碼跑 daemon 的設定和配對（網頁版前綴、遷移、CORS 預設）；新連結的 origin、路徑和 hash，舊 App 連結仍進 index 路由、iOS 和 Android 的 scheme 註冊；`OfferLinkListener` 只有一個、不在條件裡；`onboard` 的 Web app 那一行；出貨的原始碼只有 `brand-web-app.ts` 寫出 smart.woowtech.io、沒有 app.paseo.sh；`bootstrap.ts` 的固定清單沒有網頁版。
-- 守門 `woowtech/pairing-confirmation.test.mjs`：三個入口都先問再連；`handlePairingLink` 本體裡清網址列、問、匯入的先後；會存主機的每個 API 只准白名單裡的檔案呼叫；`_layout.tsx` 不帶條件地掛一個確認畫面；`host-runtime.ts` 的兩處 hook；兩個 modal 認得拒絕；「連到這台電腦」的端點跟 `LOCALHOST_FALLBACK_ENDPOINT` 相同；確認 store 在執行期不匯入 `host-runtime`。每一項都有突變驗證。
-- 守門 `woowtech/hub-gate.test.mjs`：`daemon.hub.enabled` 預設關，接點還在。
+- protocol `brand-pairing.test.ts`（7 項）：`appBaseUrl` 等於 `BRAND_WEB_APP.origin`，`new URL(origin).origin` 不變；範例文字是網頁版的連結；網頁版的連結、舊 QR Code 的 App 連結（`woowtech-smart:///`）、daemon 被設定成發出的別種網頁連結，都讀得到 offer；兩個根網址（網頁版的和 App 的）都沒有 offer。
+- server：
+  - `pairing-link.test.ts`（18 項）：新 home 的連結是網頁版的根網址加 offer，沒給 `app.baseUrl` 的 offer 也是；三種舊預設值（`https://app.paseo.sh`、`https://app.paseo.sh/`、`woowtech-smart:///`）改發網頁版的連結，daemon 重新載入 `config.json` 時同一條規則也成立（2 項）；自己設的 4 種值，和 5 種長得像舊預設值的字串（前後有空白、大小寫不同、少一個斜線、多一個斜線）都照用；`PASEO_APP_BASE_URL` 照用，設成 App 的 scheme 也照用。
+  - `cors-defaults.test.ts`（8 項）：新 home 的 `config.json` 和 CLI 對還沒建的 home 的預設都是網頁版；自己或開發環境加的來源照算；實際起 daemon，網頁版、桌面版（`woowtech-smart://app`）和 daemon 自帶的網頁介面能連（HTTP 拿到 ACAO、WebSocket 能開），上游網頁版和長得像我們的來源（`http://`、別的 port、子網域、`smart.woowtech.io.evil.test`、`woowtech-smart-web.pages.dev` 等）都被拒；沒列任何來源的 home、`[]` 在 daemon 重新載入之後、沒有 `daemon.cors` 的 `config.json`，都不放行網頁版。
+  - `woowtech-cors-origins.test.ts`（8 項）：只拿掉上游網頁版，不補任何來源；環境變數 `PASEO_CORS_ORIGINS` 和重新載入也一樣；網頁版跟上游並列時留下網頁版。
+  - `session/daemon/woowtech-offer-redaction.test.ts`（3 項）：daemon 診斷裡的 `#offer=` 後面被遮成 `[redacted]`（引號、JSON、標記裡，任何主機的連結都一樣），舊 App 連結照樣整段遮。
+  - Hub 開關的測試在第 28 節。
+- CLI：`commands/daemon/pair.app-link.test.ts`（3 項：新 home、上游預設的 home 和 0.8.1 寫著 `woowtech-smart:///` 的 home 都產生網頁版連結）、`utils/daemon-target.app-link.test.ts`（1 項）。
+- App，`runtime/`：`woowtech-offer-link.test.ts`（16 項）、`woowtech-host-confirmations.test.ts`（33 項）、`woowtech-pairing-confirmation.test.ts`（7 項）、`woowtech-pairing-link.test.ts`（17 項）、`woowtech-pairing-address-bar.test.ts`（5 項）、`woowtech-localhost-probe-policy.test.ts`（17 項）、`woowtech-probe-guard.test.ts`（8 項；真的 `HostRuntimeStore`：撞到已存主機時問、拒絕時 registry 不變）、`woowtech-host-label.test.ts`（11 項）；`hosts/`：`woowtech-confirm-arming.test.ts`（26 項）、`woowtech-host-confirmation-sheet.test.tsx`（19 項）、`woowtech-this-computer-action.test.ts`（6 項）；`desktop/components/woowtech-pairing-fingerprint.test.tsx`（3 項）、`pair-device-section.relay-off.test.tsx`（2 項）；`components/pair-link-modal.app-link.test.tsx`（5 項）、`pair-scan.app-link.test.tsx`（8 項）；`i18n/woowtech-copy.test.ts`（9 項）；`diagnostics/woowtech-offer-redaction.test.ts`（3 項）；`navigation/woowtech-welcome-host-online.test.ts`（4 項）。熱檔測試 `runtime/host-runtime.test.ts`（73 項）不改，但整個檔要過。
+- 守門 `woowtech/pairing.test.mjs`（13 項）：1 新 home 的連結是網頁版的根網址加 offer；2 網頁版拿到連結時 offer 只在 fragment、`search` 是空的，`src/app/index.tsx` 還在；3 舊 QR Code 的 App 連結仍進啟動畫面（iOS、Android 的 scheme 註冊照舊）；4 `OfferLinkListener` 把每個連結交給 `handlePairingLink`，不在條件裡、沒有平台判斷；5 早期預設的 `app.baseUrl` 會遷移，其他值不動；6 新 home 只放行網頁版這一個網頁來源；7 內部測試版的 home 不再放行上游網頁版；8 出貨的原始碼沒有 `app.paseo.sh`；9 連結用 `BRAND_WEB_APP` 的 origin，只有 `brand-web-app.ts` 寫出它的主機；10 `onboard` 的第二個下一步是網頁版；11 `bootstrap.ts` 的固定 CORS 清單沒有網頁版；12 補主機名稱用正常的 `server_info`，有 hydration 和世代的保護；13 host label 的冷啟動預算只在第一個整合案例。
+- 守門 `woowtech/pairing-confirmation.test.mjs`（8 項，每項附突變 fixture）：1 掃描器和貼上欄位先問再連；2 `handlePairingLink` 本體裡清網址列、問、匯入的先後；3 會存主機或解析 offer 的每個 API 只准白名單裡的檔案呼叫（`upsertConnectionFromOfferUrl`、`upsertConnectionFromOffer`、`upsertRelayConnection`、`probeAndUpsertConnection`、`upsertDirectConnection`、`probeAndUpsertDirectConnection`、`probeAndUpsertRemoteSshConnection`、`upsertConnectionFromListen`、`ConnectionOfferSchema.parse`，各有自己的白名單）；4 `_layout.tsx` 不帶條件地掛一個確認畫面；5 `host-runtime.ts` 在探測之後問，而且 `runBoot` 裡 `if (!shouldAutoProbeLocalhost()) return;` 要在 `this.bootstrapConfiguredOverride(` 和 `this.bootstrapDefaultLocalhost(` 之前，整個檔沒有別處呼叫這兩個；6 直連和 SSH 表單被拒絕時安靜關閉；7 「連到這台電腦」的端點跟開機探測的 `LOCALHOST_FALLBACK_ENDPOINT` 相同；8 確認 store 在執行期不匯入 `host-runtime`（只准 `import type`）。它讀 `packages/app/src` 全部非測試檔（約 3 秒），CI 的 `node --test woowtech/*.test.mjs` 會跑到；上游合併帶進新的加主機入口時第 3 項會失敗，白名單在檔內的 `ALLOWED_CALLERS`。
+- 守門 `woowtech/hub-gate.test.mjs`（7 項）：Hub 開關，見第 28 節。
+- 診斷報告：`diagnostics/woowtech-offer-redaction.test.ts`（App）和 `session/daemon/woowtech-offer-redaction.test.ts`（daemon）檢查 `#offer=` 後面被遮成 `[redacted]`。
+- 已測和沒測：這些是單元、jsdom 和行程內 daemon 的測試。需要在真的瀏覽器和裝置上看一次的，列在「接下來」的實機驗收。
 
 上游合併後要再確認：
 
@@ -1285,17 +1381,18 @@ node --test woowtech/*.test.mjs
 (cd packages/protocol && npx vitest run src/brand-pairing.test.ts --bail=1)
 (cd packages/server && npx vitest run src/server/pairing-link.test.ts src/server/cors-defaults.test.ts src/server/woowtech-cors-origins.test.ts src/server/session/daemon/woowtech-offer-redaction.test.ts --bail=1)
 (cd packages/cli && npx vitest run src/commands/daemon/pair.app-link.test.ts src/utils/daemon-target.app-link.test.ts --bail=1)
-(cd packages/app && npx vitest run src/runtime/woowtech-pairing-link.test.ts src/runtime/woowtech-host-confirmations.test.ts src/runtime/woowtech-probe-guard.test.ts src/runtime/host-runtime.test.ts src/components/pair-link-modal.app-link.test.tsx src/components/pair-scan.app-link.test.tsx --bail=1)
+(cd packages/app && npx vitest run --maxWorkers=1 src/runtime/woowtech-offer-link.test.ts src/runtime/woowtech-host-confirmations.test.ts src/runtime/woowtech-pairing-confirmation.test.ts src/runtime/woowtech-pairing-link.test.ts src/runtime/woowtech-pairing-address-bar.test.ts src/runtime/woowtech-localhost-probe-policy.test.ts src/runtime/woowtech-probe-guard.test.ts src/runtime/woowtech-host-label.test.ts src/runtime/host-runtime.test.ts src/hosts/woowtech-confirm-arming.test.ts src/hosts/woowtech-host-confirmation-sheet.test.tsx src/hosts/woowtech-this-computer-action.test.ts src/desktop/components/woowtech-pairing-fingerprint.test.tsx src/desktop/components/pair-device-section.relay-off.test.tsx src/components/pair-link-modal.app-link.test.tsx src/components/pair-scan.app-link.test.tsx src/i18n/woowtech-copy.test.ts src/navigation/woowtech-welcome-host-online.test.ts src/diagnostics/woowtech-offer-redaction.test.ts --bail=1)
 ```
 
 - 守門的出貨原始碼掃描失敗時，看新出現的地方是誰在用：預設值改用 `BRAND_PAIRING` 或 `BRAND_WEB_APP`，給人看的文字改成我們的。
 - 上游改了 `encodeOfferToFragmentUrl` 的組法或 `config.ts` 的 `app.baseUrl` 解析：保持連結是 `https://smart.woowtech.io/#offer=…`，舊 scheme 仍進 index。
-- 挑上游 364e6456e（連同它依賴的 e1c769c0）時：改用上游的 `HostConfirmations` 和 `HostConfirmationSheet`，`_layout.tsx` 那一行會衝突。fork 加的部分改成補丁：防誤按、中繼警語、瀏覽器警語、金鑰改變擋下、兩種直連的確認、欄位驗證、繁中文字、去重和清 hash。之後刪掉 fork 的確認模組，`pairing-confirmation.test.mjs` 的白名單也要改。
-- 上游改到 `runBoot` 的 `bootstrapDefaultLocalhost` 分支或 `probeAndUpsertConnection`：保留我們的兩處 hook，`pairing-confirmation.test.mjs` 會擋掉漏接的情況。
+- 挑上游 364e6456e（連同它依賴的 e1c769c0）時：改用上游的 `HostConfirmations` 和 `HostConfirmationSheet`，`_layout.tsx` 那一行會衝突（改用上游的，再補回 fork 的部分）。fork 加的部分改成補丁：防誤按、中繼警語和「（無 TLS）」、瀏覽器警語、金鑰改變擋下和向 daemon 核對、主機 ID 改變的確認、兩種直連的確認、欄位驗證、繁中文字、去重和清 hash。之後刪掉 fork 的確認模組，`pairing-confirmation.test.mjs` 的白名單也要改。
+- 上游改到 `runBoot`（`bootstrapConfiguredOverride`、`bootstrapDefaultLocalhost` 或它們前面的條件）或 `probeAndUpsertConnection`：保留我們的兩處 hook，`pairing-confirmation.test.mjs` 第 5 項會擋掉漏接的情況（`runBoot` 要保持「提早 return」的形狀，不能改回 `else if`）。
 - 升級 expo-router：守門直接讀 `expo-router/build/fork/extractPathFromURL`，搬家時會失敗。確認新版仍把 `woowtech-smart:///` 對到 index，再改守門的路徑。
 - 上游新增 `src/app/+native-intent.tsx`、改了 `src/app/index.tsx`，或把 index 放進 `Stack.Protected`：舊的 App 連結可能不再落在啟動畫面，要在模擬器上用 `xcrun simctl openurl` 和 `adb shell am start` 重新確認。
 - 上游在新 home 的 CORS 預設或 `bootstrap.ts` 的固定清單加回網頁版：`cors-defaults.test.ts` 和守門會失敗。
 - 上游改寫 `resolveCorsAllowedOrigins`（例如多一個來源）：`withoutUpstreamWebApp` 要包住最後的回傳值，接點不見時 `woowtech-cors-origins.test.ts` 和守門的 CORS 那一項會失敗。
+- 上游新增的 Hub 測試或程式：見第 28 節的「上游合併後要再確認」。
 
 ### 20. 暫停工作區自動命名與 Git metadata 生成
 
@@ -1602,7 +1699,7 @@ node --test woowtech/*.test.mjs
 - 輸出在 repo 外面：`~/.local/share/woowtech-smart/web-dist/<sha 前 12 碼>`（下面叫 `<OUT>`），才不會蓋掉 `packages/app/dist`（daemon 自帶的網頁介面和桌面版用的）。建置先寫進 `web-dist/.stage-<sha 前 12 碼>.*` 這個新目錄；建置成功、建置後的來源檢查（下面）也過了，才搬成 `<OUT>`。建置失敗或來源檢查沒過時，原來的 `<OUT>` 原封不動，stage 也會刪掉（被 kill 而留下一天以上的 stage，下次建置時清掉）。所以同一個 sha 的另一次執行（例如本機 E2E 的 dry-run）不會在上傳到一半時刪掉或改寫正在用的匯出。旁邊的 `<OUT>.build.json` 記下 commit、`package-lock.json` 的 SHA-256、是否在 `npm ci` 的安裝上建置、工作樹是否乾淨，以及匯出裡**每個檔的 SHA-256**；它放在匯出的外面，因為匯出裡的每個檔都會上傳成公開檔。
 - 上傳的不是 `<OUT>` 本身，是腳本自己暫存目錄裡的一份複本（`upload/`）：複本的每個檔都要跟 `<OUT>.build.json` 的清單相同，`check-export.mjs` 跑在複本上，`wrangler pages deploy` 和 `verify-live.mjs` 用的也是這份複本。檢查過的位元組就是上傳的位元組，上傳前後有人改 `<OUT>` 也影響不到。複本跟清單對不上時，當作沒有這個匯出，重建。
 - 上傳時遇到同一個 commit、同一個 lockfile、乾淨的工作樹建出來、而且清單對得上的匯出，直接重用（檢查照樣重跑），所以可以先 dry-run 建好，再上傳（第一次部署前也先 dry-run，才不必等建置才發現護欄檔案要核准）；加了 `WOOW_FRESH_INSTALL=1` 時，只重用在 `npm ci` 的安裝上建的。dry-run 一律重建。
-- 不准有 `packages/app/.env*`，環境裡也不准設 `EXPO_PUBLIC_LOCAL_DAEMON`（連空字串也算；代碼 2）：Expo 會自動讀這些檔，也會把 `EXPO_PUBLIC_*` 寫進 bundle，而 `EXPO_PUBLIC_LOCAL_DAEMON` 會讓每位訪客的瀏覽器每秒探測那個位址、永不停止（O2 的「公開網域不自動探測」管不到它；Lane B 的資安審查提出）。這些檔被 `.gitignore` 忽略，`git status` 看不到，所以腳本另外檢查，建置指令裡也再拿掉一次。
+- 不准有 `packages/app/.env*`，環境裡也不准設 `EXPO_PUBLIC_LOCAL_DAEMON`（連空字串也算；代碼 2）：Expo 會自動讀這些檔，也會把 `EXPO_PUBLIC_*` 寫進 bundle，而 `EXPO_PUBLIC_LOCAL_DAEMON` 會讓每位訪客的瀏覽器每秒探測那個位址、永不停止（Lane B 的資安審查提出）。Lane B 之後讓這個設定也受 O2 的政策管（`runBoot` 的提早 return 在它前面，公開的 https 頁面不探測，第 19 節），但它不該出現在公開的建置裡，所以腳本照樣擋。這些檔被 `.gitignore` 忽略，`git status` 看不到，所以腳本另外檢查，建置指令裡也再拿掉一次。
 
 `deploy-web.sh`：
 
@@ -1646,7 +1743,8 @@ test ! -d ~/.wrangler && cd "$(mktemp -d)" && CLOUDFLARE_ACCOUNT_ID=9c27f623ee59
 ```
 
 - owner 常透過 Omnigent 遠端操作，所以用 `--device`（4.119.0 起才有）。登入、部署都用 4.149.0（2026-10-08），它有 `login --device`、`login --scopes`、`whoami --json`。不再用 `packages/app` 的 4.105.0。
-- 兩個登入目錄，各自只有自己的 scopes：`wrangler-pages`（上面三個；不能改 DNS、加 Worker 或路由）和 `wrangler-reports`（回報 Worker 用的 `account:read user:read workers_scripts:write workers_routes:write zone:read`，見 `woowtech/ai-content-report-cloudrun/README.md`）。舊的 `wrangler-home` 不再使用，也不要在那裡重新登入：它是 wrangler 預設的一大串 scopes（Workers 腳本和路由、Tunnel、Secrets Store、憑證、Email Routing）。
+- 已知限制：腳本和這份 README 把 wrangler 釘在 4.149.0，但 `npx --yes wrangler@4.149.0` 在 npx 快取裡沒有它時，會重新解析它的間接相依套件，這些套件的版本範圍不是固定的（審查時數過，當時的 `~/.npm/_npx` 快取裡約有 19 個；之後沒有重數），而且 npx 會執行安裝腳本。要固定的話：commit 一份 wrangler 4.149.0 的 `package.json` 和 lockfile，用 `npm ci --ignore-scripts` 安裝。這一輪沒做（C 的決定：不做），留給 owner 決定。
+- 兩個登入目錄，各自只有自己的 scopes：`wrangler-pages`（上面三個；不能改 DNS、加 Worker 或路由）和 `wrangler-reports`（回報 Worker 用的 `account:read user:read workers_scripts:write workers_routes:write zone:read`，見 `woowtech/ai-content-report-cloudrun/README.md`）。`wrangler-reports` 固定用 wrangler 4.149.0，用完一定 logout：O12 只放寬 Pages 的登入，因為這組 scopes 含 `workers_routes:write`，能改 zone 的 Worker 路由（這個分開的做法要 owner 確認）。接收器 README 的指令寫成 shell 函式 `wr`，不是變數 `$WR`：zsh 不會把變數拆成指令和參數。舊的 `wrangler-home` 不再使用，也不要在那裡重新登入：它是 wrangler 預設的一大串 scopes（Workers 腳本和路由、Tunnel、Secrets Store、憑證、Email Routing）。
 - wrangler 一定帶 `offline_access`，refresh token 存在 `wrangler-pages` 的檔案裡，這台 Mac 上同一個使用者的程式都讀得到。所以 scopes 只給 Pages：拿到它的人能部署網站，也能刪部署、拿掉自訂網域、刪專案，但不能在 zone 加一條 Worker 路由繞過所有部署檢查。
 - 撤銷：`woowtech/scripts/deploy-web.sh --logout`（回報 Worker 的那組用 `--logout reports`），再到 Cloudflare 儀表板撤銷 wrangler 的 OAuth 授權。儀表板那一步不能省：`wrangler logout` 把 refresh token 送去撤銷，但不看對方的回應就清掉本機的檔案。為什麼不直接敲 `wrangler logout`：`~/.wrangler` 存在時 wrangler 不看 `XDG_CONFIG_HOME`，會「成功」登出錯的那個目錄，`wrangler-pages` 的 refresh token 還有效；環境裡設了 `CLOUDFLARE_API_TOKEN` 時它什麼都不做就回報成功。`--logout` 在乾淨的環境裡跑，最後要 `whoami --json` 回 `loggedIn:false` 才算成功。手動做的話，每個目錄（`wrangler-pages`、`wrangler-reports`）各做兩行，第二行要印出 `loggedIn: false`：
 
@@ -1728,7 +1826,7 @@ owner 在 Cloudflare 的步驟：
 - Pages：儀表板 Deployments → ⋯ → Rollback to this deployment，立即生效，只限成功的 production 部署；或 API `POST https://api.cloudflare.com/client/v4/accounts/9c27f623ee596e0b67be56263bcb1974/pages/projects/woowtech-smart-web/deployments/<id>/rollback`。wrangler 沒有 Pages 的 rollback 指令。
 - 要回到哪一版：腳本在正式站上傳前讀下線上最新一筆 production 部署的 Id 和 commit。上傳（代碼 5）或上傳後的檢查（代碼 6）失敗時，它印出那個 Id、commit 和儀表板的網址（`https://dash.cloudflare.com/<帳戶>/pages/view/woowtech-smart-web/<Id>`）。沒有自動重傳：重傳也是部署，要有人決定。注意 `deployment list` 排的是建立時間：在儀表板按過 Rollback 之後，最新一筆不一定是正在上線的那版。上傳失敗時先看 Deployments 清單，wrangler 可能已經建好部署才在等它完成時失敗。
 - 第一次部署沒有上一版可以回：部署另一個 commit，或部署維護頁（只有 `index.html` 和 `_headers`，寫「維護中」；它過不了 `check-export.mjs` 的入口檢查，所以由 owner 用上面的登入在暫存目錄手動 `wrangler pages deploy`）。
-- daemon 的預設（第 19 節）發佈之後只能再出一版。使用者的暫時做法：`PASEO_APP_BASE_URL`，以及 `woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`。
+- daemon 的預設（第 19 節）發佈之後只能再出一版。使用者的暫時做法：`PASEO_APP_BASE_URL`，以及 `woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`，**再執行 `woowtech-smart daemon restart`**（只改設定只擋新的連線，已經開著的網頁版連線要重啟才會斷）。
 
 事故流程（網站、Cloudflare 帳號或部署登入疑似被入侵）：
 
@@ -1736,7 +1834,14 @@ owner 在 Cloudflare 的步驟：
 2. 撤銷登入：`woowtech/scripts/deploy-web.sh --logout` 和 `woowtech/scripts/deploy-web.sh --logout reports`（`wrangler-pages`、`wrangler-reports` 兩個都做；各自要 `whoami --json` 回 `loggedIn:false` 才算成功，腳本會檢查）。沒有腳本可用時，照上面「撤銷」的手動兩行對兩個目錄各做一次，一樣要看到 `loggedIn: false`：直接敲 `wrangler logout` 在 `~/.wrangler` 存在時會登出錯的目錄，`wrangler-pages` 的 refresh token 還有效。然後到儀表板撤銷 wrangler 的 OAuth 授權；換 Cloudflare 密碼、檢查 2FA；看 audit log、Workers Routes 和 Pages 的部署清單（部署被刪、網域被拿掉、專案被刪，都是 `pages:write` 做得到的）。
 3. 找 service worker：在攻擊者那一版的部署檔案裡搜尋 `serviceWorker`，記下 worker 腳本的路徑。回復之後那個路徑會被 SPA fallback 回成 `text/html`，瀏覽器的更新檢查因為 MIME 不符而失敗，舊的 worker 可能繼續攔截導覽，所以光回復不夠。
 4. 部署「清除版」：同一個乾淨的 commit，`_headers` 的 `/*` 加 `Clear-Site-Data: "cache", "storage"`；找到 worker 路徑的話，在那個路徑放一支自我解除的 worker（`install` 時 `skipWaiting()`，`activate` 時 `registration.unregister()`，再把所有 client 重新導覽一次），那個路徑的回應也帶 `Clear-Site-Data`。至少放 30 天（瀏覽器至少每 24 小時檢查一次 worker 更新）。代價：所有網頁版使用者都要重新配對。平常的 `_headers` 不准有 `Clear-Site-Data`（守門），所以清除版由 owner 手動上傳，或在事故分支上連測試一起改。
-5. 通知使用者（版本說明、支援頁、LINE 官方帳號）：曾在網頁版配對過的人照第 19 節輪替 daemon 金鑰、用 `woowtech-smart daemon set-password` 換掉直連密碼；不再需要網頁直連的人設回 `'[]'`。偷走的 offer 沒有期限，只有輪替金鑰才能撤銷。
+5. 通知使用者（版本說明、支援頁、LINE 官方帳號）。對象有兩種人：曾在網頁版配對過的人，以及曾讓 smart.woowtech.io 連到這台電腦的人（按過「連到這台電腦」，或直連過 localhost）。後者沒有配對過，但被入侵的網站可以不經提示連上他的 daemon、以 owner 身分操作，網站修好之後它留下的東西還在。請他們在自己的電腦上依序做：
+   1. 輪替 daemon 金鑰（第 19 節「金鑰輪替」）。有設直連密碼的人，一併用 `woowtech-smart daemon set-password` 換掉。做完之後 daemon 是開著的。
+   2. 看有沒有被接上別人的 Hub：`woowtech-smart hub status`。HUB 欄有網址的話，執行 `woowtech-smart hub disconnect --force`，再執行 `woowtech-smart daemon config set daemon.hub.enabled false`（第 28 節）。
+   3. 檢查設定：`woowtech-smart daemon config get`，逐項看 `daemon.cors.allowedOrigins`、`app.baseUrl`、`daemon.terminalProfiles`、`agents.providers`、`plugins`（還有 `pluginsEnabled`）有沒有自己沒設過的值；不用 Hub 的人 `daemon.hub.enabled` 應該沒設或是 false。有不認得的，整個欄位移除：`woowtech-smart daemon config unset <路徑>`；要保留自己的項目就用 `woowtech-smart daemon config set <路徑> '<JSON>'` 重寫整個欄位（`plugins` 和 `agents.providers` 的內層是動態鍵，不能只指一項）。不再需要網頁直連的人：`woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'`。
+   4. `woowtech-smart daemon restart`（桌面版：結束 App 再重新打開）。`daemon.hub.enabled`、`plugins` 的變更要重啟才生效；已經開著的網頁版連線也要重啟才會斷，第 3 步的 `'[]'` 只擋新的連線。
+
+   daemon 不在預設 home（`~/.woowtech-smart`）時，每個指令都加 `--home "<路徑>"`。偷走的 offer 沒有期限，只有第 1 步能撤銷。owner 連線能開終端機、跑 agent，這份清單只清得到 daemon 這一層留下的東西；懷疑對方真的連上來過的人，也要檢查電腦上有沒有別的殘留（登入項目、`~/Library/LaunchAgents`、crontab、`~/.ssh/authorized_keys`、shell 設定檔）。
+
 6. 事後檢討寫進驗證紀錄：時間線、影響範圍、哪一層沒擋住。
 
 部署後檢查（正式站掛好網域之後；沒過就不能發佈帶新預設的 daemon、CLI 和桌面版）：
@@ -1772,9 +1877,59 @@ owner 在 Cloudflare 的步驟：
   - `check-export.mjs` 的小匯出：React Navigation 的 `segment.replace` 和 Expo 的 `importScripts(ASYNC_WORKER_BASE)` 會過；像 Expo 寫的 `index.html` 會過；不在基準裡的 jsQR 網址失敗、列進去就過；空的基準失敗；`serviceWorker` 變多、像 worker 的檔名失敗；`app.config.js` 沒有 `serviceWorkerPath`；新的來源（含 `ws://`、`wss://`）、多一個 `eval(` 失敗，少一個也失敗，`--write-baseline` 寫出的檔再檢查會過；`_worker.js`、`_routes.json`、`_redirects`、`functions/index.js`、`.env`、`assets/.env.local` 各自放進匯出都失敗；`.js`、`.mjs`、`.cjs` 在 `_expo/static/js/web/` 之外失敗；圖片、字型、`css`、`json`、`txt` 直接過，`.svg`、`.xml`、`.wasm` 和沒有副檔名的檔要基準檔列著路徑和 SHA-256，列了錯的雜湊失敗；`data-src` 的 inline 程式、`onload`、引號裡有 `>` 後面的 `onclick`、`javascript:`（含字元參照拆開的）、外站、`//` 開頭和 `\` 開頭的 script 網址都失敗，列在基準檔裡的外站網址過；第二個 HTML、source map、symlink、超過 25 MiB（用磁碟上的大小）、少了必要的字串都失敗；提交的基準檔是空的或格式正確（形狀檢查本身也有它抓得到的壞例子）。
   - `verify-live.mjs` 對一個照 Pages 的方式服務匯出的本機伺服器（檔案、SPA fallback、`_headers` 的規則；ephemeral port）：照實服務時通過；HTML 被注入 `/cdn-cgi/`、bundle 被改、SPA fallback 少了 CSP、JS 帶 `no-transform` 都失敗；`/_expo/static/js/web/` 底下不存在的檔會被要一次，只有那個回應被注入也會失敗；兩個頁面都連不上或都是 5xx 是代碼 3，一個頁面壞掉仍是 1；被 Access 轉址的預覽只有加 `--allow-access` 才略過。`hosted-web-smoke.mjs` 沒有配對連結就不啟動（smoke 本身要真的匯出和 daemon，在本機 E2E 和正式站跑）。
   - `hosted-web-smoke.mjs` 的輔助函式（匯入時不啟動 Chrome）：哪些主機算 loopback 或私有位址（各種 loopback、`0.0.0.0`、RFC 1918 的邊界 172.16–172.31、100.64–100.127、link-local、unique-local、IPv4 映射的 IPv6、`.local`，以及剛好在範圍外的位址）；公開的頁面連到任何一個都算失敗，本機 E2E 的頁面連自己的 loopback daemon 不算，區網位址仍算意外；配對連結和它的 `#offer=` 不會留在輸出或錯誤訊息裡。smoke 本身要真的匯出和 daemon，在本機 E2E 和正式站跑。
-  - 一致性：`deploy-web.sh` 的 `SITE_ORIGIN`、`check-export.mjs` 的 `SITE_ORIGIN`、smoke 的預設網址、`BRAND_WEB_APP.origin` 相同，回報 Worker 的 `DEFAULT_ALLOWED_ORIGINS` 包含它；`deploy-web.sh` 的 `WRANGLER_VERSION` 跟這一節、`woowtech/ai-content-report-cloudrun/README.md` 和 `cloudflare-worker-smart-reports.wrangler.jsonc` 寫的相同，三處的 wrangler 指令都釘到完整的版本號；`deploy-web.sh` 的護欄檔案清單就是測試算雜湊的那五個。`BRAND_WEB_APP` 和回報 Worker 那兩項要 protocol 的 `brand-web-app.ts` 和回報 Worker 的改動都合併後才會過。
+  - 一致性：`deploy-web.sh` 的 `SITE_ORIGIN`、`check-export.mjs` 的 `SITE_ORIGIN`、smoke 的預設網址、`BRAND_WEB_APP.origin` 相同，回報 Worker 的 `DEFAULT_ALLOWED_ORIGINS` 包含它；`deploy-web.sh` 的 `WRANGLER_VERSION` 跟這一節、`woowtech/ai-content-report-cloudrun/README.md` 和 `cloudflare-worker-smart-reports.wrangler.jsonc` 寫的相同，三處的 wrangler 指令都釘到完整的版本號；`deploy-web.sh` 的護欄檔案清單就是測試算雜湊的那五個。`BRAND_WEB_APP` 和回報 Worker 那兩項靠 protocol 的 `brand-web-app.ts`（Lane A）和回報 Worker 的改動（Lane D）；兩條 lane 合併進 `woowtech/web-1026` 之後這兩項都過了（驗證紀錄）。
 - `woowtech/workflows.test.mjs`：`deploy-app.yml` 仍在 GitHub 停用，CI 不拿部署憑證。
 - 改了腳本後：`node --test --test-concurrency=1 woowtech/web-deploy.test.mjs woowtech/workflows.test.mjs woowtech/update-sources.test.mjs`，加上 `bash -n` 和 `/bin/bash -n woowtech/scripts/deploy-web.sh`。
+
+### 28. Hub 連線預設關閉（daemon.hub.enabled）
+
+為什麼：上游讓任何 owner 連線（CLI、配對過的 App、直連 daemon 的網頁版、跑在網頁版來源裡的外掛程式碼）都能要求 daemon 連到任意 http(s) 網址的 Hub（`hub.management.daemon.connect.request`，權限 `tunnel.manage`）。daemon 把這段關係存在 `$PASEO_HOME/hub-relationship.json`，之後每次啟動都重連，一次請求就留下長期的遠端控制通道。渥屋不營運 Hub，`hub.paseo.sh` 是上游的服務。新 home 放行網頁版直連（第 19 節）之後，這條路更容易被碰到。owner 在 2026-10-27 知道並同意加這個開關（A-HUB）。
+
+規則：
+
+- 設定鍵 `daemon.hub.enabled`（boolean），預設關。沒設、`false`、不是 boolean、`config.json` 讀不了，都當關。只看 `config.json`，沒有環境變數（跟 `daemon.browserTools.enabled`、`pluginsEnabled` 一樣）。daemon 啟動時讀一次，所以 `daemon config set` 之後要重啟才生效（它不在 `daemon-config-store.ts` 的 `RELOADABLE_PATHS` 裡，reload 的結果會把它列在 `restartRequiredPaths`）。
+- 開啟：`woowtech-smart daemon config set daemon.hub.enabled true`，再 `woowtech-smart daemon restart`。daemon 不在預設 home（`~/.woowtech-smart`）時，指令要加 `--home "<路徑>"`；daemon 的拒絕訊息已經帶好。
+- 關著的時候：
+  - `hub connect`、`hub init`（連線）和 `hub permissions`（改權限）被拒，錯誤碼 `hub_disabled`（RPC 的 `rpc_error.code`；CLI 的 `--json` 輸出是 `error.code`；以前所有失敗都是 `handler_error`），訊息點名這個鍵和要執行的指令。被拒時不會對 Hub 發任何請求，也不會寫 `hub-relationship.json`。拒絕碼和訊息是用 controller、`daemon-session` 和行程內的 daemon 加 `DaemonClient` 測過的；CLI 端怎麼呈現（人看的輸出尾巴多一段 `requestType=… code=hub_disabled`、`--json` 的 `error.code`）是讀 `DaemonRpcError` 和 `toCommandError` 的程式推的，還沒有用打包好的 CLI 對真的 daemon 跑過。
+  - 已經存著的關係不會在啟動時續連，`daemon.log` 有一行警告（點名 Hub 網址和這個鍵），`hub-relationship.json` 原樣留著。
+  - `hub status` 的狀態是 `not_connected`，ERROR 欄寫原因，HUB 欄仍顯示存著的 Hub。`hub disconnect`（含 `--force`）照上游運作，清得掉存著的關係。
+- 開著的時候：跟上游一樣。啟動時如果續連存著的關係（active 或 pending），`daemon.log` 有一行警告，點名 Hub 網址和這個鍵；不然沒有人看得出 daemon 又接上了 Hub。
+- App 和桌面版沒有 Hub 畫面（`packages/app`、`packages/desktop` 裡沒有 Hub 的呼叫），Hub 只能用 CLI 管，所以這些訊息只會出現在 CLI。
+
+**這不是擋 owner 連線的邊界**：owner 連線有所有權限。能寫檔或跑程式的連線可以改 `config.json`、要求重啟（`daemon.manage`），然後連 Hub：檔案寫入 RPC（`fs.file.write.request`）可以指定任何目錄、只要 `workspace.write`；終端機、agent 和外掛都能執行指令。daemon 設定的 RPC（`set_daemon_config_request`）改不了這個鍵，環境變數也不行，但這只關掉了這兩扇門。這個開關的用途，是不讓 App 和 CLI 在使用者沒注意時把這台 daemon 接上 Hub（包括上游託管的那個）。
+
+待 owner 決定：連 owner 連線也擋的做法。在 `session/files/workspace-files-session.ts` 的寫入入口（`fs.file.write`、`fs.entry.create`、`rename`、`duplicate`）各加一行 hook，拒絕解析後落在 `paseoHome`（`config.json`、`hub-relationship.json`、`daemon-keypair.json`）裡的寫入，再加一項守門。代價：熱檔上多幾行；而且終端機（`create_terminal_request`，一樣只要 `workspace.write`）和 agent 照樣繞得過，文件得寫明它擋不了。這一輪沒做。
+
+接點（上游的檔）：`hub/relationship-controller.ts`（+9／−2：gate 欄位和 constructor 一行，`start`、`connect`、`updatePermissions` 各一行，`status` 包一層）、`persisted-config.ts`（schema 的 `daemon.hub.enabled`）、`session/daemon/daemon-session.ts`（+3／−1：拒絕時保留 `hub_disabled` 碼）。邏輯都在新檔 `hub/woowtech-hub-gate.ts`。測試用的 Hub harness（`hub/test-utils/relationship-harness.ts`）和 `relationship-remote.test.ts` 在自己的 home 寫 `{"version":1,"daemon":{"hub":{"enabled":true}}}`；`test-utils/paseo-daemon.ts` 的 `hubEnabled` 選項做同一件事（`owned-subscriptions.e2e.test.ts` 的 Hub 測試用它）。
+
+測試與守門：
+
+- server `hub/woowtech-hub-gate.test.ts`（23 項）：新 home（沒有 `config.json`、或 daemon 寫的 `config.json`）連線被拒，沒有任何請求送到 Hub、沒寫檔；錯誤碼 `hub_disabled`，訊息和狀態的 `lastError` 帶 `--home "<home>"`；`false`、空物件、字串 `"true"`、壞掉的 JSON 都維持關；`daemon.hub.enabled` 只收 boolean；開了之後照上游流程（enroll、存關係、撥 Hub）；存著的 active／pending 關係在關著時不續連、一行警告點名 Hub 和鍵、檔案不動；關著時再連線和改權限都被拒；`disconnect`（含 `--force`）關著也清得掉；開著時續連並警告一次；gate 層：active／pending 不論開關各警告一次、沒有關係或已撤銷時不吭聲；拒絕指令的 `--home` 規則（預設 home 不加；其他 home，含空白和引號的路徑，加並用 JSON 引號）。
+- server `hub/woowtech-hub-gate-daemon.test.ts`（2 項，真的起 daemon，CI 的 `test:unit` 會跑）：新 daemon 對 connect 和 permissions update 回 `DaemonRpcError`，code 是 `hub_disabled`，訊息帶指令；`hub status` 是 `not_connected` 且 `lastError` 說明原因；`hub-relationship.json` 沒被寫。`config.json` 開了之後 `lastError` 是 null。
+- server `session/daemon/daemon-session.test.ts`（新增 1 項）：connect 和 permissions update 被 gate 拒絕時，`rpc_error` 的 code 是 `hub_disabled`（其他錯誤維持 `handler_error`，原有那項測試照舊）。
+- 守門 `woowtech/hub-gate.test.mjs`（7 項）：1 新 home 連線被拒，Hub 和磁碟都沒被碰，訊息帶 `--home`；2 開了之後照上游；3 存著的關係不續連也不被改；4 controller 的 hook 都在第一行；5 `daemon-session.ts` 的 `hub_disabled` 碼；6 `new HubRelationshipController(` 只有 `bootstrap.ts`、`HubRelationshipManagement` 只有一個實作、`hub.management.*` 請求只有四個；7 daemon 設定的 RPC（`pickSupportedPatchFields`、`MutableDaemonConfigSchema`）碰不到這個鍵，出貨的原始碼除了 gate 沒有人讀或提到 `PASEO_HUB_ENABLED`、`hub.enabled`。
+- 單行突變都被抓到（Lane A 實跑 10 種，每種守門都失敗在預期的項目上，檔案已還原）：預設改成沒設就開（1、3）；`connect()` 少了 `assertEnabled()`（1、4）；`updatePermissions()` 少了它（3、4）；`start()` 少了 `allowsStart()`（3、4）；`status()` 不經過 gate（3、4）；`daemon-session.ts` 不送 `hub_disabled`（5）；拒絕訊息少了 `--home`（1）；`pickSupportedPatchFields` 多了 `hub`（7）；多一個 `new HubRelationshipController(`（6）；多一處讀 `PASEO_HUB_ENABLED`（7）。
+
+上游合併後要再確認：
+
+```bash
+npm run build:server   # 守門從原始碼跑，但跨套件的匯入讀 dist
+node --test woowtech/hub-gate.test.mjs
+(cd packages/server && npx vitest run src/server/hub/woowtech-hub-gate.test.ts src/server/hub/woowtech-hub-gate-daemon.test.ts src/server/hub/relationship-remote.test.ts src/server/session/daemon/daemon-session.test.ts --bail=1)
+(cd packages/server && npx vitest run --maxWorkers=1 src/server/hub/relationship-controller.test.ts src/server/hub/daemon-executions.test.ts --bail=1)   # 這兩個靠 harness 寫的 config.json 開著開關
+(cd packages/server && npx vitest run --maxWorkers=1 src/server/owned-subscriptions.e2e.test.ts -t "Hub bootstrap")   # CI 不跑 e2e 檔
+```
+
+- 守門第 4 項失敗：上游改了 `HubRelationshipController` 的 `start`／`connect`／`updatePermissions`／`status`，照訊息把 hook 放回第一行。
+- 守門第 5 項失敗：上游改了 `handleHubRelationshipRequest` 的 catch，把 `error instanceof HubDisabledError ? error.code : "handler_error"` 放回去。
+- 守門第 6 項失敗：上游多了新的 Hub 管理路徑（新的 `hub.management.*` 請求、第二個管理類別）；新路徑也要過 gate。
+- 上游新增的測試用 `createTestPaseoDaemon` 起 daemon 再呼叫 `connectHub`：會被拒，傳 `hubEnabled: true`（或在那個 home 寫 `config.json`）。
+
+版本說明（發佈帶新預設的 daemon、CLI 和桌面版時加上，第 19 節和「接下來」）：
+
+- 中：Hub 連線預設關閉。已經用 `woowtech-smart hub connect` 把 daemon 接上 Hub 的人，升級後 daemon 不會自動續連（`daemon.log` 會有一行警告）；要繼續用，先執行 `woowtech-smart daemon config set daemon.hub.enabled true`，再執行 `woowtech-smart daemon restart`。
+- English: Hub connections are now off by default. If you connected this daemon to a Hub with `woowtech-smart hub connect`, it will not reconnect after the update (daemon.log carries one warning). To keep using it, run `woowtech-smart daemon config set daemon.hub.enabled true`, then `woowtech-smart daemon restart`.
+- 關直連的說法（版本說明和支援頁）：`woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'` 之後要再執行 `woowtech-smart daemon restart`，已經開著的網頁版連線才會斷（第 19 節）。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
@@ -2213,13 +2368,35 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 網頁版四條 lane 的整合（2026-10-27，分支 `woowtech/web-1026`，第 19、27、28 節；web-spec.md 7.2）：A、B、D、C 依序用 `git merge --no-ff` 合進從 `acb733872`（main）開出的分支。
+  - 合併：merge commit 是 `111c4336a`（A，lane 的頂端 `0989fb808`）、`df60a98d3`（B，`80e4d0d3c`）、`120a89cfb`（D，`9cbc24b0a`）、`9f25ffd46`（C，`a33a2f5cf`）。四條 lane 一共改了 86 個檔，兩兩沒有重疊，沒有衝突；合併後每條 lane 的檔案都跟它的頂端逐檔相同，樹裡沒有衝突標記。整合時沒有推上 origin。
+  - `npm run build:server`（Node 22.23.2）：合併 A 之後一次、全部合併之後一次，兩次 exit 0。
+  - 改到的 vitest 檔，每個套件 `--maxWorkers=1`，沒有加 CI 的 `--testTimeout=60000`（整合的第一個視窗，這台的 load average 約 20，下面七項逾時都出在這個視窗）：
+    - protocol：`brand-pairing.test.ts` 7/7 過。
+    - server（15 個檔：`pairing-link`、`cors-defaults`、`woowtech-cors-origins`、`persisted-config`、`persisted-config-edit`、`config-relay`、`pairing-offer.relay`、`daemon-config-store`、`woowtech-offer-redaction`、`daemon-session`、`woowtech-hub-gate`、`woowtech-hub-gate-daemon`、`relationship-remote`、`relationship-controller`、`daemon-executions`）：262/263 過、1 失敗；失敗的一項是 `relationship-controller.test.ts` 的「a stale enrollment rejection cannot discard a fresh pending ceremony」（逾時 30 秒）。
+    - server 的 `owned-subscriptions.e2e.test.ts` 整檔（CI 不跑 e2e 檔）：26/29 過、3 失敗；失敗的三項是「checkout diff reads are snapshots and identical observers release independently」「a modern connection and pure reads retain no client observation producers」「dictation failure belongs only to its requesting source and releases speech demand」，都卡在 `SubscriptionPeer.request` 的 `expect.poll`（預設 1000 ms）等不到回應。Hub 的那一項（「Hub bootstrap sends its server ID before the producer's synchronous snapshot」）過了。
+    - CLI（`pair.app-link`、`pair.relay`、`pair`、`daemon-target.app-link`）：7/7 過。
+    - App（22 個檔：Lane B 的全部測試檔、`pair-device-section.relay-off`、`woowtech-welcome-host-online`、`app-diagnostic-report`、`woowtech-offer-redaction`、`ai-content-report-logic`、`ai-content-report-client`，以及 `host-runtime.test.ts` 整檔 73 項）：278/281 過、3 失敗；失敗的三項都是 5 秒逾時：`woowtech-host-label.test.ts` 的「ignores unrelated server identity and empty hostname, then fills a later server_info once」、`woowtech-host-confirmation-sheet.test.tsx` 的「shows the host, its key fingerprint and the relay, and connects once armed」、`woowtech-probe-guard.test.ts` 的「adds a new direct host without asking, though window has no location」。
+  - 逾時的七項單獨重跑（第二個視窗）：
+    - `relationship-controller.test.ts` 單獨跑：46/46 過（那一項這次 7.9 秒過）。
+    - 上面三個 App 測試檔單獨跑：38/38 過（那三項這次分別是 980、489、1211 ms）。
+    - `owned-subscriptions.e2e.test.ts` 的三項單獨跑：1/29 過、2 失敗、26 沒選到。「checkout diff reads…」這次過了；另外兩項還是失敗，同樣等不到 `diagnostics.request` 的回應（診斷要逐一執行外部指令，這台忙的時候超過 1 秒）。第三個視窗把 `packages/server/src` 換成基底 `acb733872` 的（dist 和 node_modules 不變，跟 Lane A 的做法一樣，跑完用 `git checkout HEAD -- packages/server/src` 還原，`git status` 乾淨），同樣這兩項各跑兩次：兩次都是這兩項失敗，也卡在同樣的 `diagnostics.request`（測試檔的第 809、1164 行）。所以這兩項在基底上本來就會失敗，跟合併無關。
+  - Hub 的另外兩個用 `HubRelationshipHarness` 的測試檔（第一個視窗沒跑；CI 單獨跑 `hub-cli-contract.test.ts`；Lane A 的 harness 改動讓它們的 home 開著 Hub 開關），在合併後的樹上：18/19 過、1 失敗（`hub-cli-contract` 1 項、`execution-session.websocket` 17 項過）；失敗的一項是 `execution-session.websocket.test.ts` 的「ordinary Hub requests survive daemon restart and restore an archived workspace」，撞到它自己設的 20 秒逾時。那個檔單獨重跑：17/18 過、1 失敗，還是那一項。只跑那一項，合併後的樹和基底各兩次、交錯著跑：合併後 19.6 秒過、21.9 秒逾時；基底 20.0 秒過、20.3 秒逾時。所以它在這台忙的時候本來就在 20 秒上下，跟合併無關。
+  - 守門（跟 `ci.yml` 同一行）：`node --test --test-concurrency=1 --test-skip-pattern="^Traditional Chinese is regenerated from upstream's current Simplified Chinese$" woowtech/*.test.mjs` 是 309 項、309 過、0 失敗、0 跳過；`node --test --test-concurrency=1 woowtech/ai-content-report-cloudrun/*.test.mjs` 是 69 項、69 過、0 失敗、0 跳過。Lane C 合併前的兩項紅燈（`brand-web-app.ts` 不存在、回報 Worker 的 README 沒寫 wrangler 版本）都過了。`bash -n` 和 `/bin/bash -n woowtech/scripts/deploy-web.sh` 都過（這台兩個都是 bash 3.2.57，CI 的 bash 5 沒跑到）。
+  - `npm run typecheck`（11 個 workspace）exit 0，沒有錯誤；`npm run format:check:files` 對 83 個符合 lefthook 格式 glob 的改動檔全部合格；`npm run lint` 對 78 個改動的 js、mjs、ts、tsx 檔是 0 個警告、0 個錯誤。86 個改動檔裡有 3 個不在這兩個 glob 裡（`deploy-web.sh`、`woowtech-smart-reports-deploy.sh`、`_headers`）。
+  - 沒跑的：整套 vitest（照規則只跑改到的檔）；真的 `expo export`、wrangler、Cloudflare（不准）；`hosted-web-smoke.mjs` 本身（要 Chrome、真的匯出和 daemon，下一階段的本機 E2E 跑）；用打包好的 CLI 對真的 daemon 看 `hub status`、`hub connect` 的輸出；`provider-policy.real.e2e.test.ts`（要真的 provider）；加了 CI 的 `--testTimeout=60000` 的 App 測試；CI 上的 bash 5。
+  - Lane A（HEAD `0989fb808`，daemon 的預設和 Hub 開關）：Hub 的六個測試檔在一個視窗裡 `--maxWorkers=1` 跑，117/117（314 秒；`woowtech-hub-gate` 23、`woowtech-hub-gate-daemon` 2、`daemon-session` 12、`relationship-remote` 22、`relationship-controller` 46、`daemon-executions` 12）；`hub-gate.test.mjs` 7/7，`pairing.test.mjs` 13/13；`hub-gate.test.mjs` 的 10 種單行突變都被抓到，檔案已還原。`owned-subscriptions.e2e.test.ts` 整檔 29 項過 27 項，失敗的兩項都等不到 `diagnostics.request` 的回應（`expect.poll` 預設 1000 ms），不是 Hub 的測試；基底 `acb733872` 同一個檔 28/29，失敗的是同一項「a modern connection and pure reads retain no client observation producers」。lefthook（format、lint、所有 workspace 的 typecheck）通過。server 的 typecheck 排除測試檔，`daemon-session.test.ts` 有 3 個上游留下的型別錯（139、153、477 行）沒有人看。
+  - Lane B（HEAD `80e4d0d3c`，App 的配對確認）：11 個檔 228/228（`woowtech-host-confirmations` 33、`woowtech-pairing-confirmation` 7、`woowtech-pairing-link` 17、`woowtech-probe-guard` 8、`woowtech-localhost-probe-policy` 17、`woowtech-host-label` 11、`woowtech-confirm-arming` 26、`woowtech-host-confirmation-sheet` 19、`pair-scan.app-link` 8、`woowtech-copy` 9，加 `host-runtime.test.ts` 整檔 73）；App 的 typecheck exit 0；改到的 16 個檔 lint 0 個警告、0 個錯誤；守門 `pairing-confirmation.test.mjs` 8 項加 `pairing.test.mjs`（當時還是 9 項）共 17/17，守門第 5 項的 7 種突變 fixture 都因預期的理由失敗；lefthook 通過。
+  - Lane D（HEAD `9cbc24b0a`，回報 Worker 和 D5）：`worker.test.mjs` 13/13；`woowtech/ai-content-report-cloudrun/*.test.mjs` 69/69（Node 22.23.2）；`ai-content-report-logic.test.ts` 加 `ai-content-report-client.test.ts` 6/6，兩個突變（改回 D5 之前的算式、用 `isWeb` 取代 `getIsElectron()`）都讓客戶端測試失敗；lefthook（format、lint、完整 typecheck）在 `3fe93a1e5`、`e5fd13660`、`9cbc24b0a` 通過。README 的 V5 迴圈和部署區塊在 bash 與 zsh 用替身 curl、npx、gcloud 跑過。
+  - Lane C（HEAD `a33a2f5cf`）的紀錄在下面。它合併前的 2 項紅燈（`brand-web-app.ts` 還不存在、回報 Worker 的 README 沒有寫 wrangler 版本）在 Lane A、D 合併之後都過了（上面的守門 309/309）。
+
 - 網頁版的部署工具（2026-10-27，分支 `woowtech/web-1026-c-hosting`，第 27 節；web-spec.md 的 Lane C，O12 的版本）：`deploy-web.sh`、`woowtech/web/` 的 `_headers`、`check-export.mjs`、`verify-live.mjs`、`hosted-web-smoke.mjs` 和空的 `export-baseline.json`，`deploy:web` 改成呼叫腳本。
-  - `node --test --test-concurrency=1 woowtech/web-deploy.test.mjs`：37 項中 35 項過。沒過的 2 項是一致性檢查，等 Lane A 的 `brand-web-app.ts` 和 Lane D 的回報 Worker 改動合併：在 worktree 暫時放上兩者的最小版本時兩項都過，再分別拿掉 Worker 的網頁版來源、改回 jsonc 沒釘版本的 `npx wrangler`，各自失敗（之後都已還原）。`workflows.test.mjs` 18/18、`update-sources.test.mjs` 2/2。`bash -n` 和 `/bin/bash -n`（3.2.57）都過，假工具的正式上傳也用 `/bin/bash` 跑過。
+  - `node --test --test-concurrency=1 woowtech/web-deploy.test.mjs`：37 項中 35 項過。沒過的 2 項是一致性檢查，等 Lane A 的 `brand-web-app.ts` 和 Lane D 的回報 Worker 改動合併（合併之後兩項都過了，見最上面整合的紀錄）：在 worktree 暫時放上兩者的最小版本時兩項都過，再分別拿掉 Worker 的網頁版來源、改回 jsonc 沒釘版本的 `npx wrangler`，各自失敗（之後都已還原）。`workflows.test.mjs` 18/18、`update-sources.test.mjs` 2/2。`bash -n` 和 `/bin/bash -n`（3.2.57）都過，假工具的正式上傳也用 `/bin/bash` 跑過。
   - 假工具的測試在這台用 `/opt/homebrew/opt/node@22/bin/node` 的 symlink（預設的 node 是 v24），沒有 skipped。跑的時候這台很忙（load average 20～34，node 一次要一秒多才啟動），整個檔要 4～10 分鐘，所以假工具都用 POSIX sh 寫；CI 上應該快得多（沒量）。
   - 測試寫的過程中抓到的：解析 Expo `serializeHtml.js` 的大括號計數被一行註解（沒閉合的 `${`）弄亂；第 27 節的切段從標題本身開始找下一個標題。都已修正，修正前那兩項是紅的。
   - 沒跑的：真的 `expo export`、真的 wrangler 和 Cloudflare、`hosted-web-smoke.mjs` 本身（要真的匯出和 daemon，整合者在本機 E2E 跑）。基準檔仍是空的，第一次真的 dry-run 後由整合者寫入。
   - 審查後的修正（2026-10-27，兩個 fix commit：`28997c4a8` 是腳本、`verify-live.mjs` 和第 27 節，第二個是 `check-export.mjs`、smoke 和基準檔的測試）。規格審查 5 項、資安審查 12 項、Lane B 資安審查要求的 1 項，能對照原始碼的都核過了（wrangler 4.149.0 的 `cli.js`：互動的判斷、登入的預設 scopes、`~/.wrangler` 優先於 `XDG_CONFIG_HOME`、yargs 對 `-` 開頭的值的解析、`--cwd`、`logout` 的行為、`deployment list` 的欄位），都成立，沒有不同意的。
-  - `node --test --test-concurrency=1 woowtech/web-deploy.test.mjs woowtech/workflows.test.mjs woowtech/update-sources.test.mjs`：87 項中 85 項過（`web-deploy.test.mjs` 67 項、`workflows.test.mjs` 18 項、`update-sources.test.mjs` 2 項）。沒過的 2 項還是那兩個一致性檢查，原因也一樣：`packages/protocol/src/brand-web-app.ts is missing`（Lane A）、回報 Worker 的 README 沒有寫 wrangler 版本（Lane D），兩條 lane 合併後才會過。`bash -n` 和 `/bin/bash -n` 都過；這台的 `bash` 和 `/bin/bash` 都是 3.2.57，所以假工具的測試都是在 bash 3.2 上跑的。oxfmt、oxlint 對改到的檔案沒有問題；第一個 commit 的 pre-commit（format、lint、所有 workspace 的 typecheck）過了。
+  - `node --test --test-concurrency=1 woowtech/web-deploy.test.mjs woowtech/workflows.test.mjs woowtech/update-sources.test.mjs`：87 項中 85 項過（`web-deploy.test.mjs` 67 項、`workflows.test.mjs` 18 項、`update-sources.test.mjs` 2 項）。沒過的 2 項還是那兩個一致性檢查，原因也一樣：`packages/protocol/src/brand-web-app.ts is missing`（Lane A）、回報 Worker 的 README 沒有寫 wrangler 版本（Lane D），兩條 lane 合併後才會過（合併之後已經過了，見最上面整合的紀錄）。`bash -n` 和 `/bin/bash -n` 都過；這台的 `bash` 和 `/bin/bash` 都是 3.2.57，所以假工具的測試都是在 bash 3.2 上跑的。oxfmt、oxlint 對改到的檔案沒有問題；第一個 commit 的 pre-commit（format、lint、所有 workspace 的 typecheck）過了。
   - 突變檢查（在暫存的複本上，每次拿掉一條規則，跑對應的測試，測試要失敗）：`deploy-web.sh` 24 項（wrangler 的 stdin 不關、fetch 不加 `--prune`、`--commit-message` 拆成兩個參數、不擋 `-` 開頭的標題、上傳前不再查登入、建置後不查工作樹、不查 assume-unchanged 和 skip-worktree、不查祖先、不擋護欄檔案的 diff、不擋 `EXPO_PUBLIC_LOCAL_DAEMON`、重用匯出時不比清單、上傳 `<OUT>` 而不是複本、標記檔規則、代碼 8、回復提示沒有 Id、`--logout` 不驗證、`CF_API_BASE_URL` 沒拿掉、`NODE_OPTIONS` 傳給 wrangler、stage 沒清、建置前先刪舊的匯出、提示沒有逾時，加上環境、分支、`pages:write` 三項比較），`verify-live.mjs` 2 項（代碼 3、fallback 探測），`check-export.mjs` 和 smoke 12 項（`_worker.js`、`_redirects`、`functions/`、`.env` 的禁令，`on*` 屬性，JavaScript 的位置，檔案類型清單，計數往下，`ws://` 的來源，172.16/12，本機位址規則，`#offer=` 的遮蔽）。全部都被抓到；不改任何東西的對照照樣通過。第一輪有一項沒抓到：`_worker.js` 的禁令被新的 JavaScript 位置規則蓋住，兩者的訊息都含「must not be in the export」；測試改成各檔案檢查自己的理由之後才抓到。
   - 測試抓到的真問題：在終端機裡跑時，`git diff` 會啟動 pager 等一個按鍵，pager 還會清掉終端機裡等著的輸入，確認提示因此等不到答案（舊版的 `git diff --stat` 也一樣，從終端機跑正式上傳的人會卡在這裡）。腳本現在設 `GIT_PAGER=cat`。這是 pseudo-terminal 的測試（macOS 的 `script`）才碰得到的：`WOOW_TTY` 的檔案走不到 `[ -t 0 ]` 那條路。
   - 沒跑的：真的 wrangler、Cloudflare 和 `expo export`（不准）；`hosted-web-smoke.mjs` 本身（要 Chrome 和 daemon）；Linux 和 CI 上的執行（pseudo-terminal 那一項只在 macOS 跑，其他平台顯示 skipped；這台沒有 bash 5）。`check-export.mjs` 的檔案類型清單沒有對照 fork 真正的匯出，只對照過上游 0.10.3（`Paseo.app` 裡的匯出：`png`、`ico`、`css`、`json`、`txt`、`js`、`html`）。建置後的 `git status` 檢查會不會被建置步驟弄髒的檔案絆倒，要等第一次真的乾淨 dry-run 才知道。
@@ -2595,16 +2772,21 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 ## 接下來
 
 - 網頁版 smart.woowtech.io（第 19、27 節；web-spec.md 第 6 節），照這個順序：
-  1. Lane A、B、D、C 依序合併進 `woowtech/web-1026`，每合併一條跑一次守門；全部合併後跑本機 E2E（web-spec.md 7.3：dry-run 匯出、`check-export.mjs`、`wrangler pages dev`、`hosted-web-smoke.mjs`），用那次真的 dry-run 寫好 `woowtech/web/export-baseline.json`，逐一看過再提交（第 27 節「基準檔」）。推 origin 的 `woowtech/web-1026`，不推 main。
+  1. Lane A、B、D、C 已依序合併進 `woowtech/web-1026`（2026-10-27，驗證紀錄有整合的結果）；接下來跑本機 E2E（web-spec.md 7.3：dry-run 匯出、`check-export.mjs`、`wrangler pages dev`、`hosted-web-smoke.mjs`），用那次真的 dry-run 寫好 `woowtech/web/export-baseline.json`，逐一看過再提交（第 27 節「基準檔」）。推 origin 的 `woowtech/web-1026`，不推 main；整合時還沒推。
   2. 【owner】在 `wrangler-pages` 登入一次、建 Pages 專案、加部署通知（第 27 節）。
   3. 第一次部署：先 dry-run（可以加 `WOOW_FRESH_INSTALL=1`，在 `~/projects/woowtech-smart-web-deploy` 這個 linked worktree 裡跑），再上傳。第一次上傳沒有線上的 commit 可比，會停在代碼 7：把腳本印出的護欄檔案 diff 和真正的基準檔給 owner 看，owner 說好才用 `WOOW_ACK_GUARD_DIFF=<雜湊>` 跑第二次（第 27 節）。上傳後 `verify-live.mjs` 對這次部署自己的網址（`<hash>.woowtech-smart-web.pages.dev`）檢查；smoke 的 S1–S4、S8–S10 打 `woowtech-smart-web.pages.dev`（S5、S6 在那裡不會過：CORS 和回報 Worker 都不放行那個來源）。步驟 4 開了 pages.dev 的 Bulk Redirect 之後它會回 301，之後的 smoke 打 `smart.woowtech.io`。
   4. 【owner】掛 smart.woowtech.io，等 Active，建標記檔 `domain-attached`（第 27 節），啟用 pages.dev 的 Bulk Redirect（`~/.local/share/woowtech-smart/plans/web-server-20261026/pages-dev-redirect.md`），看 Workers Routes 和 audit log。
   5. 正式站的部署後檢查（第 27 節）。沒過就不能做第 8 步。
   6. 【owner】回報 Worker 重新部署並跑 V1–V5、V8（`woowtech/ai-content-report-cloudrun/README.md`；可以在第 2～5 步之前做）。
   7. 【owner】隱私權政策（Odoo 391）：P1–P4 必要，P5–P8 建議，P9 看 O4；文字先給 owner 看。P3（「也不保存」）要等回報 Worker 的 Observability 和限流兩項都確認過才發佈。發佈後在第 10 節補一句哪一天為網頁版改了政策。舊頁 `/woowtech-smart/privacy(-en)` 要轉址到 391 還是更新（O7）。
-  8. 【owner】發佈帶新預設的 daemon、CLI 和桌面版（D2、D3；版本號、版本說明、簽章和公證，O8）。在這之前發佈的話，相機掃新的 QR Code 會打開一個還不存在的網站。
+  8. 【owner】發佈帶新預設的 daemon、CLI 和桌面版（D2、D3；版本號、版本說明、簽章和公證，O8）。在這之前發佈的話，相機掃新的 QR Code 會打開一個還不存在的網站。版本說明要寫：Hub 連線預設關閉、已接上 Hub 的人升級後要自己打開（第 28 節有中英文的句子）；關掉網頁直連的 `'[]'` 之後要再 `daemon restart`（第 19 節）。
 - 網頁版的待決事項：O1（CSP，已選對等版）、O2（按了才連）、O3（金鑰改變擋下）、O12（登入一次就一直有效）已決定。還沒決定：B8 的確認畫面文字（實作後給 owner 過目，第一次部署前定稿）、O4（只有 `verify-live.mjs` 仍看到 `challenge-platform` 時）、O6（pages.dev 轉址、預覽加 Access）、O7、O8、O9（要不要在版本說明附上既有 home 開直連的指令）、O10（選做：expo-camera 的網頁 stub C6，這一輪沒做；回報的 platform D5）、O11（要不要在 GitHub 上跑一次完整 CI）。
   - C6 沒做的原因：照規格把 resolver 加進 `plugins/woowtech-metro-resolver.js`，`woowtech/push.test.mjs` 用來換掉那個模組的替身只有 `withNativeRnFirebaseModules`，那一項會壞。要做的話，連那個守門一起改，或把 resolver 放在另一個檔。沒做的影響：網頁版進到 `/pair-scan` 時，expo-camera 會建立 worker 去 jsdelivr 載 jsQR，被 CSP 擋下（console 有一筆違規，畫面本來就顯示不支援）；基準檔要列那個網址。
+  - Hub 開關要不要連 owner 連線也擋（在 `paseoHome` 內拒絕檔案寫入；做法和代價在第 28 節）：owner 另外決定，這一輪沒做。
+  - 回報 Worker 的 wrangler 登入每次用完都登出，Pages 的登入不登出（O12）：這個分開的做法要 owner 確認（第 10、27 節）。
+  - wrangler 的間接相依套件版本會浮動、npx 會跑安裝腳本：要不要改成 commit 一份 lockfile、用 `npm ci --ignore-scripts` 安裝（第 27 節「已知限制」）。
+  - 正式站只該從 `origin/main` 和整合分支部署、用 `git ls-remote` 確認分支頂端：這條選做的規則沒做（`deploy-web.sh` 只要求 HEAD 在某個 `origin/*` 分支上，而且線上那版是它的祖先）。
+  - 儀表板按過 Rollback 之後，`pages deployment list` 最新一筆不是上線的那版：之後的部署要 `WOOW_ALLOW_DOWNGRADE=1`，由 owner 在場（第 27 節）。
   - help 技能（`woowtech/skills/woowtech-smart-help/SKILL.md`）的用戶端清單還沒加網頁版：技能檔是 `generate-skills.mjs` 產生的，要改 `woowtech/tools/skill-rewrites.mjs` 再重新產生（第 13 節）。
 - 網頁版延到下一輪的（O13）：CLI `woowtech-smart daemon pair` 顯示金鑰指紋（指紋的算法要先搬到 protocol）；`daemon pair --rotate-key`（這一輪用第 19 節的手動步驟）；設定頁「從這個瀏覽器移除所有主機」；新主機的標籤撞名時加註；主機清單上的「連到這台電腦」；把 HTML 預覽搬到另一個 origin，讓中間版 CSP 也能跑預覽的 script；有期限或只能用一次的配對邀請（要改 protocol）；依權限狀態決定要不要自動探測、WebSocket 支援 `targetAddressSpace`。網頁版的介面打磨：theme-color 分深淺色、manifest 的說明和 maskable icon、純網頁版歡迎頁的官網和 Mac 下載連結、`document.title` 翻譯、`+not-found`、robots 政策、LNA 和 Safari 直連失敗的提示、支援頁補網頁版說明。
 - 每次發版都要從同一個 commit 重新部署網頁版（第 27 節）。
@@ -2627,7 +2809,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 第 15 節「還沒處理的」兩項（`GIT_EDITOR`、其他 agent 宿主的變數）要不要處理，還沒決定。終端機的環境已處理。
 - 在模擬器上確認：英文系統的主畫面標籤、「新功能」的空狀態、繁中的設定頁和側欄。
 - 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
-- 配對連結打開網頁版（第 19 節）的實機驗收（owner，要有人在裝置前）：Chrome 桌面（151 以上）第一次打開網頁版不跳權限提示，按「連到這台電腦」才跳，允許後本機 daemon 出現，拒絕的話只剩 relay、再按會顯示找不到 daemon；確認畫面出現後 1 秒內按 Connect 沒反應，切到別的分頁再回來又要等 1 秒；Firefox 158 只有 daemon 在跑時才跳提示；Safari 26 的 console 有混合內容被擋，relay 照樣能用；iOS Safari、Android Chrome 用相機掃桌面版「配對裝置」的新 QR Code 會進網頁版、跳出確認（不會同時跳權限提示），指紋跟桌面版顯示的相同，按 Connect 後經 relay 配對成功；App 內的掃描器掃新的 QR Code 能配對；舊的 `woowtech-smart:///#offer=` QR Code 仍會叫起 App、跳出確認、配對成功；在 macOS 上點 https 配對連結會開瀏覽器；iOS 和 Android 原生的確認畫面疊在「貼上配對連結」上面時能正常顯示和關閉。
+- 配對連結打開網頁版（第 19 節）的實機驗收（owner，要有人在裝置前）：Chrome 桌面（151 以上）第一次打開網頁版不跳權限提示，按「連到這台電腦」才跳，允許後本機 daemon 出現，拒絕的話只剩 relay、再按會顯示找不到 daemon；確認畫面出現後 1 秒內按 Connect 沒反應，切到別的分頁再回來又要等 1 秒；Firefox 158 只有 daemon 在跑時才跳提示；Safari 26 的 console 有混合內容被擋，relay 照樣能用；iOS Safari、Android Chrome 用相機掃桌面版「配對裝置」的新 QR Code 會進網頁版、跳出確認（不會同時跳權限提示），指紋跟桌面版顯示的相同，按 Connect 後經 relay 配對成功；App 內的掃描器掃新的 QR Code 能配對；舊的 `woowtech-smart:///#offer=` QR Code 仍會叫起 App、跳出確認、配對成功；在 macOS 上點 https 配對連結會開瀏覽器；iOS 和 Android 原生的確認畫面疊在「貼上配對連結」上面時能正常顯示和關閉。另外 Lane B 只在單元和 jsdom 層驗過、要在真的瀏覽器和裝置上手動看一次的：(a) 向主機自己的 daemon 要金鑰：桌面版 daemon 開著，用「連到這台電腦」加進來，再貼上那個 daemon 自己的配對連結（應該問）、貼上金鑰不同的連結（應該被擋成金鑰改變）、把 daemon 關掉再貼（應該被擋成「無法核對這個連結的金鑰」）；(b) 瀏覽器的鍵盤焦點規則：jsdom 把 `:focus-visible` 當成 `:focus`，「滑鼠取得焦點不算」是用注入的答案測的，沒有在 Chrome、Firefox、Safari 上看過；(c) VoiceOver、NVDA 在瀏覽器裡啟動 Connect：螢幕閱讀器若不經鍵盤移動焦點，`:focus-visible` 可能是 false，啟動就不算（這是往安全的方向失敗，Tab 加 Enter 仍可用）；(d) 在取消鈕上按 Enter：唯一試過這個動作的 jsdom 測試逾時、原因沒查出來，已拿掉，只剩點取消鈕的測試；(e) Android 10–11 的點擊劫持是已知限制（第 19 節）。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 推播（第 16 節）：protocol、daemon、App 和守門都做完了（分支 `woowtech/push`，2026-09-26 已合進 main），接下來：
   - 中繼的 smart 模式和 push.woowtech.io 已在 2026-09-25 部署（第 16 節）。部署後的檢查：`POST {}` 回 400 `invalid_request`（field `token`）、假的 FCM token 回 410、直接打 run.app 回 403、GET 回 405、其他路徑回 404。
