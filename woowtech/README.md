@@ -1246,7 +1246,7 @@ owner 2026-10-26 決定照上游的做法（D2）：配對連結和 QR Code 打�
     - 核對不了（`keyUnverified`）：也不問、只能關閉，畫面寫「無法核對這個連結的金鑰」。發生在要向 daemon 要金鑰、而主機沒上線、daemon 太舊、daemon 的 relay 關著（沒有配對連結可給）、呼叫失敗或逾時，或 daemon 回報的 id 不是這台。這一步是審查之後補的洞：沒有它，連結帶同一個 serverId 和別把金鑰，對沒存金鑰的主機只會得到普通的「連線改變」問題，同意就把對方的金鑰綁到這台主機。
 - 欄位先驗證，不合格就顯示錯誤、不問：serverId 符合 `^[A-Za-z0-9_-]{1,64}$`；金鑰（trim 後）只含 base64 或 base64url 的字元，解碼後剛好 32 bytes；relay 端點（trim 後）不含空白，是 ASCII 的主機名稱或中括號裡的 IPv6，加上 port。畫面上每一個來自連結、遠端或已存資料的值都經過 `displayText`：去掉控制字元、bidi 和零寬字元，換行變空白、合成單行，太長（預設 80 字）就截斷。錯誤訊息是英文，不含連結（那是憑證）。
 - 用的不是 WOOWTECH 的中繼時，多一行警語；該中繼沒有 TLS 時，「中繼」和「已存的中繼」兩列的位址後面加「（無 TLS）」，只把 TLS 關掉的連結不會再讓兩列看起來一樣。在瀏覽器裡（不是 Electron）再多一行：主機存在這個瀏覽器，別人用這個瀏覽器就能控制它；核准的主機也能操作這台電腦上允許這個網站直連的 daemon；只在自己的瀏覽器配對。
-- 防誤按（DoubleClickjacking）：畫面看得見而且有焦點連續 1000 ms，Connect 才「武裝」；blur、focus、visibilitychange、pagehide、pageshow、resize（原生是 AppState 的變化）任何一個發生都從頭計時，換題也是。武裝後還要一個新的手勢：畫面內的 pointermove（滑鼠）、觸控或筆的 pointerdown，或用 Tab 移動焦點（keydown 和 keyup 都算，因為焦點陷阱會吞掉繞回的 Tab 的 keydown）；觸控和原生的按壓本身就是手勢。武裝前就開始的按壓、按住不放的鍵都不算。沒有 press-in 就送到的 `onPress`（TalkBack、VoiceOver 的無障礙點擊，程式送的 click）：手機上 Connect 武裝後算；瀏覽器裡只有「Connect 是在武裝之後由鍵盤取得焦點」才算（用瀏覽器的 `:focus-visible` 判斷）。初始焦點在 Cancel（每題只在取消按鈕出現時聚焦一次，用 callback ref，所以緊湊版面裡比 sheet 晚掛上的內容也找得到），未武裝時 Connect 是停用的；Connect 在未武裝時取得焦點（例如雙擊的第二下點在停用的 Connect 上），焦點立刻移回 Cancel，之後的 Enter 只會按到取消。COOP 不是這個攻擊的防護（攻擊頁導覽的是自己的分頁）。
+- 防誤按（DoubleClickjacking）：畫面看得見而且有焦點連續 1000 ms，Connect 才「武裝」；blur、focus、visibilitychange、pagehide、pageshow、resize（原生是 AppState 的變化）任何一個發生都從頭計時，換題也是。武裝後還要一個新的手勢：畫面內的 pointermove（滑鼠）、觸控或筆的 pointerdown，或用 Tab 移動焦點（keydown 和 keyup 都算，因為焦點陷阱會吞掉繞回的 Tab 的 keydown）；觸控和原生的按壓本身就是手勢。武裝前就開始的按壓、按住不放的鍵都不算。沒有 press-in 就送到的 `onPress`（TalkBack、VoiceOver 的無障礙點擊，程式送的 click）：手機上 Connect 武裝後算；瀏覽器裡只有「Connect 是在武裝之後由鍵盤取得焦點」才算（用瀏覽器的 `:focus-visible` 判斷）。初始焦點在 Cancel（每題只在取消按鈕出現時聚焦一次，用 callback ref，所以緊湊版面裡比 sheet 晚掛上的內容也找得到），未武裝時 Connect 是停用的；Connect 在未武裝時取得焦點（程式呼叫 `focus()`），焦點立刻移回 Cancel，之後的 Enter 只會按到取消。雙擊的第二下點在停用的 Connect 上時，Chrome 不會把焦點給 Connect：焦點落在 sheet 本身，之後的 Enter 什麼都不做，既不連線也不取消（2026-10-29 在 Chrome 實測，見驗證紀錄）。COOP 不是這個攻擊的防護（攻擊頁導覽的是自己的分頁）。
 - 文字在 `i18n/woowtech-copy.ts` 的 `pairingConfirmation`（繁中和英文，其他語言用英文）；前 7 個 key 跟上游 en.ts 逐字相同。這是安全警語，全部 26 個 key 的繁中和英文列在第 14 節，owner 過目後定稿（B8）。
 - 文字明講「這台主機將可以在渥屋智能裡執行程式」：核准一台主機之後，它在 `server_info` 宣告 `features.plugins`，App 就會用 `globalThis.eval` 執行它送來的外掛 client bundle（`plugins/evaluate.ts`）。上游一樣。
 - 指紋可以跟桌面版「配對裝置」QR Code 下方顯示的比對（`desktop/components/woowtech-pairing-fingerprint.tsx`，testID `pair-device-fingerprint`，讀不出連結就不顯示）。CLI 的 `daemon pair` 這一輪不顯示指紋（「接下來」）。
@@ -1798,12 +1798,12 @@ test ! -d ~/.wrangler && cd "$(mktemp -d)" && CLOUDFLARE_ACCOUNT_ID=9c27f623ee59
   - JavaScript 只准在 `_expo/static/js/web/` 底下，副檔名 `.js`（入口和 lazy chunk 都在那裡）；別處的 `.js`、`.mjs`、`.cjs` 一律失敗，基準檔也不能放行。
   - 沒有 `404.html`、`_redirects`、`_worker.js`、`_routes.json`、`functions/`、source map、`.env*`、symlink，也沒有檔名像 service worker 的檔（`sw.js`、`sw-*.js`、`service-worker*.js`、含 `workbox` 的）。
   - 每個檔不超過 25 MiB（Pages 的上限；23 MiB 以上警告並列出最大的檔），總數不超過 20,000。上游的 bundle 是 22.5 MiB，fork 的大小要建置後才知道；超過時拆 chunk，或把 3.5 MB 的 mermaid runtime 改成獨立的檔。
-  - 其他的檔都要是 Expo 會匯出的資料：圖片（`png jpg jpeg gif webp avif bmp ico`）、字型（`ttf otf woff woff2`）、聲音和影片（`wav mp3 ogg m4a mp4 webm`）、`css`、`json`、`txt`。別的失敗，除非基準檔的 `files` 列著它的路徑和 SHA-256：`.svg`、`.xml` 這類文件可以帶 script，`.wasm` 是程式碼，沒有副檔名的檔不知道是什麼。上游 0.10.3 的實際匯出只有 `png`、`ico`、`css`、`json`、`txt`、`js`、`html`；fork 的匯出會不會多出別的（`packages/app/assets/` 底下有兩個 `.svg` 和一個 `.wav`），要等第一次真的 dry-run 才知道，到時逐一看過再寫進基準檔。
+  - 其他的檔都要是 Expo 會匯出的資料：圖片（`png jpg jpeg gif webp avif bmp ico`）、字型（`ttf otf woff woff2`）、聲音和影片（`wav mp3 ogg m4a mp4 webm`）、`css`、`json`、`txt`。別的失敗，除非基準檔的 `files` 列著它的路徑和 SHA-256：`.svg`、`.xml` 這類文件可以帶 script，`.wasm` 是程式碼，沒有副檔名的檔不知道是什麼。上游 0.10.3 的實際匯出只有 `png`、`ico`、`css`、`json`、`txt`、`js`、`html`；fork 的匯出會不會多出別的（`packages/app/assets/` 底下有兩個 `.svg` 和一個 `.wav`），第一次真的 dry-run 看過了：`a494c7688` 的匯出 40 個檔，只有 `png`（28）、`js`（5）、`json`（2）、`txt`、`ico`、`html`、`css` 各 1，加 `_headers`，沒有 `.svg`、`.xml`、`.wasm`，基準檔的 `files` 是空的。
   - `_headers` 跟 `woowtech/web/_headers` 完全相同，不超過 100 條規則、每行不超過 2,000 字。
   - bundle 裡要有收件網址、`relay.woowtech.io`、`smart.woowtech.io`（證明 `BRAND_WEB_APP` 在裡面）和 `woowtech smart`；不能有 `app.paseo.sh`、`relay.paseo.sh`、上游的 CHANGELOG 網址、`cloudflareinsights`、`googletagmanager`、`google-analytics`、`posthog`、`sentry.io`、`cdn.segment.com`、`cdn.segment.io`、`api.segment.io`。不擋 `segment.`：React Navigation 一定有 `current.segment.replace(...)`。
   - 跟基準檔 `woowtech/web/export-baseline.json` 比：所有絕對 `http(s)`、`ws(s)` 網址的來源（scheme 加 host；`connect-src` 允許任何 ws 主機，所以 ws 也算）、所有像 script 的網址（`.js`、`.mjs` 結尾的網址，以及 cdn.jsdelivr.net、unpkg.com、cdnjs.cloudflare.com 底下的任何網址）、`eval(`、`new Function(`、`importScripts(`、`serviceWorker` **剛好**各出現幾次、`files` 的路徑和 SHA-256。多出基準沒有的來源、script 網址或檔案就失敗；四個計數多或少都失敗（只准往下的計數，會替日後悄悄加回來的程式留位子；計數真的變少時，看過原因再把基準檔往下調）；基準有、這次匯出沒有的來源和檔案只印出來。
 - 基準檔：
-  - Lane C 提交的是空的（`origins`、`scriptUrls`、`sinks` 都空），空的基準一律以「not initialized」失敗，所以第一次真的部署之前，一定要先跑一次真的 dry-run 寫好它。
+  - Lane C 提交的是空的（`origins`、`scriptUrls`、`sinks` 都空），空的基準一律以「not initialized」失敗，所以第一次真的部署之前，一定要先跑一次真的 dry-run 寫好它。2026-10-28 已用第一次真的 dry-run 寫好並提交（`a494c7688`），逐項看過的結果在驗證紀錄。
   - 寫入：`node woowtech/web/check-export.mjs <匯出> --write-baseline`（其他檢查都過才寫，而且不看原來的基準檔），再 `npm run format:files -- woowtech/web/export-baseline.json`，提交。基準檔是 `{ origins, scriptUrls, sinks, files }`；`files` 可以沒有（Lane C 提交的空檔就沒有）。
   - 寫完要逐一看：每個 `scriptUrls` 都要是不會被載入的說明連結，或已知被 CSP 擋下的 jsQR（`https://cdn.jsdelivr.net/npm/jsqr@1.2.0/dist/jsQR.min.js`）；上游的 bundle 也有一個說明連結 `https://github.com/jquery/jquery/blob/master/src/event.js`。`origins` 裡的 `ws://`、`wss://` 項目是哪裡來的，每個 `files` 項目是什麼檔（`.svg` 的內容有沒有 script）。`serviceWorker` 的次數記下來：fork 在網頁上也匯入整個 `expo-notifications`，它的 `getDevicePushTokenAsync.web.js` 有 `navigator.serviceWorker.register`；`app.config.js` 沒設 `notification.serviceWorkerPath`，那段程式只會丟錯、不會註冊（守門檢查）。來源清單很長（上游約 100 個，多半是說明連結），只看新出現的。看過的結果寫進下面的驗證紀錄。
   - 之後每次有變動（新增或減少），部署前先更新並提交。基準檔是五個護欄檔案之一：它跟線上正式站那版的 commit 有任何差異，`deploy-web.sh` 就停在代碼 7，要 owner 看過 diff（上面）。`web-deploy.test.mjs` 對提交的基準檔只檢查形狀（空的，或格式正確：字串陣列、非負整數的計數、`files` 的值是 SHA-256、除了上面那個 jsQR 之外沒有來自 CDN 的 script 網址），所以提交真正的基準檔不會讓 CI 變紅；內容對不對，由 owner 看那份 diff 判斷。
@@ -2368,6 +2368,24 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 網頁版第一次部署到 Pages（2026-10-28，整合分支 `woowtech/web-1026` 的 `a494c7688`，第 19、27 節；web-spec.md 6.3）：
+  - 基準檔：第一次 dry-run（`WOOW_DRY_RUN=1 WOOW_FRESH_INSTALL=1`，`npm ci` 和建置各約 20 分鐘）照預期以代碼 3 結束，因為基準檔是空的。用 `check-export.mjs <匯出> --write-baseline` 寫出基準檔，逐項看過（下面）後提交成 `a494c7688`，在整合頂端 `16dc61a70` 之上一個 commit；`woowtech/web-1026` 推上 origin，不是 main。sha 換了，所以重建一次，第二次 dry-run 代碼 0。
+  - 逐項看過（第 27 節「基準檔」的要求）：
+    - 匯出 40 個檔：`png` 28、`js` 5、`json` 2，`txt`、`ico`、`html`、`css` 各 1，加 `_headers`。入口 JS 22,493,370 bytes（21.45 MiB；Pages 單檔上限 25 MiB，腳本 23 MiB 起警告）。沒有 `.svg`、`.xml`、`.wasm`，`files` 是空的。
+    - 來源 116 個，沒有 `ws://`、`wss://`。多半是程式庫和說明的連結（Google、Expo、Chromium、GitHub 的文件）。會被請求的只有 `https://reports.woowtech.io`（回報）和 `https://raw.githubusercontent.com`（更新紀錄）；`https://paseo.sh` 一處是外掛搬遷說明，在錯誤訊息的字串裡。
+    - script 網址 5 個：jsQR 的 jsdelivr 網址（expo-camera 在 worker 裡載入，被 CSP 擋下，網頁版的掃描畫面本來就顯示不支援），其餘 4 個是 jquery、logo.js、xterm.js 的 GitHub 連結（註解和說明）。
+    - `eval(` 2 處（uuid 只在 Node 用的備援、Metro 的拆包載入器）、`new Function(` 1 處（功能偵測，傳空字串）、`importScripts(` 2 處（blob worker）、`serviceWorker` 5 處（都在 expo-notifications 的網頁推播；`app.config.js` 沒設 `notification.serviceWorkerPath`，那段程式只會丟錯，不會註冊）。
+    - 限制：基準檔只算字面的 `eval(`。程式庫裡有一處間接的 `(0,eval)(t)`，不在計數裡。
+  - 第一次正式模式：用只會拒絕 `deploy` 的 wrangler 替身（腳本不進 repo）跑到護欄檔案那一關。線上沒有部署，五個護欄檔都算新的，印出 diff 後代碼 7，雜湊 `6b2128f5918e`；`pages deployment list` 當時是 `[]`。五個檔的行數：`deploy-web.sh` 792、`check-export.mjs` 520、`verify-live.mjs` 259、`_headers` 12、`export-baseline.json` 134。這些、標頭與 CSP、基準檔的意義、護欄只擋意外的限制，都給 owner 看過；owner 在 10/28 13:39 前後回「可以」。
+  - 上傳（13:40）：`WOOW_ACK_GUARD_DIFF=6b2128f5918e WOOW_CONFIRM_SHA=a494c76 deploy-web.sh` 代碼 0。deployment `526ccee4`，Production，`a494c76`；上傳 39 個檔加 `_headers`，14.70 秒。`verify-live.mjs` 對部署自己的網址：`/` 和 `/settings/general` 都 200，38 個檔逐一比對，沒有失敗。另外用 curl 對 `woowtech-smart-web.pages.dev`：CSP、HSTS、COOP、Permissions-Policy、Referrer-Policy、X-Frame-Options 都在，HTML 帶 `no-transform`，入口 JS 是 immutable、大小相同，`/settings/general` 也是 200 並帶 CSP。
+  - pages.dev 上的 smoke（13:45–13:53）：daemon 用 `a494c76` 建，暫存 home，relay 開啟，`127.0.0.1:6791`，`PASEO_CORS_ORIGINS` 設成 pages.dev 的來源；`hosted-web-smoke.mjs --direct 127.0.0.1:6791 --report-mock`。第 1 輪加 `--grant-local-network`：S1–S10 全過。第 2 輪不加：只有 S5（直連）失敗，是預期的；S2 經 relay 照樣過。跑完 daemon 已停、暫存 home 已刪、6791 已空。
+  - Lane B 在瀏覽器裡的項目（2026-10-29，同一個 `a494c76`、同一個站，無頭 Chrome，真的滑鼠和鍵盤事件；程式送的 click 用 `dispatchEvent("click")`；腳本不進 repo）：
+    - 金鑰核對對真的 daemon（主機先用直連加入，所以沒有存 relay 金鑰；頁面開著、主機在線時才送連結，跟貼上一樣）：自己的配對連結出確認畫面（問，有 Connect 和 Cancel），按 Connect 後這台主機多一條 relay 連線；同 serverId、別把金鑰 → `host-confirmation-key-changed`，沒有 Connect、只有「關閉」，已存的連線沒變；daemon 停掉後貼自己的連結 → `host-confirmation-key-unverified`，只能關閉，已存的連線沒變。
+    - `:focus-visible` 規則：武裝後，Connect 沒有鍵盤焦點時，程式送的 click 被忽略（畫面還在、沒存主機）；按一次 Tab 到 Connect 後，程式送的 click 算數，Enter 也算。
+    - Enter 按在取消上：初始焦點在 Cancel，武裝後按 Enter 取消、沒存主機。程式呼叫 `focus()` 把焦點給未武裝的 Connect：焦點立刻回到 Cancel，武裝後 Enter 取消、沒連線。雙擊停用的 Connect：焦點落在 sheet 本身，武裝後 Enter 什麼都不做，既不連線也不取消。第一次寫的測試預期這裡焦點會回到 Cancel，所以失敗；加了診斷才看出來，第 19 節那句已改成實況。
+    - 無障礙樹（不等於螢幕閱讀器）：1 個 dialog，Connect 和 Cancel 各 1 個 button，未武裝時 Connect 是 disabled。
+  - 沒跑的：`smart.woowtech.io`（網域還沒掛）；S6 用真的回報接收端（Worker 還沒重新部署，預檢請求回 405、沒有 CORS 標頭）；Workers Routes 和 Audit log；螢幕閱讀器（VoiceOver、TalkBack）；Safari、Firefox；手機和 Mac 桌面版的實機；網頁版裡真的 agent 對話或終端機；有頭（headed）Chrome；部署通知信有沒有收到。
+
 - 網頁版四條 lane 的整合（2026-10-27，分支 `woowtech/web-1026`，第 19、27、28 節；web-spec.md 7.2）：A、B、D、C 依序用 `git merge --no-ff` 合進從 `acb733872`（main）開出的分支。
   - 合併：merge commit 是 `111c4336a`（A，lane 的頂端 `0989fb808`）、`df60a98d3`（B，`80e4d0d3c`）、`120a89cfb`（D，`9cbc24b0a`）、`9f25ffd46`（C，`a33a2f5cf`）。四條 lane 一共改了 86 個檔，兩兩沒有重疊，沒有衝突；合併後每條 lane 的檔案都跟它的頂端逐檔相同，樹裡沒有衝突標記。整合時沒有推上 origin。
   - `npm run build:server`（Node 22.23.2）：合併 A 之後一次、全部合併之後一次，兩次 exit 0。
@@ -2772,15 +2790,15 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 ## 接下來
 
 - 網頁版 smart.woowtech.io（第 19、27 節；web-spec.md 第 6 節），照這個順序：
-  1. Lane A、B、D、C 已依序合併進 `woowtech/web-1026`（2026-10-27，驗證紀錄有整合的結果）；接下來跑本機 E2E（web-spec.md 7.3：dry-run 匯出、`check-export.mjs`、`wrangler pages dev`、`hosted-web-smoke.mjs`），用那次真的 dry-run 寫好 `woowtech/web/export-baseline.json`，逐一看過再提交（第 27 節「基準檔」）。推 origin 的 `woowtech/web-1026`，不推 main；整合時還沒推。
-  2. 【owner】在 `wrangler-pages` 登入一次、建 Pages 專案、加部署通知（第 27 節）。
-  3. 第一次部署：先 dry-run（可以加 `WOOW_FRESH_INSTALL=1`，在 `~/projects/woowtech-smart-web-deploy` 這個 linked worktree 裡跑），再上傳。第一次上傳沒有線上的 commit 可比，會停在代碼 7：把腳本印出的護欄檔案 diff 和真正的基準檔給 owner 看，owner 說好才用 `WOOW_ACK_GUARD_DIFF=<雜湊>` 跑第二次（第 27 節）。上傳後 `verify-live.mjs` 對這次部署自己的網址（`<hash>.woowtech-smart-web.pages.dev`）檢查；smoke 的 S1–S4、S8–S10 打 `woowtech-smart-web.pages.dev`（S5、S6 在那裡不會過：CORS 和回報 Worker 都不放行那個來源）。步驟 4 開了 pages.dev 的 Bulk Redirect 之後它會回 301，之後的 smoke 打 `smart.woowtech.io`。
+  1. 已完成：Lane A、B、D、C 已依序合併進 `woowtech/web-1026`（2026-10-27，驗證紀錄有整合的結果）；第一次真的 dry-run 寫好 `woowtech/web/export-baseline.json`，逐項看過後提交成 `a494c7688`（第 27 節「基準檔」），`woowtech/web-1026` 已推上 origin（不是 main）。web-spec.md 7.3 用 `wrangler pages dev` 的本機 E2E 沒有單獨跑，上傳到 pages.dev 之後直接對它跑 smoke（步驟 3）。
+  2. 【owner】在 `wrangler-pages` 登入一次、建 Pages 專案、加部署通知（第 27 節）。登入和專案 2026-10-27 已完成；通知信 owner 說設好了，還沒確認 2026-10-28 那次部署有收到。
+  3. 已完成：2026-10-28 13:41 上傳到 `woowtech-smart-web.pages.dev`（deployment `526ccee4`，`a494c76`）。先在 `~/projects/woowtech-smart-web-deploy` 這個 linked worktree 跑 dry-run；第一次上傳停在代碼 7，owner 看過五個護欄檔和基準檔說好，才用 `WOOW_ACK_GUARD_DIFF=<雜湊>` 跑第二次（第 27 節）。`verify-live.mjs` 對部署自己的網址通過；smoke 的 S1–S10 打 `woowtech-smart-web.pages.dev` 全過（S5 要在測試 daemon 的 `PASEO_CORS_ORIGINS` 加上 pages.dev 的來源，S6 加 `--report-mock`：CORS 和回報 Worker 都不放行那個來源），細節在驗證紀錄。步驟 4 開了 pages.dev 的 Bulk Redirect 之後它會回 301，之後的 smoke 打 `smart.woowtech.io`。
   4. 【owner】掛 smart.woowtech.io，等 Active，建標記檔 `domain-attached`（第 27 節），啟用 pages.dev 的 Bulk Redirect（`~/.local/share/woowtech-smart/plans/web-server-20261026/pages-dev-redirect.md`），看 Workers Routes 和 audit log。
   5. 正式站的部署後檢查（第 27 節）。沒過就不能做第 8 步。
   6. 【owner】回報 Worker 重新部署並跑 V1–V5、V8（`woowtech/ai-content-report-cloudrun/README.md`；可以在第 2～5 步之前做）。
   7. 【owner】隱私權政策（Odoo 391）：P1–P4 必要，P5–P8 建議，P9 看 O4；文字先給 owner 看。P3（「也不保存」）要等回報 Worker 的 Observability 和限流兩項都確認過才發佈。發佈後在第 10 節補一句哪一天為網頁版改了政策。舊頁 `/woowtech-smart/privacy(-en)` 要轉址到 391 還是更新（O7）。
   8. 【owner】發佈帶新預設的 daemon、CLI 和桌面版（D2、D3；版本號、版本說明、簽章和公證，O8）。在這之前發佈的話，相機掃新的 QR Code 會打開一個還不存在的網站。版本說明要寫：Hub 連線預設關閉、已接上 Hub 的人升級後要自己打開（第 28 節有中英文的句子）；關掉網頁直連的 `'[]'` 之後要再 `daemon restart`（第 19 節）。
-- 網頁版的待決事項：O1（CSP，已選對等版）、O2（按了才連）、O3（金鑰改變擋下）、O12（登入一次就一直有效）已決定。還沒決定：B8 的確認畫面文字（實作後給 owner 過目，第一次部署前定稿）、O4（只有 `verify-live.mjs` 仍看到 `challenge-platform` 時）、O6（pages.dev 轉址、預覽加 Access）、O7、O8、O9（要不要在版本說明附上既有 home 開直連的指令）、O10（選做：expo-camera 的網頁 stub C6，這一輪沒做；回報的 platform D5）、O11（要不要在 GitHub 上跑一次完整 CI）。
+- 網頁版的待決事項：O1（CSP，已選對等版）、O2（按了才連）、O3（金鑰改變擋下）、O6（預覽不加 Access；pages.dev 轉址的草稿，掛網域後啟用）、B8（確認畫面文字，2026-10-27 owner 同意）、O10 的 D5（桌面版的回報標 desktop，保留）、O12（登入一次就一直有效）已決定。還沒決定：O4（只有 `verify-live.mjs` 仍看到 `challenge-platform` 時）、O7、O8、O9（要不要在版本說明附上既有 home 開直連的指令）、O10 的 C6（選做：expo-camera 的網頁 stub，這一輪沒做）、O11（要不要在 GitHub 上跑一次完整 CI）。
   - C6 沒做的原因：照規格把 resolver 加進 `plugins/woowtech-metro-resolver.js`，`woowtech/push.test.mjs` 用來換掉那個模組的替身只有 `withNativeRnFirebaseModules`，那一項會壞。要做的話，連那個守門一起改，或把 resolver 放在另一個檔。沒做的影響：網頁版進到 `/pair-scan` 時，expo-camera 會建立 worker 去 jsdelivr 載 jsQR，被 CSP 擋下（console 有一筆違規，畫面本來就顯示不支援）；基準檔要列那個網址。
   - Hub 開關要不要連 owner 連線也擋（在 `paseoHome` 內拒絕檔案寫入；做法和代價在第 28 節）：owner 另外決定，這一輪沒做。
   - 回報 Worker 的 wrangler 登入每次用完都登出，Pages 的登入不登出（O12）：這個分開的做法要 owner 確認（第 10、27 節）。
@@ -2808,7 +2826,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 更新紀錄：HTTP 200、內容卻不是 changelog 時（例如會攔截 TLS 的公司 proxy 回的封鎖頁），現在顯示「還沒有釋出說明」，沒有重試按鈕。要不要跟 404 分開處理，還沒決定。
 - 第 15 節「還沒處理的」兩項（`GIT_EDITOR`、其他 agent 宿主的變數）要不要處理，還沒決定。終端機的環境已處理。
 - 在模擬器上確認：英文系統的主畫面標籤、「新功能」的空狀態、繁中的設定頁和側欄。
-- 部署 relay.woowtech.io（第 11 節），部署後照第 11 節檢查，再發佈這個分支的版本；部署前發佈的話，daemon 會一直重試連不上的 relay。
+- relay.woowtech.io 已在 2026-09-25 部署（第 11 節；2026-09-26 只重新部署設定），這個分支沒有改 `packages/relay`。2026-10-29 `/health` 回 `{"status":"ok"}`，2026-10-28 的 smoke 經它配對上線。
 - 配對連結打開網頁版（第 19 節）的實機驗收（owner，要有人在裝置前）：Chrome 桌面（151 以上）第一次打開網頁版不跳權限提示，按「連到這台電腦」才跳，允許後本機 daemon 出現，拒絕的話只剩 relay、再按會顯示找不到 daemon；確認畫面出現後 1 秒內按 Connect 沒反應，切到別的分頁再回來又要等 1 秒；Firefox 158 只有 daemon 在跑時才跳提示；Safari 26 的 console 有混合內容被擋，relay 照樣能用；iOS Safari、Android Chrome 用相機掃桌面版「配對裝置」的新 QR Code 會進網頁版、跳出確認（不會同時跳權限提示），指紋跟桌面版顯示的相同，按 Connect 後經 relay 配對成功；App 內的掃描器掃新的 QR Code 能配對；舊的 `woowtech-smart:///#offer=` QR Code 仍會叫起 App、跳出確認、配對成功；在 macOS 上點 https 配對連結會開瀏覽器；iOS 和 Android 原生的確認畫面疊在「貼上配對連結」上面時能正常顯示和關閉。另外 Lane B 只在單元和 jsdom 層驗過、要在真的瀏覽器和裝置上手動看一次的：(a) 向主機自己的 daemon 要金鑰：桌面版 daemon 開著，用「連到這台電腦」加進來，再貼上那個 daemon 自己的配對連結（應該問）、貼上金鑰不同的連結（應該被擋成金鑰改變）、把 daemon 關掉再貼（應該被擋成「無法核對這個連結的金鑰」）；(b) 瀏覽器的鍵盤焦點規則：jsdom 把 `:focus-visible` 當成 `:focus`，「滑鼠取得焦點不算」是用注入的答案測的，沒有在 Chrome、Firefox、Safari 上看過；(c) VoiceOver、NVDA 在瀏覽器裡啟動 Connect：螢幕閱讀器若不經鍵盤移動焦點，`:focus-visible` 可能是 false，啟動就不算（這是往安全的方向失敗，Tab 加 Enter 仍可用）；(d) 在取消鈕上按 Enter：唯一試過這個動作的 jsdom 測試逾時、原因沒查出來，已拿掉，只剩點取消鈕的測試；(e) Android 10–11 的點擊劫持是已知限制（第 19 節）。
 - 之前內部測試版建立的 home 寫著 `daemon.relay.enabled: false`，要不要遷移成開，還沒決定。
 - 推播（第 16 節）：protocol、daemon、App 和守門都做完了（分支 `woowtech/push`，2026-09-26 已合進 main），接下來：
