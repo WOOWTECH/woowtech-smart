@@ -165,7 +165,10 @@ for i in $(seq 1 40); do curl -s -o /dev/null -w '%{http_code}\n' -X POST "$U" -
 - `CLOUDFLARE_ACCOUNT_ID=9f14a17191df1e77889566d848f063ad`（Alan 的帳戶，apporo.ai 的 zone 在這裡）。登入用同一個 `wrangler-reports` 目錄，`whoami --json` 的帳戶清單要列著它。
 - `RUN_URL=$(gcloud --project apporo-smart-app run services describe smart-reports --region us-west1 --format='value(status.url)')`
 - 部署前的三項（變數、Observability、限流）到 Alan 帳戶的儀表板看。這個 Worker 之前是用 wrangler 還是儀表板部署的、從哪個 commit 部署的，都沒有紀錄：先跑 `wr deployments list --name smart-reports-proxy`。不知道上次的 commit 時，部署前至少確認線上的 `ALLOWED_ORIGINS` 是 `apporosmart://app`，這次只多 `https://smart.apporo.ai`。
-- 檢查：`U=https://www.apporo.ai/api/smart/v1/ai-content-reports; W=https://smart.apporo.ai`。V3 的桌面版來源是 `apporosmart://app`；V5 的來源換成 `http://smart.apporo.ai https://www.smart.apporo.ai https://smart.apporo.ai.evil.invalid https://apporo-smart-web.pages.dev "$W/"`。V8 只會讓這台的 IP 在這條路徑上被限 1 分鐘，官網其他頁面不受影響。
+- 檢查：`U=https://www.apporo.ai/api/smart/v1/ai-content-reports; W=https://smart.apporo.ai`。V3 的桌面版來源是 `apporosmart://app`；V5 的來源換成 `http://smart.apporo.ai https://www.smart.apporo.ai https://smart.apporo.ai.evil.invalid https://apporo-smart-web.pages.dev "$W/"`。
+- 每 IP 限流靠的是 apporo.ai 的 WAF 限流規則「Apporo smart AI reports: per-IP limit」（2026-10-31 owner 選的做法）：主機 `www.apporo.ai`、路徑 `/api/smart/v1/ai-content-reports`，同一個 IP 每 10 秒超過 5 次就擋 10 秒（免費方案只有這種時間單位，也只能設一條）。Worker 的 `IP_RATE_LIMITER` binding 在這個帳戶不會擋：2026-10-31 連送 105 次都沒有 429，同一份程式在渥屋的帳戶（Workers Paid）會擋；Alan 的帳戶是免費方案，Cloudflare 文件沒寫免費方案能不能用。
+  - 被 WAF 擋下的 429 不帶 CORS 標頭，網頁版和桌面版讀不到它，只會顯示一般的連線錯誤；手機 App 不受影響。檢查工具（plans 的 `apporo-reports-worker-verify.py`）的「web origin」那一列 V8 因此會失敗，這是預期的。
+  - 一次跑完 V1–V5 會超過每 10 秒 5 次：要檢查就每 10 秒最多送 4 次，否則後面的請求只會拿到 429。V8 只會讓這台的 IP 在這條路徑上被擋 10 秒，官網其他頁面不受影響。
 - Apporo 隱私權政策的網頁版段落（P3）要等這些都過了才發佈，稿子在 `~/.local/share/woowtech-smart/plans/apporo-smart-web-20261030/privacy-apporo-web-draft.md`。
 
 ## 日常
