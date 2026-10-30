@@ -17,7 +17,8 @@
 # --brand=<id> picks the brand: woowtech (the default) or apporo. The checkout always has
 # woowtech applied (woowtech/brands). Another brand is built in a copy of HEAD's files, made next
 # to the exports, with this checkout's node_modules cloned into it (copy-on-write on APFS) and the
-# brand applied by woowtech/tools/apply-brand.mjs; the copy is deleted when the script ends.
+# brand applied by woowtech/tools/apply-brand.mjs; the copy is deleted after the build (or when
+# the script stops before that).
 #
 # Uploads use the owner's wrangler login in a directory of its own,
 # ~/.local/share/woowtech-smart/wrangler-pages, made once with only the account:read, user:read
