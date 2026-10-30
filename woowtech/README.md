@@ -356,6 +356,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 守門 `woowtech/help-links.test.mjs`；測試 `woowtech-privacy-policy-row.test.tsx`（繁中、英文、點了開政策網址）。
     上游的外部連結開啟器只放行 http/https。現在 App 的 `utils/open-external-url.ts` 和桌面版的 `features/opener.ts` 多放行 `mailto:`，`file:`、`javascript:` 照樣擋掉。
   - 網頁版的修改稿（owner 發佈；不在 repo 裡，在 `~/.local/share/woowtech-smart/plans/web-server-20261026/`）：`privacy-391-web-draft.md`；完整 HTML 是 `privacy-391-draft-required.html`（P1–P4）和 `privacy-391-draft-recommended.html`（P1–P8，P7 已補瀏覽器通知）。兩份都有 6 個待填記號（4 個日期、2 個包住 P3），P3（「也不保存」）要等 Worker 的 Observability（含 Tail Worker）、限流和 V8 看到 429 都確認後才保留。原內容備份在同一個資料夾的 `privacy-391-backup-20261027/content.html`。發佈後在本節加一行「政策於 <日期> 加入網頁版」。
+  - 政策於 2026-10-30 加入網頁版：P1–P8 都發佈（含 P3），中文和英文兩個語言的內容都寫入，公開頁面跟發佈檔逐字相同，細節在驗證紀錄。文章的小標題和 SEO 描述還是「手機與桌面 App」。
 - 社群與快速求助：官網首頁 aiot.woowtech.io（`BRAND_LINKS.website`）。2026-09-26 起不再導向 LINE 官方帳號（擁有者決定）。
   - 說明選單的 Discord 改成「官方網站」。
   - 設定的「關於」頁和專案首頁底部，原本有 GitHub Star、贊助上游作者、Discord 三個按鈕，現在只留「官方網站」（地球圖示）。
@@ -2368,6 +2369,12 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 隱私權政策加入網頁版（2026-10-30，Odoo `blog.post` 391；web-spec.md 6.8；文字在 plans 的 `privacy-391-web-draft.md`）：owner 看過要貼的文字後說「幫我貼」；照建議發佈 P1–P8（P3 的前提在下一條確認過），日期 2026-10-30。
+  - 做法：Odoo 後台的文章表單沒有內文欄位，所以在 owner 已登入的瀏覽器分頁裡用 JSON-RPC（`/web/dataset/call_kw`）讀寫 `blog.post.content`。寫入前先讀：網站語言是 zh_TW（預設）和 en_US，兩個語言的內文相同（13,154 字），跟 10/27 的備份逐位元組相同；全文另存在 plans 的 `privacy-publish-20261030/`。寫入時先再確認一次 `write_date` 和內文的 SHA-256 都沒變，再依序寫 en_US、zh_TW。讀回時兩個語言都跟發佈檔逐字相同；發佈檔是 `make-privacy-html.py 2026-10-30 recommended keep` 產生的，SHA-256 `3a39d969…`。
+  - 公開頁面（中文和 `/en/`）：抓下內容欄位、還原 Cloudflare 的信箱混淆後，跟發佈檔逐字相同。`smart.woowtech.io` 出現 6 次，待填記號 0，「跨來源請求／cross-origin request」2 次；生效日期與頁尾日期都是 2026-10-30；`cf-cache-status: DYNAMIC`。
+  - 沒改：文章的小標題和 SEO 描述（`website_meta_description`）還是「手機與桌面 App」，等 owner 決定；舊頁 `/woowtech-smart/privacy(-en)`（O7）沒動。
+  - 回復：把 `privacy-publish-20261030/content-before-*.html` 寫回兩個語言。
+
 - 回報 Worker 重新部署，放行網頁版（2026-10-30，Worker `smart-reports-proxy`，來源 `3d288ed63`；做法照 `woowtech/ai-content-report-cloudrun/README.md` 的「只更新 Worker」；web-spec.md 6.7）：owner 在對話裡明確說「同意部署可以」。
   - 變更：跟 10/14 部署的 `6be6f0127` 比，Worker 和它的 wrangler 設定只差一行：`DEFAULT_ALLOWED_ORIGINS` 多了 `https://smart.woowtech.io`；其餘 43 行都是註解。
   - 部署前（17:29–17:43）：Cloudflare 用 `wrangler login --device` 登入另一個目錄 `wrangler-reports`（owner 在瀏覽器核准），`whoami` 的權限剛好是 `account:read`、`user:read`、`workers_scripts:write`、`workers_routes:write`、`zone:read` 加 `offline_access`。`deployments list`：線上是 10/14 的 `fd4262ff`（Secret Change，前一筆是 Upload `ce5f91fa`）。owner 重新登入 gcloud 後，`gcloud run services describe smart-reports` 回的網址（最新可用 revision `smart-reports-00001-8bw`）跟儀表板上的 `RELAY_ORIGIN`（Text）相同；部署時的 `--var` 用的是 gcloud 回的值。儀表板（唯讀）：`EDGE_KEY` 是 Secret，沒有 `ALLOWED_ORIGINS`，`IP_RATE_LIMITER`（namespace 4102）在；Logs、Traces、Issues 關，沒有匯出、沒有 Logpush、沒有 Tail Worker。`reports-worker-verify.py --expect old`（腳本在 plans 目錄，不進 repo）9／9 過；dry-run 5.52 KiB。
@@ -2817,7 +2824,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   4. 已完成：2026-10-29 11:34 掛上 `smart.woowtech.io`（owner 明確說可以），11:37 Active，11:39 建標記檔 `domain-attached`（第 27 節），11:52 啟用 pages.dev 的 Bulk Redirect（`~/.local/share/woowtech-smart/plans/web-server-20261026/pages-dev-redirect.md`），Workers Routes 和 audit log 看過；細節在驗證紀錄第一條。不要把網域拿掉：daemon 的 `config.json` 信任這個網址。
   5. 正式站的部署後檢查（第 27 節）：線上內容（`verify-live.mjs`、標頭、入口 JS、`challenge-platform` 0 次）和 smoke S1–S10（含不設 `PASEO_CORS_ORIGINS`、只靠預設白名單的一輪）已在 2026-10-29 通過。回報 Worker 的 V1–V5、V8 已在 2026-10-30 通過（步驟 6）；實機驗收還沒做，沒做完不能做第 8 步。
   6. 已完成：2026-10-30 回報 Worker 重新部署（版本 `3632b58e`，放行網頁版），V1–V5、V8 全過，細節在驗證紀錄第一條（`woowtech/ai-content-report-cloudrun/README.md` 的「只更新 Worker」）。
-  7. 【owner】隱私權政策（Odoo 391）：P1–P4 必要，P5–P8 建議，P9 看 O4；文字先給 owner 看。P3（「也不保存」）要等回報 Worker 的 Observability 和限流兩項都確認過才發佈（2026-10-30 已確認）。發佈後在第 10 節補一句哪一天為網頁版改了政策。舊頁 `/woowtech-smart/privacy(-en)` 要轉址到 391 還是更新（O7）。
+  7. 已完成：2026-10-30 隱私權政策加入網頁版（P1–P8，含 P3），中英文兩個語言都寫入，細節在驗證紀錄第一條。還沒決定：文章的小標題和 SEO 描述要不要加上網頁版；舊頁 `/woowtech-smart/privacy(-en)` 要轉址到 391 還是更新（O7）。
   8. 【owner】發佈帶新預設的 daemon、CLI 和桌面版（D2、D3；版本號、版本說明、簽章和公證，O8）。在這之前發佈的話，相機掃新的 QR Code 會打開一個還不存在的網站。版本說明要寫：Hub 連線預設關閉、已接上 Hub 的人升級後要自己打開（第 28 節有中英文的句子）；關掉網頁直連的 `'[]'` 之後要再 `daemon restart`（第 19 節）。
 - 網頁版的待決事項：O1（CSP，已選對等版）、O2（按了才連）、O3（金鑰改變擋下）、O6（預覽不加 Access；pages.dev 轉址 2026-10-29 已啟用）、B8（確認畫面文字，2026-10-27 owner 同意）、O10 的 D5（桌面版的回報標 desktop，保留）、O12（登入一次就一直有效）已決定。還沒決定：O7、O8、O9（要不要在版本說明附上既有 home 開直連的指令）、O10 的 C6（選做：expo-camera 的網頁 stub，這一輪沒做）、O11（要不要在 GitHub 上跑一次完整 CI）。O4 只有在 `verify-live.mjs` 看到 `challenge-platform` 時才要決定，2026-10-29 沒有出現。
   - C6 沒做的原因：照規格把 resolver 加進 `plugins/woowtech-metro-resolver.js`，`woowtech/push.test.mjs` 用來換掉那個模組的替身只有 `withNativeRnFirebaseModules`，那一項會壞。要做的話，連那個守門一起改，或把 resolver 放在另一個檔。沒做的影響：網頁版進到 `/pair-scan` 時，expo-camera 會建立 worker 去 jsdelivr 載 jsQR，被 CSP 擋下（console 有一筆違規，畫面本來就顯示不支援）；基準檔要列那個網址。
