@@ -1955,7 +1955,7 @@ npm 只裝執行 `npm install` 那台機器的 esbuild 執行檔（`@esbuild/<�
 
   建完把 `$lock` 刪掉。留著也不會進 arm64 版（after-pack 會拿掉），只是開發環境用不到。
 
-- 2026-10-30 實測：上面的指令抓到 0.25.12（4.5 MB），integrity 跟 lockfile 相同，`bin/esbuild` 是 x86_64。用真的 esbuild 執行檔組一個假 App：x64 缺 x64 套件時建置會停，補上後通過、arm64 套件被拿掉、`esbuild/bin/esbuild` 變成 x86_64；arm64 原樣通過。實際的 x64 打包還沒跑，下次發版建 x64 時一起驗：公證紀錄（`notarytool log`）的 ticketContents 每個檔都要是 x86_64。
+- 2026-10-30 實測：上面的指令抓到 0.25.12（4.5 MB），integrity 跟 lockfile 相同，`bin/esbuild` 是 x86_64。用真的 esbuild 執行檔組一個假 App：x64 缺 x64 套件時建置會停，補上後通過、arm64 套件被拿掉、`esbuild/bin/esbuild` 變成 x86_64；arm64 原樣通過。同一天實際打包一次沒簽章的 x64 `--dir`（照上面的指令放好 x64 套件，`build:app-deps:clean`、Electron 版的 `expo export`、electron-builder 共約 2.5 分鐘）：App 裡 29 個 Mach-O 檔都是 x86_64，`@esbuild` 只剩 `darwin-x64`，`esbuild/bin/esbuild` 換成了 x86_64。在 Rosetta 下用 App 自己的執行檔（`ELECTRON_RUN_AS_NODE`）載入 `app.asar` 裡的 esbuild，指向 `compiler.ts` 會用的那個 unpacked 執行檔，`transformSync` 和帶外掛的 `build` 都成功；同樣在 x64 行程裡載入只有 `darwin-arm64` 的 esbuild（0.8.1 的情況）會報「You installed esbuild for another platform than the one you're currently using」。簽章和公證過的 x64 下次發版時建，公證紀錄（`notarytool log`）的 ticketContents 每個檔都要是 x86_64。
 - 守門 `woowtech/desktop-native-arch.test.mjs`（8 項）：Mach-O 架構判讀、0.8.1 的情況會停、補上 x64 套件後只留它、arm64 原樣、JavaScript 啟動檔不動、任何不含目標架構的檔都會停、after-pack 的呼叫順序，以及 lockfile 還記著 server 那份 esbuild 的 x64 套件且版本相同。拿掉 after-pack 的呼叫時，接線那一項會失敗。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
