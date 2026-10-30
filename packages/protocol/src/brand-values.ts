@@ -63,6 +63,7 @@ export const BRAND = {
     ],
     style: "mark",
     color: "#6183fc",
+    colorOnDark: "#6183fc",
     tileColor: "#6183fc",
     badgeRing: "#e3e6ee",
     markWidths: {

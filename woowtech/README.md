@@ -287,7 +287,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - `woowtech/tools/flatten-symbol.py` 把它攤平成 `woowtech-symbol-path.svg`，共 10 筆路徑，畫出來跟原檔逐像素相同。
   - 不能合成一條路徑：筆畫會重疊，合成後在非零環繞規則下，交叉處會被挖成空洞。
   - 這 10 筆路徑和 viewBox 也抄在品牌設定 `woowtech.json` 的 `logo`，App 和圖示產生器讀的是那份（第 29 節）；`icons.test.mjs` 檢查兩份相同。
-- `woowtech/tools/generate-icons.mjs` 產生全部 24 個圖示，需要 Google Chrome、sips 和 iconutil。加 `--out <資料夾>` 可以只輸出預覽。
+- `woowtech/tools/generate-icons.mjs` 產生全部 25 個圖示，需要 Google Chrome、sips 和 iconutil。加 `--out <資料夾>` 可以只輸出預覽。
   - 預設畫目前套用的品牌；`--brand apporo --out woowtech/brands/apporo/assets` 畫 Apporo 的那一套，放在品牌資料夾，換品牌時由 `apply-brand.mjs` 蓋到原位。
   - Chrome 用暫時的使用者資料夾，不會動到開著的 Chrome。
   - iOS：1024 滿版、沒有透明通道。
@@ -2005,11 +2005,11 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
   - 守門 223 項全過。
   - 相關的單元測試全過：protocol、CLI、桌面版、App、server，共 509 項。
 - **Logo 和圖示**：品牌設定的 `logo` 有路徑、viewBox、樣式、顏色和各種圖示裡標誌的寬度（`markWidths`）。
-  - `style`：渥屋是 `mark`，App 裡和透明背景上畫裸的標誌。Apporo 是 `badge`：白色圓盤加淺灰外框，裡面是灰色標誌，跟 Apporo platform 一樣（owner 2026-10-15，沿用 10/8 的「Logo都要是圓型外框」）。App 裡的 logo、啟動畫面和 favicon 都用徽章。
-  - `tileColor`：App 圖示白底上的標誌顏色，也是徽章裡的標誌顏色。渥屋是品牌藍；Apporo 照它其他 App 的慣例，用灰色。
-  - `color`：裸標誌的顏色（渥屋的 App 內 logo，以及 iOS 深色圖示）。Apporo 是金色 `#8B6B24`，灰色在深色背景上看不清楚。
+  - `style`：兩個品牌都是 `mark`，App 裡和透明背景上畫去背的標誌。owner 2026-10-30：「所有跟 apporo logo 相關的都要用去背的方式呈現，如果是淺色的就用深灰色的線條，如果是深色的就用白色的線條」。在這之前（10/15 起）Apporo 是 `badge`：白色圓盤加淺灰外框，裡面是灰色標誌。程式還留著 `badge` 這個樣式，沒有品牌在用。
+  - `color` 和 `colorOnDark`：去背標誌在淺色背景、深色背景上的顏色。渥屋兩個都是品牌藍；Apporo 是深灰 `#4D4D4D` 和白色。App 的 logo（`components/icons/paseo-logo.tsx`）和啟動畫面依主題的明暗選色（`styles/brand.ts` 的 `brandLogoColor`）。圖示也分兩組：淺色的啟動畫面、favicon 用 `color`，深色啟動畫面（`splash-icon-dark.png`）、瀏覽器深色模式的 `favicon-dark*`、iOS 深色圖示用 `colorOnDark`。
+  - `tileColor`：App 圖示白底上的標誌顏色。渥屋是品牌藍；Apporo 照它其他 App 的慣例，用深灰。App 圖示一定要有底色（iOS 和 PWA 不收透明圖示），所以維持白底，剛好也符合「淺色用深灰」。
   - `markWidths`：App 圖示裡標誌佔多寬。Apporo 跟它其他 App 一樣幾乎填滿（92%），渥屋是 62%（owner 2026-10-15）。
-  - Apporo 的 24 個圖示在 `woowtech/brands/apporo/assets/`，由 `generate-icons.mjs --brand apporo` 產生。
+  - Apporo 的 25 個圖示在 `woowtech/brands/apporo/assets/`，由 `generate-icons.mjs --brand apporo` 產生。渥屋的在原位；2026-10-30 多了 `splash-icon-dark.png`，因為渥屋兩種背景同色，它跟 `splash-icon.png` 一模一樣。
 - **Apporo 的 relay 設定**：`packages/relay/wrangler.apporo.toml`（`relay.apporo.ai`），還沒部署；apporo.ai 的 DNS 在客戶的 Cloudflare 帳號，第一次部署前要填 `account_id`。
 - **2026-10-15 在 Apporo 套用後的暫存樹跑全部守門**：除了一項要 git 歷史的（暫存樹沒有），全過。
 - **只准同品牌配對**（owner 2026-10-15）：每個品牌的推播中繼只送得到自己 Firebase 專案的 App，跨品牌配對的手機永遠收不到通知，所以不讓它配。寫在 `packages/protocol/src/brand-match.ts`：

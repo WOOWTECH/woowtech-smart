@@ -259,7 +259,8 @@ export default {
             // woowtech smart: Android draws the splash logo onto a square of the background color
             // (@expo/prebuild-config withAndroidSplashImages), and only makes night drawables when
             // dark has an image: without one, the white square showed on the black dark splash.
-            image: "./assets/images/splash-icon.png",
+            // The dark image has the logo in its color for dark backgrounds (Apporo smart: white).
+            image: "./assets/images/splash-icon-dark.png",
             backgroundColor: "#000000",
           },
         },

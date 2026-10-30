@@ -1,9 +1,11 @@
 // Generates a brand's app, web and desktop icons from its logo (woowtech/brands): the logo
 // in its tile color on white tiles for app icons (woowtech smart: the blue WOOW symbol,
 // distinct from WOOW Home's blue tiles; Apporo smart: the grey mark, as Apporo's other apps),
-// the bare logo in its logo color on a transparent background wherever it sits on the app's
-// own background (splash screen, favicons, the iOS dark icon, Android's themed icon), a white
-// logo for Android notifications, and a tile in the brand color for development desktop builds.
+// the bare logo on a transparent background wherever it sits on the app's own background
+// (splash screens, favicons, the iOS dark icon, Android's themed icon) in its logo color, or its
+// color for dark backgrounds where the background is dark (Apporo smart: dark grey and white;
+// woowtech smart: its blue on both), a white logo for Android notifications, and a tile in the
+// brand color for development desktop builds.
 //
 //   node woowtech/tools/generate-icons.mjs                    # the applied brand, into the packages
 //   node woowtech/tools/generate-icons.mjs --out DIR          # write a preview set to DIR
@@ -59,11 +61,12 @@ function logoFile(name, fill) {
 
 const TILE_SYMBOL = logoFile("logo-tile", brand.logo.tileColor);
 const CLEAR_SYMBOL = logoFile("logo-clear", brand.logo.color);
+const CLEAR_SYMBOL_ON_DARK = logoFile("logo-clear-dark", brand.logo.colorOnDark);
 const WHITE_SYMBOL = logoFile("logo-white", "#ffffff");
 // How wide the mark is in each kind of icon, in percent of the canvas.
 const WIDTH = brand.logo.markWidths;
-// Apporo smart draws its logo on the app's own background as a badge: its grey mark inside a
-// white disc with a light ring. woowtech smart draws its bare symbol there.
+// A "badge" brand draws its logo on the app's own background as its mark inside a white disc with
+// a light ring (Apporo smart until 2026-10-30). Both brands draw the bare mark there now.
 const BADGE = brand.logo.style === "badge";
 
 // --- compositions (CSS on a MASTER-sized transparent canvas) -----------------
@@ -100,11 +103,14 @@ function badge({ diameter, dot }) {
   );
 }
 
-/** The logo on a transparent canvas: the brand's badge, or its bare symbol. */
-function onOwnBackground({ glyphWidth, badgeDiameter, dot }) {
+/**
+ * The logo on a transparent canvas: the brand's badge, or its bare symbol in the logo color for
+ * a light background or, with `onDark`, for a dark one.
+ */
+function onOwnBackground({ glyphWidth, badgeDiameter, dot, onDark = false }) {
   return BADGE
     ? badge({ diameter: badgeDiameter, dot })
-    : clear({ glyph: CLEAR_SYMBOL, glyphWidth, dot });
+    : clear({ glyph: onDark ? CLEAR_SYMBOL_ON_DARK : CLEAR_SYMBOL, glyphWidth, dot });
 }
 
 /** A square tile, inset from the canvas edge, holding a centered symbol. */
@@ -140,14 +146,30 @@ const compositions = {
   // WOOW symbol (105.2 x 83.4) is 50% wide: its diagonal, 64%, stays inside the circle. A badge
   // is 64% wide, inside the same circle.
   splash: onOwnBackground({ glyphWidth: 50, badgeDiameter: 64 }),
+  // The dark splash screen (black, app.config.js) gets the logo in its color for dark backgrounds.
+  splashDark: onOwnBackground({ glyphWidth: 50, badgeDiameter: 64, onDark: true }),
   // Favicons show at 16-32px, so the logo fills almost the whole canvas. A badge is 70% wide, so
-  // its disc and the status dot together cover less than half of it.
+  // its disc and the status dot together cover less than half of it. The -dark favicons are the
+  // ones a browser in dark mode shows (hooks/use-favicon-status.ts).
   favicon: onOwnBackground({ glyphWidth: 92, badgeDiameter: 70 }),
   faviconRunning: onOwnBackground({ glyphWidth: 92, badgeDiameter: 70, dot: RUNNING_DOT }),
   faviconAttention: onOwnBackground({ glyphWidth: 92, badgeDiameter: 70, dot: ATTENTION_DOT }),
-  // iOS 18 dark app icon: the system draws the background, the icon gives the symbol at the
-  // size of the light icon's. No tinted icon: prebuild flattens it onto white (withIosIcons).
-  iosDark: clear({ glyph: CLEAR_SYMBOL, glyphWidth: WIDTH.appIcon }),
+  faviconDark: onOwnBackground({ glyphWidth: 92, badgeDiameter: 70, onDark: true }),
+  faviconDarkRunning: onOwnBackground({
+    glyphWidth: 92,
+    badgeDiameter: 70,
+    dot: RUNNING_DOT,
+    onDark: true,
+  }),
+  faviconDarkAttention: onOwnBackground({
+    glyphWidth: 92,
+    badgeDiameter: 70,
+    dot: ATTENTION_DOT,
+    onDark: true,
+  }),
+  // iOS 18 dark app icon: the system draws the (dark) background, the icon gives the symbol at
+  // the size of the light icon's. No tinted icon: prebuild flattens it onto white (withIosIcons).
+  iosDark: clear({ glyph: CLEAR_SYMBOL_ON_DARK, glyphWidth: WIDTH.appIcon }),
   // Android 13+ themed icon: a silhouette with the adaptive foreground's geometry.
   androidMonochrome: clear({ glyph: WHITE_SYMBOL, glyphWidth: WIDTH.androidForeground }),
   // macOS icon grid: an 824px tile inside the 1024px canvas, with a soft shadow.
@@ -277,18 +299,17 @@ try {
   write("packages/app/assets/images/android-icon-foreground.png", png("androidForeground", MASTER));
   write("packages/app/assets/images/notification-icon.png", png("notification", 96));
   write("packages/app/assets/images/splash-icon.png", png("splash", 800));
+  write("packages/app/assets/images/splash-icon-dark.png", png("splashDark", 800));
   write("packages/app/assets/images/ios-icon-dark.png", png("iosDark", MASTER));
   write("packages/app/assets/images/android-icon-monochrome.png", png("androidMonochrome", MASTER));
-  for (const name of ["favicon", "favicon-light", "favicon-dark"]) {
+  for (const name of ["favicon", "favicon-light"]) {
     write(`packages/app/assets/images/${name}.png`, png("favicon", 48));
   }
-  for (const scheme of ["light", "dark"]) {
-    write(`packages/app/assets/images/favicon-${scheme}-running.png`, png("faviconRunning", 48));
-    write(
-      `packages/app/assets/images/favicon-${scheme}-attention.png`,
-      png("faviconAttention", 48),
-    );
-  }
+  write("packages/app/assets/images/favicon-light-running.png", png("faviconRunning", 48));
+  write("packages/app/assets/images/favicon-light-attention.png", png("faviconAttention", 48));
+  write("packages/app/assets/images/favicon-dark.png", png("faviconDark", 48));
+  write("packages/app/assets/images/favicon-dark-running.png", png("faviconDarkRunning", 48));
+  write("packages/app/assets/images/favicon-dark-attention.png", png("faviconDarkAttention", 48));
   write("packages/app/public/apple-touch-icon.png", withoutAlpha(resized(masters.fullBleed, 180)));
   write("packages/app/public/pwa-icon-192.png", png("tile", 192));
   write("packages/app/public/pwa-icon-512.png", png("tile", 512));

@@ -15,13 +15,13 @@ import { useTranslation } from "react-i18next";
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { BookOpen, Copy, RotateCw, TriangleAlert } from "lucide-react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import { PaseoLogo, brandBadgeSvg, woowSymbolMaskSvg } from "@/components/icons/paseo-logo";
 import { Button } from "@/components/ui/button";
 import { getDesktopDaemonLogs, type DesktopDaemonLogs } from "@/desktop/daemon/desktop-daemon";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { isNative, isWeb } from "@/constants/platform";
-import { BRAND_LOGO_COLOR } from "@/styles/brand";
+import { brandLogoColor } from "@/styles/brand";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 
 interface StartupSplashScreenProps {
@@ -81,14 +81,22 @@ function ensureWebSplashShimmerKeyframes() {
   webSplashShimmerRegistered = true;
 }
 
-// woowtech smart: the logo is a brand mark, so the splash draws it in the brand's logo color in
-// every theme (README section 9). PaseoLogo already ignores the color on native.
+// woowtech smart: the logo is a brand mark, so the splash draws it in the brand's logo color for
+// the theme's color scheme (README section 9; styles/brand.ts), not the theme's foreground.
+// PaseoLogo already ignores the color on native and picks the same one.
+const ThemedWebLogoShimmer = withUnistyles(WebLogoShimmer, (theme) => ({
+  color: brandLogoColor(theme.colorScheme),
+}));
+const ThemedNativeLogoShimmer = withUnistyles(NativeLogoShimmer, (theme) => ({
+  color: brandLogoColor(theme.colorScheme),
+}));
+
 function LogoShimmer() {
   if (isWeb) {
-    return <WebLogoShimmer color={BRAND_LOGO_COLOR} />;
+    return <ThemedWebLogoShimmer />;
   }
 
-  return <NativeLogoShimmer color={BRAND_LOGO_COLOR} />;
+  return <ThemedNativeLogoShimmer />;
 }
 
 function WebLogoShimmer({ color }: { color: string }) {

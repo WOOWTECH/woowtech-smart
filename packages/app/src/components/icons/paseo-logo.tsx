@@ -1,8 +1,9 @@
 import { BRAND } from "@getpaseo/protocol/brand-values";
 import React from "react";
 import Svg, { Circle, G, Path } from "react-native-svg";
+import { withUnistyles } from "react-native-unistyles";
 
-import { BRAND_LOGO_COLOR } from "@/styles/brand";
+import { brandLogoColor } from "@/styles/brand";
 
 interface PaseoLogoProps {
   size?: number;
@@ -11,10 +12,11 @@ interface PaseoLogoProps {
 }
 
 // The brand's logo (woowtech/brands). woowtech smart draws the WOOW symbol, from
-// woowtech/brand/woowtech-symbol-path.svg, in its brand blue. Apporo smart draws its grey mark
-// inside a white disc with a light ring, as Apporo's other apps do (owner 2026-10-15). Each
-// stroke is its own path: the WOOW strokes overlap, and one combined path would cut holes where
-// they cross.
+// woowtech/brand/woowtech-symbol-path.svg, in its brand blue on every theme. Apporo smart draws
+// its bare mark too: dark grey lines on a light theme, white lines on a dark one (owner
+// 2026-10-30; from 2026-10-15 it was a badge, the grey mark inside a white disc with a light
+// ring, which the "badge" style still draws). Each stroke is its own path: the WOOW strokes
+// overlap, and one combined path would cut holes where they cross.
 const SYMBOL_STROKES: readonly string[] = BRAND.logo.paths;
 const VIEW_BOX = BRAND.logo.viewBox;
 const LOGO_STYLE: "mark" | "badge" = BRAND.logo.style;
@@ -53,6 +55,22 @@ export function brandBadgeSvg(size: number): string | null {
   return `<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='${BADGE_VIEW_BOX}'>${badgeSvgBody()}</svg>`;
 }
 
+/** The bare mark in one color. */
+export function BrandMark({ size, fill }: { size: number; fill: string }) {
+  return (
+    <Svg width={size} height={size} viewBox={VIEW_BOX} fill="none">
+      {SYMBOL_STROKES.map((stroke) => (
+        <Path key={stroke} d={stroke} fill={fill} />
+      ))}
+    </Svg>
+  );
+}
+
+// The mark in the color for the current theme's color scheme (styles/brand.ts).
+const ThemedBrandMark = withUnistyles(BrandMark, (theme) => ({
+  fill: brandLogoColor(theme.colorScheme),
+}));
+
 export function PaseoLogo({ size = 64 }: PaseoLogoProps) {
   if (LOGO_STYLE === "badge") {
     return (
@@ -73,11 +91,5 @@ export function PaseoLogo({ size = 64 }: PaseoLogoProps) {
       </Svg>
     );
   }
-  return (
-    <Svg width={size} height={size} viewBox={VIEW_BOX} fill="none">
-      {SYMBOL_STROKES.map((stroke) => (
-        <Path key={stroke} d={stroke} fill={BRAND_LOGO_COLOR} />
-      ))}
-    </Svg>
-  );
+  return <ThemedBrandMark size={size} />;
 }

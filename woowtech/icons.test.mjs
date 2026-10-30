@@ -1,8 +1,9 @@
 // The brand's icons (woowtech/brands): its logo on white app-icon tiles (woowtech smart: the
 // blue WOOW symbol; Apporo smart: the grey mark) and on a transparent background wherever it
-// sits on the app's own background, in the sizes and formats each platform requires. The checks
-// look at what the pictures contain, so an upstream merge that brings Paseo's icons back fails
-// here.
+// sits on the app's own background, in the logo color on light backgrounds and the dark one's
+// color on dark backgrounds (Apporo smart: dark grey and white), in the sizes and formats each
+// platform requires. The checks look at what the pictures contain, so an upstream merge that
+// brings Paseo's icons back fails here.
 //
 //   node --test woowtech/icons.test.mjs
 import assert from "node:assert/strict";
@@ -32,13 +33,19 @@ const favicons = [
   "-dark-attention",
 ];
 
-// Icons that show the logo, with their required pixel size.
+// Icons that show the logo, with their required pixel size. `onDark` ones sit on a dark
+// background: the dark splash, a browser in dark mode, the iOS dark icon.
 const SYMBOL_ICONS = [
   { path: `${images}/icon.png`, size: 1024, opaque: true },
   { path: `${images}/android-icon-foreground.png`, size: 1024 },
   { path: `${images}/splash-icon.png`, size: 800 },
-  { path: `${images}/ios-icon-dark.png`, size: 1024 },
-  ...favicons.map((suffix) => ({ path: `${images}/favicon${suffix}.png`, size: 48 })),
+  { path: `${images}/splash-icon-dark.png`, size: 800, onDark: true },
+  { path: `${images}/ios-icon-dark.png`, size: 1024, onDark: true },
+  ...favicons.map((suffix) => ({
+    path: `${images}/favicon${suffix}.png`,
+    size: 48,
+    onDark: suffix.startsWith("-dark"),
+  })),
   { path: "packages/app/public/apple-touch-icon.png", size: 180, opaque: true },
   { path: "packages/app/public/pwa-icon-192.png", size: 192 },
   { path: "packages/app/public/pwa-icon-512.png", size: 512 },
@@ -79,12 +86,17 @@ function towards([red, green, blue], color) {
 
 const inLogoColor = (red, green, blue) =>
   LOGO_COLORS.some((color) => towards([red, green, blue], color));
+// On a transparent canvas the edges of a stroke keep its color and lose alpha, so a logo for a dark
+// background (white for Apporo smart) is its color itself, give or take rounding.
+const ON_DARK = rgbOf(brand.logo.colorOnDark);
+const inLogoColorOnDark = (red, green, blue) =>
+  [red, green, blue].every((channel, index) => Math.abs(channel - ON_DARK[index]) < 40);
 const nearlyBlack = (red, green, blue) => red + green + blue < 90;
 
-function assertShowsTheBlueSymbol(image, label) {
+function assertShowsTheBlueSymbol(image, label, onDark = false) {
   assert.ok(
-    shareOfPixels(image, inLogoColor) > 0.01,
-    `${label} shows no logo in the brand's colors`,
+    shareOfPixels(image, onDark ? inLogoColorOnDark : inLogoColor) > 0.01,
+    `${label} shows no logo in the brand's colors${onDark ? " for a dark background" : ""}`,
   );
   assert.ok(
     shareOfPixels(image, nearlyBlack) < 0.02,
@@ -111,7 +123,7 @@ function largestEmbeddedPng(file) {
 
 test("app, web and desktop icons show the brand's logo, not Paseo's black tile", () => {
   for (const icon of SYMBOL_ICONS) {
-    assertShowsTheBlueSymbol(readPng(repoPath(icon.path)), icon.path);
+    assertShowsTheBlueSymbol(readPng(repoPath(icon.path)), icon.path, icon.onDark);
   }
   for (const file of [`${desktop}/icon.icns`, `${desktop}/icon.ico`]) {
     assertShowsTheBlueSymbol(largestEmbeddedPng(file), file);
@@ -142,6 +154,7 @@ test("icons have the sizes and formats their platforms require", () => {
 // Android's dark splash screen (2026-10-07). App icons keep theirs (SYMBOL_ICONS, opaque).
 const CLEAR_LOGOS = [
   `${images}/splash-icon.png`,
+  `${images}/splash-icon-dark.png`,
   ...favicons.map((suffix) => `${images}/favicon${suffix}.png`),
   `${images}/ios-icon-dark.png`,
   `${images}/android-icon-monochrome.png`,
@@ -212,7 +225,8 @@ test("the dark splash screen gets its own logo drawables on Android", () => {
   );
   assert.ok(splash, "the expo-splash-screen plugin is not configured");
   assert.equal(splash[1].image, "./assets/images/splash-icon.png");
-  assert.equal(splash[1].dark?.image, "./assets/images/splash-icon.png");
+  // Its own image: the logo in its color for dark backgrounds (Apporo smart: white).
+  assert.equal(splash[1].dark?.image, "./assets/images/splash-icon-dark.png");
   assert.equal(splash[1].dark?.backgroundColor?.toLowerCase(), "#000000");
 });
 
@@ -249,8 +263,14 @@ test("the app's logo component draws the brand's logo", () => {
   assert.match(component, /const SYMBOL_STROKES: readonly string\[\] = BRAND\.logo\.paths;/);
   assert.match(component, /const VIEW_BOX = BRAND\.logo\.viewBox;/);
   assert.match(component, /<Svg width=\{size\} height=\{size\} viewBox=\{VIEW_BOX\}/);
-  assert.match(component, /fill=\{BRAND_LOGO_COLOR\}/);
-  // The badge (Apporo smart): the mark in its tile color inside a white disc with the ring.
+  // The bare mark in the logo color for the theme's color scheme (styles/brand.ts).
+  assert.match(component, /<Path key=\{stroke\} d=\{stroke\} fill=\{fill\} \/>/);
+  assert.match(
+    component,
+    /withUnistyles\(BrandMark, \(theme\) => \(\{\s*fill: brandLogoColor\(theme\.colorScheme\),/,
+  );
+  assert.match(component, /return <ThemedBrandMark size=\{size\} \/>;/);
+  // The badge (Apporo smart until 2026-10-30): the mark in its tile color inside a white disc.
   assert.match(component, /const LOGO_STYLE: "mark" \| "badge" = BRAND\.logo\.style;/);
   assert.match(component, /stroke=\{BRAND\.logo\.badgeRing\}/);
   assert.match(component, /fill=\{BRAND\.logo\.tileColor\}/);
@@ -266,8 +286,16 @@ test("the startup splash draws the logo in the brand's logo color", () => {
   const end = splash.indexOf("function WebLogoShimmer(");
   assert.ok(start !== -1 && end > start, "the splash no longer has LogoShimmer");
   const shimmer = splash.slice(start, end);
-  assert.match(shimmer, /<WebLogoShimmer color=\{BRAND_LOGO_COLOR\} \/>/);
-  assert.match(shimmer, /<NativeLogoShimmer color=\{BRAND_LOGO_COLOR\} \/>/);
+  assert.match(shimmer, /return <ThemedWebLogoShimmer \/>;/);
+  assert.match(shimmer, /return <ThemedNativeLogoShimmer \/>;/);
+  for (const name of ["WebLogoShimmer", "NativeLogoShimmer"]) {
+    assert.match(
+      splash,
+      new RegExp(
+        `withUnistyles\\(${name}, \\(theme\\) => \\(\\{\\s*color: brandLogoColor\\(theme\\.colorScheme\\),`,
+      ),
+    );
+  }
 });
 
 test("nothing that ships draws upstream Paseo's butterfly mark", () => {

@@ -36,6 +36,7 @@ export const BRAND_ICON_FILES = [
   "packages/app/assets/images/android-icon-foreground.png",
   "packages/app/assets/images/notification-icon.png",
   "packages/app/assets/images/splash-icon.png",
+  "packages/app/assets/images/splash-icon-dark.png",
   "packages/app/assets/images/ios-icon-dark.png",
   "packages/app/assets/images/android-icon-monochrome.png",
   "packages/app/assets/images/favicon.png",

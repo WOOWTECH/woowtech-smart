@@ -116,6 +116,7 @@ test("brand values have the shapes the code relies on", () => {
     for (const color of [
       ...Object.values(brand.colors),
       logo.color,
+      logo.colorOnDark,
       logo.tileColor,
       logo.badgeRing,
     ]) {

@@ -7,7 +7,18 @@ export const BRAND_COLOR = BRAND.colors.primary;
 export const BRAND_COLOR_ON_DARK = BRAND.colors.accentOnDark;
 
 /**
- * The color the app draws the brand's logo in, on any theme: woowtech smart's blue; Apporo's
- * gold, which stays readable on dark backgrounds where its grey mark would not.
+ * The color the app draws the brand's logo in on a light background: woowtech smart's blue,
+ * Apporo smart's dark grey.
  */
 export const BRAND_LOGO_COLOR = BRAND.logo.color;
+
+/**
+ * The color of the brand's logo on a dark background: woowtech smart's blue again, Apporo smart's
+ * white (owner 2026-10-30: the bare mark, dark grey lines on light, white lines on dark).
+ */
+export const BRAND_LOGO_COLOR_ON_DARK = BRAND.logo.colorOnDark;
+
+/** The logo's color for a theme's color scheme. */
+export function brandLogoColor(colorScheme: "light" | "dark"): string {
+  return colorScheme === "dark" ? BRAND_LOGO_COLOR_ON_DARK : BRAND_LOGO_COLOR;
+}
