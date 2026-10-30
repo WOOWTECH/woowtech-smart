@@ -157,6 +157,17 @@ for i in $(seq 1 40); do curl -s -o /dev/null -w '%{http_code}\n' -X POST "$U" -
 - 都符合之後，再到儀表板看一次 Observability（含 Tail Worker）和限流，把部署的 commit、部署前後兩次的結果記進 `woowtech/README.md` 的驗證紀錄。兩項都確認過、V8 也看到 429，隱私權政策才能發佈網頁版那一段（「轉送程式只用來源決定要不要回應，不轉給回報服務，也不保存」；草稿在 `plans/web-server-20261026/privacy-391-web-draft.md`）。
 - 最後 `wr logout`。
 
+#### Apporo smart 的 Worker
+
+網頁版 `https://smart.apporo.ai` 上線後（上線順序第 4 步），Apporo 的回報 Worker 也要放行它。程式同一份，步驟同上，換掉這些：
+
+- 設定檔是 `deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc`：`ALLOWED_ORIGINS` 從 2026-10-30 起是 `apporosmart://app https://smart.apporo.ai`，`PUBLIC_HOST`、`PUBLIC_PATH` 也寫在裡面（wrangler 部署會用這份的值換掉儀表板上的 Text 變數）。
+- `CLOUDFLARE_ACCOUNT_ID=9f14a17191df1e77889566d848f063ad`（Alan 的帳戶，apporo.ai 的 zone 在這裡）。登入用同一個 `wrangler-reports` 目錄，`whoami --json` 的帳戶清單要列著它。
+- `RUN_URL=$(gcloud --project apporo-smart-app run services describe smart-reports --region us-west1 --format='value(status.url)')`
+- 部署前的三項（變數、Observability、限流）到 Alan 帳戶的儀表板看。這個 Worker 之前是用 wrangler 還是儀表板部署的、從哪個 commit 部署的，都沒有紀錄：先跑 `wr deployments list --name smart-reports-proxy`。不知道上次的 commit 時，部署前至少確認線上的 `ALLOWED_ORIGINS` 是 `apporosmart://app`，這次只多 `https://smart.apporo.ai`。
+- 檢查：`U=https://www.apporo.ai/api/smart/v1/ai-content-reports; W=https://smart.apporo.ai`。V3 的桌面版來源是 `apporosmart://app`；V5 的來源換成 `http://smart.apporo.ai https://www.smart.apporo.ai https://smart.apporo.ai.evil.invalid https://apporo-smart-web.pages.dev "$W/"`。V8 只會讓這台的 IP 在這條路徑上被限 1 分鐘，官網其他頁面不受影響。
+- Apporo 隱私權政策的網頁版段落（P3）要等這些都過了才發佈，稿子在 `~/.local/share/woowtech-smart/plans/apporo-smart-web-20261030/privacy-apporo-web-draft.md`。
+
 ## 日常
 
 - **收到信**：信裡有收件編號。每個警示政策每天最多寄 20 封，超過就不再寄信，但回報照常存入；所以也要定期（至少每週）看 Firestore。
