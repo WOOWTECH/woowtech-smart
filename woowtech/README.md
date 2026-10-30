@@ -1925,6 +1925,7 @@ node --test woowtech/hub-gate.test.mjs
 - 守門第 5 項失敗：上游改了 `handleHubRelationshipRequest` 的 catch，把 `error instanceof HubDisabledError ? error.code : "handler_error"` 放回去。
 - 守門第 6 項失敗：上游多了新的 Hub 管理路徑（新的 `hub.management.*` 請求、第二個管理類別）；新路徑也要過 gate。
 - 上游新增的測試用 `createTestPaseoDaemon` 起 daemon 再呼叫 `connectHub`：會被拒，傳 `hubEnabled: true`（或在那個 home 寫 `config.json`）。
+  - 自己用 `createPaseoDaemon` 起 daemon、在 home 先寫 `hub-relationship.json` 的測試也一樣：`bootstrap.smoke.test.ts` 的「relay config changes during Hub enrollment reach the live runtime」沒寫 `config.json`，註冊永遠不會開始，等到 30 秒逾時。本機只跑改到的測試檔，所以 2026-10-30 的 CI 第 53 次（run 41059859953）才發現；已在它的 home 寫 `{"version":1,"daemon":{"hub":{"enabled":true}}}`，跟 `test-utils/paseo-daemon.ts` 的 `hubEnabled: true` 寫的一樣。
 
 版本說明（發佈帶新預設的 daemon、CLI 和桌面版時加上，第 19 節和「接下來」）：
 
