@@ -2396,6 +2396,13 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- 0.9.0：版本、GitHub CI、合進 main、網頁版重新部署（2026-10-30）。owner 對「版本號 0.9.0、實機驗收、合進 main、GitHub 完整測試」回「實機驗收之外的都去做」，CI 第一次沒過後回「好的再跑一次」，對「桌面版正式發佈、網頁版用同一個 commit 重新部署、發佈時打 tag」回「都同意」。實機驗收沒做，版本說明裡跟瀏覽器有關的句子維持「預期」。
+  - 版本（`563401bf9`）：照 `6be6f0127`（0.8.1）的做法，根目錄改 0.9.0、`scripts/sync-workspace-versions.mjs`、`package-lock.json` 的根目錄和 11 個 workspace 項目（lockfile 裡第三方的 `@cspotcode/source-map-support`、`rou3` 也是 0.8.1，沒動）、手機授權清單的 6 列 `@getpaseo/*`。14 個檔、65 行增、65 行減，跟 0.8.1 那次相同；不寫 CHANGELOG 和 F-Droid 的更新說明，tag 等發佈時再打。守門 318／318，`npm ls --workspaces` 全是 0.9.0。
+  - CI 第 53 次（run 41059859953，手動、沒勾 Playwright）：server-tests 6244 個測試只有 `bootstrap.smoke.test.ts` 的 Hub 註冊測試 30 秒逾時，原因和修正在第 28 節（`d5496f786`）。第 54 次（run 41075016088）12 個 job 全過，6 個照設計略過（2 個 Windows、4 個 Playwright）。
+  - main：推之前確認 origin/main 還是 `acb733872`、分支還是 `d5496f786`、main 是祖先，`git push origin d5496f786:refs/heads/main`（不是 force），`acb733872..d5496f786`，多 37 個 commit。推 main 只觸發 `ci.yml`（第 55 次），其他 10 個 workflow 停用中，repo 沒有任何 secret。
+  - 網頁版（第 27 節）：部署用的 worktree 切到 `d5496f786`，`WOOW_FRESH_INSTALL=1 WOOW_DRY_RUN=1` 先跑（`npm ci` 加建置，`check-export` 跟上一版相同：40 個檔、116 個來源、5 個 script URL、sinks 不變），再用 `WOOW_CONFIRM_SHA=d5496f786` 正式上傳：五個護欄檔跟線上的 `a494c76` 相同，沒有要核准的 diff；只上傳 2 個檔（37 個沿用），部署 `edfe6dea`，腳本在部署自己的網址和 smart.woowtech.io 都檢查過。`web-health.py --full --deployments` 14 過、0 警告、0 失敗（`verify-live.mjs` 38 個檔的 SHA-256 全對）。
+  - 還沒做：桌面版的 Developer ID 簽章、公證、上傳、公開和 tag `v0.9.0`。要 owner 先登入 developer.apple.com 建憑證；發佈 repo 的 0.9.0 更新紀錄在公開時才推，太早推的話 0.8.1 的「更新內容」會先看到它。
+
 - 隱私權政策加入網頁版（2026-10-30，Odoo `blog.post` 391；web-spec.md 6.8；文字在 plans 的 `privacy-391-web-draft.md`）：owner 看過要貼的文字後說「幫我貼」；照建議發佈 P1–P8（P3 的前提在下一條確認過），日期 2026-10-30。
   - 做法：Odoo 後台的文章表單沒有內文欄位，所以在 owner 已登入的瀏覽器分頁裡用 JSON-RPC（`/web/dataset/call_kw`）讀寫 `blog.post.content`。寫入前先讀：網站語言是 zh_TW（預設）和 en_US，兩個語言的內文相同（13,154 字），跟 10/27 的備份逐位元組相同；全文另存在 plans 的 `privacy-publish-20261030/`。寫入時先再確認一次 `write_date` 和內文的 SHA-256 都沒變，再依序寫 en_US、zh_TW。讀回時兩個語言都跟發佈檔逐字相同；發佈檔是 `make-privacy-html.py 2026-10-30 recommended keep` 產生的，SHA-256 `3a39d969…`。
   - 公開頁面（中文和 `/en/`）：抓下內容欄位、還原 Cloudflare 的信箱混淆後，跟發佈檔逐字相同。`smart.woowtech.io` 出現 6 次，待填記號 0，「跨來源請求／cross-origin request」2 次；生效日期與頁尾日期都是 2026-10-30；`cf-cache-status: DYNAMIC`。
@@ -2852,7 +2859,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   5. 正式站的部署後檢查（第 27 節）：線上內容（`verify-live.mjs`、標頭、入口 JS、`challenge-platform` 0 次）和 smoke S1–S10（含不設 `PASEO_CORS_ORIGINS`、只靠預設白名單的一輪）已在 2026-10-29 通過。回報 Worker 的 V1–V5、V8 已在 2026-10-30 通過（步驟 6）；實機驗收還沒做，沒做完不能做第 8 步。
   6. 已完成：2026-10-30 回報 Worker 重新部署（版本 `3632b58e`，放行網頁版），V1–V5、V8 全過，細節在驗證紀錄第一條（`woowtech/ai-content-report-cloudrun/README.md` 的「只更新 Worker」）。
   7. 已完成：2026-10-30 隱私權政策加入網頁版（P1–P8，含 P3），中英文兩個語言都寫入，細節在驗證紀錄第一條。還沒決定：文章的小標題和 SEO 描述要不要加上網頁版；舊頁 `/woowtech-smart/privacy(-en)` 要轉址到 391 還是更新（O7）。
-  8. 【owner】發佈帶新預設的 daemon、CLI 和桌面版（D2、D3；版本號、版本說明、簽章和公證，O8）。在這之前發佈的話，相機掃新的 QR Code 會打開一個還不存在的網站。版本說明要寫：Hub 連線預設關閉、已接上 Hub 的人升級後要自己打開（第 28 節有中英文的句子）；關掉網頁直連的 `'[]'` 之後要再 `daemon restart`（第 19 節）。
+  8. 【owner】發佈帶新預設的 daemon、CLI 和桌面版（D2、D3；版本號、版本說明、簽章和公證，O8）。在這之前發佈的話，相機掃新的 QR Code 會打開一個還不存在的網站。版本說明要寫：Hub 連線預設關閉、已接上 Hub 的人升級後要自己打開（第 28 節有中英文的句子）；關掉網頁直連的 `'[]'` 之後要再 `daemon restart`（第 19 節）。2026-10-30：版本 0.9.0 已合進 main，網頁版已用同一個 commit 重新部署（驗證紀錄第一條）；桌面版等 Developer ID 憑證。
 - 網頁版的待決事項：O1（CSP，已選對等版）、O2（按了才連）、O3（金鑰改變擋下）、O6（預覽不加 Access；pages.dev 轉址 2026-10-29 已啟用）、B8（確認畫面文字，2026-10-27 owner 同意）、O10 的 D5（桌面版的回報標 desktop，保留）、O12（登入一次就一直有效）已決定。還沒決定：O7、O8、O9（要不要在版本說明附上既有 home 開直連的指令）、O10 的 C6（選做：expo-camera 的網頁 stub，這一輪沒做）、O11（要不要在 GitHub 上跑一次完整 CI）。O4 只有在 `verify-live.mjs` 看到 `challenge-platform` 時才要決定，2026-10-29 沒有出現。
   - C6 沒做的原因：照規格把 resolver 加進 `plugins/woowtech-metro-resolver.js`，`woowtech/push.test.mjs` 用來換掉那個模組的替身只有 `withNativeRnFirebaseModules`，那一項會壞。要做的話，連那個守門一起改，或把 resolver 放在另一個檔。沒做的影響：網頁版進到 `/pair-scan` 時，expo-camera 會建立 worker 去 jsdelivr 載 jsQR，被 CSP 擋下（console 有一筆違規，畫面本來就顯示不支援）；基準檔要列那個網址。
   - Hub 開關要不要連 owner 連線也擋（在 `paseoHome` 內拒絕檔案寫入；做法和代價在第 28 節）：owner 另外決定，這一輪沒做。
