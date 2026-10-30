@@ -38,6 +38,8 @@ const DEPLOY_SCRIPT = "woowtech/scripts/deploy-web.sh";
 const CHECK_EXPORT = path.join(repoRoot, "woowtech/web/check-export.mjs");
 const HEADERS = path.join(repoRoot, "woowtech/web/_headers");
 const ACCOUNT_ID = "9c27f623ee596e0b67be56263bcb1974";
+// Alan's account, which holds apporo.ai: Apporo smart's Pages project lives there.
+const APPORO_ACCOUNT_ID = "9f14a17191df1e77889566d848f063ad";
 const MiB = 1024 * 1024;
 
 const read = (relative) => readFileSync(path.join(repoRoot, relative), "utf8");
@@ -94,6 +96,15 @@ const BASELINE = {
   scriptUrls: [],
   sinks: NO_SINKS,
 };
+// Apporo smart's stand-in export and its baseline (woowtech/web/export-baseline.apporo.json).
+const APPORO_BUNDLE =
+  'const report="https://www.apporo.ai/api/smart/v1/ai-content-reports",relay="relay.apporo.ai:443",' +
+  'web="https://smart.apporo.ai",name="Apporo smart";\n';
+const APPORO_BASELINE = {
+  origins: ["https://smart.apporo.ai", "https://www.apporo.ai"],
+  scriptUrls: [],
+  sinks: NO_SINKS,
+};
 const OWNER_LOGIN = {
   loggedIn: true,
   authType: "OAuth Token",
@@ -101,6 +112,14 @@ const OWNER_LOGIN = {
   accounts: [{ id: ACCOUNT_ID, name: "WOOWTECH" }],
   tokenPermissions: ["account:read", "user:read", "pages:write", "offline_access"],
 };
+// The owner's login as it is on this Mac: it can use both brands' accounts.
+const LOGIN_BOTH_ACCOUNTS = JSON.stringify({
+  ...OWNER_LOGIN,
+  accounts: [...OWNER_LOGIN.accounts, { id: APPORO_ACCOUNT_ID, name: "Alan" }],
+});
+const APPORO_PROJECTS = JSON.stringify([
+  { "Project Name": "apporo-smart-web", "Project Domains": "apporo-smart-web.pages.dev" },
+]);
 // The files whose change since production's commit deploy-web.sh makes someone acknowledge (exit 7).
 const GUARD_FILES = [
   "woowtech/web/export-baseline.json",
@@ -109,6 +128,8 @@ const GUARD_FILES = [
   "woowtech/web/verify-live.mjs",
   "woowtech/scripts/deploy-web.sh",
 ];
+// Apporo smart's: its own baseline in place of woowtech smart's.
+const APPORO_GUARD_FILES = ["woowtech/web/export-baseline.apporo.json", ...GUARD_FILES.slice(1)];
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -238,13 +259,19 @@ if [ "$1 $2" = "pages deploy" ]; then
   exit "\${FAKE_DEPLOY_EXIT:-0}"
 fi
 if [ "$1 $2 $3" = "pages deployment list" ]; then
+  project=woowtech-smart-web
+  for arg in "$@"; do
+    case "$arg" in
+      --project-name=*) project=\${arg#--project-name=} ;;
+    esac
+  done
   if [ -n "\${FAKE_LIST_FAIL:-}" ]; then echo "stand-in wrangler: the deployment list failed" >&2; exit 1; fi
   if [ ! -f "$deployed" ]; then printf '%s\\n' "\${FAKE_PREVIOUS:-[]}"; exit 0; fi
   read -r branch hash <"$deployed"
   environment=Preview
   if [ "$branch" = main ]; then environment=Production; fi
   short=$(printf '%s' "$hash" | cut -c 1-7)
-  printf '[{"Id":"d1","Environment":"%s","Branch":"%s","Source":"%s","Deployment":"https://0123abcd.woowtech-smart-web.pages.dev","Status":"now"}]\\n' "\${FAKE_DEPLOYED_ENV:-$environment}" "\${FAKE_DEPLOYED_BRANCH:-$branch}" "$short"
+  printf '[{"Id":"d1","Environment":"%s","Branch":"%s","Source":"%s","Deployment":"https://0123abcd.%s.pages.dev","Status":"now"}]\\n' "\${FAKE_DEPLOYED_ENV:-$environment}" "\${FAKE_DEPLOYED_BRANCH:-$branch}" "$short" "$project"
 fi
 exit 0
 `;
@@ -291,6 +318,11 @@ const FAKE_NPX = `#!/bin/sh
   if [ -n "\${FAKE_FINAL_OUT:-}" ]; then
     if [ -d "$FAKE_FINAL_OUT" ]; then printf 'ENV FINAL_OUT=yes\\n'; else printf 'ENV FINAL_OUT=no\\n'; fi
   fi
+  if [ -f ../protocol/src/brand-values.ts ]; then
+    printf 'ENV BRAND_ID=%s\\n' "$(sed -n 's/^export const BRAND_ID = "\\(.*\\)";$/\\1/p' ../protocol/src/brand-values.ts)"
+  fi
+  if [ -f ../../node_modules/some-dep/index.js ]; then printf 'ENV DEP=yes\\n'; fi
+  if [ -L ../../node_modules/linked-app ]; then printf 'ENV LINK=%s\\n' "$(readlink ../../node_modules/linked-app)"; fi
   ${SH_LOG_ENV([
     "APP_VARIANT",
     "WOOWTECH_AI_CONTENT_REPORT_URL",
@@ -330,11 +362,21 @@ exit 0
 `;
 
 // verify-live.mjs in the fixture repository: records how deploy-web.sh calls it and ends as
-// FAKE_VERIFY_EXIT (the deployment's own address) or FAKE_VERIFY_SITE_EXIT (smart.woowtech.io) say.
+// FAKE_VERIFY_EXIT (the deployment's own address) or FAKE_VERIFY_SITE_EXIT (the brand's site) say.
 const FAKE_VERIFY = `import { appendFileSync } from "node:fs";
 appendFileSync(process.env.FAKE_LOG + "/verify.jsonl", JSON.stringify({ args: process.argv.slice(2) }) + "\\n");
-const site = process.argv[2].includes("smart.woowtech.io");
+const site = !new URL(process.argv[2]).hostname.endsWith(".pages.dev");
 process.exit(Number((site ? process.env.FAKE_VERIFY_SITE_EXIT : process.env.FAKE_VERIFY_EXIT) ?? 0));
+`;
+
+// woowtech/tools/apply-brand.mjs in the fixture repository: records where and how it ran, then
+// writes the brand into brand-values.ts as the real one does (FAKE_APPLY_AS writes another brand,
+// FAKE_APPLY_FAIL makes it fail).
+const FAKE_APPLY_BRAND = `import { appendFileSync, writeFileSync } from "node:fs";
+appendFileSync(process.env.FAKE_LOG + "/apply-brand.jsonl", JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd() }) + "\\n");
+if (process.env.FAKE_APPLY_FAIL) process.exit(1);
+const id = process.env.FAKE_APPLY_AS || process.argv[2];
+writeFileSync("packages/protocol/src/brand-values.ts", 'export const BRAND_ID = "' + id + '";\\n');
 `;
 
 function git(cwd, args, env) {
@@ -349,11 +391,15 @@ function writeTool(file, source) {
 }
 
 /**
- * A repository with deploy-web.sh, check-export.mjs and _headers from this checkout, a stand-in
- * verify-live.mjs, a baseline that fits the stand-in export, and a bare origin it is pushed to.
- * `linked` adds a linked worktree of it, where the script then runs; `subject` is the commit's.
+ * A repository with deploy-web.sh, check-export.mjs, _headers and the brand files from this
+ * checkout, stand-ins for verify-live.mjs and apply-brand.mjs, woowtech applied, baselines that fit
+ * the stand-in exports, and a bare origin it is pushed to. `linked` adds a linked worktree of it,
+ * where the script then runs; `subject` is the commit's; `brand` picks the stand-in export.
  */
-function deployFixture(t, { linked = false, subject = "Ship the web app" } = {}) {
+function deployFixture(
+  t,
+  { linked = false, subject = "Ship the web app", brand = "woowtech" } = {},
+) {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "woowtech-deploy-web-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const dirs = Object.fromEntries(
@@ -367,7 +413,12 @@ function deployFixture(t, { linked = false, subject = "Ship the web app" } = {})
     "woowtech/web/check-export.mjs": read("woowtech/web/check-export.mjs"),
     "woowtech/web/_headers": read("woowtech/web/_headers"),
     "woowtech/web/export-baseline.json": `${JSON.stringify(BASELINE, null, 2)}\n`,
+    "woowtech/web/export-baseline.apporo.json": `${JSON.stringify(APPORO_BASELINE, null, 2)}\n`,
     "woowtech/web/verify-live.mjs": FAKE_VERIFY,
+    "woowtech/brands/woowtech.json": read("woowtech/brands/woowtech.json"),
+    "woowtech/brands/apporo.json": read("woowtech/brands/apporo.json"),
+    "woowtech/tools/apply-brand.mjs": FAKE_APPLY_BRAND,
+    "packages/protocol/src/brand-values.ts": 'export const BRAND_ID = "woowtech";\n',
     "packages/app/package.json": '{ "name": "@getpaseo/app" }\n',
     "package-lock.json": '{ "lockfileVersion": 3 }\n',
     ".gitignore": "node_modules/\n.env*\n",
@@ -394,7 +445,10 @@ function deployFixture(t, { linked = false, subject = "Ship the web app" } = {})
   writeTool(path.join(dirs.bin, "heavy.sh"), FAKE_HEAVY);
   writeTool(path.join(dirs.bin, "npm"), FAKE_NPM);
   writeTool(path.join(dirs.bin, "npx"), FAKE_NPX);
-  writeExport(dirs.template, { headers: false });
+  writeExport(dirs.template, {
+    headers: false,
+    bundle: brand === "apporo" ? APPORO_BUNDLE : BUNDLE,
+  });
   const sha = git(repo, ["rev-parse", "HEAD"], gitEnv);
   const short = git(repo, ["rev-parse", "--short=12", "HEAD"], gitEnv);
   const outRoot = path.join(dirs.home, ".local/share/woowtech-smart/web-dist");
@@ -408,7 +462,7 @@ function deployFixture(t, { linked = false, subject = "Ship the web app" } = {})
     sha,
     outRoot,
     loginHome,
-    out: path.join(outRoot, short),
+    out: path.join(outRoot, brand === "woowtech" ? short : `${brand}-${short}`),
   };
 }
 
@@ -467,7 +521,7 @@ function runEnv(fixture, env) {
 }
 
 /** What deploy-web.sh prints as the hash of the guard files' diff from `from` to HEAD. */
-function guardHash(fixture, from) {
+function guardHash(fixture, from, files = GUARD_FILES) {
   const diff = spawnSync(
     "git",
     [
@@ -482,7 +536,7 @@ function guardHash(fixture, from) {
       from,
       "HEAD",
       "--",
-      ...GUARD_FILES,
+      ...files,
     ],
     { cwd: fixture.checkout, env: fixture.gitEnv },
   );
@@ -542,6 +596,10 @@ const stagesLeft = (fixture) =>
   existsSync(fixture.outRoot)
     ? readdirSync(fixture.outRoot).filter((name) => name.startsWith(".stage-"))
     : [];
+const treesLeft = (fixture) =>
+  existsSync(fixture.outRoot)
+    ? readdirSync(fixture.outRoot).filter((name) => name.startsWith(".tree-"))
+    : [];
 
 function listTree(dir, prefix = "") {
   return readdirSync(dir, { withFileTypes: true })
@@ -600,7 +658,11 @@ const productionRuns = (sha, id = "d0") =>
 
 test("deploy-web.sh asks for a guard diff of the files this test hashes, and its prompt gives up", () => {
   const script = read(DEPLOY_SCRIPT);
-  assert.deepEqual(/^GUARD_FILES="([^"]+)"$/m.exec(script)?.[1].split(" "), GUARD_FILES);
+  const guarded = /^GUARD_FILES="([^"]+)"$/m.exec(script)?.[1].split(" ");
+  assert.deepEqual(
+    guarded?.map((file) => (file === "$BASELINE" ? brandPresets().woowtech.BASELINE : file)),
+    GUARD_FILES,
+  );
   for (const file of GUARD_FILES) assert.ok(existsSync(path.join(repoRoot, file)), file);
   // A person who walks away from the prompt, or an agent that runs the script in a terminal
   // without WOOW_CONFIRM_SHA, would wait for ever.
@@ -692,15 +754,176 @@ test(
   },
 );
 
+test(
+  "--brand=apporo builds in a copy of HEAD with Apporo applied, checks it as Apporo's, and removes the copy",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t, { brand: "apporo" });
+    // The checkout's node_modules go into the copy, workspace links and all.
+    mkdirSync(path.join(fixture.checkout, "node_modules/some-dep"), { recursive: true });
+    writeFileSync(path.join(fixture.checkout, "node_modules/some-dep/index.js"), "export {};\n");
+    symlinkSync("../packages/app", path.join(fixture.checkout, "node_modules/linked-app"));
+    const run = deploy(fixture, { args: ["--brand=apporo"], env: { WOOW_DRY_RUN: "1" } });
+
+    assert.equal(run.status, 0, run.output);
+    assert.deepEqual(run.wrangler, [], "a dry run never runs wrangler");
+    const applied = readJsonLines(fixture, "apply-brand.jsonl");
+    assert.equal(applied.length, 1);
+    assert.deepEqual(applied[0].args, ["apporo"]);
+    const tree = applied[0].cwd;
+    assert.match(
+      tree,
+      new RegExp(`^${escapeRegExp(fixture.outRoot)}/\\.tree-apporo-[0-9a-f]{12}\\.[A-Za-z0-9]+$`),
+    );
+    // The build ran in the copy, with Apporo applied and Apporo's report receiver.
+    assert.deepEqual(
+      run.npm.map((call) => call.args),
+      [["--prefix", tree, "run", "build:app-deps"]],
+    );
+    const [exporter] = run.npx;
+    assert.equal(exporter.cwd, path.join(tree, "packages/app"));
+    assert.equal(exporter.env.BRAND_ID, "apporo");
+    assert.equal(exporter.env.DEP, "yes", "the checkout's node_modules are not in the copy");
+    assert.equal(exporter.env.LINK, "../packages/app", "a workspace link became something else");
+    assert.equal(
+      exporter.env.WOOWTECH_AI_CONTENT_REPORT_URL,
+      "https://www.apporo.ai/api/smart/v1/ai-content-reports",
+    );
+    // Apporo's export has a name of its own next to woowtech's, and check-export took it as Apporo's.
+    assert.equal(path.basename(fixture.out), `apporo-${fixture.sha.slice(0, 12)}`);
+    assert.deepEqual(listTree(fixture.out), [...listTree(fixture.template), "_headers"].sort());
+    assert.match(run.output, /brand apporo's export .* passed its checks/);
+    assert.deepEqual(treesLeft(fixture), [], "the copy was left behind");
+    assert.deepEqual(stagesLeft(fixture), [], "the stage was left behind");
+    // The checkout is untouched: woowtech applied, nothing changed.
+    assert.equal(
+      readFileSync(path.join(fixture.checkout, "packages/protocol/src/brand-values.ts"), "utf8"),
+      'export const BRAND_ID = "woowtech";\n',
+    );
+    assert.equal(git(fixture.checkout, ["status", "--porcelain"], fixture.gitEnv), "");
+  },
+);
+
+test(
+  "an Apporo copy that ends up with another brand, or a failed apply, builds nothing",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t, { brand: "apporo" });
+    const dry = { WOOW_DRY_RUN: "1" };
+    const wrong = deploy(fixture, {
+      args: ["--brand=apporo"],
+      env: { ...dry, FAKE_APPLY_AS: "woowtech" },
+    });
+    assertRefused(wrong, 3, /has brand "woowtech" applied, not apporo/);
+    assert.deepEqual(builds(wrong), []);
+    const failed = deploy(fixture, {
+      args: ["--brand=apporo"],
+      env: { ...dry, FAKE_APPLY_FAIL: "1" },
+    });
+    assertRefused(failed, 3, /apply-brand\.mjs apporo failed/);
+    assert.deepEqual(builds(failed), []);
+    assert.deepEqual(treesLeft(fixture), [], "the copy was left behind");
+  },
+);
+
+test(
+  "woowtech smart's stand-in export fails as Apporo's: check-export wants Apporo's values",
+  { skip: needsNode22 },
+  (t) => {
+    // The woowtech fixture's template holds woowtech's report URL, relay and name.
+    const fixture = deployFixture(t);
+    const run = deploy(fixture, { args: ["--brand=apporo"], env: { WOOW_DRY_RUN: "1" } });
+    assertRefused(run, 3, /check-export\.mjs found problems/);
+    assert.match(run.output, /the bundle does not contain "relay\.apporo\.ai"/);
+    assert.match(run.output, /"relay\.woowtech\.io" is in/);
+  },
+);
+
+test(
+  "--brand=apporo uploads to apporo-smart-web in Alan's account and checks smart.apporo.ai",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t, { brand: "apporo" });
+    const projects = JSON.stringify([
+      {
+        "Project Name": "apporo-smart-web",
+        "Project Domains": "apporo-smart-web.pages.dev, smart.apporo.ai",
+      },
+    ]);
+    const run = deploy(fixture, {
+      args: ["--brand=apporo"],
+      ack: null,
+      env: {
+        FAKE_WHOAMI: LOGIN_BOTH_ACCOUNTS,
+        FAKE_PROJECTS: projects,
+        WOOW_ACK_GUARD_DIFF: guardHash(fixture, EMPTY_TREE, APPORO_GUARD_FILES),
+      },
+    });
+
+    assert.equal(run.status, 0, run.output);
+    assertWranglerEnvironment(fixture, run, "wrangler-pages", APPORO_ACCOUNT_ID);
+    const [upload] = uploads(run);
+    const dir = assertUploadCopy(fixture, run);
+    assert.equal(upload.args[3], "--project-name=apporo-smart-web");
+    for (const call of run.wrangler.filter(({ args }) =>
+      args.join(" ").includes("deployment list"),
+    )) {
+      assert.ok(call.args.includes("--project-name=apporo-smart-web"), call.args.join(" "));
+    }
+    assert.deepEqual(run.verify, [
+      { args: ["https://0123abcd.apporo-smart-web.pages.dev", dir] },
+      { args: ["https://smart.apporo.ai", dir] },
+    ]);
+  },
+);
+
+test(
+  "Apporo smart's upload needs a login that can use its account, its own guard diff and its own marker",
+  { skip: needsNode22 },
+  (t) => {
+    const fixture = deployFixture(t, { brand: "apporo" });
+    const apporo = { FAKE_WHOAMI: LOGIN_BOTH_ACCOUNTS, FAKE_PROJECTS: APPORO_PROJECTS };
+    // The login reaches WOOWTECH's account only.
+    assertRefused(
+      deploy(fixture, { args: ["--brand=apporo"], env: { FAKE_PROJECTS: APPORO_PROJECTS } }),
+      4,
+      /cannot use the account that holds apporo\.ai 9f14a17191df1e77889566d848f063ad/,
+    );
+    // woowtech smart's guard hash is not Apporo smart's: its baseline is another file.
+    assertRefused(
+      deploy(fixture, { args: ["--brand=apporo"], env: apporo }),
+      7,
+      /is not this diff's hash/,
+    );
+    // woowtech smart's marker says nothing about Apporo smart's project.
+    mkdirSync(fixture.loginHome, { recursive: true });
+    writeFileSync(path.join(fixture.loginHome, "domain-attached"), "");
+    const ack = { WOOW_ACK_GUARD_DIFF: guardHash(fixture, EMPTY_TREE, APPORO_GUARD_FILES) };
+    const unmarked = deploy(fixture, {
+      args: ["--brand=apporo"],
+      ack: null,
+      env: { ...apporo, ...ack },
+    });
+    assert.equal(unmarked.status, 0, unmarked.output);
+    // Its own marker does: smart.apporo.ai has to be on the project.
+    writeFileSync(path.join(fixture.loginHome, "domain-attached-apporo"), "");
+    assertRefused(
+      deploy(fixture, { args: ["--brand=apporo"], ack: null, env: { ...apporo, ...ack } }),
+      4,
+      /smart\.apporo\.ai is not on the Pages project apporo-smart-web any more/,
+    );
+  },
+);
+
 /**
- * Every wrangler call: WOOWTECH's account, the login directory `home`, an empty cache and working
+ * Every wrangler call: the brand's account, the login directory `home`, an empty cache and working
  * directory, no credentials or endpoints from the caller, and no standard input to ask questions of.
  */
-function assertWranglerEnvironment(fixture, run, home = "wrangler-pages") {
+function assertWranglerEnvironment(fixture, run, home = "wrangler-pages", account = ACCOUNT_ID) {
   assert.ok(run.wrangler.length > 0, "wrangler never ran");
   for (const call of run.wrangler) {
     const where = call.args.join(" ");
-    assert.equal(call.env.CLOUDFLARE_ACCOUNT_ID, ACCOUNT_ID, where);
+    assert.equal(call.env.CLOUDFLARE_ACCOUNT_ID, account, where);
     assert.equal(
       call.env.XDG_CONFIG_HOME,
       path.join(fixture.home, ".local/share/woowtech-smart", home),
@@ -1211,7 +1434,24 @@ test("the switches refuse what they are not for", { skip: needsNode22 }, (t) => 
     /WOOW_ACK_GUARD_DIFF must be the 12 hexadecimal characters/,
   );
   assertRefused(deploy(fixture, { args: ["--logout", "--preview"] }), 2, /--logout stands alone/);
+  assertRefused(
+    deploy(fixture, { args: ["--logout", "--brand=apporo"] }),
+    2,
+    /--logout stands alone/,
+  );
   assertRefused(deploy(fixture, { args: ["--nope"] }), 2, /unknown argument --nope/);
+  assertRefused(deploy(fixture, { args: ["--brand=paseo"] }), 2, /unknown brand "paseo"/);
+  assertRefused(deploy(fixture, { args: ["--brand="] }), 2, /--brand= needs a brand/);
+  assertRefused(deploy(fixture, { args: ["--brand", "apporo"] }), 2, /unknown argument --brand/);
+  // Another brand is built from HEAD's files: a dirty checkout would not be what it builds.
+  assertRefused(
+    deploy(fixture, {
+      args: ["--brand=apporo"],
+      env: { WOOW_DRY_RUN: "1", WOOW_ALLOW_DIRTY: "1" },
+    }),
+    2,
+    /brand apporo is built from HEAD's files: commit first/,
+  );
 });
 
 test("a wrong confirmation, or one it cannot read, uploads nothing", { skip: needsNode22 }, (t) => {
@@ -1262,7 +1502,7 @@ test(
       ],
       [
         { FAKE_WHOAMI: login({ accounts: [{ id: "0123456789abcdef0123456789abcdef" }] }) },
-        /cannot use the WOOWTECH account/,
+        /cannot use WOOWTECH's account 9c27f623ee596e0b67be56263bcb1974/,
       ],
       [{ FAKE_WHOAMI: login({ authType: "User API Token" }) }, /not the owner OAuth login/],
       [{ FAKE_PROJECTS: "[]" }, /has no Pages project woowtech-smart-web/],
@@ -2576,40 +2816,117 @@ test("hosted-web-smoke.mjs prints no pairing link, in its summary or in an error
   );
 });
 
-test("check-export names the same site as deploy-web.sh and the smoke test", () => {
-  const checkExportOrigin = /^const SITE_ORIGIN = "([^"]+)";$/m.exec(
-    read("woowtech/web/check-export.mjs"),
-  )?.[1];
-  assert.equal(checkExportOrigin, scriptConstant("SITE_ORIGIN"));
-});
-
-// --- the same address and the same wrangler everywhere ---
+// --- the same address and the same wrangler everywhere, for each brand ---
 
 const scriptConstant = (name) => new RegExp(`^${name}=(\\S+)$`, "m").exec(read(DEPLOY_SCRIPT))?.[1];
-const smokeDefaultBase = () =>
-  /^const DEFAULT_BASE = "([^"]+)";$/m.exec(read("woowtech/web/hosted-web-smoke.mjs"))?.[1];
+const BRAND_IDS = readdirSync(path.join(repoRoot, "woowtech/brands"))
+  .filter((name) => name.endsWith(".json"))
+  .map((name) => name.slice(0, -".json".length))
+  .sort();
+const brandFile = (id) => readJson(`woowtech/brands/${id}.json`);
 
-test("deploy-web.sh and the smoke test name the same site", () => {
-  assert.equal(scriptConstant("SITE_ORIGIN"), "https://smart.woowtech.io");
-  assert.equal(smokeDefaultBase(), scriptConstant("SITE_ORIGIN"));
+/** deploy-web.sh's preset for each brand, as { id: { PROJECT, ACCOUNT_ID, ... } }. */
+function brandPresets() {
+  const cases = /^case "\$BRAND" in\n([\s\S]*?)^esac$/m.exec(read(DEPLOY_SCRIPT))?.[1];
+  assert.ok(cases, "deploy-web.sh has no brand presets");
+  const presets = {};
+  for (const [, id, body] of cases.matchAll(/^ {2}([a-z][a-z0-9-]*)\)\n([\s\S]*?)^ {4};;$/gm)) {
+    presets[id] = Object.fromEntries(
+      [...body.matchAll(/^ {4}([A-Z_]+)=(?:"([^"]*)"|(\S+))$/gm)].map(([, name, quoted, plain]) => [
+        name,
+        quoted ?? plain,
+      ]),
+    );
+  }
+  return presets;
+}
+
+test("each brand has a deploy preset that matches its file, and shares nothing with another", () => {
+  const presets = brandPresets();
+  assert.deepEqual(Object.keys(presets).sort(), BRAND_IDS);
+  for (const id of BRAND_IDS) {
+    const brand = brandFile(id);
+    const preset = presets[id];
+    assert.equal(preset.SITE_ORIGIN, `https://${brand.web.host}`, `${id}: the site`);
+    // The address the web app sends reports to (app.config.js reads it at build time).
+    assert.equal(preset.REPORT_URL, brand.services.aiContentReportUrl, `${id}: the report URL`);
+    assert.match(preset.ACCOUNT_ID, /^[0-9a-f]{32}$/, `${id}: the account`);
+    assert.match(preset.BASELINE, /^woowtech\/web\/export-baseline(?:\.[a-z][a-z0-9-]*)?\.json$/);
+    assert.match(preset.MARKER_NAME, /^domain-attached(?:-[a-z][a-z0-9-]*)?$/);
+  }
+  for (const field of ["PROJECT", "ACCOUNT_ID", "SITE_ORIGIN", "BASELINE", "MARKER_NAME"]) {
+    const values = BRAND_IDS.map((id) => presets[id][field]);
+    assert.equal(new Set(values).size, values.length, `two brands share ${field}: ${values}`);
+  }
+  // woowtech smart's are the ones its site has run on since 2026-10-28.
+  assert.deepEqual(
+    {
+      PROJECT: presets.woowtech.PROJECT,
+      ACCOUNT_ID: presets.woowtech.ACCOUNT_ID,
+      BASELINE: presets.woowtech.BASELINE,
+      MARKER_NAME: presets.woowtech.MARKER_NAME,
+    },
+    {
+      PROJECT: "woowtech-smart-web",
+      ACCOUNT_ID,
+      BASELINE: "woowtech/web/export-baseline.json",
+      MARKER_NAME: "domain-attached",
+    },
+  );
+  assert.equal(presets.apporo.ACCOUNT_ID, APPORO_ACCOUNT_ID);
+  assert.equal(presets.apporo.PROJECT, "apporo-smart-web");
 });
 
-test("the site is BRAND_WEB_APP's origin, and the reports Worker answers it by default", async () => {
-  // Lane A writes brand-web-app.ts and Lane D the Worker's default origins: this passes once both
-  // are merged (web-spec.md section 8).
-  const brand = "packages/protocol/src/brand-web-app.ts";
-  assert.ok(existsSync(path.join(repoRoot, brand)), `${brand} is missing`);
-  const { BRAND_WEB_APP } = await importSource(brand);
+test("check-export, the smoke test and deploy-web.sh name the same site for each brand", async () => {
+  const { brandChecks, baselineFor } = await import(pathToFileURL(CHECK_EXPORT).href);
+  const { brandEndpoints } = await import(
+    pathToFileURL(path.join(repoRoot, "woowtech/web/hosted-web-smoke.mjs")).href
+  );
+  const presets = brandPresets();
+  for (const id of BRAND_IDS) {
+    const brand = brandFile(id);
+    const checks = brandChecks(id);
+    assert.equal(checks.site, presets[id].SITE_ORIGIN, id);
+    assert.equal(baselineFor(id), path.join(repoRoot, presets[id].BASELINE), id);
+    assert.deepEqual(brandEndpoints(id), {
+      site: presets[id].SITE_ORIGIN,
+      reportUrl: brand.services.aiContentReportUrl,
+      relayHost: brand.services.relayHost,
+    });
+    // Each brand's export must not carry another brand's names or addresses.
+    for (const other of BRAND_IDS.filter((candidate) => candidate !== id)) {
+      for (const mark of [brandFile(other).web.host, brandFile(other).services.relayHost]) {
+        assert.ok(checks.forbidden.includes(mark), `${id}'s export may hold ${mark}`);
+      }
+    }
+  }
+});
+
+test("the site is BRAND_WEB_APP's origin, and the reports Worker answers each brand's site", async () => {
+  const source = "packages/protocol/src/brand-web-app.ts";
+  assert.ok(existsSync(path.join(repoRoot, source)), `${source} is missing`);
+  const { BRAND_WEB_APP } = await importSource(source);
+  const { BRAND_ID } = await importSource("packages/protocol/src/brand-values.ts");
+  const presets = brandPresets();
   assert.equal(BRAND_WEB_APP.origin, `https://${BRAND_WEB_APP.host}`);
-  assert.equal(scriptConstant("SITE_ORIGIN"), BRAND_WEB_APP.origin);
+  assert.equal(BRAND_WEB_APP.origin, presets[BRAND_ID].SITE_ORIGIN);
+  // woowtech smart's Worker answers its site by default; Apporo smart's lists its origins in its
+  // wrangler config (woowtech/ai-content-report-cloudrun/worker.test.mjs checks that config).
   const worker = read(
     "woowtech/ai-content-report-cloudrun/deploy/cloudflare-worker-smart-reports.js",
   );
   const origins = /const DEFAULT_ALLOWED_ORIGINS = \[([^\]]*)\]/.exec(worker)?.[1] ?? "";
   assert.ok(
-    [...origins.matchAll(/"([^"]+)"/g)].some(([, origin]) => origin === BRAND_WEB_APP.origin),
+    [...origins.matchAll(/"([^"]+)"/g)].some(
+      ([, origin]) => origin === presets.woowtech.SITE_ORIGIN,
+    ),
     `DEFAULT_ALLOWED_ORIGINS is [${origins}]`,
   );
+  const apporoConfig = read(
+    "woowtech/ai-content-report-cloudrun/deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc",
+  );
+  const listed = /"ALLOWED_ORIGINS": "([^"]*)"/.exec(apporoConfig)?.[1].split(/[\s,]+/) ?? [];
+  assert.ok(listed.includes(presets.apporo.SITE_ORIGIN), `Apporo's ALLOWED_ORIGINS is ${listed}`);
 });
 
 /** Section 27 of the README: from its heading to the next section. */

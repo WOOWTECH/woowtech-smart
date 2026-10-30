@@ -1,13 +1,18 @@
 #!/usr/bin/env node
-// Checks a web export of packages/app before deploy-web.sh uploads it to Cloudflare Pages
-// (smart.woowtech.io, woowtech/README.md section 27). Exits 1 when a check fails, 2 on bad usage.
+// Checks a brand's web export of packages/app before deploy-web.sh uploads it to Cloudflare Pages
+// (woowtech/README.md section 27). Exits 1 when a check fails, 2 on bad usage.
 //
-//   node woowtech/web/check-export.mjs <export dir> [--baseline <file>] [--write-baseline]
+//   node woowtech/web/check-export.mjs <export dir> [--brand <id>] [--baseline <file>]
+//     [--write-baseline]
+//
+// --brand picks the brand the export was built for: woowtech (the default) or another brand in
+// woowtech/brands. Its file gives the site (web.host) and what the bundle must name.
 //
 // - index.html is the only HTML file. Every <script> in it has an attribute named exactly src (a
 //   data-src does not count), no tag has an on* attribute or a javascript: URL, and each script
-//   URL, resolved against https://smart.woowtech.io, is on this site or in the baseline. Exactly
-//   one of them is the entry bundle (/_expo/static/js/web/index-*.js).
+//   URL, resolved against the brand's site (https://smart.woowtech.io for woowtech smart), is on
+//   this site or in the baseline. Exactly one of them is the entry bundle
+//   (/_expo/static/js/web/index-*.js).
 // - JavaScript is only in _expo/static/js/web/. No 404.html, _redirects, _worker.js, _routes.json
 //   or functions/ (they change how Pages serves the site), no source maps, no .env files, no
 //   symlinks, and no file named like a service worker script: a deployment must never leave a
@@ -18,9 +23,10 @@
 //   its path and SHA-256 under "files".
 // - No file is over Pages' 25 MiB limit (23 MiB warns), and there are at most 20,000 files.
 // - _headers is woowtech/web/_headers, with at most 100 rules and lines of 2,000 characters.
-// - The bundle names our report receiver, relay and web app, and none of upstream's hosts or an
-//   analytics or error-reporting service.
-// - Against export-baseline.json (--baseline picks another file): no absolute http(s) or ws(s)
+// - The bundle names the brand's report receiver, relay, web app and name, and none of upstream's
+//   hosts, another brand's names and addresses, or an analytics or error-reporting service.
+// - Against the brand's baseline (export-baseline.json for woowtech smart, export-baseline.<id>.json
+//   for another brand; --baseline picks another file): no absolute http(s) or ws(s)
 //   origin and no script URL the baseline does not list, and eval(, new Function(, importScripts(
 //   and serviceWorker appear exactly as often as it counts, up or down: a count that may only
 //   fall leaves room for a later addition. An empty baseline fails: it has not been initialized.
@@ -28,9 +34,16 @@
 //   and commit (README section 27 lists what to look at). It writes nothing when another check
 //   fails.
 import { createHash } from "node:crypto";
-import { lstatSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const MiB = 1024 * 1024;
 const MAX_FILE_BYTES = 25 * MiB;
@@ -40,11 +53,8 @@ const MAX_HEADER_RULES = 100;
 const MAX_HEADER_LINE = 2000;
 
 const HEADERS_SOURCE = fileURLToPath(new URL("_headers", import.meta.url));
-const BASELINE_SOURCE = fileURLToPath(new URL("export-baseline.json", import.meta.url));
-
-// The address of the site. deploy-web.sh's SITE_ORIGIN and BRAND_WEB_APP say the same
-// (woowtech/web-deploy.test.mjs checks that).
-const SITE_ORIGIN = "https://smart.woowtech.io";
+const BRANDS_DIR = fileURLToPath(new URL("../brands/", import.meta.url));
+const DEFAULT_BRAND = "woowtech";
 const JS_DIR = "_expo/static/js/web/";
 const ENTRY_BUNDLE = /^\/_expo\/static\/js\/web\/index-[^/]+\.js$/;
 // What Expo exports besides code: images, fonts, sounds, video, styles, JSON and text. Not .svg,
@@ -74,16 +84,8 @@ const ALLOWED_EXTENSIONS = new Set([
   "txt",
 ]);
 const SCRIPT_EXTENSIONS = new Set(["js", "mjs", "cjs"]);
-// Host names only: template strings such as `https://${HOST}` are not always folded into one
-// literal by the minifier. The report URL is a JSON string inside the embedded app manifest.
-const REQUIRED_STRINGS = [
-  "https://reports.woowtech.io/v1/ai-content-reports",
-  "relay.woowtech.io",
-  "smart.woowtech.io",
-  "woowtech smart",
-];
 // Not "segment.": react-navigation always has `current.segment.replace(...)`.
-const FORBIDDEN_STRINGS = [
+const UPSTREAM_AND_TRACKERS = [
   "app.paseo.sh",
   "relay.paseo.sh",
   "getpaseo/paseo/main/CHANGELOG",
@@ -107,19 +109,88 @@ const CDN_URL =
 function usage(message) {
   console.error(`check-export: ${message}`);
   console.error(
-    "usage: node woowtech/web/check-export.mjs <export dir> [--baseline <file>] [--write-baseline]",
+    "usage: node woowtech/web/check-export.mjs <export dir> [--brand <id>] [--baseline <file>] " +
+      "[--write-baseline]",
   );
   process.exit(2);
 }
 
+/** The brands with a file in woowtech/brands, and one brand's values. */
+function brandIds() {
+  return readdirSync(BRANDS_DIR)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => name.slice(0, -".json".length))
+    .sort();
+}
+function loadBrand(id) {
+  return JSON.parse(readFileSync(path.join(BRANDS_DIR, `${id}.json`), "utf8"));
+}
+
+/** The names and addresses that mark a brand's build. */
+function brandMarks(brand) {
+  return [
+    brand.name,
+    brand.nameZh,
+    brand.scheme,
+    brand.web.host,
+    brand.services.relayHost,
+    new URL(brand.services.pushRelayUrl).host,
+    new URL(brand.services.aiContentReportUrl).host,
+    brand.links.websiteHost,
+    brand.links.supportEmail,
+    brand.links.releasesRepo,
+  ];
+}
+
+/**
+ * What brand `id`'s export is checked against: its site, the strings its bundle must hold, and
+ * the ones it must not: upstream's, the trackers', and the other brands' marks (unless one of
+ * this brand's own holds the mark).
+ */
+export function brandChecks(id) {
+  const brand = loadBrand(id);
+  const own = brandMarks(brand);
+  const others = brandIds()
+    .filter((other) => other !== id)
+    .flatMap((other) => brandMarks(loadBrand(other)))
+    .filter((mark) => !own.some((ours) => ours.includes(mark)));
+  return {
+    site: `https://${brand.web.host}`,
+    // Host names only: template strings such as `https://${HOST}` are not always folded into one
+    // literal by the minifier. The report URL is a JSON string inside the embedded app manifest.
+    required: [
+      brand.services.aiContentReportUrl,
+      brand.services.relayHost,
+      brand.web.host,
+      brand.name,
+    ],
+    forbidden: [...UPSTREAM_AND_TRACKERS, ...new Set(others)],
+  };
+}
+
+/** The brand's baseline: export-baseline.json for woowtech smart, export-baseline.<id>.json else. */
+export function baselineFor(id) {
+  const name = id === DEFAULT_BRAND ? "export-baseline.json" : `export-baseline.${id}.json`;
+  return fileURLToPath(new URL(name, import.meta.url));
+}
+
 function parseArgs(argv) {
-  const options = { exportDir: null, baselinePath: BASELINE_SOURCE, writeBaseline: false };
+  const options = {
+    exportDir: null,
+    brand: DEFAULT_BRAND,
+    baselinePath: null,
+    writeBaseline: false,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--baseline") {
       index += 1;
       if (!argv[index]) usage("--baseline needs a file");
       options.baselinePath = path.resolve(argv[index]);
+    } else if (arg === "--brand") {
+      index += 1;
+      if (!argv[index]) usage("--brand needs a brand");
+      options.brand = argv[index];
     } else if (arg === "--write-baseline") {
       options.writeBaseline = true;
     } else if (arg.startsWith("-") || options.exportDir) {
@@ -129,6 +200,13 @@ function parseArgs(argv) {
     }
   }
   if (!options.exportDir) usage("name the export directory");
+  if (
+    !/^[a-z][a-z0-9-]*$/.test(options.brand) ||
+    !existsSync(path.join(BRANDS_DIR, `${options.brand}.json`))
+  ) {
+    usage(`there is no brand "${options.brand}" in woowtech/brands (${brandIds().join(", ")})`);
+  }
+  options.baselinePath ??= baselineFor(options.brand);
   return options;
 }
 
@@ -260,7 +338,7 @@ function isJavascriptUrl(value) {
   return plain.toLowerCase().startsWith("javascript:");
 }
 
-function checkIndex(exportDir, listing, baseline, report) {
+function checkIndex(exportDir, listing, baseline, site, report) {
   if (!listing.files.includes("index.html")) {
     report.fail("index.html is missing");
     return;
@@ -287,12 +365,12 @@ function checkIndex(exportDir, listing, baseline, report) {
   for (const source of sources) {
     let url;
     try {
-      url = new URL(source, SITE_ORIGIN);
+      url = new URL(source, site);
     } catch {
       report.fail(`index.html loads a script whose address is not a URL: ${source}`);
       continue;
     }
-    if (url.origin !== SITE_ORIGIN) {
+    if (url.origin !== site) {
       if (!baseline.scriptUrls.includes(url.href)) {
         report.fail(`index.html loads a script that is not on this site: ${source}`);
       }
@@ -356,14 +434,14 @@ function collect(exportDir, scripts, unlisted) {
   return { origins: [...origins].sort(), scriptUrls: [...scriptUrls].sort(), sinks, files };
 }
 
-function checkBundleStrings(scripts, report) {
+function checkBundleStrings(scripts, checks, report) {
   if (scripts.length === 0) report.fail("the export has no .js files");
-  for (const needle of REQUIRED_STRINGS) {
+  for (const needle of checks.required) {
     if (!scripts.some(({ text }) => text.includes(needle))) {
       report.fail(`the bundle does not contain "${needle}"`);
     }
   }
-  for (const needle of FORBIDDEN_STRINGS) {
+  for (const needle of checks.forbidden) {
     const found = scripts.filter(({ text }) => text.includes(needle)).map(({ file }) => file);
     if (found.length > 0) report.fail(`"${needle}" is in ${found.join(", ")}`);
   }
@@ -470,6 +548,7 @@ function printReport(report) {
 
 function main() {
   const options = parseArgs(process.argv.slice(2));
+  const checks = brandChecks(options.brand);
   const report = createReport();
   let listing;
   try {
@@ -482,12 +561,12 @@ function main() {
     ? { origins: [], scriptUrls: [], sinks: {}, files: {} }
     : readBaseline(options.baselinePath);
   const unlisted = checkFiles(options.exportDir, listing, report);
-  checkIndex(options.exportDir, listing, baseline, report);
+  checkIndex(options.exportDir, listing, baseline, checks.site, report);
   checkHeaders(options.exportDir, listing, report);
   const scripts = listing.files
     .filter((file) => /\.(?:m|c)?js$/.test(file))
     .map((file) => ({ file, text: readFileSync(path.join(options.exportDir, file), "utf8") }));
-  checkBundleStrings(scripts, report);
+  checkBundleStrings(scripts, checks, report);
   const found = collect(options.exportDir, scripts, unlisted);
   if (options.writeBaseline) {
     printReport(report);
@@ -501,7 +580,7 @@ function main() {
         `${found.scriptUrls.length} script URLs, sinks ${JSON.stringify(found.sinks)}, ` +
         `${Object.keys(found.files).length} listed files. Check every script URL, the ` +
         "serviceWorker count and every listed file (woowtech/README.md section 27), then format " +
-        "and commit it: npm run format:files -- woowtech/web/export-baseline.json",
+        `and commit it: npm run format:files -- ${path.relative(process.cwd(), options.baselinePath)}`,
     );
     return;
   }
@@ -517,4 +596,7 @@ function main() {
   );
 }
 
-main();
+// Run as a script, not when the tests import brandChecks.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  main();
+}

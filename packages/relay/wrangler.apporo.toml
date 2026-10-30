@@ -3,10 +3,11 @@
 # the relay itself instead of forwarding to upstream's. woowtech/relay-worker.test.mjs guards
 # that and the domain.
 #
-# Not deployed yet. apporo.ai's DNS is in Apporo's Cloudflare account: pin that account here
-# with account_id before the first deploy, from packages/relay:
+# Deployed in the Cloudflare account that holds apporo.ai (Alan's), as the Worker
+# apporo-smart-relay (seen there 2026-10-30). From packages/relay:
 #   npx wrangler deploy --config wrangler.apporo.toml
 name = "apporo-smart-relay"
+account_id = "9f14a17191df1e77889566d848f063ad"
 main = "src/cloudflare-adapter.ts"
 compatibility_date = "2024-12-01"
 

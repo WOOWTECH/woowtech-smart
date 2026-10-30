@@ -1696,12 +1696,33 @@ node --test woowtech/*.test.mjs
 | 標頭                | 只有 nosniff、Referrer-Policy、ACAO `*` | 加上 CSP、XFO、HSTS、COOP、Permissions-Policy，HTML 帶 `no-transform`（下面）       |
 | AI 內容回報         | 沒有                                    | 有，Worker 放行網頁版的來源（第 10 節，D4）                                         |
 
+兩個品牌（2026-10-30 起）：Apporo smart 的網頁版用同一套工具，加 `--brand=apporo`。
+
+| 項目            | 渥屋智能（預設）                                    | Apporo smart                                            |
+| --------------- | --------------------------------------------------- | ------------------------------------------------------- |
+| 網址            | `https://smart.woowtech.io`                         | `https://smart.apporo.ai`                               |
+| Pages 專案      | `woowtech-smart-web`                                | `apporo-smart-web`                                      |
+| Cloudflare 帳戶 | WOOWTECH `9c27f623ee596e0b67be56263bcb1974`         | Alan 的 `9f14a17191df1e77889566d848f063ad`（apporo.ai） |
+| AI 回報收件網址 | `https://reports.woowtech.io/v1/ai-content-reports` | `https://www.apporo.ai/api/smart/v1/ai-content-reports` |
+| 基準檔          | `woowtech/web/export-baseline.json`                 | `woowtech/web/export-baseline.apporo.json`              |
+| 網域標記檔      | `wrangler-pages/domain-attached`                    | `wrangler-pages/domain-attached-apporo`                 |
+| 匯出            | `web-dist/<sha 前 12 碼>`                           | `web-dist/apporo-<sha 前 12 碼>`                        |
+
+- 這些值寫在 `deploy-web.sh` 的品牌預設（`case "$BRAND"`）。網址和收件網址要跟品牌設定檔的 `web.host`、`services.aiContentReportUrl` 一致，兩個品牌也不能共用專案、帳戶、網址、基準檔或標記檔：`web-deploy.test.mjs` 都會檢查。
+- checkout 永遠套用渥屋（第 29 節），所以其他品牌在複本裡建置：
+  - 腳本用 `git archive` 把 HEAD 的追蹤檔解到 `web-dist/.tree-<品牌>-<sha 前 12 碼>.*`，把 checkout 的每個 `node_modules` 複製進去（APFS 上是 copy-on-write；workspace 的連結照樣指向複本裡的 `packages/*`），再在複本裡跑 `woowtech/tools/apply-brand.mjs <品牌>`，確認 `brand-values.ts` 的 `BRAND_ID` 是那個品牌，才在複本裡跑同一個建置（代碼 3）。
+  - 被 `.gitignore` 忽略的檔（`.env*`、建置輸出、`.secrets/`）不會帶進複本。建置完就刪掉複本；被 kill 而留下一天以上的，下次建置時清掉。
+  - 複本是 HEAD 而不是工作樹，所以其他品牌不能配 `WOOW_ALLOW_DIRTY=1`（代碼 2），要先 commit；dry-run 也要先推上 origin。
+- 兩個品牌用同一組 `wrangler-pages` 登入（O12）：它看得到兩個帳戶，每次執行只對品牌的帳戶（`CLOUDFLARE_ACCOUNT_ID`）。
+- `check-export.mjs --brand <品牌>` 從品牌設定檔讀網站和 bundle 必須有的四個字串（收件網址、relay、網址、名稱）。另一個品牌的名稱、scheme、網址、relay、推播和回報的主機、官網、客服信箱、發佈 repo 出現在 bundle 裡，就算失敗。`hosted-web-smoke.mjs --brand <品牌>` 也讀品牌的網址、relay 和收件網址。
+- Apporo 第一次上傳前要先做的事（Cloudflare 的 2FA、建專案、通知寄 `info@apporo.ai`、掛網域、轉址、回報 Worker 放行網頁版）和順序，寫在 `~/.local/share/woowtech-smart/plans/apporo-smart-web-20261030/RESUME.md`。
+
 建置：
 
 - `woowtech/scripts/deploy-web.sh` 經 heavy.sh 跑 `npm run build:app-deps`，再在 `packages/app` 跑 `npx expo export --platform web --output-dir <STAGE>/export --clear --max-workers 2`。`<STAGE>` 是 `web-dist/` 底下每次新建的 `.stage-<sha 前 12 碼>.*` 目錄（下面）。
-- 帶 `APP_VARIANT=production`、`WOOWTECH_AI_CONTENT_REPORT_URL=https://reports.woowtech.io/v1/ai-content-reports`、`NODE_OPTIONS=--max-old-space-size=4096`，拿掉呼叫端的 `EXPO_PUBLIC_LOCAL_DAEMON`、`EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL`、`PASEO_WEB_PLATFORM`、`PASEO_FDROID_BUILD`、`PASEO_PROFILE_BUILD`。收件網址只能在建置時寫進 bundle（`app.config.js` 的 `extra.aiContentReportUrl` → `APP_MANIFEST`），`check-export.mjs` 建置後檢查它在不在。
+- 帶 `APP_VARIANT=production`、`WOOWTECH_AI_CONTENT_REPORT_URL=<品牌的收件網址>`（上表）、`NODE_OPTIONS=--max-old-space-size=4096`，拿掉呼叫端的 `EXPO_PUBLIC_LOCAL_DAEMON`、`EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL`、`PASEO_WEB_PLATFORM`、`PASEO_FDROID_BUILD`、`PASEO_PROFILE_BUILD`。收件網址只能在建置時寫進 bundle（`app.config.js` 的 `extra.aiContentReportUrl` → `APP_MANIFEST`），`check-export.mjs` 建置後檢查它在不在。
 - `--clear`：Metro 的 transform 快取可能留著舊的內嵌 manifest。`--max-workers 2`：這台 Mac 只有 8 GB。
-- 輸出在 repo 外面：`~/.local/share/woowtech-smart/web-dist/<sha 前 12 碼>`（下面叫 `<OUT>`），才不會蓋掉 `packages/app/dist`（daemon 自帶的網頁介面和桌面版用的）。建置先寫進 `web-dist/.stage-<sha 前 12 碼>.*` 這個新目錄；建置成功、建置後的來源檢查（下面）也過了，才搬成 `<OUT>`。建置失敗或來源檢查沒過時，原來的 `<OUT>` 原封不動，stage 也會刪掉（被 kill 而留下一天以上的 stage，下次建置時清掉）。所以同一個 sha 的另一次執行（例如本機 E2E 的 dry-run）不會在上傳到一半時刪掉或改寫正在用的匯出。旁邊的 `<OUT>.build.json` 記下 commit、`package-lock.json` 的 SHA-256、是否在 `npm ci` 的安裝上建置、工作樹是否乾淨，以及匯出裡**每個檔的 SHA-256**；它放在匯出的外面，因為匯出裡的每個檔都會上傳成公開檔。
+- 輸出在 repo 外面：`~/.local/share/woowtech-smart/web-dist/<sha 前 12 碼>`（其他品牌是 `web-dist/<品牌>-<sha 前 12 碼>`；下面叫 `<OUT>`），才不會蓋掉 `packages/app/dist`（daemon 自帶的網頁介面和桌面版用的）。建置先寫進 `web-dist/.stage-<sha 前 12 碼>.*` 這個新目錄；建置成功、建置後的來源檢查（下面）也過了，才搬成 `<OUT>`。建置失敗或來源檢查沒過時，原來的 `<OUT>` 原封不動，stage 也會刪掉（被 kill 而留下一天以上的 stage，下次建置時清掉）。所以同一個 sha 的另一次執行（例如本機 E2E 的 dry-run）不會在上傳到一半時刪掉或改寫正在用的匯出。旁邊的 `<OUT>.build.json` 記下 commit、`package-lock.json` 的 SHA-256、是否在 `npm ci` 的安裝上建置、工作樹是否乾淨，以及匯出裡**每個檔的 SHA-256**；它放在匯出的外面，因為匯出裡的每個檔都會上傳成公開檔。
 - 上傳的不是 `<OUT>` 本身，是腳本自己暫存目錄裡的一份複本（`upload/`）：複本的每個檔都要跟 `<OUT>.build.json` 的清單相同，`check-export.mjs` 跑在複本上，`wrangler pages deploy` 和 `verify-live.mjs` 用的也是這份複本。檢查過的位元組就是上傳的位元組，上傳前後有人改 `<OUT>` 也影響不到。複本跟清單對不上時，當作沒有這個匯出，重建。
 - 上傳時遇到同一個 commit、同一個 lockfile、乾淨的工作樹建出來、而且清單對得上的匯出，直接重用（檢查照樣重跑），所以可以先 dry-run 建好，再上傳（第一次部署前也先 dry-run，才不必等建置才發現護欄檔案要核准）；加了 `WOOW_FRESH_INSTALL=1` 時，只重用在 `npm ci` 的安裝上建的。dry-run 一律重建。
 - 不准有 `packages/app/.env*`，環境裡也不准設 `EXPO_PUBLIC_LOCAL_DAEMON`（連空字串也算；代碼 2）：Expo 會自動讀這些檔，也會把 `EXPO_PUBLIC_*` 寫進 bundle，而 `EXPO_PUBLIC_LOCAL_DAEMON` 會讓每位訪客的瀏覽器每秒探測那個位址、永不停止（Lane B 的資安審查提出）。Lane B 之後讓這個設定也受 O2 的政策管（`runBoot` 的提早 return 在它前面，公開的 https 頁面不探測，第 19 節），但它不該出現在公開的建置裡，所以腳本照樣擋。這些檔被 `.gitignore` 忽略，`git status` 看不到，所以腳本另外檢查，建置指令裡也再拿掉一次。
@@ -1712,27 +1733,28 @@ node --test woowtech/*.test.mjs
 WOOW_DRY_RUN=1 woowtech/scripts/deploy-web.sh   # 建置加檢查，不跑 wrangler
 woowtech/scripts/deploy-web.sh --preview        # 上傳到 preview 分支
 woowtech/scripts/deploy-web.sh                  # 上傳到正式站（main 分支）；npm run deploy:web 一樣
+woowtech/scripts/deploy-web.sh --brand=apporo   # Apporo smart 的網頁版（上面三種都可以加）
 ```
 
 - 登入一次就一直有效（O12，2026-10-27）：上傳用 owner 在 `~/.local/share/woowtech-smart/wrangler-pages` 這個獨立目錄做的 wrangler 登入（下面），腳本每次用 `whoami --json` 檢查 scopes，**結束時不登出**；正式站的上傳不要求終端機確認，agent 可以在 owner 登入後部署。**owner 接受的代價：登入有效期間，這台 Mac 上任何 agent 都能部署到正式站。**這組登入（`pages:write`）做得到的也不只是部署：它能刪掉部署（回復要用的那幾版）、把自訂網域從專案拿掉、刪掉整個 Pages 專案；後兩者會讓 daemon 設定裡永久寫著的 `smart.woowtech.io` 變成懸空的 CNAME（見「這個網域的承諾」）。`--help` 也這麼寫。
 - 腳本擋的是意外，不是刻意的 agent（agent 讀得到腳本，也能自己跑 wrangler）。它仍然擋住：沒提交或沒推上去的程式、建置途中被改掉的程式、把線上正式站退回舊版或別的分支、沒人看過就改了的護欄檔案、別的帳戶、權限更大的登入、多出來的第三方程式碼。
 - 正式站的來源檢查（代碼 2；預覽不檢查）：`git fetch --prune origin` 之後，HEAD 要在某個 `origin/*` 分支上（GitHub 上已刪掉的分支留在本機的舊 ref 不算）；而且線上正式站現在跑的 commit（`pages deployment list` 最新一筆的 `Source`，7 碼）要是 HEAD 的祖先（`git merge-base --is-ancestor`，同一個 commit 也算）。第一次部署（還沒有 production 部署）不受限。線上那個 commit 不是祖先（退版、換到別的分支）、本機沒有那個 commit（fetch 之後也沒有）或讀不出來時就退出；真的要這樣做，要同時設 `WOOW_ALLOW_DOWNGRADE=1` **和**在終端機輸入 HEAD 的前 7 碼（沒有終端機的 agent 做不到，`WOOW_CONFIRM_SHA` 也不算）。「在 origin 上」只是前提，不等於有人審過，也不等於是最新的。注意：在儀表板按過 Rollback 之後，`deployment list` 最新一筆不是目前上線的那版；這個檢查會往安全的方向拒絕，回復之後的修正要走 `WOOW_ALLOW_DOWNGRADE=1`，由 owner 在場。
-- 護欄檔案的 diff（代碼 7；只有正式站）：`woowtech/web/export-baseline.json`、`woowtech/web/_headers`、`woowtech/web/check-export.mjs`、`woowtech/web/verify-live.mjs`、`woowtech/scripts/deploy-web.sh` 這五個檔跟線上正式站那版的 commit 有任何差異，或根本沒有線上那版（第一次部署，五個檔都算新的），腳本就先印出檔案清單、diff（最多 200 行，完整的指令一併印出）和它的 12 碼 sha256，然後退出（代碼 7）。要設 `WOOW_ACK_GUARD_DIFF=<那 12 碼>`，或在終端機輸入那 12 碼，才會往下；diff 又變了，雜湊就對不上。agent 要做的是：把這個 diff 貼給 owner 看，等 owner 說好，再用 `WOOW_ACK_GUARD_DIFF` 跑第二次。**這只擋意外的自我核准，擋不住刻意的 agent**：任何 agent 都能自己算出雜湊，或自己改護欄檔案再核准；基準檔也只抓得到意外多出來的第三方程式碼和 `eval` 類呼叫，抓不到有意寫進 bundle 的程式（外掛系統本身就是 `eval`，見下面）。第一次部署之前，owner 要自己看過真正的基準檔。
+- 護欄檔案的 diff（代碼 7；只有正式站）：品牌的基準檔（`woowtech/web/export-baseline.json`，Apporo 是 `woowtech/web/export-baseline.apporo.json`）、`woowtech/web/_headers`、`woowtech/web/check-export.mjs`、`woowtech/web/verify-live.mjs`、`woowtech/scripts/deploy-web.sh` 這五個檔跟線上正式站那版的 commit 有任何差異，或根本沒有線上那版（第一次部署，五個檔都算新的），腳本就先印出檔案清單、diff（最多 200 行，完整的指令一併印出）和它的 12 碼 sha256，然後退出（代碼 7）。要設 `WOOW_ACK_GUARD_DIFF=<那 12 碼>`，或在終端機輸入那 12 碼，才會往下；diff 又變了，雜湊就對不上。agent 要做的是：把這個 diff 貼給 owner 看，等 owner 說好，再用 `WOOW_ACK_GUARD_DIFF` 跑第二次。**這只擋意外的自我核准，擋不住刻意的 agent**：任何 agent 都能自己算出雜湊，或自己改護欄檔案再核准；基準檔也只抓得到意外多出來的第三方程式碼和 `eval` 類呼叫，抓不到有意寫進 bundle 的程式（外掛系統本身就是 `eval`，見下面）。第一次部署之前，owner 要自己看過真正的基準檔。
 - 可選的確認：`WOOW_CONFIRM_SHA=<HEAD 的前 7 碼以上>` 不問就確認（打錯會在建置前就退出）；從終端機跑正式上傳時，先印出這次的 commit、正式站目前的 commit 和之間的 `git diff --stat`，再要你輸入 sha 的前 7 碼（等 10 分鐘，沒答就退出）。兩者都沒有、也沒有終端機（agent）就不問，直接上傳。**在終端機裡跑腳本的 agent（Omnigent 終端、tmux 都算終端機）一定要設 `WOOW_CONFIRM_SHA`，否則會停在提示，等 10 分鐘後失敗。**
 - `WOOW_FRESH_INSTALL=1`：先在這個 worktree 跑 `npm ci`（經 heavy.sh，這台約 21 分鐘），除非 `node_modules/.woow-npm-ci` 記著這個 lockfile 已經是 `npm ci` 裝的。`npm ci` 會整個換掉 `node_modules`，所以只准在 linked worktree 裡用，例如 `git worktree add --detach ~/projects/woowtech-smart-web-deploy <sha>`，不准在主 checkout。這是選做：不設時，就用 worktree 現有的 `node_modules` 建置。
 - 其他設定：`WOOW_ALLOW_DIRTY=1`（只能配 dry-run，給本機 E2E 跳過「乾淨」和「已推上」）、`WOOW_HEAVY_LABEL`（heavy.sh 的 label，預設 `web-export`；本機 E2E 用自己外層的 label，heavy.sh 同一個 label 才會直接放行）、`WOOW_NODE22_BIN`（node 不是 22 時放到 PATH 前面的目錄）、`WOOW_VERIFY_ATTEMPTS`、`WOOW_VERIFY_WAIT`（上傳後檢查幾次、隔幾秒，預設 3 次、20 秒）、`WOOW_ACK_GUARD_DIFF`、`WOOW_ALLOW_DOWNGRADE`（上面）。`WOOW_HEAVY`、`WOOW_WRANGLER`、`WOOW_TTY` 只給測試換掉工具用。`--help` 印出這些設定、退出代碼和 O12 的取捨（英文）。
 - 依序檢查，任何一項失敗就退出，什麼都不上傳：
   1. node 是 22 版；commit 的標題不是 `-` 開頭（見第 7 步）；`WOOW_CONFIRM_SHA` 對得上；環境沒有 `EXPO_PUBLIC_LOCAL_DAEMON`；`git fetch --prune origin` 之後，HEAD 沒變、工作樹乾淨、沒有被設成 assume-unchanged 或 skip-worktree 的追蹤檔（`git status` 看不到它們）、沒有 `packages/app/.env*`，HEAD 在某個 `origin/*` 分支上（代碼 2）。
-  2. 上傳模式：沒有 `~/.wrangler`（有的話 wrangler 會改讀那裡的登入）；wrangler 正好是 4.149.0；`whoami --json` 是 owner 的 OAuth 登入，`tokenPermissions` 只有 `account:read`、`user:read`、`pages:write`、`offline_access`，而且能用 WOOWTECH 的帳戶；帳戶裡有 `woowtech-smart-web` 專案；有標記檔 `domain-attached` 時，專案要列著 `smart.woowtech.io`（下面；代碼 4，同時印出登入和建專案的指令）。這一步在建置之前，登入過期時幾秒就知道，不必等建置。
-  3. `WOOW_FRESH_INSTALL=1` 不在主 checkout（代碼 2）；`npm ci` 和建置（代碼 3）。
-  4. 建置後：HEAD、工作樹、`.env*`、`~/.wrangler` 再查一次（代碼 2 或 4）；通過才把 stage 搬成 `<OUT>`（匯出裡已放進 `woowtech/web/_headers`）；再複製一份、對照清單，在複本上跑 `check-export.mjs`（代碼 3）。dry-run 到這裡結束，印出 `<OUT>`。
+  2. 上傳模式：沒有 `~/.wrangler`（有的話 wrangler 會改讀那裡的登入）；wrangler 正好是 4.149.0；`whoami --json` 是 owner 的 OAuth 登入，`tokenPermissions` 只有 `account:read`、`user:read`、`pages:write`、`offline_access`，而且能用品牌的帳戶；帳戶裡有品牌的專案（渥屋是 `woowtech-smart-web`）；有品牌的標記檔（渥屋是 `domain-attached`）時，專案要列著品牌的網址（下面；代碼 4，同時印出登入和建專案的指令）。這一步在建置之前，登入過期時幾秒就知道，不必等建置。
+  3. `WOOW_FRESH_INSTALL=1` 不在主 checkout（代碼 2）；`npm ci`、其他品牌的複本和建置（代碼 3）。
+  4. 建置後：HEAD、工作樹、`.env*`、`~/.wrangler` 再查一次（代碼 2 或 4）；通過才把 stage 搬成 `<OUT>`（匯出裡已放進 `woowtech/web/_headers`）；再複製一份、對照清單，在複本上用品牌的值和基準檔跑 `check-export.mjs`（代碼 3）。dry-run 到這裡結束，印出 `<OUT>`。
   5. 正式站：來源檢查、護欄檔案的 diff、確認（上面；代碼 2 或 7）。
   6. 上傳前：HEAD、工作樹、`.env*`、`~/.wrangler`，以及 wrangler 的版本、登入的 scopes 和帳戶、專案，全部再查一次（確認提示可能讓人想了很久；代碼 2 或 4）。
-  7. `wrangler pages deploy <複本> --project-name=woowtech-smart-web --branch=main|preview --commit-hash=<sha> --commit-message=<主旨> --commit-dirty=false --cwd=<空目錄>`（代碼 5）。每個值都跟它的旗標在同一個參數裡（`--flag=value`）：以 `-` 開頭的主旨若是獨立的參數，wrangler 會把它當成選項，例如 `--cwd=<目錄>` 會讓它把 `<目錄>/functions` 編成 Pages Functions，跑在網站前面，`check-export.mjs` 看不到。主旨以 `-` 開頭的 commit 腳本直接拒絕。
+  7. `wrangler pages deploy <複本> --project-name=<品牌的專案> --branch=main|preview --commit-hash=<sha> --commit-message=<主旨> --commit-dirty=false --cwd=<空目錄>`（代碼 5）。每個值都跟它的旗標在同一個參數裡（`--flag=value`）：以 `-` 開頭的主旨若是獨立的參數，wrangler 會把它當成選項，例如 `--cwd=<目錄>` 會讓它把 `<目錄>/functions` 編成 Pages Functions，跑在網站前面，`check-export.mjs` 看不到。主旨以 `-` 開頭的 commit 腳本直接拒絕。
   8. `pages deployment list` 最新一筆是這個 commit、環境和分支正確；`verify-live.mjs` 一律對這次部署自己的網址（`<hash>.woowtech-smart-web.pages.dev`）比對每個檔，用的是上傳的那份複本；正式站在專案的 `Project Domains` 列著 `smart.woowtech.io` 時，也對它比對一次。`woowtech-smart-web.pages.dev` 本身不是檢查對象：O6 的 Bulk Redirect 開了之後它回 301，而 `<hash>.…pages.dev`（沒開 Include subdomains）仍回 200。部署自己的網址沒過是代碼 6，同時印出回復的方法；`smart.woowtech.io` 已在專案裡卻連不上（連線失敗或 5xx，通常是網域還沒 Active）是代碼 8，不印回復的方法（部署本身是好的），等 Active 後手動跑 `verify-live.mjs`；它回了但內容或標頭不對，是代碼 6。預覽對這次部署的網址，被 Access 保護時印出 `skipped`。
-- 退出代碼：0 完成，2 建置前的檢查、來源檢查或確認，3 `npm ci`、建置或 `check-export`，4 wrangler（版本、登入、scopes、帳戶、專案、少了自訂網域、登出沒成功），5 上傳，6 上傳後的檢查，7 護欄檔案的 diff 還沒核准，8 已上傳、部署自己的網址檢查過了，但 `smart.woowtech.io` 在專案裡卻連不上，75 heavy.sh 等不到鎖。
-- 自訂網域的標記檔：掛好網域、狀態變成 Active 之後，建一個空檔 `~/.local/share/woowtech-smart/wrangler-pages/domain-attached`（`touch` 就好）。有了它，專案的 `Project Domains` 裡缺 `smart.woowtech.io` 就是硬失敗（代碼 4，指向事故流程）：有人把網域拿掉了。沒有它（第一次部署）時，網域不在清單裡不算錯，只檢查部署自己的網址。
-- 每一次 wrangler 都在一個新的空目錄裡跑，**標準輸入是 `/dev/null`**，`CLOUDFLARE_ACCOUNT_ID` 固定是 WOOWTECH 的帳戶，`WRANGLER_CACHE_DIR` 是空的暫存目錄（`pages project list` 和 `pages deployment list` 會先讀快取的帳戶 id，快取還會往上找 `node_modules/.cache`），`WRANGLER_SEND_METRICS=false`。呼叫端的 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_API_KEY`、`CLOUDFLARE_EMAIL`、`WRANGLER_CF_AUTHORIZATION_TOKEN` 和舊名的 `CF_*` 都拿掉：只用 owner 的 OAuth 登入，CI 不部署（`woowtech/workflows.test.mjs`）。能把 API 請求或 refresh token 送去別處的 `CLOUDFLARE_API_BASE_URL`（舊名 `CF_API_BASE_URL`）、`WRANGLER_TOKEN_URL`、`WRANGLER_REVOKE_URL`、`WRANGLER_AUTH_URL`、`WRANGLER_AUTH_DOMAIN`、`WRANGLER_CLIENT_ID`、`WRANGLER_API_ENVIRONMENT`、`CLOUDFLARE_COMPLIANCE_REGION`，以及能在 wrangler 行程裡插程式的 `NODE_OPTIONS`，也一律拿掉。
+- 退出代碼：0 完成，2 建置前的檢查、來源檢查或確認，3 `npm ci`、其他品牌的複本、建置或 `check-export`，4 wrangler（版本、登入、scopes、帳戶、專案、少了自訂網域、登出沒成功），5 上傳，6 上傳後的檢查，7 護欄檔案的 diff 還沒核准，8 已上傳、部署自己的網址檢查過了，但品牌的網址（`smart.woowtech.io`）在專案裡卻連不上，75 heavy.sh 等不到鎖。
+- 自訂網域的標記檔：掛好網域、狀態變成 Active 之後，建一個空檔 `~/.local/share/woowtech-smart/wrangler-pages/domain-attached`（`touch` 就好；Apporo 是同一個目錄的 `domain-attached-apporo`）。有了它，專案的 `Project Domains` 裡缺 `smart.woowtech.io` 就是硬失敗（代碼 4，指向事故流程）：有人把網域拿掉了。沒有它（第一次部署）時，網域不在清單裡不算錯，只檢查部署自己的網址。
+- 每一次 wrangler 都在一個新的空目錄裡跑，**標準輸入是 `/dev/null`**，`CLOUDFLARE_ACCOUNT_ID` 固定是品牌的帳戶（渥屋是 WOOWTECH 的），`WRANGLER_CACHE_DIR` 是空的暫存目錄（`pages project list` 和 `pages deployment list` 會先讀快取的帳戶 id，快取還會往上找 `node_modules/.cache`），`WRANGLER_SEND_METRICS=false`。呼叫端的 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_API_KEY`、`CLOUDFLARE_EMAIL`、`WRANGLER_CF_AUTHORIZATION_TOKEN` 和舊名的 `CF_*` 都拿掉：只用 owner 的 OAuth 登入，CI 不部署（`woowtech/workflows.test.mjs`）。能把 API 請求或 refresh token 送去別處的 `CLOUDFLARE_API_BASE_URL`（舊名 `CF_API_BASE_URL`）、`WRANGLER_TOKEN_URL`、`WRANGLER_REVOKE_URL`、`WRANGLER_AUTH_URL`、`WRANGLER_AUTH_DOMAIN`、`WRANGLER_CLIENT_ID`、`WRANGLER_API_ENVIRONMENT`、`CLOUDFLARE_COMPLIANCE_REGION`，以及能在 wrangler 行程裡插程式的 `NODE_OPTIONS`，也一律拿掉。
 - 為什麼關掉標準輸入：wrangler 在 stdin 和 stdout 都是終端機時算「互動」。登入的 refresh 失敗時（建置要約 20 分鐘，heavy.sh 又可能排很久，登入可能在這段時間過期或被撤銷），互動的 wrangler 會自己開瀏覽器登入，用它預設那一大串 scopes，並把那個 token 存進 `wrangler-pages`。`pages deploy` 是唯一輸出直接印在終端機上的呼叫，所以只有它會踩到。stdin 是 `/dev/null` 時，過期的登入直接失敗（代碼 5），不會換成權限更大的登入；確認提示讀的是 `/dev/tty`，不受影響。
 - **不要把 `$HOME` 當成 wrangler 的工作目錄**：wrangler 會在工作目錄建 `.wrangler`（專案快取）。從 `$HOME` 跑就建出 `~/.wrangler`；wrangler 看到 `~/.wrangler` 是目錄，就把它當舊式的全域設定目錄，不再看 `XDG_CONFIG_HOME`，回報「未登入」，`wrangler logout` 也會登出那個目錄、報告成功，`wrangler-pages` 的 refresh token 卻還有效（2026-10-27 真的發生過）。所以腳本每次在新的空目錄裡跑 wrangler，`~/.wrangler` 存在時拒絕往下（代碼 4），這份 README 裡每一個 wrangler 指令也都這樣寫。
 - `deploy-web.sh --logout [pages|reports]`：在上面那個乾淨的環境裡對 `wrangler-pages`（預設）或 `wrangler-reports` 跑 `wrangler logout`，`~/.wrangler` 存在時拒絕，最後一定要 `wrangler whoami --json` 回 `loggedIn:false` 才算成功（沒成功是代碼 4）。不看工作樹，緊急時也能用。
@@ -1996,9 +2018,8 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
   - daemon 只擋 App（`mobile`、`browser`），因為推播 token 在 App 手上；CLI、MCP、Hub、外掛照舊。擋的時候先送一個只有品牌的 `server_info`，再用 4004 關閉：經過 relay 時，關閉的原因傳不到 App，App 要靠 `server_info` 才說得出是哪個品牌。
   - 沒帶品牌的 daemon 和 App（0.8.2 以前）一律當成渥屋智能。所以渥屋智能照舊能配上游 Paseo；Apporo smart 的 daemon 會擋掉舊版渥屋智能 App。
   - 測試：`packages/server/src/server/websocket-server.brand.test.ts`、`packages/client/src/daemon-client.test.ts` 的品牌兩項。
-- **還沒做**：
-  - 線上服務：relay 的部署、推播中繼、AI 回報接收端，連同 Firebase 專案。
-  - 發版腳本的品牌參數。
+- **線上服務**（2026-10-30 從外面查過）：relay.apporo.ai 的 `/health` 回 200；`www.apporo.ai/api/smart/v1/notify`（推播）和 `…/ai-content-reports`（AI 回報）兩條路徑由 Alan 帳戶裡的 Worker 回應。Apporo 的推播中繼程式在私有 repo `WOOWTECH/woowtech-push-relay` 的 `apporo-smart` 分支。
+- **還沒做**：桌面版和 CLI 發版腳本的品牌參數。網頁版的 `deploy-web.sh` 已經有 `--brand`（第 27 節）。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 

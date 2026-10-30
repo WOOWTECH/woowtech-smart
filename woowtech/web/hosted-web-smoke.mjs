@@ -5,11 +5,14 @@
 // Scenarios S1-S10 are the spec's (web-server-20261026/web-spec.md, 7.3 and 7.4).
 //
 //   node woowtech/web/hosted-web-smoke.mjs --base <url> --pair-url <pairing link>
-//     [--direct <host:port>] [--grant-local-network] [--report-mock] [--headed]
+//     [--brand <id>] [--direct <host:port>] [--grant-local-network] [--report-mock] [--headed]
 //
-// --base       the site; https://smart.woowtech.io by default. The local E2E serves the export
-//              at http://127.0.0.1:8788 (`wrangler pages dev`).
-// --pair-url   a pairing link from `woowtech-smart daemon pair` (https://smart.woowtech.io/#offer=...).
+// --brand      the brand whose site, relay and report receiver to expect (woowtech/brands):
+//              woowtech (the default) or apporo.
+// --base       the site; the brand's by default (https://smart.woowtech.io for woowtech smart).
+//              The local E2E serves the export at http://127.0.0.1:8788 (`wrangler pages dev`).
+// --pair-url   a pairing link from the brand's `<cli> daemon pair` (for woowtech smart
+//              `woowtech-smart daemon pair`, https://smart.woowtech.io/#offer=...).
 //              S2 pastes it whole; the other scenarios open <base>/#offer=<its payload>.
 // --direct     a daemon to add as a direct connection (S5), such as 127.0.0.1:6791.
 // --grant-local-network  grants Chrome's local-network-access permission (loopback included).
@@ -20,18 +23,19 @@
 // On a public https page (S1, S8) any request or WebSocket to a loopback host (any port), 0.0.0.0,
 // a private, shared (Tailscale), link-local or unique-local address or a .local name fails
 // before anyone has pressed anything: a probe of localhost:6767 or of the LAN would pass a check
-// that only looks for localhost:6770. The pairing link is a credential: "#offer=..." and the link
+// that only looks for the brand's port (6770 for woowtech smart). The pairing link is a
+// credential: "#offer=..." and the link
 // itself are replaced by [redacted] in the summary and in error messages.
 //
 // Uses playwright-core with the installed Google Chrome (channel "chrome"). Prints a JSON
 // summary and exits 1 when a scenario fails, 2 on bad usage.
 import { randomBytes } from "node:crypto";
-import { realpathSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const DEFAULT_BASE = "https://smart.woowtech.io";
-const REPORT_URL = "https://reports.woowtech.io/v1/ai-content-reports";
-const RELAY_HOST = "relay.woowtech.io";
+const BRANDS_DIR = fileURLToPath(new URL("../brands/", import.meta.url));
+const DEFAULT_BRAND = "woowtech";
 const CHANGELOG_HOST = "raw.githubusercontent.com";
 const REGISTRY_KEY = "@paseo:daemon-registry";
 // Pairing credentials that must not reach the summary: filled in once the link is parsed.
@@ -42,22 +46,40 @@ const ARMING_MS = 1000;
 function usage(message) {
   console.error(`hosted-web-smoke: ${message}`);
   console.error(
-    "usage: node woowtech/web/hosted-web-smoke.mjs --base <url> --pair-url <link> " +
+    "usage: node woowtech/web/hosted-web-smoke.mjs --base <url> --pair-url <link> [--brand <id>] " +
       "[--direct <host:port>] [--grant-local-network] [--report-mock] [--headed]",
   );
   process.exit(2);
 }
 
+/** The brand's site, report receiver and relay host, from woowtech/brands/<id>.json. */
+export function brandEndpoints(id = DEFAULT_BRAND) {
+  const file = path.join(BRANDS_DIR, `${id}.json`);
+  if (!/^[a-z][a-z0-9-]*$/.test(id) || !existsSync(file)) usage(`there is no brand "${id}"`);
+  const brand = JSON.parse(readFileSync(file, "utf8"));
+  return {
+    site: `https://${brand.web.host}`,
+    reportUrl: brand.services.aiContentReportUrl,
+    relayHost: brand.services.relayHost,
+  };
+}
+
 function parseArgs(argv) {
   const options = {
-    base: DEFAULT_BASE,
+    brand: DEFAULT_BRAND,
+    base: null,
     pairUrl: null,
     direct: null,
     grantLocalNetwork: false,
     reportMock: false,
     headed: false,
   };
-  const valued = { "--base": "base", "--pair-url": "pairUrl", "--direct": "direct" };
+  const valued = {
+    "--brand": "brand",
+    "--base": "base",
+    "--pair-url": "pairUrl",
+    "--direct": "direct",
+  };
   const flags = {
     "--grant-local-network": "grantLocalNetwork",
     "--report-mock": "reportMock",
@@ -79,9 +101,10 @@ function parseArgs(argv) {
 }
 
 function validate(options) {
+  const endpoints = brandEndpoints(options.brand);
   let base;
   try {
-    base = new URL(options.base);
+    base = new URL(options.base ?? endpoints.site);
   } catch {
     usage(`--base is not a URL: ${options.base}`);
   }
@@ -91,7 +114,7 @@ function validate(options) {
     usage(`--direct must be host:port, not ${options.direct}`);
   }
   SECRETS.push(options.pairUrl, offer.payload);
-  return { ...options, base: base.origin, offer };
+  return { ...options, base: base.origin, endpoints, offer };
 }
 
 /** The offer of a pairing link: everything after the first "#offer=", as base64url JSON. */
@@ -306,9 +329,14 @@ async function waitForWelcome(page) {
  * changelog. `local` are loopback or private addresses; a public page may not reach any, while the
  * local E2E page (http://127.0.0.1) reaches its own daemon and is not asked.
  */
-export function classifyHosts(urls, base) {
+export function classifyHosts(urls, base, endpoints = brandEndpoints()) {
   const site = new URL(base);
-  const allowed = new Set([site.host, RELAY_HOST, CHANGELOG_HOST, "reports.woowtech.io"]);
+  const allowed = new Set([
+    site.host,
+    endpoints.relayHost,
+    CHANGELOG_HOST,
+    new URL(endpoints.reportUrl).host,
+  ]);
   const checkLocal = isPublicHttps(base);
   const unexpected = new Set();
   const local = new Set();
@@ -327,11 +355,11 @@ export function classifyHosts(urls, base) {
   return { unexpected: [...unexpected], local: [...local] };
 }
 
-function relaySocket(seen, serverId) {
+function relaySocket(seen, serverId, relayHost) {
   return seen.sockets.find((socket) => {
     const url = new URL(socket.url);
     return (
-      url.hostname === RELAY_HOST &&
+      url.hostname === relayHost &&
       url.searchParams.get("serverId") === serverId &&
       url.searchParams.get("role") === "client" &&
       socket.frames > 0
@@ -349,6 +377,7 @@ async function s1(browser, options) {
     const { unexpected, local } = classifyHosts(
       [...seen.requests, ...seen.sockets.map((s) => s.url)],
       options.base,
+      options.endpoints,
     );
     return {
       ok: csp.length === 0 && unexpected.length === 0 && local.length === 0,
@@ -396,7 +425,9 @@ async function pastePairingLink(context, options) {
   await pressConnect(page);
   await sheet.waitFor({ state: "hidden", timeout: 10_000 });
   const saved = await poll(() => savedHost(page, serverId), { timeout: 10_000 });
-  const online = await poll(() => relaySocket(seen, serverId), { timeout: 30_000 });
+  const online = await poll(() => relaySocket(seen, serverId, options.endpoints.relayHost), {
+    timeout: 30_000,
+  });
   return {
     ok:
       shownServerId === serverId && disabledAtFirst && syntheticClickIgnored && !!saved && !!online,
@@ -542,7 +573,7 @@ async function s6(browser, options) {
     const page = await context.newPage();
     const seen = watch(page);
     if (options.reportMock) {
-      await page.route(REPORT_URL, (route) =>
+      await page.route(options.endpoints.reportUrl, (route) =>
         route.fulfill({
           status: 400,
           headers: {
@@ -566,7 +597,7 @@ async function s6(browser, options) {
       } catch (error) {
         return { error: String(error) };
       }
-    }, REPORT_URL);
+    }, options.endpoints.reportUrl);
     const csp = await cspViolations(page, seen);
     return {
       ok: answer.status === 400 && csp.length === 0,

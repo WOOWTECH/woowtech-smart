@@ -1,22 +1,31 @@
 #!/bin/bash
-# deploy-web.sh: build woowtech smart's web app and upload it to Cloudflare Pages.
+# deploy-web.sh: build a brand's web app and upload it to Cloudflare Pages.
 #
-# The web app is packages/app's `expo export --platform web`, served by the Pages project
-# woowtech-smart-web (WOOWTECH's Cloudflare account) at https://smart.woowtech.io.
+# The web app is packages/app's `expo export --platform web`. Each brand has its own Pages
+# project, Cloudflare account and site (the brand presets below): woowtech smart's is the project
+# woowtech-smart-web (WOOWTECH's Cloudflare account) at https://smart.woowtech.io, Apporo smart's
+# the project apporo-smart-web (the account that holds apporo.ai) at https://smart.apporo.ai.
 # woowtech/README.md section 27 has the whole procedure, the owner's steps and the rollback.
 #
 #   WOOW_DRY_RUN=1 woowtech/scripts/deploy-web.sh   # build and check; wrangler never runs
 #   woowtech/scripts/deploy-web.sh --preview        # upload to the preview branch
 #   woowtech/scripts/deploy-web.sh                  # upload to production (branch main)
 #   npm run deploy:web --workspace=@getpaseo/app    # the same as the line above
+#   woowtech/scripts/deploy-web.sh --brand=apporo   # Apporo smart's web app (with any of the above)
 #   woowtech/scripts/deploy-web.sh --logout [pages|reports]   # end a wrangler login
+#
+# --brand=<id> picks the brand: woowtech (the default) or apporo. The checkout always has
+# woowtech applied (woowtech/brands). Another brand is built in a copy of HEAD's files, made next
+# to the exports, with this checkout's node_modules cloned into it (copy-on-write on APFS) and the
+# brand applied by woowtech/tools/apply-brand.mjs; the copy is deleted when the script ends.
 #
 # Uploads use the owner's wrangler login in a directory of its own,
 # ~/.local/share/woowtech-smart/wrangler-pages, made once with only the account:read, user:read
 # and pages:write scopes. Every run checks those scopes with `wrangler whoami --json`, and no run
 # logs out (owner decision O12, 2026-10-27). The trade-off the owner accepted: while that login
 # is valid, any agent on this Mac can deploy to production. The same login can also delete
-# deployments (the rollback targets), detach the custom domain and delete the project.
+# deployments (the rollback targets), detach the custom domain and delete the project. Both
+# brands use it: it can use both accounts, and each run talks to its brand's account only.
 #
 # Never run wrangler with your home directory as its working directory: it then makes ~/.wrangler,
 # wrangler stops reading XDG_CONFIG_HOME from that moment on, and "not logged in" (or a logout of
@@ -31,14 +40,16 @@
 #     checked before the build, after it and right before the upload.
 #   - The export is built in a new directory and moved to its place only when the build worked.
 #     What is uploaded is a copy of it, matched against a SHA-256 manifest and checked by
-#     woowtech/web/check-export.mjs with its baseline (woowtech/web/export-baseline.json).
+#     woowtech/web/check-export.mjs for the brand, with the brand's baseline
+#     (woowtech/web/export-baseline.json for woowtech smart, export-baseline.<brand>.json next to
+#     it for another brand).
 #   - wrangler is exactly WRANGLER_VERSION, and the login (checked again right before the upload)
-#     has only the allowed scopes and can use WOOWTECH's account, the only one any call runs for
+#     has only the allowed scopes and can use the brand's account, the only one any call runs for
 #     (CLOUDFLARE_ACCOUNT_ID).
 #   - Production only: the commit production runs now is an ancestor of HEAD. For a downgrade, or
 #     when that commit is not in this repository, set WOOW_ALLOW_DOWNGRADE=1 and answer the prompt
 #     at a terminal.
-#   - Production only: when the files that guard the deploy (the export baseline, _headers,
+#   - Production only: when the files that guard the deploy (the brand's export baseline, _headers,
 #     check-export.mjs, verify-live.mjs, this script) differ from production's commit, or
 #     production has no deployment yet, the script prints that diff with a 12-character hash and
 #     stops (exit 7) until WOOW_ACK_GUARD_DIFF=<hash> is set or the hash is typed at a terminal.
@@ -58,43 +69,38 @@
 #       this package-lock.json (node_modules/.woow-npm-ci). Only in a linked worktree, such as
 #       ~/projects/woowtech-smart-web-deploy: npm ci replaces node_modules.
 #   WOOW_ALLOW_DIRTY=1     with WOOW_DRY_RUN=1 only (the local E2E): skips the clean and pushed
-#       checks.
+#       checks. woowtech smart only: another brand is built from HEAD's files, so commit first.
 #   WOOW_HEAVY_LABEL       heavy.sh label for npm ci and the build (default web-export).
 #   WOOW_NODE22_BIN        Node 22 to put first on PATH when node is not 22 ("" for none).
 #   WOOW_VERIFY_ATTEMPTS, WOOW_VERIFY_WAIT  how often and how many seconds apart verify-live.mjs
 #       checks the site after an upload (3, 20).
 #   WOOW_HEAVY, WOOW_WRANGLER, WOOW_TTY  stand-ins for woowtech/web-deploy.test.mjs.
 #
-# After the custom domain is attached the owner makes an empty file, domain-attached, in the login
-# directory. From then on a project without smart.woowtech.io is an error (exit 4): someone
-# detached the domain (README section 27, incident). Before it, only the deployment's own
-# address is checked.
+# After the custom domain is attached the owner makes an empty file in the login directory:
+# domain-attached for woowtech smart, domain-attached-<brand> for another brand. From then on a
+# project without the brand's site is an error (exit 4): someone detached the domain (README
+# section 27, incident). Before it, only the deployment's own address is checked.
 #
 # --logout [pages|reports]  runs `wrangler logout` for that login directory (pages by default)
 #   in the clean environment above, and succeeds only when `wrangler whoami --json` then says
 #   loggedIn false. The grant can also be revoked in the Cloudflare dashboard.
 #
 # Exit codes: 0 done; 2 a check before the build, the provenance of the commit, or the
-# confirmation; 3 npm ci, the build or check-export; 4 wrangler (version, login, scopes, account,
-# project, the custom domain, a logout that did not work); 5 the upload; 6 the check after the
-# upload (it prints how to roll back); 7 the guard diff was not acknowledged; 8 uploaded and
-# checked at the deployment's own address, but smart.woowtech.io is on the project and does not
-# answer (not Active yet; no rollback needed); 75 heavy.sh gave up waiting for its lock.
+# confirmation; 3 npm ci, the brand's copy, the build or check-export; 4 wrangler (version, login,
+# scopes, account, project, the custom domain, a logout that did not work); 5 the upload; 6 the
+# check after the upload (it prints how to roll back); 7 the guard diff was not acknowledged; 8
+# uploaded and checked at the deployment's own address, but the brand's site is on the project
+# and does not answer (not Active yet; no rollback needed); 75 heavy.sh gave up waiting for its
+# lock.
 set -euo pipefail
 
-PROJECT=woowtech-smart-web
-ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974
-SITE_ORIGIN=https://smart.woowtech.io
-REPORT_URL=https://reports.woowtech.io/v1/ai-content-reports
 # 2026-10-08. It has `login --device`, `login --scopes` and `whoami --json` (README section 27).
 WRANGLER_VERSION=4.149.0
 DATA_ROOT=$HOME/.local/share/woowtech-smart
 WRANGLER_HOME=$DATA_ROOT/wrangler-pages
 REPORTS_HOME=$DATA_ROOT/wrangler-reports
-DOMAIN_MARKER=$WRANGLER_HOME/domain-attached
 ALLOWED_SCOPES="account:read user:read pages:write offline_access"
 OUT_ROOT=$DATA_ROOT/web-dist
-GUARD_FILES="woowtech/web/export-baseline.json woowtech/web/_headers woowtech/web/check-export.mjs woowtech/web/verify-live.mjs woowtech/scripts/deploy-web.sh"
 EMPTY_TREE=4b825dc642cb6eb9a060e54bf8d69288fbee4904
 HEAVY=${WOOW_HEAVY:-$DATA_ROOT/coord/bin/heavy.sh}
 HEAVY_LABEL=${WOOW_HEAVY_LABEL:-web-export}
@@ -133,9 +139,14 @@ is_hex() {
 
 PREVIEW=false
 LOGOUT=""
+BRAND=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --preview) PREVIEW=true ;;
+    --brand=*)
+      BRAND=${1#--brand=}
+      if [ -z "$BRAND" ]; then die 2 "--brand= needs a brand: woowtech or apporo"; fi
+      ;;
     --logout)
       LOGOUT=pages
       case "${2:-}" in
@@ -157,15 +168,49 @@ MODE=production
 if [ "$PREVIEW" = true ]; then MODE=preview; fi
 if flag WOOW_DRY_RUN; then MODE=dry-run; fi
 if [ -n "$LOGOUT" ]; then
-  if [ "$MODE" != production ]; then die 2 "--logout stands alone: not with --preview or WOOW_DRY_RUN=1"; fi
+  if [ "$MODE" != production ] || [ -n "$BRAND" ]; then
+    die 2 "--logout stands alone: not with --preview, --brand or WOOW_DRY_RUN=1"
+  fi
   MODE=logout
 fi
+BRAND=${BRAND:-woowtech}
+# Each brand's Pages project, Cloudflare account, site, report receiver (built into the app),
+# export baseline and domain marker. woowtech/web-deploy.test.mjs keeps the site and the report
+# receiver equal to the brand's file (woowtech/brands/<id>.json: web.host and
+# services.aiContentReportUrl), and the baseline and the marker apart from the other brands'.
+case "$BRAND" in
+  woowtech)
+    PROJECT=woowtech-smart-web
+    ACCOUNT_ID=9c27f623ee596e0b67be56263bcb1974
+    ACCOUNT_NAME="WOOWTECH's account"
+    SITE_ORIGIN=https://smart.woowtech.io
+    REPORT_URL=https://reports.woowtech.io/v1/ai-content-reports
+    BASELINE=woowtech/web/export-baseline.json
+    MARKER_NAME=domain-attached
+    ;;
+  apporo)
+    # Alan's account, which holds the apporo.ai zone (owner decision, 2026-10-30).
+    PROJECT=apporo-smart-web
+    ACCOUNT_ID=9f14a17191df1e77889566d848f063ad
+    ACCOUNT_NAME="the account that holds apporo.ai"
+    SITE_ORIGIN=https://smart.apporo.ai
+    REPORT_URL=https://www.apporo.ai/api/smart/v1/ai-content-reports
+    BASELINE=woowtech/web/export-baseline.apporo.json
+    MARKER_NAME=domain-attached-apporo
+    ;;
+  *) die 2 "unknown brand \"$BRAND\": woowtech or apporo (see --help)" ;;
+esac
+DOMAIN_MARKER=$WRANGLER_HOME/$MARKER_NAME
+GUARD_FILES="$BASELINE woowtech/web/_headers woowtech/web/check-export.mjs woowtech/web/verify-live.mjs woowtech/scripts/deploy-web.sh"
 if [ -n "${WOOW_TTY:-}" ] && [ -z "${WOOW_WRANGLER:-}" ]; then
   die 2 "WOOW_TTY only works with a stand-in wrangler (WOOW_WRANGLER), in tests"
 fi
 ALLOW_DIRTY=false
 if flag WOOW_ALLOW_DIRTY; then
   if [ "$MODE" != dry-run ]; then die 2 "WOOW_ALLOW_DIRTY=1 is only for WOOW_DRY_RUN=1 (the local E2E)"; fi
+  if [ "$BRAND" != woowtech ]; then
+    die 2 "WOOW_ALLOW_DIRTY=1 builds this checkout as it is, but brand $BRAND is built from HEAD's files: commit first"
+  fi
   ALLOW_DIRTY=true
 fi
 FRESH_INSTALL=false
@@ -221,9 +266,11 @@ esac
 WRANGLER_CACHE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/woowtech-wrangler-cache.XXXXXX")
 export WRANGLER_CACHE_DIR
 STAGE=""
+BRAND_TREE=""
 cleanup() {
   rm -rf "$TMP" "$WRANGLER_CACHE_DIR"
   if [ -n "$STAGE" ]; then rm -rf "$STAGE"; fi
+  if [ -n "$BRAND_TREE" ]; then rm -rf "$BRAND_TREE"; fi
 }
 trap cleanup EXIT
 
@@ -410,7 +457,7 @@ check_login() {
     die 4 "wrangler is \"$WRANGLER_SEEN\", not $WRANGLER_VERSION"
   fi
   WHOAMI=$(wr whoami --json 2>/dev/null) || true
-  if ! node -e 'const [raw, account, allowed, home] = process.argv.slice(1);
+  if ! node -e 'const [raw, account, allowed, home, name] = process.argv.slice(1);
   const fail = (message) => { console.error("deploy-web: " + message); process.exit(1); };
   let who;
   try { who = JSON.parse(raw.slice(raw.search(/^\{/m), raw.lastIndexOf("}") + 1)); } catch { fail("wrangler whoami --json printed no JSON"); }
@@ -421,8 +468,8 @@ check_login() {
   if (extra.length > 0) fail("the login has scopes beyond " + allowed + ": " + extra.join(" ") + ". Log out and log in again with the scopes below.");
   if (!scopes.includes("pages:write")) fail("the login has no pages:write scope");
   const accounts = Array.isArray(who.accounts) ? who.accounts : [];
-  if (!accounts.some((entry) => entry && entry.id === account)) fail("the login cannot use the WOOWTECH account " + account);' \
-    "$WHOAMI" "$ACCOUNT_ID" "$ALLOWED_SCOPES" "$WRANGLER_HOME"; then
+  if (!accounts.some((entry) => entry && entry.id === account)) fail("the login cannot use " + name + " " + account);' \
+    "$WHOAMI" "$ACCOUNT_ID" "$ALLOWED_SCOPES" "$WRANGLER_HOME" "$ACCOUNT_NAME"; then
     login_help
     exit 4
   fi
@@ -443,7 +490,8 @@ check_login() {
     die 4 "${SITE_ORIGIN#https://} is not on the Pages project $PROJECT any more, but $DOMAIN_MARKER says it was attached: someone detached it. Do not deploy; follow the incident steps in woowtech/README.md section 27"
   fi
 }
-# domain_listed: smart.woowtech.io is among the project's domains (it may not be Active yet).
+# domain_listed: the brand's site (smart.woowtech.io for woowtech smart) is among the project's
+# domains (it may not be Active yet).
 domain_listed() {
   case ", $DOMAINS," in
     *", ${SITE_ORIGIN#https://},"*) return 0 ;;
@@ -497,7 +545,8 @@ process.stdout.write(JSON.stringify(Object.fromEntries(entries), null, 2));' "$1
 }
 
 # Outside the repository, so packages/app/dist (the daemon's web UI and Electron) stays as it is.
-OUT=$OUT_ROOT/$SHORT
+# woowtech smart's exports keep the names they had before there were two brands.
+if [ "$BRAND" = woowtech ]; then OUT=$OUT_ROOT/$SHORT; else OUT=$OUT_ROOT/$BRAND-$SHORT; fi
 # Next to the export, not in it: everything in the export is uploaded.
 BUILD_INFO=$OUT.build.json
 # What is uploaded: a private copy of the export, matched against the manifest in BUILD_INFO.
@@ -511,6 +560,33 @@ build_record() {
 copy_to_upload() {
   mkdir "$UPLOAD" || die 3 "cannot make $UPLOAD"
   cp -R "$1/." "$UPLOAD/" || die 3 "cannot copy $1 to $UPLOAD"
+}
+# clone_dir <from> <to>: a copy-on-write clone where the file system makes one (APFS), else a copy.
+# Symbolic links stay links: the workspace packages in node_modules point at ../../packages/*.
+clone_dir() {
+  rm -rf "$2"
+  if [ "$(uname -s)" = Darwin ] && cp -cR "$1" "$2" 2>/dev/null; then return 0; fi
+  rm -rf "$2"
+  cp -R "$1" "$2"
+}
+# make_brand_tree: BRAND_TREE, HEAD's files with the brand applied and this checkout's node_modules,
+# for a brand the checkout does not have applied. A copy of tracked files, so nothing ignored
+# (.env files, build output, secrets) comes along; the build makes the packages' dist itself.
+make_brand_tree() {
+  local modules applied
+  BRAND_TREE=$(mktemp -d "$OUT_ROOT/.tree-${OUT##*/}.XXXXXX") || die 3 "cannot make a directory for brand $BRAND's copy"
+  say "copying HEAD's files to $BRAND_TREE and applying brand $BRAND there"
+  git -C "$REPO" archive --format=tar "$SHA" | tar -x -f - -C "$BRAND_TREE" ||
+    die 3 "cannot copy HEAD's files to $BRAND_TREE"
+  # find does not look inside a node_modules it has found: these are the root's and each package's
+  # (and any in an ignored directory, which the copy does not have).
+  while IFS= read -r modules; do
+    if [ ! -d "$BRAND_TREE/$(dirname "$modules")" ]; then continue; fi
+    clone_dir "$REPO/$modules" "$BRAND_TREE/$modules" || die 3 "cannot copy $modules to $BRAND_TREE"
+  done < <(cd "$REPO" && find . -path ./.git -prune -o -name node_modules -type d -prune -print | sed 's|^\./||')
+  (cd "$BRAND_TREE" && node woowtech/tools/apply-brand.mjs "$BRAND") || die 3 "apply-brand.mjs $BRAND failed in $BRAND_TREE"
+  applied=$(sed -n 's/^export const BRAND_ID = "\([a-z][a-z0-9-]*\)";$/\1/p' "$BRAND_TREE/packages/protocol/src/brand-values.ts")
+  if [ "$applied" != "$BRAND" ]; then die 3 "$BRAND_TREE has brand \"$applied\" applied, not $BRAND"; fi
 }
 DIRTY=false
 if [ -n "$(git -C "$REPO" status --porcelain)" ]; then DIRTY=true; fi
@@ -536,19 +612,28 @@ if [ "$REUSE" = true ]; then
   check_source "before the export is reused"
 else
   mkdir -p "$OUT_ROOT"
-  # Stages left by a run that was killed.
-  find "$OUT_ROOT" -maxdepth 1 -name '.stage-*' -mmin +1440 -exec rm -rf {} + 2>/dev/null || true
-  STAGE=$(mktemp -d "$OUT_ROOT/.stage-$SHORT.XXXXXX")
-  say "building the web export into $STAGE/export (heavy.sh, label $HEAVY_LABEL)"
+  # Stages and brand copies left by a run that was killed.
+  find "$OUT_ROOT" -maxdepth 1 \( -name '.stage-*' -o -name '.tree-*' \) -mmin +1440 -exec rm -rf {} + 2>/dev/null || true
+  STAGE=$(mktemp -d "$OUT_ROOT/.stage-${OUT##*/}.XXXXXX")
+  BUILD_ROOT=$REPO
+  if [ "$BRAND" != woowtech ]; then
+    make_brand_tree
+    BUILD_ROOT=$BRAND_TREE
+  fi
+  say "building brand $BRAND's web export into $STAGE/export (heavy.sh, label $HEAVY_LABEL)"
   # --clear: Metro's transform cache can keep an older embedded app manifest.
   # --max-workers 2: this Mac has 8 GB.
   run_heavy "the web export" env -u EXPO_PUBLIC_LOCAL_DAEMON -u EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL \
     -u PASEO_WEB_PLATFORM -u PASEO_FDROID_BUILD -u PASEO_PROFILE_BUILD \
     APP_VARIANT=production WOOWTECH_AI_CONTENT_REPORT_URL="$REPORT_URL" \
-    NODE_OPTIONS=--max-old-space-size=4096 REPO="$REPO" OUT="$STAGE/export" \
+    NODE_OPTIONS=--max-old-space-size=4096 REPO="$BUILD_ROOT" OUT="$STAGE/export" \
     sh -c 'npm --prefix "$REPO" run build:app-deps && cd "$REPO/packages/app" && npx expo export --platform web --output-dir "$OUT" --clear --max-workers 2'
   if [ ! -f "$STAGE/export/index.html" ]; then die 3 "the web export wrote no $STAGE/export/index.html"; fi
   cp "$REPO/woowtech/web/_headers" "$STAGE/export/_headers"
+  if [ -n "$BRAND_TREE" ]; then
+    rm -rf "$BRAND_TREE"
+    BRAND_TREE=""
+  fi
   check_source "after the build"
   BUILT_FILES=$(manifest_json "$STAGE/export")
   # The upload is a copy of what was just built; OUT is a cache for the next run (and what the
@@ -563,9 +648,10 @@ else
   STAGE=""
 fi
 
-node "$REPO/woowtech/web/check-export.mjs" "$UPLOAD" || die 3 "check-export.mjs found problems in the export (above; it checked a copy of $OUT)"
+node "$REPO/woowtech/web/check-export.mjs" "$UPLOAD" --brand "$BRAND" --baseline "$REPO/$BASELINE" ||
+  die 3 "check-export.mjs found problems in the export (above; it checked a copy of $OUT)"
 if [ "$MODE" = dry-run ]; then
-  say "dry run done, nothing uploaded: $OUT passed its checks"
+  say "dry run done, nothing uploaded: brand $BRAND's export $OUT passed its checks"
   exit 0
 fi
 
@@ -765,9 +851,9 @@ verify_site() {
     sleep "$VERIFY_WAIT"
   done
 }
-# The deployment's own address (<hash>.woowtech-smart-web.pages.dev) answers for this upload
-# whatever is attached to the project: the Bulk Redirect sends woowtech-smart-web.pages.dev itself
-# to smart.woowtech.io (301, not 200), but not these addresses (it does not include subdomains).
+# The deployment's own address (<hash>.<project>.pages.dev) answers for this upload whatever is
+# attached to the project: the Bulk Redirect sends <project>.pages.dev itself to the brand's site
+# (301, not 200), but not these addresses (it does not include subdomains).
 VERIFY_FLAG=""
 if [ "$MODE" = preview ]; then VERIFY_FLAG=--allow-access; fi
 say "checking the deployment's own address $DEPLOYED_URL"

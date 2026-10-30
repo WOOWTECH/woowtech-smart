@@ -21,6 +21,8 @@ const relayDir = path.join(repoRoot, "packages/relay");
 const OUR_CONFIG = path.join(relayDir, "wrangler.woowtech.toml");
 const UPSTREAM_CONFIG = path.join(relayDir, "wrangler.toml");
 const WOOWTECH_ACCOUNT_ID = "9c27f623ee596e0b67be56263bcb1974";
+// Alan's account, which holds apporo.ai.
+const APPORO_ACCOUNT_ID = "9f14a17191df1e77889566d848f063ad";
 const RELAY_HOST = "relay.woowtech.io";
 
 const { default: relayWorker } = await tsImport(
@@ -69,6 +71,15 @@ test("our Worker config deploys the relay to WoowTech's account at relay.woowtec
   assert.equal(config.account_id, WOOWTECH_ACCOUNT_ID);
   assert.deepEqual(config.routes, [{ pattern: RELAY_HOST, custom_domain: true }]);
   assert.equal(config.workers_dev, false, "no second address on workers.dev");
+});
+
+test("Apporo smart's Worker config deploys its relay to the account that holds apporo.ai", () => {
+  const config = readConfig(path.join(relayDir, "wrangler.apporo.toml"));
+  assert.equal(config.name, "apporo-smart-relay");
+  assert.equal(config.account_id, APPORO_ACCOUNT_ID);
+  assert.deepEqual(config.routes, [{ pattern: "relay.apporo.ai", custom_domain: true }]);
+  assert.equal(config.workers_dev, false, "no second address on workers.dev");
+  assert.equal(config.vars.PASEO_RELAY_UPSTREAM, undefined);
 });
 
 test("daemons and pairing offers use the domain of the brand's Worker", () => {
