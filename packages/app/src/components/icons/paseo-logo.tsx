@@ -1,40 +1,82 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import React from "react";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Circle, G, Path } from "react-native-svg";
 
-import { BRAND_BLUE } from "@/styles/brand";
+import { BRAND_LOGO_COLOR } from "@/styles/brand";
 
 interface PaseoLogoProps {
   size?: number;
-  /** Ignored: the WOOW symbol is a brand mark, always drawn in the brand blue. */
+  /** Ignored: the logo is a brand mark, always drawn in the brand's own colors. */
   color?: string;
 }
 
-// woowtech smart's WOOW symbol, from woowtech/brand/woowtech-symbol-path.svg. Each stroke
-// is its own path: the strokes overlap, and one combined path would cut holes where they cross.
-const SYMBOL_STROKES = [
-  "M 78.816 5.351 C 68.803 5.351 60.658 13.496 60.658 23.509 C 60.658 33.522 68.803 41.667 78.816 41.667 C 88.829 41.667 96.974 33.522 96.974 23.509 C 96.974 13.496 88.829 5.351 78.816 5.351 M 78.816 47.013 C 65.856 47.013 55.312 36.469 55.312 23.509 C 55.312 10.549 65.856 0.007 78.816 0.007 C 91.776 0.007 102.318 10.549 102.318 23.509 C 102.318 36.469 91.776 47.013 78.816 47.013",
-  "M 26.383 41.684 C 16.370 41.684 8.225 49.831 8.225 59.842 C 8.225 69.855 16.370 78.000 26.383 78.000 C 36.396 78.000 44.541 69.855 44.541 59.842 C 44.541 49.831 36.396 41.684 26.383 41.684 M 26.383 83.346 C 13.423 83.346 2.879 72.802 2.879 59.842 C 2.879 46.882 13.423 36.340 26.383 36.340 C 39.343 36.340 49.885 46.882 49.885 59.842 C 49.885 72.802 39.343 83.346 26.383 83.346",
-  "M 6.407 41.653 L 12.517 41.649 L 26.034 0.007 L 19.923 0.007 Z",
-  "M 46.359 41.653 L 40.249 41.649 L 26.732 0.007 L 32.843 0.007 Z",
-  "M 0.094 41.671 L 0.071 0.009 L 5.415 0.007 L 5.438 41.667 Z",
-  "M 52.695 41.670 L 47.351 41.670 L 47.351 0.008 L 52.695 0.008 Z",
-  "M 58.841 83.328 L 64.951 83.324 L 78.468 41.682 L 72.357 41.682 Z",
-  "M 98.792 83.328 L 92.682 83.324 L 79.165 41.682 L 85.276 41.682 Z",
-  "M 52.528 83.346 L 52.505 41.684 L 57.849 41.682 L 57.872 83.342 Z",
-  "M 105.129 83.345 L 99.785 83.345 L 99.785 41.683 L 105.129 41.683 Z",
-];
+// The brand's logo (woowtech/brands). woowtech smart draws the WOOW symbol, from
+// woowtech/brand/woowtech-symbol-path.svg, in its brand blue. Apporo smart draws its grey mark
+// inside a white disc with a light ring, as Apporo's other apps do (owner 2026-10-15). Each
+// stroke is its own path: the WOOW strokes overlap, and one combined path would cut holes where
+// they cross.
+const SYMBOL_STROKES: readonly string[] = BRAND.logo.paths;
+const VIEW_BOX = BRAND.logo.viewBox;
+const LOGO_STYLE: "mark" | "badge" = BRAND.logo.style;
 
-/** The symbol as an SVG document in black, for the web splash's CSS mask. */
+// The badge is drawn on a 100 x 100 box: a disc with a ring 3 units wide, and the mark centered
+// at markWidths.badge percent of the box's width.
+const BADGE_VIEW_BOX = "0 0 100 100";
+const BADGE_RING_WIDTH = 3;
+const [MARK_X = 0, MARK_Y = 0, MARK_WIDTH = 1, MARK_HEIGHT = 1] = VIEW_BOX.split(/\s+/).map(Number);
+const BADGE_MARK_SCALE = BRAND.logo.markWidths.badge / MARK_WIDTH;
+const BADGE_MARK_TRANSFORM = `translate(${50 - (MARK_X + MARK_WIDTH / 2) * BADGE_MARK_SCALE} ${
+  50 - (MARK_Y + MARK_HEIGHT / 2) * BADGE_MARK_SCALE
+}) scale(${BADGE_MARK_SCALE})`;
+
+function badgeSvgBody(): string {
+  const strokes = SYMBOL_STROKES.map(
+    (stroke) => `<path fill='${BRAND.logo.tileColor}' d='${stroke}'/>`,
+  ).join("");
+  return `<circle cx='50' cy='50' r='${50 - BADGE_RING_WIDTH / 2}' fill='#ffffff' stroke='${BRAND.logo.badgeRing}' stroke-width='${BADGE_RING_WIDTH}'/><g transform='${BADGE_MARK_TRANSFORM}'>${strokes}</g>`;
+}
+
+/** The logo's silhouette as an SVG document in black, for the web splash's CSS mask. */
 export function woowSymbolMaskSvg(size: number): string {
+  if (LOGO_STYLE === "badge") {
+    return `<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='${BADGE_VIEW_BOX}'><circle fill='black' cx='50' cy='50' r='50'/></svg>`;
+  }
   const strokes = SYMBOL_STROKES.map((stroke) => `<path fill='black' d='${stroke}'/>`).join("");
-  return `<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='0 0 105.2 83.4'>${strokes}</svg>`;
+  return `<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='${VIEW_BOX}'>${strokes}</svg>`;
+}
+
+/** The badge in its own colors as an SVG document, for the web splash; null for a plain mark. */
+export function brandBadgeSvg(size: number): string | null {
+  if (LOGO_STYLE !== "badge") {
+    return null;
+  }
+  return `<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}' viewBox='${BADGE_VIEW_BOX}'>${badgeSvgBody()}</svg>`;
 }
 
 export function PaseoLogo({ size = 64 }: PaseoLogoProps) {
+  if (LOGO_STYLE === "badge") {
+    return (
+      <Svg width={size} height={size} viewBox={BADGE_VIEW_BOX} fill="none">
+        <Circle
+          cx={50}
+          cy={50}
+          r={50 - BADGE_RING_WIDTH / 2}
+          fill="#ffffff"
+          stroke={BRAND.logo.badgeRing}
+          strokeWidth={BADGE_RING_WIDTH}
+        />
+        <G transform={BADGE_MARK_TRANSFORM}>
+          {SYMBOL_STROKES.map((stroke) => (
+            <Path key={stroke} d={stroke} fill={BRAND.logo.tileColor} />
+          ))}
+        </G>
+      </Svg>
+    );
+  }
   return (
-    <Svg width={size} height={size} viewBox="0 0 105.2 83.4" fill="none">
+    <Svg width={size} height={size} viewBox={VIEW_BOX} fill="none">
       {SYMBOL_STROKES.map((stroke) => (
-        <Path key={stroke} d={stroke} fill={BRAND_BLUE} />
+        <Path key={stroke} d={stroke} fill={BRAND_LOGO_COLOR} />
       ))}
     </Svg>
   );

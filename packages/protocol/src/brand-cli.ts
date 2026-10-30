@@ -1,10 +1,11 @@
-// The command that runs woowtech smart's CLI. The official Paseo installs
-// `paseo`, so ours has its own name: both fit on one PATH, and neither app's
-// "Install CLI" replaces the other's. The CLI, the daemon's messages and the
-// desktop app's CLI install read it from here.
+// The command that runs the CLI. The official Paseo installs `paseo`, so each of
+// our brands has its own name (woowtech-smart, apporo-smart): they all fit on one
+// PATH, and no app's "Install CLI" replaces another's. The CLI, the daemon's
+// messages and the desktop app's CLI install read it from here.
+import { BRAND } from "./brand-values.js";
 
 /** What people type to run the CLI. */
-export const CLI_COMMAND = "woowtech-smart";
+export const CLI_COMMAND = BRAND.cliCommand;
 
 /** The file that runs the CLI on `platform`; Windows needs a .cmd trampoline. */
 export function cliCommandFileName(platform: string): string {

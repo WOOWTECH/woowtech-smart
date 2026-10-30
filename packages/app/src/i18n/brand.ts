@@ -1,49 +1,34 @@
 import { withCliCommand } from "@getpaseo/protocol/brand-cli";
 import type { Resource, ResourceKey, ResourceLanguage } from "i18next";
+import { APP_NAME, APP_NAME_ZH, withChineseName } from "./product-name";
 import { supportCopyFor } from "./support-copy";
 import { themeCopyFor } from "./theme-copy";
 import { woowtechCopyFor } from "./woowtech-copy";
 
-/** The product name wherever the UI is not in Chinese. */
-export const APP_NAME = "woowtech smart";
-/** The product name in Chinese UI. */
-export const APP_NAME_ZH = "渥屋智能";
+export { APP_NAME, APP_NAME_ZH };
 
 // Upstream Paseo's name, optionally followed by " Desktop", together with the
 // single spaces that set it apart from the text around it.
 const UPSTREAM_NAME = /( ?)Paseo( Desktop)?( ?)/g;
-const CJK_CHARACTER = /[　-〿㐀-鿿＀-￯]/;
 
 function isChinese(language: string): boolean {
   return language === "zh" || language.startsWith("zh-");
 }
 
-/** Keeps a separating space only where the neighbouring text is not Chinese. */
-function spaceBeside(space: string, neighbour: string | undefined): string {
-  return space && neighbour && !CJK_CHARACTER.test(neighbour) ? space : "";
-}
-
 /**
  * Replaces upstream Paseo's name and command in one translation. `paseo <command>`
- * reads `woowtech-smart <command>` in every language. Chinese reads 渥屋智能
- * ("Paseo Desktop" becomes 渥屋智能桌面版) without the spaces that set the Latin
- * name apart from Chinese text; every other language reads "woowtech smart".
- * Identifiers such as $PASEO_PORT or paseo.json are left alone.
+ * reads the brand's command (`woowtech-smart <command>`) in every language. Chinese
+ * reads the Chinese name ("Paseo Desktop" becomes 渥屋智能桌面版), without the spaces
+ * that set the Latin name apart from Chinese text when that name is Chinese; every
+ * other language reads the English name. Identifiers such as $PASEO_PORT or
+ * paseo.json are left alone.
  */
 export function rebrandTranslation(text: string, language: string): string {
   const withCommand = withCliCommand(text);
   if (!isChinese(language)) {
     return withCommand.replaceAll("Paseo", APP_NAME);
   }
-  return withCommand.replace(
-    UPSTREAM_NAME,
-    (match: string, before: string, desktop: string | undefined, after: string, offset: number) => {
-      const name = desktop ? `${APP_NAME_ZH}桌面版` : APP_NAME_ZH;
-      const leading = spaceBeside(before, withCommand[offset - 1]);
-      const trailing = spaceBeside(after, withCommand[offset + match.length]);
-      return `${leading}${name}${trailing}`;
-    },
-  );
+  return withChineseName(withCommand, UPSTREAM_NAME);
 }
 
 function rebrandValue(value: unknown, language: string): unknown {
@@ -115,9 +100,9 @@ function withWoowtechCopy(translation: ResourceKey, language: string): ResourceK
 }
 
 /**
- * The translations with woowtech smart's name and command in place of upstream
+ * The translations with the brand's name and command in place of upstream
  * Paseo's, WoowTech's help channels in place of Paseo's Discord and GitHub, the
- * Claude theme called 陶土 (Terracotta), and woowtech smart's own text under `woowtech`.
+ * Claude theme called 陶土 (Terracotta), and the fork's own text under `woowtech`.
  * Applied to the resources as they load, so strings upstream adds later are
  * covered without editing its locale files, and interpolated values (a project
  * that happens to be called Paseo) are never touched.

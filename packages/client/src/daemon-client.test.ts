@@ -7,6 +7,7 @@ import {
   type DaemonTransport,
   type Logger,
 } from "./daemon-client";
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import { BROWSER_AUTOMATION_COMMAND_NAMES } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 import {
@@ -97,7 +98,11 @@ function createMockTransport() {
   return {
     transport,
     sent,
-    triggerOpen: (options?: { preserveSent?: boolean; features?: Record<string, boolean> }) => {
+    triggerOpen: (options?: {
+      preserveSent?: boolean;
+      features?: Record<string, boolean>;
+      brand?: { id: string; name: string };
+    }) => {
       onOpen();
       if (!options?.preserveSent) {
         // Ignore HELLO handshake payloads in assertions.
@@ -114,6 +119,7 @@ function createMockTransport() {
               hostname: null,
               version: null,
               features: options?.features ?? { ownedSubscriptions: true },
+              ...(options?.brand ? { brand: options.brand } : {}),
             },
           },
         }),
@@ -883,6 +889,7 @@ test("advertises client capabilities in hello", async () => {
     clientId: "clsk_unit_test",
     clientType: "cli",
     protocolVersion: 1,
+    brand: BRAND_IDENTITY.id,
     capabilities: {
       all_providers: true,
       selective_agent_timeline: true,
@@ -906,6 +913,45 @@ test("advertises client capabilities in hello", async () => {
       },
     },
   });
+});
+
+// woowtech smart: only same-brand pairing (packages/protocol/src/brand-match.ts).
+test("stops at a daemon of another brand and says why", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_other_brand_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen({ brand: { id: "another-brand", name: "Another smart" } });
+
+  await expect(connectPromise).rejects.toThrow(
+    `This computer runs Another smart. Pair it with the Another smart app, or install ${BRAND_IDENTITY.name} on it.`,
+  );
+  expect(client.getConnectionState().status).toBe("disconnected");
+  expect(client.lastError).toContain("This computer runs Another smart.");
+});
+
+test("uses a daemon of its own brand, and one from before daemons named their brand", async () => {
+  for (const brand of [BRAND_IDENTITY, undefined]) {
+    const mock = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_same_brand_test",
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+
+    const connectPromise = client.connect();
+    mock.triggerOpen(brand ? { brand } : undefined);
+    await connectPromise;
+    expect(client.getConnectionState().status).toBe("connected");
+  }
 });
 
 test("allows callers to disable default client capabilities", async () => {

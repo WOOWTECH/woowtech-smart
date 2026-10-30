@@ -3472,6 +3472,10 @@ export const ServerInfoStatusPayloadSchema = z
     permissions: z.array(DaemonPermissionSchema).optional(),
     // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
     desktopManaged: z.boolean().optional(),
+    // woowtech smart: the daemon's brand (woowtech/brands), so an app of another brand stops
+    // instead of pairing (brand-match.ts). COMPAT(brandHandshake): added in v0.8.2, remove
+    // optional parsing after 2027-10-15.
+    brand: z.object({ id: z.string(), name: z.string() }).optional(),
     capabilities: ServerCapabilitiesFromUnknownSchema.optional(),
     // COMPAT(providersSnapshot): added in v0.1.48, remove gating when all clients use snapshot
     features: z
@@ -7305,6 +7309,9 @@ export const WSHelloMessageSchema = z.object({
   clientType: z.enum(["mobile", "browser", "cli", "mcp", "hub"]),
   protocolVersion: z.number().int(),
   appVersion: z.string().optional(),
+  // woowtech smart: the client's brand id (woowtech/brands); a daemon of another brand closes
+  // the connection (brand-match.ts). COMPAT(brandHandshake): added in v0.8.2.
+  brand: z.string().optional(),
   capabilities: z
     .object({
       voice: z.boolean().optional(),

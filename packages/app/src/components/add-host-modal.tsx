@@ -1,3 +1,4 @@
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 import { useCallback, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Pressable, Text, View } from "react-native";
@@ -300,7 +301,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [host, setHost] = useState("");
-  const [port, setPort] = useState("6770");
+  const [port, setPort] = useState(String(DEFAULT_DAEMON_PORT));
   const [useTls, setUseTls] = useState(false);
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -310,7 +311,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
 
   const clearInput = useCallback(() => {
     setHost("");
-    setPort("6770");
+    setPort(String(DEFAULT_DAEMON_PORT));
     setUseTls(false);
     setPassword("");
     setIsPasswordVisible(false);
@@ -525,7 +526,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
             initialValue={port}
             resetKey={`direct-port-${inputResetKey}`}
             onChangeText={setPort}
-            placeholder="6770"
+            placeholder={String(DEFAULT_DAEMON_PORT)}
             placeholderTextColor={theme.colors.foregroundMuted}
             style={styles.input}
             autoCapitalize="none"
@@ -616,7 +617,7 @@ export function AddHostModal({ visible, onClose, onCancel, onSaved }: AddHostMod
             initialValue={advancedUri}
             resetKey={`direct-host-uri-${inputResetKey}`}
             onChangeText={setAdvancedUri}
-            placeholder="tcp://localhost:6770?ssl=true"
+            placeholder={`tcp://localhost:${DEFAULT_DAEMON_PORT}?ssl=true`}
             placeholderTextColor={theme.colors.foregroundMuted}
             style={styles.input}
             autoCapitalize="none"

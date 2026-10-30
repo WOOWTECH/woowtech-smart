@@ -3,12 +3,14 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { spawnProcess } from "@getpaseo/server/process";
 import { buildAgentDeepLink, type AgentDeepLinkTarget } from "@getpaseo/protocol/agent-deep-link";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
+import { DESKTOP_APP_NAME } from "@getpaseo/protocol/brand-desktop";
 
 function findDesktopApp(): string | null {
   if (process.platform === "darwin") {
     const candidates = [
-      "/Applications/woowtech smart.app",
-      path.join(homedir(), "Applications", "woowtech smart.app"),
+      `/Applications/${DESKTOP_APP_NAME}.app`,
+      path.join(homedir(), "Applications", `${DESKTOP_APP_NAME}.app`),
     ];
 
     for (const candidate of candidates) {
@@ -22,9 +24,9 @@ function findDesktopApp(): string | null {
 
   if (process.platform === "linux") {
     const candidates = [
-      "/usr/bin/woowtech smart",
-      "/opt/woowtech smart/woowtech smart",
-      path.join(homedir(), "Applications", "woowtech smart.AppImage"),
+      `/usr/bin/${DESKTOP_APP_NAME}`,
+      `/opt/${DESKTOP_APP_NAME}/${DESKTOP_APP_NAME}`,
+      path.join(homedir(), "Applications", `${DESKTOP_APP_NAME}.AppImage`),
     ];
 
     for (const candidate of candidates) {
@@ -42,7 +44,12 @@ function findDesktopApp(): string | null {
       return null;
     }
 
-    const candidate = path.join(localAppData, "Programs", "woowtech smart", "woowtech smart.exe");
+    const candidate = path.join(
+      localAppData,
+      "Programs",
+      DESKTOP_APP_NAME,
+      `${DESKTOP_APP_NAME}.exe`,
+    );
     return existsSync(candidate) ? candidate : null;
   }
 
@@ -71,14 +78,14 @@ function spawnDetached(command: string, args: string[]): void {
 function launchDesktop(args: string[]): void {
   if (process.env.PASEO_DESKTOP_CLI === "1") {
     throw new Error(
-      "Cannot open woowtech smart Desktop while running in desktop CLI passthrough mode.",
+      `Cannot open ${DESKTOP_APP_NAME} Desktop while running in desktop CLI passthrough mode.`,
     );
   }
 
   const desktopApp = findDesktopApp();
   if (!desktopApp) {
     throw new Error(
-      "woowtech smart desktop app not found. Install it from https://github.com/WOOWTECH/woowtech-smart-releases/releases",
+      `${DESKTOP_APP_NAME} desktop app not found. Install it from ${BRAND_LINKS.releases}`,
     );
   }
 

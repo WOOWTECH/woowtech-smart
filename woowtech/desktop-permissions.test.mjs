@@ -13,6 +13,11 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { appliedBrand } from "./brands/index.cjs";
+
+const brand = appliedBrand();
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const repoRoot = new URL("../", import.meta.url);
 const desktopDir = new URL("packages/desktop/", repoRoot);
 
@@ -21,8 +26,8 @@ const PURPOSE_KEYS = ["NSMicrophoneUsageDescription"];
 // Simplified Chinese). A zh-Hant.lproj beside its empty zh_TW.lproj would give the app two
 // Traditional Chinese localizations.
 const LOCALIZATIONS = {
-  zh_TW: /^允許「渥屋智能」/,
-  zh_CN: /^允许“渥屋智能”/,
+  zh_TW: new RegExp(`^允許「${escapeRegExp(brand.nameZh)}」`),
+  zh_CN: new RegExp(`^允许“${escapeRegExp(brand.nameZh)}”`),
 };
 
 /** The desktop config as electron-builder reads it. */
@@ -58,7 +63,7 @@ test("macOS explains each permission in English, Traditional and Simplified Chin
   for (const key of PURPOSE_KEYS) {
     assert.match(
       extendInfo[key],
-      /^Allow woowtech smart to .{20,}\.$/,
+      new RegExp(`^Allow ${escapeRegExp(brand.name)} to .{20,}\\.$`),
       `${key}: ${extendInfo[key]}`,
     );
   }

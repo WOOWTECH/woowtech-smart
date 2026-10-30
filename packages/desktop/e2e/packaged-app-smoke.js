@@ -7,7 +7,8 @@ const { setTimeout: delay } = require("node:timers/promises");
 const { chromium } = require("playwright");
 const { extractFile } = require("@electron/asar");
 
-const EXECUTABLE_NAME = "woowtech smart";
+// electron-builder.yml names the app and its executable after the brand (woowtech/brands/apply.mjs).
+const EXECUTABLE_NAME = require("../../../woowtech/brands/index.cjs").appliedBrand().name;
 const SMOKE_TIMEOUT_MS = 60_000;
 const EXIT_TIMEOUT_MS = 10_000;
 const TERMINAL_CAPTURE_ATTEMPTS = 20;

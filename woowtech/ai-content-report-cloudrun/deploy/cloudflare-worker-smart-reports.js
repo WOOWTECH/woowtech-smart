@@ -1,20 +1,25 @@
 // Cloudflare Worker `smart-reports-proxy` for reports.woowtech.io: the only public way into the
 // AI content report receiver (Cloud Run service smart-reports, project woowtech-smart). It is
 // smart-push-proxy (push.woowtech.io) with another path, another size limit and CORS for the
-// desktop App and the web app, whose reports are both cross-origin requests.
+// desktop App and the web app, whose reports are both cross-origin requests. Apporo smart runs the
+// same file on www.apporo.ai/api/smart/v1/ai-content-reports, in the Cloudflare account that holds
+// apporo.ai, as Apporo aiot's Worker serves www.apporo.ai/api/*
+// (cloudflare-worker-smart-reports.apporo.wrangler.jsonc).
 //
-// - Serves only POST /v1/ai-content-reports on reports.woowtech.io (other paths 404, other methods
-//   405). Its workers.dev and Preview URLs get 404 too: they are outside the woowtech.io zone, so
+// - Serves only POST on its PUBLIC_HOST and PUBLIC_PATH (other paths 404, other methods
+//   405). Its workers.dev and Preview URLs get 404 too: they are outside the brand's zone, so
 //   the zone's WAF rate limiting rule would not apply to them. Turn both off in the dashboard as
 //   well, in the Worker's Settings > Domains & Routes.
 // - Takes only application/json (415) and refuses bodies over 12,288 bytes (413) before
 //   forwarding. The number is MAX_BODY_BYTES of the report contract; a test keeps them equal.
 // - The phone Apps send no Origin header. A POST with an Origin is answered 403 and a preflight
-//   405, except from an allowed origin: the desktop App's page is woowtech-smart://app and the web
-//   app's is https://smart.woowtech.io. Both fetches are cross-origin, so the browser engine sends
-//   a preflight (OPTIONS) first and needs the CORS headers on every answer. Matching is exact;
-//   "*" and "null" never match. The Origin only decides whether to answer with CORS: requests
-//   without one are taken, so the per-IP limit and the receiver's daily cap stop abuse, not this.
+//   405, except from an origin listed in ALLOWED_ORIGINS: unset, that is woowtech smart's desktop
+//   App's page, woowtech-smart://app, and its web app's, https://smart.woowtech.io (Apporo smart
+//   sets apporosmart://app and https://smart.apporo.ai in its wrangler config). Both fetches are
+//   cross-origin, so the browser engine sends a preflight (OPTIONS) first and needs the CORS headers
+//   on every answer. Matching is exact; "*" and "null" never match. The Origin only decides whether
+//   to answer with CORS: requests without one are taken, so the per-IP limit and the receiver's
+//   daily cap stop abuse, not this.
 // - Forwards the body, and nothing else of the client, to RELAY_ORIGIN with the edge key the
 //   receiver requires, so calling the run.app URL directly cannot bypass the limits applied here.
 //   The receiver therefore never sees an Origin and refuses one.
@@ -29,12 +34,14 @@
 // Settings: RELAY_ORIGIN (text: https://smart-reports-....run.app), EDGE_KEY (secret, the value
 // of Secret Manager secret smart-reports-edge-key; while a rotation leaves "old new" in it, the
 // new key only: the whole pair is sent as one key and every request gets 403), ALLOWED_ORIGINS
-// (optional text, origins separated by commas or spaces; unset means the desktop App's and the
-// web app's origins, empty means none, any other value replaces the whole list; a wrangler deploy
-// drops a text value set in the dashboard but keeps one stored as a secret), IP_RATE_LIMITER
+// (optional text, origins separated by commas or spaces; unset means woowtech smart's desktop
+// App's and web app's origins, empty means none, any other value replaces the whole list; a
+// wrangler deploy drops a text value set in the dashboard but keeps one stored as a secret),
+// PUBLIC_HOST and PUBLIC_PATH (optional text, the address the Worker serves; unset means
+// reports.woowtech.io and /v1/ai-content-reports, the receiver's own path), IP_RATE_LIMITER
 // (optional binding).
 
-const PUBLIC_HOST = "reports.woowtech.io";
+const DEFAULT_PUBLIC_HOST = "reports.woowtech.io";
 const REPORT_PATH = "/v1/ai-content-reports";
 const MAX_BODY_BYTES = 12288;
 // The desktop App loads its pages from this custom scheme (packages/desktop/src/main.ts,
@@ -69,6 +76,19 @@ function configured(env) {
     typeof env.EDGE_KEY === "string" &&
     env.EDGE_KEY.length >= MIN_EDGE_KEY_LENGTH
   );
+}
+
+function publicHost(env) {
+  return typeof env.PUBLIC_HOST === "string" && env.PUBLIC_HOST !== ""
+    ? env.PUBLIC_HOST
+    : DEFAULT_PUBLIC_HOST;
+}
+
+// The path the App posts to; the receiver behind the Worker always takes REPORT_PATH.
+function publicPath(env) {
+  return typeof env.PUBLIC_PATH === "string" && env.PUBLIC_PATH !== ""
+    ? env.PUBLIC_PATH
+    : REPORT_PATH;
 }
 
 function originAllowed(origin, env) {
@@ -124,7 +144,7 @@ async function readBody(request, maxBytes) {
 // The answer to a request that is turned away before its body is read, or null to go on.
 function earlyAnswer(request, env, origin) {
   const url = new URL(request.url);
-  if (url.hostname !== PUBLIC_HOST || url.pathname !== REPORT_PATH) {
+  if (url.hostname !== publicHost(env) || url.pathname !== publicPath(env)) {
     return json(404, { error: "not_found" });
   }
   if (

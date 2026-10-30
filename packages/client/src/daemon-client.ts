@@ -1,3 +1,8 @@
+import {
+  BRAND_IDENTITY,
+  OTHER_BRAND_CLOSE_CODE,
+  otherBrandReason,
+} from "@getpaseo/protocol/brand-match";
 import { subscribeTimeline, type TimelineMessage } from "./timeline-subscription/index.js";
 import { ProviderSnapshotUpdates } from "./provider-snapshots/index.js";
 import {
@@ -6011,6 +6016,8 @@ export class DaemonClient {
         clientId: this.config.clientId,
         clientType: this.config.clientType ?? "cli",
         protocolVersion: 1,
+        // woowtech smart: a daemon of another brand turns this client away (brand-match.ts).
+        brand: BRAND_IDENTITY.id,
         capabilities: {
           ...DEFAULT_CLIENT_CAPABILITIES,
           ...this.config.capabilities,
@@ -6465,6 +6472,19 @@ export class DaemonClient {
 
     if (consumerMessage.type === "status") {
       const serverInfo = parseServerInfoStatusPayload(consumerMessage.payload);
+      // woowtech smart: only same-brand pairing. A daemon of another brand, or one from before
+      // daemons named their brand, stops the connection here, with the reason as the error.
+      const otherBrand = serverInfo ? otherBrandReason(serverInfo.brand) : null;
+      if (otherBrand && this.connectionState.status === "connecting") {
+        this.resetConnectTimeout();
+        this.disposeTransport(OTHER_BRAND_CLOSE_CODE, "Another brand's daemon");
+        this.scheduleReconnect({
+          reason: otherBrand,
+          event: "OTHER_BRAND",
+          reasonCode: "other_brand",
+        });
+        return;
+      }
       if (serverInfo) {
         this.lastServerInfoMessage = serverInfo;
         if (this.connectionState.status === "connecting") {

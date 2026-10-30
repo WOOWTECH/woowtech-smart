@@ -1,3 +1,9 @@
+import {
+  BRAND_IDENTITY,
+  OTHER_BRAND_CLIENT_REASON,
+  OTHER_BRAND_CLOSE_CODE,
+  isSameBrandClient,
+} from "@getpaseo/protocol/brand-match";
 import { stat } from "node:fs/promises";
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import { CreationService } from "./creation/index.js";
@@ -1579,6 +1585,10 @@ export class VoiceAssistantWebSocketServer {
       return;
     }
 
+    if (this.turnAwayOtherBrandApp({ ws, message, pending })) {
+      return;
+    }
+
     const clientId = message.clientId.trim();
     if (clientId.length === 0) {
       this.clearPendingConnection(ws);
@@ -1693,6 +1703,7 @@ export class VoiceAssistantWebSocketServer {
       permissions: session.getPermissions(),
       // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
       desktopManaged: this.daemonRuntimeConfig?.desktopManaged === true,
+      brand: BRAND_IDENTITY,
       ...(this.serverCapabilities ? { capabilities: this.serverCapabilities } : {}),
       features: {
         ownedSubscriptions: true,
@@ -1850,6 +1861,51 @@ export class VoiceAssistantWebSocketServer {
         agentConfigApply: true,
       },
     };
+  }
+
+  /**
+   * woowtech smart: only same-brand pairing (brand-match.ts). The apps (mobile, and the browser
+   * the desktop app runs) carry the push tokens, so another brand's app is turned away; one that
+   * names no brand predates the check and counts as woowtech smart's. The CLI, MCP, Hub and
+   * plugin clients send no push token and stay welcome. True when it turned the client away.
+   */
+  private turnAwayOtherBrandApp(params: {
+    ws: WebSocketLike;
+    message: WSHelloMessage;
+    pending: PendingConnection;
+  }): boolean {
+    const { ws, message, pending } = params;
+    const isApp = message.clientType === "mobile" || message.clientType === "browser";
+    if (!isApp || isSameBrandClient(message.brand)) {
+      return false;
+    }
+    this.clearPendingConnection(ws);
+    pending.connectionLogger.warn(
+      { clientBrand: message.brand, daemonBrand: BRAND_IDENTITY.id },
+      "Rejected hello from a client of another brand",
+    );
+    // The app reads the brand from server_info and says why it stopped; through the relay, the
+    // close frame's reason does not reach it.
+    this.sendBrandServerInfo(ws);
+    try {
+      ws.close(OTHER_BRAND_CLOSE_CODE, OTHER_BRAND_CLIENT_REASON);
+    } catch {
+      // ignore close errors
+    }
+    return true;
+  }
+
+  /** server_info with the daemon's brand only, for an app this daemon turns away. */
+  private sendBrandServerInfo(ws: WebSocketLike): void {
+    const message: WSOutboundMessage = {
+      type: "session",
+      message: {
+        type: "status",
+        payload: { status: "server_info", serverId: this.serverId, brand: BRAND_IDENTITY },
+      },
+    };
+    const frame = JSON.stringify(message);
+    this.sendFrameToClient(ws, frame, outboundFrameByteLength(frame), () => {});
   }
 
   private createServerInfoMessage(session: Session): WSOutboundMessage {

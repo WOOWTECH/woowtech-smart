@@ -4,7 +4,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { expoIntrospectedConfig } from "./expo-config.mjs";
+
+const brand = appliedBrand();
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const ENGLISH_START = new RegExp(`^Allow ${escapeRegExp(brand.name)} to .{20,}\\.$`);
+const CHINESE_START = new RegExp(`^允[許许]“?「?${escapeRegExp(brand.nameZh)}`);
 
 const KEYS = [
   "NSCameraUsageDescription",
@@ -18,10 +24,10 @@ for (const variant of ["production", "development"]) {
     const { ios, locales } = expoIntrospectedConfig(variant);
     for (const key of KEYS) {
       const english = ios.infoPlist[key];
-      assert.match(english, /^Allow woowtech smart to .{20,}\.$/, `${key}: ${english}`);
+      assert.match(english, ENGLISH_START, `${key}: ${english}`);
       for (const language of ["zh-Hant", "zh-Hans"]) {
         const text = locales[language].ios[key];
-        assert.match(text, /^允[許许]“?「?渥屋智能/, `${language} ${key}: ${text}`);
+        assert.match(text, CHINESE_START, `${language} ${key}: ${text}`);
         assert.doesNotMatch(text, /\$\(|Allow/, `${language} ${key}: ${text}`);
       }
     }

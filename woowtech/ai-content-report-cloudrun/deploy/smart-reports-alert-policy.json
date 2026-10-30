@@ -1,5 +1,5 @@
 {
-  "displayName": "woowtech smart: new AI content report",
+  "displayName": "__PRODUCT__: new AI content report",
   "combiner": "OR",
   "enabled": true,
   "conditions": [
@@ -20,7 +20,7 @@
   "notificationChannels": ["__CHANNEL__"],
   "documentation": {
     "mimeType": "text/markdown",
-    "subject": "woowtech smart: new AI content report",
-    "content": "App 收到一則新的 AI 內容回報。\n\n**收件編號：** ${log.extracted_label.receipt_id}\n\n**怎麼看：** Google Cloud 主控台 → Firestore → Data → 集合 aiContentReports → 文件 ${log.extracted_label.receipt_id}（專案 woowtech-smart，資料庫 (default)）。也可以在終端機用 admin.mjs，步驟見 woowtech/ai-content-report-cloudrun/README.md。\n\n此信不含回報內容。回報保存 30 天，之後由 Firestore TTL 刪除，通常在到期後 24 小時內。\n\n每天最多寄出 20 封（Google 對這類警示的上限）。超過後不再寄信，但回報仍會存入，請定期到主控台查看。"
+    "subject": "__PRODUCT__: new AI content report",
+    "content": "App 收到一則新的 AI 內容回報。\n\n**收件編號：** ${log.extracted_label.receipt_id}\n\n**怎麼看：** Google Cloud 主控台 → Firestore → Data → 集合 aiContentReports → 文件 ${log.extracted_label.receipt_id}（專案 __PROJECT__，資料庫 (default)）。也可以在終端機用 admin.mjs，步驟見 woowtech/ai-content-report-cloudrun/README.md。\n\n此信不含回報內容。回報保存 30 天，之後由 Firestore TTL 刪除，通常在到期後 24 小時內。\n\n每天最多寄出 20 封（Google 對這類警示的上限）。超過後不再寄信，但回報仍會存入，請定期到主控台查看。"
   }
 }

@@ -16,12 +16,12 @@ import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { BookOpen, Copy, RotateCw, TriangleAlert } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { PaseoLogo, woowSymbolMaskSvg } from "@/components/icons/paseo-logo";
+import { PaseoLogo, brandBadgeSvg, woowSymbolMaskSvg } from "@/components/icons/paseo-logo";
 import { Button } from "@/components/ui/button";
 import { getDesktopDaemonLogs, type DesktopDaemonLogs } from "@/desktop/daemon/desktop-daemon";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { isNative, isWeb } from "@/constants/platform";
-import { BRAND_BLUE } from "@/styles/brand";
+import { BRAND_LOGO_COLOR } from "@/styles/brand";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 
 interface StartupSplashScreenProps {
@@ -81,14 +81,14 @@ function ensureWebSplashShimmerKeyframes() {
   webSplashShimmerRegistered = true;
 }
 
-// woowtech smart: the WOOW symbol is a brand mark, so the splash draws it in the brand blue in
+// woowtech smart: the logo is a brand mark, so the splash draws it in the brand's logo color in
 // every theme (README section 9). PaseoLogo already ignores the color on native.
 function LogoShimmer() {
   if (isWeb) {
-    return <WebLogoShimmer color={BRAND_BLUE} />;
+    return <WebLogoShimmer color={BRAND_LOGO_COLOR} />;
   }
 
-  return <NativeLogoShimmer color={BRAND_BLUE} />;
+  return <NativeLogoShimmer color={BRAND_LOGO_COLOR} />;
 }
 
 function WebLogoShimmer({ color }: { color: string }) {
@@ -96,25 +96,49 @@ function WebLogoShimmer({ color }: { color: string }) {
     ensureWebSplashShimmerKeyframes();
   }, []);
 
+  const badge = brandBadgeSvg(LOGO_SIZE);
   const shimmerStyle = useMemo(
     () => ({
       width: LOGO_SIZE,
       height: LOGO_SIZE,
-      // woowtech smart: the WOOW symbol, the same mask the native splash draws with PaseoLogo.
+      // woowtech smart: the brand's logo, the same mask the native splash draws with PaseoLogo.
       WebkitMaskImage: `url("data:image/svg+xml,${encodeURIComponent(woowSymbolMaskSvg(LOGO_SIZE))}")`,
       WebkitMaskSize: "contain",
       WebkitMaskRepeat: "no-repeat",
       WebkitMaskPosition: "center",
-      background: `linear-gradient(90deg, ${color} 0%, ${color}88 40%, ${color}FF 50%, ${color}88 60%, ${color} 100%)`,
+      // A badge (Apporo smart) keeps its own colors under a white shimmer, as the native splash
+      // draws it; a plain mark is drawn in the logo color, the shimmer a brighter step of it.
+      background: badge
+        ? "linear-gradient(90deg, #FFFFFF00 0%, #FFFFFF00 40%, #FFFFFF66 50%, #FFFFFF00 60%, #FFFFFF00 100%)"
+        : `linear-gradient(90deg, ${color} 0%, ${color}88 40%, ${color}FF 50%, ${color}88 60%, ${color} 100%)`,
       backgroundSize: `${LOGO_SIZE + SHIMMER_PEAK_WIDTH * 2}px ${LOGO_SIZE}px`,
       animationName: WEB_SPLASH_SHIMMER_ANIMATION_NAME,
       animationDuration: `${SHIMMER_DURATION_MS}ms`,
       animationTimingFunction: "linear",
       animationIterationCount: "infinite",
     }),
-    [color],
+    [badge, color],
+  );
+  const badgeStyle = useMemo(
+    () =>
+      badge
+        ? {
+            width: LOGO_SIZE,
+            height: LOGO_SIZE,
+            backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(badge)}")`,
+            backgroundSize: "contain",
+          }
+        : null,
+    [badge],
   );
 
+  if (badgeStyle) {
+    return (
+      <View style={badgeStyle as never}>
+        <View style={shimmerStyle as never} />
+      </View>
+    );
+  }
   return <View style={shimmerStyle as never} />;
 }
 

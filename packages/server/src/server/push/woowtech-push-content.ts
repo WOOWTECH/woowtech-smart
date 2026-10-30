@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { PRODUCT_NAME as NAME, PRODUCT_NAME_ZH } from "@getpaseo/protocol/brand-name";
 
 import type { PushPayload } from "./push-service.js";
 
@@ -18,8 +19,8 @@ export type PushLanguage = "zh-TW" | "en";
 type PushReason = "finished" | "permission" | "attention";
 
 const PRODUCT_NAME: Record<PushLanguage, string> = {
-  "zh-TW": "渥屋智能",
-  en: "woowtech smart",
+  "zh-TW": PRODUCT_NAME_ZH,
+  en: NAME,
 };
 
 const SENTENCE: Record<PushLanguage, Record<PushReason, string>> = {

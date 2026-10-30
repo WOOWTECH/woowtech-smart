@@ -32,7 +32,7 @@ const stored = () =>
   });
 
 /** One request through the Worker; `upstream` answers (or throws) in place of the receiver. */
-async function call(path, init, { env = ENV, upstream = stored } = {}) {
+async function call(path, init, { env = ENV, upstream = stored, host = HOST } = {}) {
   const relayed = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input, options) => {
@@ -40,7 +40,7 @@ async function call(path, init, { env = ENV, upstream = stored } = {}) {
     return upstream(input, options);
   };
   try {
-    const response = await worker.fetch(new Request(`${HOST}${path}`, init), env);
+    const response = await worker.fetch(new Request(`${host}${path}`, init), env);
     return { response, relayed, text: await response.text() };
   } finally {
     globalThis.fetch = realFetch;
@@ -505,6 +505,72 @@ function parseJsonc(text) {
   return JSON.parse(withoutComments.replace(/,(\s*[}\]])/g, "$1"));
 }
 
+test("PUBLIC_HOST and PUBLIC_PATH move the Worker to another address, and only there", async () => {
+  const apporo = {
+    ...ENV,
+    PUBLIC_HOST: "www.apporo.ai",
+    PUBLIC_PATH: "/api/smart/v1/ai-content-reports",
+  };
+  const site = { env: apporo, host: "https://www.apporo.ai" };
+
+  const served = await call("/api/smart/v1/ai-content-reports", post(), site);
+  const receiverPath = await call(REPORT_PATH, post(), site);
+  const otherHost = await call("/api/smart/v1/ai-content-reports", post(), { env: apporo });
+
+  assert.equal(served.response.status, 201);
+  assert.equal(served.relayed.length, 1);
+  assert.equal(served.relayed[0].url, `${RELAY}${REPORT_PATH}`, "the receiver keeps its own path");
+  assert.equal(receiverPath.response.status, 404);
+  assert.equal(receiverPath.relayed.length, 0);
+  assert.equal(otherHost.response.status, 404);
+  assert.equal(otherHost.relayed.length, 0);
+});
+
+/** A brand's values (woowtech/brands/<id>.json). */
+async function brand(id) {
+  return JSON.parse(await readFile(new URL(`../brands/${id}.json`, import.meta.url), "utf8"));
+}
+
+test("Apporo smart's wrangler config serves its App's report address on one route", async () => {
+  const configUrl = new URL(
+    "./deploy/cloudflare-worker-smart-reports.apporo.wrangler.jsonc",
+    import.meta.url,
+  );
+  const text = await readFile(configUrl, "utf8");
+  const config = parseJsonc(text);
+  const apporo = await brand("apporo");
+  const reportUrl = new URL(apporo.services.aiContentReportUrl);
+
+  assert.equal(config.main, "cloudflare-worker-smart-reports.js");
+  // The website's host: one exact path, never a wildcard that would take over the site.
+  assert.deepEqual(config.routes, [
+    { pattern: `${reportUrl.hostname}${reportUrl.pathname}`, zone_name: "apporo.ai" },
+  ]);
+  assert.equal(config.vars.PUBLIC_HOST, reportUrl.hostname);
+  assert.equal(config.vars.PUBLIC_PATH, reportUrl.pathname);
+  // The desktop App's page and the hosted web app: both send reports cross-origin.
+  assert.equal(config.vars.ALLOWED_ORIGINS, `${apporo.scheme}://app https://${apporo.web.host}`);
+  assert.deepEqual(Object.keys(config.vars).sort(), [
+    "ALLOWED_ORIGINS",
+    "PUBLIC_HOST",
+    "PUBLIC_PATH",
+    "RELAY_ORIGIN",
+  ]);
+  assert.ok(
+    !config.vars.RELAY_ORIGIN.startsWith("https:"),
+    "a placeholder until the run.app URL is set",
+  );
+  assert.equal(config.workers_dev, false);
+  assert.equal(config.preview_urls, false);
+  assert.deepEqual(config.observability, { enabled: false });
+  assert.equal(config.logpush, false);
+  assert.doesNotMatch(text, /[0-9a-f]{32,}/i, "no key in the config");
+  assert.deepEqual(
+    config.ratelimits.map((limiter) => limiter.simple),
+    [{ limit: 10, period: 60 }],
+  );
+});
+
 test("the wrangler config deploys the Worker to reports.woowtech.io alone, with no logs", async () => {
   const configUrl = new URL(
     "./deploy/cloudflare-worker-smart-reports.wrangler.jsonc",
@@ -518,6 +584,9 @@ test("the wrangler config deploys the Worker to reports.woowtech.io alone, with 
   assert.equal(config.workers_dev, false);
   assert.equal(config.preview_urls, false);
   assert.deepEqual(config.routes, [{ pattern: "reports.woowtech.io", custom_domain: true }]);
+  const woowtech = await brand("woowtech");
+  assert.equal(new URL(woowtech.services.aiContentReportUrl).hostname, "reports.woowtech.io");
+  assert.equal(DESKTOP, `${woowtech.scheme}://app`, "the Worker's default origin is woowtech's");
   assert.deepEqual(config.observability, { enabled: false });
   assert.equal(config.logpush, false);
 

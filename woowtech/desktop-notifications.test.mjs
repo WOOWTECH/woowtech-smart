@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { importSource } from "./source-modules.mjs";
+
 function source(path) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 }
@@ -180,7 +182,7 @@ test("notification clicks reopen a window and wait for the renderer's PushNotifi
   assert.match(router.slice(take), /openNotification\(data\)/);
 });
 
-test("Windows gets the electron-builder appId as AppUserModelID before the app is ready", () => {
+test("Windows gets the electron-builder appId as AppUserModelID before the app is ready", async () => {
   const desktopMain = source("packages/desktop/src/main.ts");
   const call = desktopMain.indexOf("applyWindowsAppUserModelId({");
   assert.notEqual(call, -1);
@@ -193,7 +195,9 @@ test("Windows gets the electron-builder appId as AppUserModelID before the app i
   const builder = source("packages/desktop/electron-builder.yml");
   const appId = builder.match(/^appId: (\S+)$/m)?.[1];
   assert.ok(appId);
-  assert.ok(helper.includes(`WOOWTECH_DESKTOP_APP_ID = "${appId}"`));
+  assert.ok(helper.includes("WOOWTECH_DESKTOP_APP_ID = DESKTOP_APP_ID;"));
+  const { DESKTOP_APP_ID } = await importSource("packages/protocol/src/brand-desktop.ts");
+  assert.equal(DESKTOP_APP_ID, appId);
 });
 
 // woowtech smart (README section 16): macOS keeps a new app's notifications hidden until the person

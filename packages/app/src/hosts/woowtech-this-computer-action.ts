@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 import { useTranslation } from "react-i18next";
 import { Monitor } from "lucide-react-native";
 import { useToast } from "@/contexts/toast-context";
@@ -13,7 +14,7 @@ import type { HostProfile } from "@/types/host-connection";
 // prompt then comes from the user's own press.
 
 /** host-runtime.ts's LOCALHOST_FALLBACK_ENDPOINT, the boot probe's address. A guard keeps them equal. */
-const THIS_COMPUTER_ENDPOINT = "localhost:6770";
+const THIS_COMPUTER_ENDPOINT = `localhost:${DEFAULT_DAEMON_PORT}`;
 // Long enough to read both sentences; the toast holds while the pointer is over it.
 const FAILURE_TOAST_MS = 10_000;
 

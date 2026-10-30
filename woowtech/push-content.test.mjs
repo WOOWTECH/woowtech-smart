@@ -16,6 +16,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { tsImport } from "tsx/esm/api";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
 
 const { createPushNotifications } = await tsImport(
@@ -31,7 +32,8 @@ const { VoiceAssistantWebSocketServer } = await tsImport(
   import.meta.url,
 );
 
-const RELAY_URL = "https://push.woowtech.io/api/smart/v1/notify";
+// The brand's push relay (woowtech/brands): push.woowtech.io for woowtech smart.
+const RELAY_URL = appliedBrand().services.pushRelayUrl;
 // Shaped like tokens the phones register. Fake.
 const FCM_TOKEN = "fake-install-0001:APA91bFAKE_TOKEN_FOR_GUARD_TESTS_ONLY-0001";
 const EXPO_TOKEN = "ExponentPushToken[guard]";
@@ -295,7 +297,14 @@ test("upstream's Expo sender is the only code that names Expo, and nothing calls
     "packages/server/src/server/push/push-service.ts",
   ]);
   assert.deepEqual(findInShippedSources([/new PushService\b/, /\.sendPush\(/]), []);
-  assert.deepEqual(filesOf(findInShippedSources([/push\.woowtech\.io/])), [
+  // The brand's push relay is named once, in its generated values, and only the relay deliver
+  // sends to it.
+  const pushHost = new URL(appliedBrand().services.pushRelayUrl).host;
+  assert.deepEqual(filesOf(findInShippedSources([new RegExp(pushHost.replaceAll(".", "\\."))])), [
+    "packages/protocol/src/brand-values.ts",
+  ]);
+  assert.deepEqual(filesOf(findInShippedSources([/\bBRAND_PUSH_RELAY_URL\b/])), [
+    "packages/protocol/src/brand-push.ts",
     "packages/server/src/server/push/woowtech-relay.ts",
   ]);
 });

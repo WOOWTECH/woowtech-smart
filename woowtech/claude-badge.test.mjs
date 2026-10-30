@@ -38,6 +38,8 @@ const SHIPPED_DIRS = [
   "packages/desktop/assets",
   "packages/server/src",
   "packages/cli/src",
+  // The brand's logo is data in the protocol package (brand-values.ts).
+  "packages/protocol/src",
 ];
 const SHIPPED_FILES = /\.(?:[cm]?[jt]sx?|json|svg|html|css|xml)$/;
 const IMAGE_FILES = /\.(?:png|jpe?g|gif|webp|bmp|tiff?|ico|icns|svg)$/i;
@@ -61,7 +63,8 @@ const ALLOWED_DRAWINGS = {
   "packages/app/src/components/icons/forgejo-icon.tsx": "git forge mark, kept by the owner",
   "packages/app/src/components/icons/codeberg-icon.tsx":
     "git forge mark, kept by the owner, in pure black or white (section 24)",
-  "packages/app/src/components/icons/paseo-logo.tsx": "the WOOW logo, our own mark",
+  "packages/protocol/src/brand-values.ts":
+    "the brand's logo (woowtech/brands): the WOOW symbol or Apporo's mark, our own",
   "packages/app/src/components/icons/manual-status-icon.tsx": "a plain gear for pipeline status",
   "packages/app/src/components/sidebar/workspace-meta-row/check-indicator.tsx":
     "check and cross marks",

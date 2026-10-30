@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { TFunction } from "i18next";
 import { PASEO_COPYRIGHT, PASEO_LICENSE_TEXT } from "./woowtech-paseo-license";
 
@@ -216,8 +217,7 @@ export const FILE_TYPE_MARK_NOTICES: readonly FileTypeMarkNotice[] = [
     icons: ["python"],
     name: "Python",
     owner: "Python Software Foundation",
-    credit:
-      "“Python” and the Python logos are trademarks or registered trademarks of the Python Software Foundation, used by woowtech smart with permission from the Foundation.",
+    credit: `“Python” and the Python logos are trademarks or registered trademarks of the Python Software Foundation, used by ${PRODUCT_NAME} with permission from the Foundation.`,
   },
   {
     icons: ["r"],

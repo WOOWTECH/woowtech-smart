@@ -1,7 +1,8 @@
-// woowtech smart's pairing links and QR codes open its hosted web app, as upstream's open
-// upstream's (owner decision D2, 2026-10-26; woowtech/README.md, 第 19 節). A link is the web
-// app's root with the offer in its fragment: https://smart.woowtech.io/#offer=<payload>. The app
-// still opens the app links older QR codes carry (woowtech-smart:///#offer=<payload>).
+// A brand's pairing links and QR codes open its hosted web app, as upstream's open upstream's
+// (owner decision D2, 2026-10-26; woowtech/README.md, 第 19 節). A link is the web app's root
+// with the offer in its fragment: https://<web.host>/#offer=<payload>, for woowtech smart
+// https://smart.woowtech.io/#offer=<payload>. The app still opens the app links older QR codes
+// carry (<scheme>:///#offer=<payload>). The checks are for the brand the checkout has applied.
 // A merge can bring upstream's web app back into the daemon's defaults (persisted-config.ts,
 // config.ts, pairing-offer.ts, bootstrap.ts), the CLI's onboarding or the app's paste-a-link
 // field, or drop the rules that move existing homes off earlier defaults (app.baseUrl and the
@@ -18,6 +19,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { expoIntrospectedConfig } from "./expo-config.mjs";
 import { findInShippedSources, repoRoot } from "./shipped-sources.mjs";
 import { importSource } from "./source-modules.mjs";
@@ -36,14 +38,18 @@ const { parseConnectionOfferFromUrl } = await importSource(
 const { BRAND_PAIRING } = await importSource("packages/protocol/src/brand-pairing.ts");
 const { BRAND_WEB_APP } = await importSource("packages/protocol/src/brand-web-app.ts");
 
-const WEB_APP_ORIGIN = "https://smart.woowtech.io";
+// The applied brand's hosted web app and link scheme (woowtech/brands: web.host and scheme).
+const BRAND_VALUES = appliedBrand();
+const WEB_APP_HOST = BRAND_VALUES.web.host;
+const WEB_APP_ORIGIN = `https://${WEB_APP_HOST}`;
 const WEB_LINK_PREFIX = `${WEB_APP_ORIGIN}/#offer=`;
-const APP_SCHEME = "woowtech-smart";
+const APP_SCHEME = BRAND_VALUES.scheme;
 // The app's root URL, the default app.baseUrl from 2026-09-25 to 2026-10-26 (0.8.1 included).
 const APP_LINK_ROOT = `${APP_SCHEME}:///`;
 const OFFER_MARKER = "#offer=";
-// The one shipped file that names the hosted web app's host: BRAND_WEB_APP.
-const WEB_APP_SOURCE = "packages/protocol/src/brand-web-app.ts";
+// The one shipped file that names the hosted web app's host: the generated brand values, which
+// BRAND_WEB_APP reads.
+const WEB_APP_SOURCE = "packages/protocol/src/brand-values.ts";
 const UPSTREAM_WEB_APP = /app\.paseo\.sh/;
 // The one shipped file that names upstream's web app: it moves homes off its default, and
 // woowtech-cors-origins.ts imports the name from it.
@@ -270,6 +276,7 @@ test("no shipped source names upstream's web app", () => {
         "packages/app/public/manifest.json",
         "packages/desktop/electron-builder.yml",
         "packages/relay/wrangler.woowtech.toml",
+        "packages/relay/wrangler.apporo.toml",
       ],
       skipPaths: [MIGRATION_SOURCE],
     }),
@@ -296,13 +303,14 @@ test("no shipped source names upstream's web app", () => {
 });
 
 // The pairing links, the web app the CLI names and the app's example link all come from
-// BRAND_WEB_APP (packages/protocol/src/brand-web-app.ts); the host is written out nowhere else.
-test("pairing links use the hosted web app's origin, and only brand-web-app.ts names its host", () => {
+// BRAND_WEB_APP (packages/protocol/src/brand-web-app.ts), which reads the host from the generated
+// brand values; the host is written out nowhere else.
+test("pairing links use the hosted web app's origin, and only the brand values name its host", () => {
   assert.equal(BRAND_WEB_APP.origin, WEB_APP_ORIGIN);
   assert.equal(BRAND_PAIRING.appBaseUrl, BRAND_WEB_APP.origin);
   assert.equal(BRAND_PAIRING.appSchemeRootUrl, APP_LINK_ROOT);
   assert.deepEqual(
-    findInShippedSources([/smart\.woowtech\.io/], {
+    findInShippedSources([new RegExp(WEB_APP_HOST.replaceAll(".", "\\."))], {
       skipPaths: [WEB_APP_SOURCE],
       skipComments: true,
     }),
@@ -326,13 +334,16 @@ test("onboard names the hosted web app as the second next step", () => {
 
 // The origins bootstrap.ts always lets in, whatever config.json says. The hosted web app stays
 // out of them, so "[]" in config.json still turns it off.
-test("the daemon's fixed CORS origins leave the hosted web app out", () => {
+test("the daemon's fixed CORS origins leave the hosted web app out", async () => {
   const bootstrapPath = "packages/server/src/server/bootstrap.ts";
   const bootstrap = readFileSync(path.join(repoRoot, bootstrapPath), "utf8");
   const fixed = /^ {2}const fixedAllowedOrigins = \[[\s\S]*?^ {2}\];$/m.exec(bootstrap)?.[0];
   assert.ok(fixed, `fixedAllowedOrigins is gone from ${bootstrapPath}`);
-  assert.ok(fixed.includes('"woowtech-smart://app"'), "the desktop app's origin moved");
-  assert.doesNotMatch(fixed, /smart\.woowtech\.io|BRAND_WEB_APP/);
+  assert.ok(fixed.includes("DESKTOP_APP_ORIGIN,"), "the desktop app's origin moved");
+  const { DESKTOP_APP_ORIGIN } = await importSource("packages/protocol/src/brand-desktop.ts");
+  assert.equal(DESKTOP_APP_ORIGIN, `${APP_SCHEME}://app`);
+  assert.ok(!fixed.includes(WEB_APP_HOST), "bootstrap.ts names the web app's host");
+  assert.doesNotMatch(fixed, /BRAND_WEB_APP/);
 });
 
 test("host labels use normal server_info with hydration and generation guards", () => {

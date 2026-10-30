@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import { darkHighlightColors, lightHighlightColors } from "@getpaseo/highlight";
-import { BRAND_BLUE } from "./brand";
+import { BRAND_COLOR, BRAND_COLOR_ON_DARK } from "./brand";
 
 export const baseColors = {
   // Base colors
@@ -306,10 +306,10 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
   };
 }
 
-// woowtech smart's brand blue for highlights: buttons, toggles, selection. Links on dark
-// surfaces use a lighter step so they stay readable there.
-const BRAND_ACCENT = BRAND_BLUE;
-const BRAND_ACCENT_ON_DARK = "#8fa6fd";
+// The brand's color for highlights: buttons, toggles, selection. Links on dark surfaces use a
+// lighter step so they stay readable there.
+const BRAND_ACCENT = BRAND_COLOR;
+const BRAND_ACCENT_ON_DARK = BRAND_COLOR_ON_DARK;
 
 const lightSemanticColors = buildLightSemanticColors({
   surface0: "#ffffff",

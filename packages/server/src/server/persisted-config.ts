@@ -10,6 +10,7 @@ import {
 import type { AgentProviderRuntimeSettingsMap } from "./agent/provider-launch-config.js";
 import { ensurePrivateFile, writePrivateFileAtomicSync } from "./private-files.js";
 import { AgentProfileSchema, AgentSkillSelectionSchema } from "@getpaseo/protocol/agent-profile";
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 import { PluginIdSchema, PluginSourceSchema } from "@getpaseo/protocol/plugin-config";
 import { TerminalProfileSchema } from "@getpaseo/protocol/terminal-profile";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
@@ -352,9 +353,9 @@ const CONFIG_FILENAME = "config.json";
 const DEFAULT_PERSISTED_CONFIG = PersistedConfigSchema.parse({
   version: 1,
   daemon: {
-    listen: "127.0.0.1:6770",
-    // woowtech smart's hosted web app (BRAND_WEB_APP, smart.woowtech.io) may reach the daemon
-    // directly, as upstream lets its own in (owner decision D3, 2026-10-26).
+    listen: `127.0.0.1:${DEFAULT_DAEMON_PORT}`,
+    // The brand's hosted web app (BRAND_WEB_APP: smart.woowtech.io for woowtech smart) may reach
+    // the daemon directly, as upstream lets its own in (owner decision D3, 2026-10-26).
     cors: {
       allowedOrigins: [BRAND_WEB_APP.origin],
     },

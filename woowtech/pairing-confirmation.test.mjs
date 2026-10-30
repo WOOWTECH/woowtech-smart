@@ -218,8 +218,10 @@ function declinedCatch(source, call) {
 
 // (g) "Connect to this computer" probes the address the boot probe used.
 function thisComputerEndpoint(runtime, action) {
-  const bootEndpoint = /const LOCALHOST_FALLBACK_ENDPOINT = "([^"]+)";/.exec(runtime)?.[1];
-  const buttonEndpoint = /const THIS_COMPUTER_ENDPOINT = "([^"]+)";/.exec(action)?.[1];
+  // A string or a template literal (the brand layer writes `localhost:${DEFAULT_DAEMON_PORT}`); the
+  // two must be written the same way.
+  const bootEndpoint = /const LOCALHOST_FALLBACK_ENDPOINT = (["`])([^"`]+)\1;/.exec(runtime)?.[2];
+  const buttonEndpoint = /const THIS_COMPUTER_ENDPOINT = (["`])([^"`]+)\1;/.exec(action)?.[2];
   const problems = [];
   if (!bootEndpoint || bootEndpoint !== buttonEndpoint) {
     problems.push(`the button probes ${buttonEndpoint}, the boot probe ${bootEndpoint}`);
@@ -424,7 +426,7 @@ test("Connect to this computer probes the boot probe's address", () => {
 
   const moved = replaceOnce(
     THIS_COMPUTER,
-    'const THIS_COMPUTER_ENDPOINT = "localhost:6770";',
+    "const THIS_COMPUTER_ENDPOINT = `localhost:${DEFAULT_DAEMON_PORT}`;",
     'const THIS_COMPUTER_ENDPOINT = "localhost:6767";',
   );
   assert.notDeepEqual(thisComputerEndpoint(HOST_RUNTIME, moved), []);
