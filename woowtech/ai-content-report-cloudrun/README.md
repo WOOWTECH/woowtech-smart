@@ -1,6 +1,6 @@
 # AI 內容回報接收器（Cloud Run 版）
 
-狀態（2026-10-27）：**已上線。** 2026-10-14 從 6be6f0127 部署，Cloud Run `smart-reports`（revision 00001）＋ Worker `smart-reports-proxy`（`reports.woowtech.io`）。從外部送真回報實測過：收據、讀回、通知信、依收件編號刪除都正常。0.8.1 的正式建置帶這個網址。Worker 的程式從 2026-10-27 起也放行網頁版 `https://smart.woowtech.io`（owner 決定 D4），但線上跑的還是 10/14 那一版：網頁版來源的預檢仍得 405、沒有 CORS 標頭（2026-10-26 21:45 UTC 實測）。照下面的「只更新 Worker」重新部署後才會通。
+狀態（2026-10-30）：**已上線。** 2026-10-14 從 6be6f0127 部署，Cloud Run `smart-reports`（revision 00001）＋ Worker `smart-reports-proxy`（`reports.woowtech.io`）。從外部送真回報實測過：收據、讀回、通知信、依收件編號刪除都正常。0.8.1 的正式建置帶這個網址。2026-10-30 照下面的「只更新 Worker」從 `3d288ed63` 重新部署 Worker（版本 `3632b58e`），放行網頁版 `https://smart.woowtech.io`（owner 決定 D4）；V1–V5、V8 全過，細節在 `woowtech/README.md` 的驗證紀錄。Cloud Run 服務沒動。
 
 App 的「回報」按鈕把一則回報 POST 到這裡。做法和 `smart-push` 相同：Cloud Run ＋ Firestore ＋ Cloudflare Worker，專案 `woowtech-smart`，區域 asia-east1（台灣）。不需要主機、磁碟或 Gmail 授權。
 
