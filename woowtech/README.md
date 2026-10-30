@@ -1932,6 +1932,32 @@ node --test woowtech/hub-gate.test.mjs
 - English: Hub connections are now off by default. If you connected this daemon to a Hub with `woowtech-smart hub connect`, it will not reconnect after the update (daemon.log carries one warning). To keep using it, run `woowtech-smart daemon config set daemon.hub.enabled true`, then `woowtech-smart daemon restart`.
 - 關直連的說法（版本說明和支援頁）：`woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'` 之後要再執行 `woowtech-smart daemon restart`，已經開著的網頁版連線才會斷（第 19 節）。
 
+### 29. 桌面版在 Apple 晶片 Mac 上建 Intel 版（2026-10-30）
+
+npm 只裝執行 `npm install` 那台機器的 esbuild 執行檔（`@esbuild/<平台>-<架構>`；esbuild 的 postinstall 還會把它複製成 `esbuild/bin/esbuild`）。上游的 `desktop-release.yml` 每個架構各用一台機器建（arm64 用 `macos-14`、x64 用 `macos-15-intel`），不會遇到。0.8.1 在同一台 Apple 晶片 Mac 上建兩個架構，x64 版就帶了 arm64 的 esbuild：公證紀錄裡 x64 版的 31 個項目只有 `esbuild/bin/esbuild` 和 `@esbuild/darwin-arm64/bin/esbuild` 是 arm64。daemon 編譯本機外掛時直接執行 `app.asar.unpacked/node_modules/@esbuild/darwin-<架構>/bin/esbuild`（`packages/server/src/server/plugins/compiler.ts`），所以 0.8.1 在 Intel Mac 上編譯不了本機外掛。OpenCode 的橋接外掛在打包版讀預先編好的檔，不受影響。
+
+- `packages/desktop/scripts/woowtech-native-arch.js`，`after-pack.js` 在修剪原生模組之後、翻 fuse 和簽章之前呼叫（只有 Mac）：App 裡只留目標架構的 `@esbuild` 套件，`esbuild/bin/esbuild` 換成它；目標架構的套件不在，建置就失敗。最後檢查整個 `.app`：每個 Mach-O 執行檔和函式庫都要含目標架構（略過符號連結和 `.o`），有一個不含就失敗並列出檔名。
+- 在 Apple 晶片 Mac 上建 x64 之前，在 repo 根目錄把 lockfile 記的 x64 套件放到 server 的 esbuild 旁邊（App 打包的是 server 那一份 esbuild）。下載的檔案跟 `package-lock.json` 的 integrity 相同才解開：
+
+  ```sh
+  lock=packages/server/node_modules/@esbuild/darwin-x64
+  v=$(node -p "require('./package-lock.json').packages['$lock'].version")
+  want=$(node -p "require('./package-lock.json').packages['$lock'].integrity")
+  tmp=$(mktemp -d)
+  npm pack "@esbuild/darwin-x64@$v" --pack-destination "$tmp" --json > "$tmp/pack.json"
+  if [ "$(node -p "require('$tmp/pack.json')[0].integrity")" = "$want" ]; then
+    mkdir "$lock"
+    tar -xzf "$tmp/$(node -p "require('$tmp/pack.json')[0].filename")" --strip-components 1 -C "$lock"
+  else
+    echo "integrity 跟 package-lock.json 不同，沒有解開"
+  fi
+  ```
+
+  建完把 `$lock` 刪掉。留著也不會進 arm64 版（after-pack 會拿掉），只是開發環境用不到。
+
+- 2026-10-30 實測：上面的指令抓到 0.25.12（4.5 MB），integrity 跟 lockfile 相同，`bin/esbuild` 是 x86_64。用真的 esbuild 執行檔組一個假 App：x64 缺 x64 套件時建置會停，補上後通過、arm64 套件被拿掉、`esbuild/bin/esbuild` 變成 x86_64；arm64 原樣通過。實際的 x64 打包還沒跑，下次發版建 x64 時一起驗：公證紀錄（`notarytool log`）的 ticketContents 每個檔都要是 x86_64。
+- 守門 `woowtech/desktop-native-arch.test.mjs`（8 項）：Mach-O 架構判讀、0.8.1 的情況會停、補上 x64 套件後只留它、arm64 原樣、JavaScript 啟動檔不動、任何不含目標架構的檔都會停、after-pack 的呼叫順序，以及 lockfile 還記著 server 那份 esbuild 的 x64 套件且版本相同。拿掉 after-pack 的呼叫時，接線那一項會失敗。
+
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
 ### 第一批：上游 `836f1a9..d6861f81e`
