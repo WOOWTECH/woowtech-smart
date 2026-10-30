@@ -159,17 +159,17 @@
       "documentIds": ["0e4c9a9b6c71019cbbea3bdc20b01223110a9035700f9c960c8fcbf78c2325ce"]
     },
     {
-      "id": "js:@getpaseo/client@0.8.1",
+      "id": "js:@getpaseo/client@0.9.0",
       "name": "@getpaseo/client",
-      "version": "0.8.1",
+      "version": "0.9.0",
       "platforms": ["android", "ios", "js"],
       "licenses": [],
       "documentIds": ["79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"]
     },
     {
-      "id": "js:@getpaseo/expo-two-way-audio@0.8.1",
+      "id": "js:@getpaseo/expo-two-way-audio@0.9.0",
       "name": "@getpaseo/expo-two-way-audio",
-      "version": "0.8.1",
+      "version": "0.9.0",
       "platforms": ["android", "ios", "js"],
       "licenses": [
         {
@@ -179,33 +179,33 @@
       "documentIds": ["79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"]
     },
     {
-      "id": "js:@getpaseo/highlight@0.8.1",
+      "id": "js:@getpaseo/highlight@0.9.0",
       "name": "@getpaseo/highlight",
-      "version": "0.8.1",
+      "version": "0.9.0",
       "platforms": ["android", "ios", "js"],
       "licenses": [],
       "documentIds": ["79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"]
     },
     {
-      "id": "js:@getpaseo/plugin@0.8.1",
+      "id": "js:@getpaseo/plugin@0.9.0",
       "name": "@getpaseo/plugin",
-      "version": "0.8.1",
+      "version": "0.9.0",
       "platforms": ["android", "ios", "js"],
       "licenses": [],
       "documentIds": ["79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"]
     },
     {
-      "id": "js:@getpaseo/protocol@0.8.1",
+      "id": "js:@getpaseo/protocol@0.9.0",
       "name": "@getpaseo/protocol",
-      "version": "0.8.1",
+      "version": "0.9.0",
       "platforms": ["android", "ios", "js"],
       "licenses": [],
       "documentIds": ["79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"]
     },
     {
-      "id": "js:@getpaseo/relay@0.8.1",
+      "id": "js:@getpaseo/relay@0.9.0",
       "name": "@getpaseo/relay",
-      "version": "0.8.1",
+      "version": "0.9.0",
       "platforms": ["android", "ios", "js"],
       "licenses": [],
       "documentIds": ["79d5aedce6aa0adc547336dc1bd34c5cc9308ba110fac7079ed97515ee573ad3"]
