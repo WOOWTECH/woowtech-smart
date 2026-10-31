@@ -5,6 +5,8 @@ const { smokePackagedDesktopApp } = require("../e2e/packaged-app-smoke.js");
 
 const { installLinuxLauncher } = require("./linux-sandbox");
 const { flipWoowtechFuses } = require("./woowtech-fuses");
+const { prepareWoowtechNativeArch } = require("./woowtech-native-arch");
+
 const { appliedBrand } = require("../../../woowtech/brands/index.cjs");
 
 // electron-builder.yml names the app and its executable after the brand (woowtech/brands/apply.mjs).
@@ -119,6 +121,12 @@ exports.default = async function afterPack(context) {
   const arch = ARCH_MAP[context.arch] || process.arch;
 
   pruneNativeModules(context.appOutDir, platform, arch);
+
+  // woowtech smart: the target's esbuild, and no Mach-O file for another architecture, before
+  // signing (scripts/woowtech-native-arch.js).
+  if (platform === "darwin") {
+    prepareWoowtechNativeArch(path.join(context.appOutDir, `${EXECUTABLE_NAME}.app`), arch);
+  }
 
   // woowtech smart: before signing, the Linux launcher and the smoke test (scripts/woowtech-fuses.js).
   await flipWoowtechFuses(context);

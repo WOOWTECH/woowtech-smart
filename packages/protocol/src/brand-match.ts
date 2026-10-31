@@ -1,4 +1,4 @@
-// Only same-brand pairing (owner decision 2026-10-15, woowtech/README.md §29): woowtech smart's
+// Only same-brand pairing (owner decision 2026-10-15, woowtech/README.md §30): woowtech smart's
 // app uses woowtech smart's computers, Apporo smart's uses Apporo smart's. Each brand's push
 // relay sends only to apps of its own Firebase project, so a phone paired across brands would
 // never get a notification. The daemon names its brand in server_info, and the client stops at a

@@ -1,4 +1,4 @@
-// The brand layer: one codebase builds woowtech smart and Apporo smart (woowtech/README.md §29).
+// The brand layer: one codebase builds woowtech smart and Apporo smart (woowtech/README.md §30).
 // Each brand is a JSON file in woowtech/brands; woowtech/tools/apply-brand.mjs writes one into
 // packages/protocol/src/brand-values.ts and the files in woowtech/brands/apply.mjs. These checks
 // keep the brands complete, apart from each other and from upstream Paseo, and keep the

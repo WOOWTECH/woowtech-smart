@@ -159,7 +159,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 | agent 技能           | `paseo`、`paseo-advisor`…          | `woowtech-smart`、`woowtech-smart-advisor`…          |
 | 技能儲存的暫存資料夾 | `.paseo-skills-transaction-*`      | `.woowtech-smart-skills-transaction-*`               |
 
-- 右欄的值都寫在品牌設定 `woowtech/brands/woowtech.json`，程式從那裡讀（第 29 節）。Apporo smart 有自己的一組，跟上游和渥屋智能都不同，三者可以裝在同一台電腦和同一支手機。
+- 右欄的值都寫在品牌設定 `woowtech/brands/woowtech.json`，程式從那裡讀（第 30 節）。Apporo smart 有自己的一組，跟上游和渥屋智能都不同，三者可以裝在同一台電腦和同一支手機。
 - port 在 daemon、App（本機備援位址、手動新增主機的預設值）、CLI 說明和 SSH 連線的預設值都一致。
 - 桌面版啟動時會併入登入 shell 的環境變數，但不採用其中的 `PASEO_HOME` 和 `PASEO_HOST`。使用官方 Paseo 的人可能在 shell 設定檔 export 這兩個值，指向官方的 `~/.paseo` 或 daemon；採用的話，我們的 daemon 會搬進官方的資料夾，桌面版呼叫的 CLI 也會連到官方的 daemon。
   - App 自己啟動時就帶著的值照樣有效，桌面版的 e2e 和 smoke 測試靠這個指定暫存 home。
@@ -286,7 +286,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
 - 來源是 `woowtech/brand/woowtech-symbol.svg`：設計系統的官方字形，是 PDF 轉出的 SVG，已經裁切到字形的範圍。
   - `woowtech/tools/flatten-symbol.py` 把它攤平成 `woowtech-symbol-path.svg`，共 10 筆路徑，畫出來跟原檔逐像素相同。
   - 不能合成一條路徑：筆畫會重疊，合成後在非零環繞規則下，交叉處會被挖成空洞。
-  - 這 10 筆路徑和 viewBox 也抄在品牌設定 `woowtech.json` 的 `logo`，App 和圖示產生器讀的是那份（第 29 節）；`icons.test.mjs` 檢查兩份相同。
+  - 這 10 筆路徑和 viewBox 也抄在品牌設定 `woowtech.json` 的 `logo`，App 和圖示產生器讀的是那份（第 30 節）；`icons.test.mjs` 檢查兩份相同。
 - `woowtech/tools/generate-icons.mjs` 產生全部 25 個圖示，需要 Google Chrome、sips 和 iconutil。加 `--out <資料夾>` 可以只輸出預覽。
   - 預設畫目前套用的品牌；`--brand apporo --out woowtech/brands/apporo/assets` 畫 Apporo 的那一套，放在品牌資料夾，換品牌時由 `apply-brand.mjs` 蓋到原位。
   - Chrome 用暫時的使用者資料夾，不會動到開著的 Chrome。
@@ -318,7 +318,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   - 已知取捨：按鈕上的白字對比是 3.4:1，低於無障礙 AA 標準的 4.5:1。
 - 深色背景上的連結用比較淡的 #8fa6fd，確保讀得清楚。
 - 預設的深色主題原本帶上游的綠色調，現在背景改成中性灰（沿用 Zinc 的灰階），紅色也改用 Zinc 那組中性紅。其他深色主題（Zinc、Midnight、陶土、Ghostty）維持原樣。陶土原本叫 Claude，改名見第 22 節。
-- 品牌色是品牌設定的 `colors.primary`（第 29 節）。App 從 `packages/app/src/styles/brand.ts` 的 `BRAND_COLOR` 讀，主題的強調色直接引用它；深色背景的連結色是 `colors.accentOnDark`（`BRAND_COLOR_ON_DARK`）。
+- 品牌色是品牌設定的 `colors.primary`（第 30 節）。App 從 `packages/app/src/styles/brand.ts` 的 `BRAND_COLOR` 讀，主題的強調色直接引用它；深色背景的連結色是 `colors.accentOnDark`（`BRAND_COLOR_ON_DARK`）。
   主題清單裡代表預設深色主題的色塊（上游是綠色 #2D8B62）也引用它。選單上深色主題顯示的是月亮圖示，這個色塊目前沒有畫出來。
 - 另外兩處用到品牌色，上游都是綠色 #20744A：
   - Android 通知的強調色，通知的小圖示會染成這個顏色。`packages/app/app.config.js` 的 expo-notifications 外掛設定從品牌設定讀。
@@ -1709,7 +1709,7 @@ node --test woowtech/*.test.mjs
 | 匯出            | `web-dist/<sha 前 12 碼>`                           | `web-dist/apporo-<sha 前 12 碼>`                        |
 
 - 這些值寫在 `deploy-web.sh` 的品牌預設（`case "$BRAND"`）。網址和收件網址要跟品牌設定檔的 `web.host`、`services.aiContentReportUrl` 一致，兩個品牌也不能共用專案、帳戶、網址、基準檔或標記檔：`web-deploy.test.mjs` 都會檢查。
-- checkout 永遠套用渥屋（第 29 節），所以其他品牌在複本裡建置：
+- checkout 永遠套用渥屋（第 30 節），所以其他品牌在複本裡建置：
   - 腳本用 `git archive` 把 HEAD 的追蹤檔解到 `web-dist/.tree-<品牌>-<sha 前 12 碼>.*`，把 checkout 的每個 `node_modules` 複製進去（APFS 上是 copy-on-write；workspace 的連結照樣指向複本裡的 `packages/*`），再在複本裡跑 `woowtech/tools/apply-brand.mjs <品牌>`，確認 `brand-values.ts` 的 `BRAND_ID` 是那個品牌，才在複本裡跑同一個建置（代碼 3）。
   - 被 `.gitignore` 忽略的檔（`.env*`、建置輸出、`.secrets/`）不會帶進複本。建置完就刪掉複本；被 kill 而留下一天以上的，下次建置時清掉。
   - 複本是 HEAD 而不是工作樹，所以其他品牌不能配 `WOOW_ALLOW_DIRTY=1`（代碼 2），要先 commit；dry-run 也要先推上 origin。
@@ -1951,6 +1951,7 @@ node --test woowtech/hub-gate.test.mjs
 - 守門第 5 項失敗：上游改了 `handleHubRelationshipRequest` 的 catch，把 `error instanceof HubDisabledError ? error.code : "handler_error"` 放回去。
 - 守門第 6 項失敗：上游多了新的 Hub 管理路徑（新的 `hub.management.*` 請求、第二個管理類別）；新路徑也要過 gate。
 - 上游新增的測試用 `createTestPaseoDaemon` 起 daemon 再呼叫 `connectHub`：會被拒，傳 `hubEnabled: true`（或在那個 home 寫 `config.json`）。
+  - 自己用 `createPaseoDaemon` 起 daemon、在 home 先寫 `hub-relationship.json` 的測試也一樣：`bootstrap.smoke.test.ts` 的「relay config changes during Hub enrollment reach the live runtime」沒寫 `config.json`，註冊永遠不會開始，等到 30 秒逾時。本機只跑改到的測試檔，所以 2026-10-30 的 CI 第 53 次（run 41059859953）才發現；已在它的 home 寫 `{"version":1,"daemon":{"hub":{"enabled":true}}}`，跟 `test-utils/paseo-daemon.ts` 的 `hubEnabled: true` 寫的一樣。
 
 版本說明（發佈帶新預設的 daemon、CLI 和桌面版時加上，第 19 節和「接下來」）：
 
@@ -1958,7 +1959,33 @@ node --test woowtech/hub-gate.test.mjs
 - English: Hub connections are now off by default. If you connected this daemon to a Hub with `woowtech-smart hub connect`, it will not reconnect after the update (daemon.log carries one warning). To keep using it, run `woowtech-smart daemon config set daemon.hub.enabled true`, then `woowtech-smart daemon restart`.
 - 關直連的說法（版本說明和支援頁）：`woowtech-smart daemon config set daemon.cors.allowedOrigins '[]'` 之後要再執行 `woowtech-smart daemon restart`，已經開著的網頁版連線才會斷（第 19 節）。
 
-### 29. 品牌層：渥屋智能和 Apporo smart 用同一份程式（2026-10-15）
+### 29. 桌面版在 Apple 晶片 Mac 上建 Intel 版（2026-10-30）
+
+npm 只裝執行 `npm install` 那台機器的 esbuild 執行檔（`@esbuild/<平台>-<架構>`；esbuild 的 postinstall 還會把它複製成 `esbuild/bin/esbuild`）。上游的 `desktop-release.yml` 每個架構各用一台機器建（arm64 用 `macos-14`、x64 用 `macos-15-intel`），不會遇到。0.8.1 在同一台 Apple 晶片 Mac 上建兩個架構，x64 版就帶了 arm64 的 esbuild：公證紀錄裡 x64 版的 31 個項目只有 `esbuild/bin/esbuild` 和 `@esbuild/darwin-arm64/bin/esbuild` 是 arm64。daemon 編譯本機外掛時直接執行 `app.asar.unpacked/node_modules/@esbuild/darwin-<架構>/bin/esbuild`（`packages/server/src/server/plugins/compiler.ts`），所以 0.8.1 在 Intel Mac 上編譯不了本機外掛。OpenCode 的橋接外掛在打包版讀預先編好的檔，不受影響。
+
+- `packages/desktop/scripts/woowtech-native-arch.js`，`after-pack.js` 在修剪原生模組之後、翻 fuse 和簽章之前呼叫（只有 Mac）：App 裡只留目標架構的 `@esbuild` 套件，`esbuild/bin/esbuild` 換成它；目標架構的套件不在，建置就失敗。最後檢查整個 `.app`：每個 Mach-O 執行檔和函式庫都要含目標架構（略過符號連結和 `.o`），有一個不含就失敗並列出檔名。
+- 在 Apple 晶片 Mac 上建 x64 之前，在 repo 根目錄把 lockfile 記的 x64 套件放到 server 的 esbuild 旁邊（App 打包的是 server 那一份 esbuild）。下載的檔案跟 `package-lock.json` 的 integrity 相同才解開：
+
+  ```sh
+  lock=packages/server/node_modules/@esbuild/darwin-x64
+  v=$(node -p "require('./package-lock.json').packages['$lock'].version")
+  want=$(node -p "require('./package-lock.json').packages['$lock'].integrity")
+  tmp=$(mktemp -d)
+  npm pack "@esbuild/darwin-x64@$v" --pack-destination "$tmp" --json > "$tmp/pack.json"
+  if [ "$(node -p "require('$tmp/pack.json')[0].integrity")" = "$want" ]; then
+    mkdir "$lock"
+    tar -xzf "$tmp/$(node -p "require('$tmp/pack.json')[0].filename")" --strip-components 1 -C "$lock"
+  else
+    echo "integrity 跟 package-lock.json 不同，沒有解開"
+  fi
+  ```
+
+  建完把 `$lock` 刪掉。留著也不會進 arm64 版（after-pack 會拿掉），只是開發環境用不到。
+
+- 2026-10-30 實測：上面的指令抓到 0.25.12（4.5 MB），integrity 跟 lockfile 相同，`bin/esbuild` 是 x86_64。用真的 esbuild 執行檔組一個假 App：x64 缺 x64 套件時建置會停，補上後通過、arm64 套件被拿掉、`esbuild/bin/esbuild` 變成 x86_64；arm64 原樣通過。同一天實際打包一次沒簽章的 x64 `--dir`（照上面的指令放好 x64 套件，`build:app-deps:clean`、Electron 版的 `expo export`、electron-builder 共約 2.5 分鐘）：App 裡 29 個 Mach-O 檔都是 x86_64，`@esbuild` 只剩 `darwin-x64`，`esbuild/bin/esbuild` 換成了 x86_64。在 Rosetta 下用 App 自己的執行檔（`ELECTRON_RUN_AS_NODE`）載入 `app.asar` 裡的 esbuild，指向 `compiler.ts` 會用的那個 unpacked 執行檔，`transformSync` 和帶外掛的 `build` 都成功；同樣在 x64 行程裡載入只有 `darwin-arm64` 的 esbuild（0.8.1 的情況）會報「You installed esbuild for another platform than the one you're currently using」。簽章和公證過的 x64 下次發版時建，公證紀錄（`notarytool log`）的 ticketContents 每個檔都要是 x86_64。
+- 守門 `woowtech/desktop-native-arch.test.mjs`（8 項）：Mach-O 架構判讀、0.8.1 的情況會停、補上 x64 套件後只留它、arm64 原樣、JavaScript 啟動檔不動、任何不含目標架構的檔都會停、after-pack 的呼叫順序，以及 lockfile 還記著 server 那份 esbuild 的 x64 套件且版本相同。拿掉 after-pack 的呼叫時，接線那一項會失敗。
+
+### 30. 品牌層：渥屋智能和 Apporo smart 用同一份程式（2026-10-15）
 
 owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做法：同一份程式，建置時選品牌，不另開 fork。另開 fork 的代價見 aiot 的紀錄（文案走樣、修正要做兩次）。研究和決定在 `~/.local/share/woowtech-smart/team/apporo-smart-1015/`。
 
@@ -2457,6 +2484,13 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - commit 時 lefthook 會對所有 workspace 跑 typecheck。desktop 和 cli 依賴 server 的 dist 型別，所以 clone 下來後要先跑一次 `npm run build:server`。
 
 ## 驗證紀錄
+
+- Apporo 發版準備：把 main 的 0.9.0 合進 `woowtech/apporo-web-1030`（2026-10-31，owner 說「開始」發 Apporo 的桌面版和 CLI）。這次在 cluster1（Linux，沒有 repo 也沒有 `node_modules`）做，所以只跑不需安裝套件的守門，其餘留給 GitHub CI。
+  - 合併 `origin/main`（`d5496f786`，0.9.0）：兩個衝突。`packages/desktop/scripts/after-pack.js` 兩邊各加一行 import，兩行都留；main 的 `prepareWoowtechNativeArch(…${EXECUTABLE_NAME}.app…)` 搭配品牌版的 `EXECUTABLE_NAME = appliedBrand().name`，Apporo 版會檢查 `Apporo smart.app`。
+  - **章節撞號**：main 的第 29 節是「桌面版在 Apple 晶片 Mac 上建 Intel 版」，品牌層原本也編 29 ⇒ 品牌層改成**第 30 節**，指向它的 6 處一起改（`brand-match.ts`、`brand-layer.test.mjs` 的 §30，README 的第 162、289、321、1712 行）。`desktop-native-arch.test.mjs` 指的是 main 那一節，維持 29。
+  - **合併抓到一個真的會變紅的地方**：main 新加的 `woowtech/desktop-native-arch.test.mjs` 斷言 `const EXECUTABLE_NAME = "woowtech smart";`，跟品牌層衝突。改成斷言它讀 `appliedBrand().name` 和 `brands/index.cjs`，fixture 的 `.app` 名稱也改成讀套用品牌（Apporo 版會變 `Apporo smart.app`）。改前 7／8，改後 **8／8**。
+  - 其他檢查：版本根目錄和 11 個 workspace 都是 0.9.0；兩份品牌設定完好（`web.host`、`logo.style=mark`、Apporo `#4D4D4D`／`#FFFFFF`）；套用的品牌還是渥屋；改過的腳本 `bash -n`／`node --check` 都過；Apporo 基準檔是合法 JSON；回報服務守門 41／41。
+  - **還沒做**：GitHub 完整 CI（要 owner 同意才跑，決定 18）、合進 main、桌面版的 Developer ID 簽章與公證（跟 woowtech 0.9.0 卡在同一件事：要 owner 先登入 developer.apple.com 建憑證）、上傳與公開、tag。版本號照決定 17 跟渥屋同為 0.9.0。
 
 - 隱私權政策加入網頁版（2026-10-30，Odoo `blog.post` 391；web-spec.md 6.8；文字在 plans 的 `privacy-391-web-draft.md`）：owner 看過要貼的文字後說「幫我貼」；照建議發佈 P1–P8（P3 的前提在下一條確認過），日期 2026-10-30。
   - 做法：Odoo 後台的文章表單沒有內文欄位，所以在 owner 已登入的瀏覽器分頁裡用 JSON-RPC（`/web/dataset/call_kw`）讀寫 `blog.post.content`。寫入前先讀：網站語言是 zh_TW（預設）和 en_US，兩個語言的內文相同（13,154 字），跟 10/27 的備份逐位元組相同；全文另存在 plans 的 `privacy-publish-20261030/`。寫入時先再確認一次 `write_date` 和內文的 SHA-256 都沒變，再依序寫 en_US、zh_TW。讀回時兩個語言都跟發佈檔逐字相同；發佈檔是 `make-privacy-html.py 2026-10-30 recommended keep` 產生的，SHA-256 `3a39d969…`。
