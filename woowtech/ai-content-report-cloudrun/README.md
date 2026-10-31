@@ -166,9 +166,10 @@ for i in $(seq 1 40); do curl -s -o /dev/null -w '%{http_code}\n' -X POST "$U" -
 - `RUN_URL=$(gcloud --project apporo-smart-app run services describe smart-reports --region us-west1 --format='value(status.url)')`
 - 部署前的三項（變數、Observability、限流）到 Alan 帳戶的儀表板看。這個 Worker 之前是用 wrangler 還是儀表板部署的、從哪個 commit 部署的，都沒有紀錄：先跑 `wr deployments list --name smart-reports-proxy`。不知道上次的 commit 時，部署前至少確認線上的 `ALLOWED_ORIGINS` 是 `apporosmart://app`，這次只多 `https://smart.apporo.ai`。
 - 檢查：`U=https://www.apporo.ai/api/smart/v1/ai-content-reports; W=https://smart.apporo.ai`。V3 的桌面版來源是 `apporosmart://app`；V5 的來源換成 `http://smart.apporo.ai https://www.smart.apporo.ai https://smart.apporo.ai.evil.invalid https://apporo-smart-web.pages.dev "$W/"`。
-- 每 IP 限流靠的是 apporo.ai 的 WAF 限流規則「Apporo smart AI reports: per-IP limit」（2026-10-31 owner 選的做法）：主機 `www.apporo.ai`、路徑 `/api/smart/v1/ai-content-reports`，同一個 IP 每 10 秒超過 5 次就擋 10 秒（免費方案只有這種時間單位，也只能設一條）。Worker 的 `IP_RATE_LIMITER` binding 在這個帳戶不會擋：2026-10-31 連送 105 次都沒有 429，同一份程式在渥屋的帳戶（Workers Paid）會擋；Alan 的帳戶是免費方案，Cloudflare 文件沒寫免費方案能不能用。
-  - 被 WAF 擋下的 429 不帶 CORS 標頭，網頁版和桌面版讀不到它，只會顯示一般的連線錯誤；手機 App 不受影響。檢查工具（plans 的 `apporo-reports-worker-verify.py`）的「web origin」那一列 V8 因此會失敗，這是預期的。
-  - 一次跑完 V1–V5 會超過每 10 秒 5 次：要檢查就每 10 秒最多送 4 次，否則後面的請求只會拿到 429。V8 只會讓這台的 IP 在這條路徑上被擋 10 秒，官網其他頁面不受影響。
+- 每 IP 限流跟渥屋一樣，靠 Worker 的 `IP_RATE_LIMITER` binding（owner 2026-10-31 選的做法）。這個帳戶原本是 Workers Free，binding 不會擋：2026-10-30／31 連送 105 次都沒有 429，同一份程式在渥屋的帳戶（Workers Paid）會擋。2026-10-31 owner 確認後升級成 Workers Paid，並用同一份設定重新部署（版本 `3f6ebeff`），V8 才看得到 429，而且網頁版收到的 429 帶 CORS。
+  - 但擋得比渥屋少：同樣的 V8，Apporo 40 次只有 4 次 429，渥屋是 31 次。binding 的計數是每個機房、最終一致的，apporo.ai 的請求從台灣進到 SJC 這種大機房，分散在很多台機器上。
+  - 升級前加的 apporo.ai WAF 限流規則「Apporo smart AI reports: per-IP limit」（主機 `www.apporo.ai`、這條路徑，同一個 IP 每 10 秒超過 5 次就擋 10 秒）2026-10-31 改成停用，沒有刪除：要更嚴格就在 Security rules 把它重新啟用。它擋下的 429 不帶 CORS，網頁版和桌面版讀不到，只會顯示一般的連線錯誤。啟用它的時候，一次跑完 V1–V5 會超過每 10 秒 5 次，要每 10 秒最多送 4 次。
+  - V8 只會讓這台的 IP 在這條路徑上被限一陣子，官網其他頁面不受影響。
 - Apporo 隱私權政策的網頁版段落（P3）要等這些都過了才發佈，稿子在 `~/.local/share/woowtech-smart/plans/apporo-smart-web-20261030/privacy-apporo-web-draft.md`。
 
 ## 日常
