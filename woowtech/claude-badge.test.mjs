@@ -127,7 +127,7 @@ function* shippedFiles(fileTypes = SHIPPED_FILES) {
   }
 }
 
-const relative = (file) => path.relative(repoRoot, file);
+const relative = (file) => path.relative(repoRoot, file).split(path.sep).join("/");
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
 const isVendorFile = (file) =>
   marks.some(([, mark]) => mark.files.includes(file)) ||

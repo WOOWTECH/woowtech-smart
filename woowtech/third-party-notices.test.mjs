@@ -101,7 +101,7 @@ const REPLACED_FILE_TYPE_LOGOS = {
 const LUCIDE = "lucide-react-native";
 
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
-const relative = (file) => path.relative(repoRoot, file);
+const relative = (file) => path.relative(repoRoot, file).split(path.sep).join("/");
 const squeeze = (text) => text.replace(/[\s,]+/g, "");
 const sorted = (values) => [...values].sort();
 

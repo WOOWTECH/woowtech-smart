@@ -15,7 +15,7 @@ const DEV_ONLY = new Set(["packages/server/scripts/dev-runner.ts"]);
 function sourceFiles(directory) {
   return readdirSync(join(root, directory), { withFileTypes: true, recursive: true })
     .filter((entry) => entry.isFile() && /\.(ts|mts)$/.test(entry.name))
-    .map((entry) => relative(root, join(entry.parentPath, entry.name)))
+    .map((entry) => relative(root, join(entry.parentPath, entry.name)).replaceAll("\\", "/"))
     .filter((file) => !/\.(test|spec)\.|[\\/](test-utils|daemon-e2e|e2e)[\\/]/.test(file))
     .filter((file) => !DEV_ONLY.has(file));
 }

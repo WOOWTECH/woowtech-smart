@@ -42,15 +42,18 @@ function listFiles(dir) {
   return readdirSync(dir, { withFileTypes: true, recursive: true })
     .filter((entry) => entry.isFile())
     .map((entry) => path.relative(dir, path.join(entry.parentPath, entry.name)))
+    .map((file) => file.split(path.sep).join("/"))
     .sort();
 }
 
 function format(outputPath, text) {
-  const result = spawnSync(oxfmt, [`--stdin-filepath=${outputPath}`], {
-    cwd: repoRoot,
-    input: text,
-    encoding: "utf8",
-  });
+  // The .bin entry is a command script on Windows, which only cmd.exe can start.
+  const windows = process.platform === "win32";
+  const result = spawnSync(
+    windows ? `"${oxfmt}.cmd"` : oxfmt,
+    [windows ? `"--stdin-filepath=${outputPath}"` : `--stdin-filepath=${outputPath}`],
+    { cwd: repoRoot, input: text, encoding: "utf8", shell: windows },
+  );
   if (result.status !== 0) {
     throw new Error(`oxfmt could not format ${outputPath}:\n${result.stderr}`);
   }
@@ -78,7 +81,7 @@ function generate() {
   for (const skill of upstreamSkills) {
     for (const file of listFiles(path.join(upstreamDir, skill))) {
       const source = readFileSync(path.join(upstreamDir, skill, file));
-      const target = path.join(brandSkillName(skill), file);
+      const target = `${brandSkillName(skill)}/${file}`;
       files.set(
         target,
         file.endsWith(".md")
