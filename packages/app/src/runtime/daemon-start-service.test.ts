@@ -325,7 +325,7 @@ describe("upsertDesktopDaemonConnection", () => {
     expect(fake.upserts).toEqual([]);
   });
 
-  // woowtech smart: the Windows app can move its daemon off a reserved port (README §25).
+  // woowtech smart: the Windows app can move its daemon off a reserved port (README §31).
   it("adds the new address when the registered local daemon moved to another port", async () => {
     const fake = createFakeStore([
       {

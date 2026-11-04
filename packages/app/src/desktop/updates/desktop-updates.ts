@@ -1,3 +1,5 @@
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
+import { DESKTOP_ARTIFACT_PREFIX } from "@getpaseo/protocol/brand-desktop";
 import { isElectronRuntime } from "@/desktop/host";
 import { invokeDesktopCommand } from "@/desktop/electron/invoke";
 import { isWeb } from "@/constants/platform";
@@ -38,9 +40,8 @@ export interface LocalDaemonVersionResult {
   error: string | null;
 }
 
-// woowtech smart publishes installers to a public releases-only repo; the source repo is private.
-const RELEASE_DOWNLOAD_BASE_URL =
-  "https://github.com/WOOWTECH/woowtech-smart-releases/releases/download";
+// Each brand publishes its installers to its own public releases-only repo (woowtech/brands).
+const RELEASE_DOWNLOAD_BASE_URL = BRAND_LINKS.releaseDownloads;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -196,7 +197,7 @@ export function buildMacAppleSiliconDownloadUrl(version: string | null | undefin
     return null;
   }
 
-  return `${RELEASE_DOWNLOAD_BASE_URL}/v${normalizedVersion}/woowtech-smart-${normalizedVersion}-arm64.dmg`;
+  return `${RELEASE_DOWNLOAD_BASE_URL}/v${normalizedVersion}/${DESKTOP_ARTIFACT_PREFIX}-${normalizedVersion}-arm64.dmg`;
 }
 
 export function buildDaemonUpdateDiagnostics(result: LocalDaemonUpdateResult): string {

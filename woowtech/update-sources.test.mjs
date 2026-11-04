@@ -1,4 +1,5 @@
-// woowtech smart must never take updates or installers from upstream Paseo.
+// The brand's desktop app must never take updates or installers from upstream Paseo, or from
+// another brand: each publishes to its own releases repo (woowtech/brands).
 // Upstream merges can bring back an upstream update source in a file we never
 // touched, so these checks read the packaging config and the shipped sources
 // directly.
@@ -8,12 +9,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
 const electronBuilderConfigPath = new URL("packages/desktop/electron-builder.yml", repoRoot);
 
-const OUR_RELEASES = { provider: "github", owner: "WOOWTECH", repo: "woowtech-smart-releases" };
+const [releasesOwner, releasesRepo] = appliedBrand().links.releasesRepo.split("/");
+const OUR_RELEASES = { provider: "github", owner: releasesOwner, repo: releasesRepo };
 const UPSTREAM_DOWNLOAD_LINKS = [/github\.com\/getpaseo\/paseo\/releases/, /paseo\.sh\/download/];
 
 /**
@@ -42,7 +45,7 @@ function publishBlocks(source) {
   return blocks;
 }
 
-test("the desktop app looks for updates in our releases repo", () => {
+test("the desktop app looks for updates in the brand's releases repo", () => {
   const blocks = publishBlocks(readFileSync(electronBuilderConfigPath, "utf8"));
 
   assert.ok(blocks.length > 0, "electron-builder.yml has no publish block");

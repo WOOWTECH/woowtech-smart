@@ -1,5 +1,5 @@
 // woowtech smart: Install CLI on Windows also puts %USERPROFILE%\.local\bin on the user PATH
-// (woowtech/README.md §25, plan G16), the Windows counterpart of the export line the Mac writes
+// (woowtech/README.md §31, plan G16), the Windows counterpart of the export line the Mac writes
 // into the shell rc. One Windows PowerShell run reads HKCU\Environment\Path without expanding it,
 // does nothing when the folder is already on the user or machine PATH, and otherwise appends it
 // keeping the value's kind: REG_EXPAND_SZ (Windows' default) gets %USERPROFILE%\.local\bin,

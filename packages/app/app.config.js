@@ -8,6 +8,9 @@ const withPasteInput = require("./plugins/with-paste-input");
 const withWoowtechPush = require("./plugins/with-woowtech-push");
 const { iosGoogleServiceInfoPlist } = require("./plugins/woowtech-ios-firebase");
 const { getNativeReleaseVersion } = require("./native-release-version");
+// The brand this checkout builds (woowtech/brands): woowtech smart unless a release tree applied
+// another one with woowtech/tools/apply-brand.mjs.
+const brand = require("../../woowtech/brands/index.cjs").appliedBrand();
 const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
@@ -15,28 +18,32 @@ const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
 // Keep CFBundleName independent of Expo's sanitized PRODUCT_NAME. The home-screen
 // display name is CFBundleDisplayName; setting this short name does not guarantee
 // the icon label's spacing or truncation. Debug and Release labels still need validation.
-const shortName = "woowtech smart";
-const chineseShortName = "渥屋智能";
+const shortName = brand.name;
+const chineseShortName = brand.nameZh;
 
 // woowtech smart: the purpose strings iOS shows when it asks for each permission, in the phone's
-// language. Apple has rejected a woowtech app for vague or English-only permission text (App
-// Store guideline 5.1.1). Localized InfoPlist.strings do not expand $(PRODUCT_NAME), so the app
-// name is written out.
+// language. The local network one shows when the app first connects to a host at a LAN address.
+// Apple has rejected a woowtech app for vague or English-only permission text (App Store
+// guideline 5.1.1). Localized InfoPlist.strings do not expand $(PRODUCT_NAME), so the app name is
+// written out.
 const iosPermissionText = {
   en: {
     NSCameraUsageDescription: `Allow ${shortName} to use the camera to scan the QR code that pairs it with your computer.`,
     NSMicrophoneUsageDescription: `Allow ${shortName} to use the microphone so you can dictate messages to your agents.`,
     NSPhotoLibraryUsageDescription: `Allow ${shortName} to access your photos so you can attach images to messages to your agents.`,
+    NSLocalNetworkUsageDescription: `Allow ${shortName} to connect to the computers on your local network that run your agents.`,
   },
   "zh-Hant": {
     NSCameraUsageDescription: `允許「${chineseShortName}」使用相機，掃描配對電腦用的 QR Code。`,
     NSMicrophoneUsageDescription: `允許「${chineseShortName}」使用麥克風，用語音輸入給 Agent 的訊息。`,
     NSPhotoLibraryUsageDescription: `允許「${chineseShortName}」取用你的照片，把圖片附加到給 Agent 的訊息。`,
+    NSLocalNetworkUsageDescription: `允許「${chineseShortName}」連線到區域網路上執行 Agent 的電腦。`,
   },
   "zh-Hans": {
     NSCameraUsageDescription: `允许“${chineseShortName}”使用相机，扫描配对电脑用的二维码。`,
     NSMicrophoneUsageDescription: `允许“${chineseShortName}”使用麦克风，用语音输入发给 Agent 的消息。`,
     NSPhotoLibraryUsageDescription: `允许“${chineseShortName}”访问你的照片，把图片附加到发给 Agent 的消息。`,
+    NSLocalNetworkUsageDescription: `允许“${chineseShortName}”连接到局域网上运行 Agent 的电脑。`,
   },
 };
 
@@ -73,7 +80,7 @@ const buildProfile = isFdroidBuild
           "expo-notifications",
           {
             icon: "./assets/images/notification-icon.png",
-            color: "#6183fc",
+            color: brand.colors.primary,
             // woowtech smart: FCM's default channel in the Android manifest, where a push naming a
             // channel the phone lacks lands instead of FCM's "Miscellaneous" (woowtech/README.md, 16).
             defaultChannel: "agent-finished",
@@ -96,31 +103,35 @@ function resolveSecretFile(params) {
   return undefined;
 }
 
+// Each brand's Firebase files sit in its own folder (woowtech's in .secrets, Apporo's in
+// .secrets/apporo), so a build never falls back to another brand's project.
+const secretsDir = `./${brand.mobileSecretsDir}`;
+
 const variants = {
   production: {
-    name: "woowtech smart",
-    chineseName: "渥屋智能",
-    packageId: "io.woowtech.smart",
+    name: brand.name,
+    chineseName: brand.nameZh,
+    packageId: brand.mobileAppId,
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_PROD",
-      fallbackRelativePath: "./.secrets/google-services.prod.json",
+      fallbackRelativePath: `${secretsDir}/google-services.prod.json`,
     }),
     googleServiceInfoPlist: resolveSecretFile({
       envKey: "GOOGLE_SERVICE_INFO_PLIST_PROD",
-      fallbackRelativePath: "./.secrets/GoogleService-Info.prod.plist",
+      fallbackRelativePath: `${secretsDir}/GoogleService-Info.prod.plist`,
     }),
   },
   development: {
-    name: "woowtech smart Debug",
-    chineseName: "渥屋智能 Debug",
-    packageId: "io.woowtech.smart.debug",
+    name: `${brand.name}${brand.debugSuffix}`,
+    chineseName: `${brand.nameZh}${brand.debugSuffix}`,
+    packageId: brand.mobileAppIdDebug,
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_DEBUG",
-      fallbackRelativePath: "./.secrets/google-services.debug.json",
+      fallbackRelativePath: `${secretsDir}/google-services.debug.json`,
     }),
     googleServiceInfoPlist: resolveSecretFile({
       envKey: "GOOGLE_SERVICE_INFO_PLIST_DEBUG",
-      fallbackRelativePath: "./.secrets/GoogleService-Info.debug.plist",
+      fallbackRelativePath: `${secretsDir}/GoogleService-Info.debug.plist`,
     }),
   },
 };
@@ -152,7 +163,7 @@ export default {
     version: nativeReleaseVersion.appVersion,
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "woowtech-smart",
+    scheme: brand.scheme,
     // Chinese launchers show the Chinese name.
     locales: {
       "zh-Hans": chineseLocale("zh-Hans"),
@@ -161,11 +172,45 @@ export default {
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
+      // woowtech smart: the iOS 18 dark icon is the bare symbol on the system's dark background;
+      // the light icon stays the opaque white tile the App Store requires. No tinted icon: prebuild
+      // flattens it onto white, and iOS tints the light icon itself when there is none.
+      icon: {
+        light: "./assets/images/icon.png",
+        dark: "./assets/images/ios-icon-dark.png",
+      },
       supportsTablet: true,
       infoPlist: {
         CFBundleName: shortName,
         ...iosPermissionText.en,
         ITSAppUsesNonExemptEncryption: false,
+      },
+      // woowtech smart: the app's own entries in PrivacyInfo.xcprivacy. The phone's FCM token reaches
+      // WoowTech's push relay through the daemon, and the relay keeps its SHA-256 for the daily
+      // quota until its UTC day ends (woowtech/README.md, 16). An AI content report can carry the
+      // text of one AI reply when the user attaches it; the report service keeps it 30 days, linked
+      // to no one. pod install adds every pod's required-reason APIs to this file, and the Firebase
+      // SDKs ship their own manifests.
+      privacyManifests: {
+        NSPrivacyTracking: false,
+        NSPrivacyCollectedDataTypes: [
+          {
+            NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeDeviceID",
+            NSPrivacyCollectedDataTypeLinked: false,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+            ],
+          },
+          {
+            NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeOtherUserContent",
+            NSPrivacyCollectedDataTypeLinked: false,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+            ],
+          },
+        ],
       },
       bundleIdentifier: variant.packageId,
       ...(googleServiceInfoPlist ? { googleServicesFile: googleServiceInfoPlist } : {}),
@@ -175,6 +220,8 @@ export default {
       adaptiveIcon: {
         backgroundColor: "#FFFFFF",
         foregroundImage: "./assets/images/android-icon-foreground.png",
+        // woowtech smart: Android 13+ "Themed icons" draws this silhouette in the system colors.
+        monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -182,6 +229,9 @@ export default {
       // Allow HTTP connections for local network hosts (required for release builds)
       usesCleartextTraffic: true,
       permissions: buildProfile.androidPermissions,
+      // woowtech smart: Expo's prebuild template asks for "display over other apps", which only
+      // React Native's debug tools use. Google Play lists it on the store page.
+      blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW"],
       package: variant.packageId,
       versionCode: nativeReleaseVersion.androidVersionCode,
       ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),
@@ -206,6 +256,11 @@ export default {
           resizeMode: "contain",
           backgroundColor: "#ffffff",
           dark: {
+            // woowtech smart: Android draws the splash logo onto a square of the background color
+            // (@expo/prebuild-config withAndroidSplashImages), and only makes night drawables when
+            // dark has an image: without one, the white square showed on the black dark splash.
+            // The dark image has the logo in its color for dark backgrounds (Apporo smart: white).
+            image: "./assets/images/splash-icon-dark.png",
             backgroundColor: "#000000",
           },
         },
@@ -251,6 +306,7 @@ export default {
     extra: {
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
+      aiContentReportUrl: process.env.WOOWTECH_AI_CONTENT_REPORT_URL?.trim() || undefined,
       router: {},
       eas: {
         projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",

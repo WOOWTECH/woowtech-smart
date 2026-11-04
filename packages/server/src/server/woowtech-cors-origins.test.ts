@@ -12,7 +12,9 @@ import { withoutUpstreamWebApp } from "./woowtech-cors-origins.js";
 // Homes created by internal test builds still list upstream's hosted web app in
 // daemon.cors.allowedOrigins. woowtech smart drops it whenever it resolves the config, so
 // that site cannot reach the daemon from the user's browser, and leaves config.json alone.
+// It never puts anything in its place, not even our hosted web app: only new homes list that.
 const UPSTREAM_WEB_APP = "https://app.paseo.sh";
+const HOSTED_WEB_APP = "https://smart.woowtech.io";
 const DEV_ORIGIN = "http://localhost:8081";
 
 const roots: string[] = [];
@@ -66,6 +68,7 @@ describe("withoutUpstreamWebApp", () => {
   test("keeps every other origin in its order, even ones on upstream's host", () => {
     const others = [
       DEV_ORIGIN,
+      HOSTED_WEB_APP,
       "*",
       "woowtech-smart://app",
       "http://app.paseo.sh",
@@ -90,6 +93,19 @@ describe("CORS origins of a home from an internal test build", () => {
       DEV_ORIGIN,
       `${UPSTREAM_WEB_APP}/`,
     ]);
+  });
+
+  test("a home that listed only upstream's web app lets no web origin in", async () => {
+    const home = await homeWithCorsOrigins([UPSTREAM_WEB_APP]);
+
+    expect(loadConfig(home, { env: {} }).corsAllowedOrigins).toEqual([]);
+    expect(await originsInConfigJson(home)).toEqual([UPSTREAM_WEB_APP]);
+  });
+
+  test("the hosted web app stays when a home lists it next to upstream's", async () => {
+    const home = await homeWithCorsOrigins([UPSTREAM_WEB_APP, HOSTED_WEB_APP, DEV_ORIGIN]);
+
+    expect(loadConfig(home, { env: {} }).corsAllowedOrigins).toEqual([HOSTED_WEB_APP, DEV_ORIGIN]);
   });
 
   test("PASEO_CORS_ORIGINS cannot let it in either", async () => {

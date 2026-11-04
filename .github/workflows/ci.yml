@@ -1,10 +1,8 @@
 name: CI
 
 on:
-  # woowtech smart: weekly instead of on every push to main, to fit GitHub Free's
-  # 2,000 private-repo minutes a month (woowtech/README.md section 18).
-  schedule:
-    - cron: "17 18 * * 0" # Sunday 18:17 UTC, Monday 02:17 in Taiwan
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   merge_group:
@@ -58,8 +56,6 @@ jobs:
 
       - name: Detect affected CI contracts
         id: filter
-        # woowtech smart: a schedule event has no default branch to compare with; every job runs.
-        if: github.event_name != 'schedule'
         uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
         with:
           filters: .github/ci-paths.yml
@@ -139,6 +135,11 @@ jobs:
       # OpenCC, which woowtech/tools installs on its own and npm ci does not.
       - name: Check woowtech fork guards
         run: node --test --test-concurrency=1 --test-skip-pattern="^Traditional Chinese is regenerated from upstream's current Simplified Chinese$" woowtech/*.test.mjs
+
+      # woowtech smart: the AI content report receiver (Cloud Run). Its tests use an in-memory store
+      # and fake gcloud, so they need neither its npm dependencies nor network access.
+      - name: Test the AI content report receiver
+        run: node --test --test-concurrency=1 woowtech/ai-content-report-cloudrun/*.test.mjs
 
       - name: Typecheck all packages
         run: npm run typecheck

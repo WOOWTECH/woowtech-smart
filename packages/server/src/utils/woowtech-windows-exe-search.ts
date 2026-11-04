@@ -1,6 +1,6 @@
 // woowtech smart: Windows looks for a bare command name in the current folder first. The daemon
 // runs git, Copilot and Pi by name inside the user's project folders, so a project that carries
-// git.exe or copilot.cmd would have it run (woowtech/README.md §25, plan G28). libuv (1.48+) and
+// git.exe or copilot.cmd would have it run (woowtech/README.md §31, plan G28). libuv (1.48+) and
 // cmd.exe both skip the current folder when NoDefaultCurrentDirectoryInExePath is set, and
 // agents inherit it. The in-app terminal drops it again, but only when we were the ones who set
 // it, so a user's own setting survives.

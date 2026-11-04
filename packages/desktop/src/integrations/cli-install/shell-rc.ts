@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { DESKTOP_APP_NAME } from "@getpaseo/protocol/brand-desktop";
 import log from "electron-log/main";
 
 export interface ShellRcInfo {
@@ -87,7 +88,7 @@ export async function ensurePathInShellRc(): Promise<{ shellUpdated: boolean }> 
     }
 
     await fs.mkdir(path.dirname(info.rcFile), { recursive: true });
-    await fs.appendFile(info.rcFile, `\n# Added by woowtech smart\n${info.exportLine}\n`);
+    await fs.appendFile(info.rcFile, `\n# Added by ${DESKTOP_APP_NAME}\n${info.exportLine}\n`);
 
     return { shellUpdated: true };
   } catch (err) {

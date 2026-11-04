@@ -11,7 +11,9 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
+import { importSource } from "./source-modules.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, repoRoot), "utf8");
@@ -51,10 +53,14 @@ test("nothing shipped leads to the LINE official account", () => {
   assert.deepEqual(skillHits, []);
 });
 
-test("the help menu and the community button open the website's home page", () => {
-  const links = read("packages/protocol/src/brand-links.ts");
-  assert.match(links, /const WEBSITE = `https:\/\/\$\{WEBSITE_HOST\}`;/);
-  assert.match(links, /const WEBSITE_HOST = "aiot\.woowtech\.io";/);
+const brand = appliedBrand();
+const brandLinks = async () =>
+  (await importSource("packages/protocol/src/brand-links.ts")).BRAND_LINKS;
+
+test("the help menu and the community button open the website's home page", async () => {
+  const { website, docs } = await brandLinks();
+  assert.equal(website, `https://${brand.links.websiteHost}`);
+  assert.deepEqual(new Set(Object.values(docs)), new Set([website]));
 
   const helpMenu = read("packages/app/src/components/sidebar/sidebar-help-menu.tsx");
   assert.match(helpMenu, /openExternalUrl\(BRAND_LINKS\.website\)/);
@@ -64,4 +70,25 @@ test("the help menu and the community button open the website's home page", () =
 
   // The item's label names the website in every language, not LINE.
   assert.doesNotMatch(read("packages/app/src/i18n/support-copy.ts"), /LINE/);
+});
+
+// Apple (App Store Review Guideline 5.1.1) and Google Play want the privacy policy reachable
+// inside the app as well as in the store listing. It is on the brand's website: woowtech smart's
+// is a Help Center post that holds both languages, Apporo smart's has a page per language.
+test("Settings > About opens the privacy policy on the website", async () => {
+  const { website, privacyPolicy, privacyPolicyZh } = await brandLinks();
+  for (const policy of [privacyPolicy, privacyPolicyZh]) {
+    assert.ok(policy.startsWith(`${website}/`), `${policy} is not on ${website}`);
+  }
+  assert.equal(privacyPolicy, brand.links.privacyPolicy);
+  assert.equal(privacyPolicyZh, brand.links.privacyPolicyZh);
+  const row = read("packages/app/src/screens/settings/woowtech-privacy-policy-row.tsx");
+  assert.match(
+    row,
+    /isChinese \? BRAND_LINKS\.privacyPolicyZh : BRAND_LINKS\.privacyPolicy;/,
+    "the row opens another address",
+  );
+  assert.match(row, /openExternalUrl\(policyUrl\)/);
+  const settings = read("packages/app/src/screens/settings-screen.tsx");
+  assert.match(settings, /<WhatsNewRow \/>[\s\S]{0,200}<WoowtechPrivacyPolicyRow \/>/);
 });

@@ -123,7 +123,7 @@ export async function findExecutable(
 
   if (process.platform === "win32") {
     // woowtech smart: a program installed while the app runs is found after re-reading the saved
-    // PATH (README §25, plan G29).
+    // PATH (README §31, plan G29).
     return findWithWindowsPathRefresh({
       lookup: () =>
         windowsExecutableResolution.find(trimmed, {

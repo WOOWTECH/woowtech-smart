@@ -16,6 +16,9 @@ import {
   ENABLE_BUILT_IN_DAEMON_OPTION_ID,
   getHostPickerLabel,
   buildHostPickerOptions,
+  hostIdTag,
+  hostsSharingAName,
+  hostSubtitle,
 } from "./host-picker-constants";
 
 export {
@@ -23,6 +26,8 @@ export {
   ALL_HOSTS_OPTION_ID,
   ENABLE_BUILT_IN_DAEMON_OPTION_ID,
   getHostPickerLabel,
+  hostIdTag,
+  hostsSharingAName,
 };
 
 const SEARCHABLE_THRESHOLD = 10;
@@ -55,10 +60,27 @@ function formatActiveConnectionLabel(connection: ActiveConnection, t: TFunction)
   return formatConnectionEndpoint(connection.endpoint);
 }
 
+/**
+ * The address a host is reached at, shown under its name: two hosts often share a name (two
+ * daemons on one computer, or two computers left with the same default name).
+ */
+export function useHostConnectionLabel(serverId: string): string | undefined {
+  const { t } = useTranslation();
+  const activeConnection = useHostRuntimeSnapshot(serverId)?.activeConnection ?? null;
+  return activeConnection ? formatActiveConnectionLabel(activeConnection, t) : undefined;
+}
+
+export function useHostSubtitle(serverId: string, sharesName: boolean): string | undefined {
+  const connectionLabel = useHostConnectionLabel(serverId);
+  return hostSubtitle({ connectionLabel, serverId, sharesName });
+}
+
 export interface HostPickerOptionProps {
   serverId: string;
   label: string;
   showActiveConnection: boolean;
+  /** Another host in the list has the same name. */
+  sharesName?: boolean;
   selected?: boolean;
   active: boolean;
   onPress: () => void;
@@ -70,6 +92,7 @@ export function HostPickerOption({
   serverId,
   label,
   showActiveConnection,
+  sharesName,
   selected,
   active,
   onPress,
@@ -78,11 +101,8 @@ export function HostPickerOption({
 }: HostPickerOptionProps): ReactElement {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const activeConnection = useHostRuntimeSnapshot(serverId)?.activeConnection ?? null;
-  const connectionLabel =
-    showActiveConnection && activeConnection
-      ? formatActiveConnectionLabel(activeConnection, t)
-      : undefined;
+  const subtitle = useHostSubtitle(serverId, sharesName === true);
+  const connectionLabel = showActiveConnection || sharesName ? subtitle : undefined;
   const leadingSlot = useMemo(() => <HostStatusDotSlot serverId={serverId} />, [serverId]);
   const handleSettingsPress = useCallback(
     (event: GestureResponderEvent) => {
@@ -223,6 +243,7 @@ export function HostPicker({
   );
 
   const isSearchable = searchable === true && orderedHosts.length > SEARCHABLE_THRESHOLD;
+  const sharedNames = useMemo(() => hostsSharingAName(hosts), [hosts]);
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -286,6 +307,7 @@ export function HostPicker({
           serverId={option.id}
           label={option.label}
           showActiveConnection={showActiveConnection === true}
+          sharesName={sharedNames.has(option.id)}
           selected={selected}
           active={active}
           onPress={onPress}
@@ -300,6 +322,7 @@ export function HostPicker({
       onOpenHostSettings,
       showActiveConnection,
       handleOpenHostSettings,
+      sharedNames,
     ],
   );
 

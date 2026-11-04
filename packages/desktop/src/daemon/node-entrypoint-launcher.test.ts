@@ -41,7 +41,7 @@ describe("node-entrypoint-launcher", () => {
       });
     });
 
-    // woowtech smart: a packaged test build offers the mock providers (README §25, G26).
+    // woowtech smart: a packaged test build offers the mock providers (README §31, G26).
     it("runs a packaged test build's node entrypoints in development mode", () => {
       const invocation = createNodeEntrypointInvocation({
         execPath: "C:\\Programs\\woowtech smart\\woowtech smart.exe",

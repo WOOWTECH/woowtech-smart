@@ -78,6 +78,8 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { useToast } from "@/contexts/toast-context";
 import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 import { useOpenDirectoryInEditor } from "@/workspace/open-in-editor/directory";
+import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { useRetryExplorerOnReconnect } from "@/components/woowtech-file-explorer-reconnect";
 
 const SORT_OPTIONS: { value: SortOption }[] = [
   { value: "name" },
@@ -1041,6 +1043,14 @@ export function FileExplorerPane({
       setCurrentPath: false,
     });
   }, [requestDirectoryListing]);
+
+  // woowtech smart: reload once the host is back (components/woowtech-file-explorer-reconnect.ts).
+  const isHostConnected = useHostRuntimeIsConnected(serverId);
+  useRetryExplorerOnReconnect({
+    isConnected: isHostConnected,
+    hasError: Boolean(error),
+    retry: handleRetry,
+  });
 
   if (!hasWorkspaceScope) {
     return (

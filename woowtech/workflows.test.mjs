@@ -17,6 +17,8 @@ import { promisify } from "node:util";
 
 import YAML from "yaml";
 
+import { appliedBrandId, loadBrand } from "./brands/index.cjs";
+
 const workflowsDir = new URL("../.github/workflows/", import.meta.url);
 const desktopDir = new URL("../packages/desktop/", import.meta.url);
 
@@ -47,7 +49,8 @@ const ENABLED = ["ci.yml"];
 // Disabled in GitHub: Actions → the workflow → ··· → Disable workflow.
 const DISABLED_IN_UI = {
   "android-apk-release.yml": "builds on upstream's EAS project and uploads to a GitHub release",
-  "deploy-app.yml": "deploys the web app to upstream's Cloudflare Pages project",
+  "deploy-app.yml":
+    "runs deploy:web, which now calls woowtech/scripts/deploy-web.sh (needs the owner's wrangler login on the Mac)",
   "deploy-relay.yml": "deploys upstream's relay config; ours is deployed by hand",
   "deploy-website.yml": "deploys paseo.sh to upstream's Cloudflare account",
   "desktop-release.yml": "builds on macOS and Windows runners and publishes a GitHub release",
@@ -77,36 +80,17 @@ test("every workflow file is either enabled or disabled in GitHub's UI", () => {
   );
 });
 
-test("CI runs weekly, on pull requests and on demand, not on every push to main", () => {
+test("CI runs on every push to main, on pull requests and on demand, as upstream does", () => {
+  // The repository is public since 2026-10-08, so standard runners cost no minutes. While it
+  // was private (GitHub Free, 2,000 minutes a month) CI ran weekly instead.
   const { on } = workflow("ci.yml");
-  const message =
-    "A CI run takes about 125 of GitHub Free's 2,000 private-repo minutes a month, or 275 " +
-    "with Playwright. Ten full runs a working day would need about 30 times the month's " +
-    "minutes; the weekly run without Playwright takes about a quarter.";
-  assert.deepEqual(
-    Object.keys(on).sort(),
-    ["merge_group", "pull_request", "schedule", "workflow_dispatch"],
-    message,
-  );
-  const weekly = /^\d{1,2} \d{1,2} \* \* [0-6]$/;
-  assert.deepEqual(
-    on.schedule.map(({ cron }) => weekly.test(cron)),
-    [true],
-    message,
-  );
-});
-
-test("CI's weekly run skips change detection, which has no default branch to compare with", () => {
-  // dorny/paths-filter reads the default branch from the event payload, and a
-  // schedule event's payload does not carry the repository, so the action fails
-  // there. Outside pull requests every job runs whatever it detects.
-  const pathFilters = workflow("ci.yml").jobs.changes.steps.filter(({ uses }) =>
-    String(uses).startsWith("dorny/paths-filter@"),
-  );
-  assert.deepEqual(
-    pathFilters.map((step) => step.if),
-    ["github.event_name != 'schedule'"],
-  );
+  assert.deepEqual(Object.keys(on).sort(), [
+    "merge_group",
+    "pull_request",
+    "push",
+    "workflow_dispatch",
+  ]);
+  assert.deepEqual(on.push, { branches: ["main"] });
 });
 
 /**
@@ -428,11 +412,16 @@ test("CI's Ubuntu desktop job may run for an hour", () => {
 
 test("CI's RPM smoke first removes the deb package our desktop build installed", async () => {
   // Upstream's deb is `paseo`. dpkg only warns about a package that is not installed,
-  // so a stale name leaves the deb's files in place to hide what the RPM misses.
+  // so a stale name leaves the deb's files in place to hide what the RPM misses. CI builds
+  // woowtech smart, whose deb is named after its desktop app id.
   const removed = workflow("ci.yml").jobs["desktop-tests-ubuntu"].steps.flatMap(({ run }) =>
     [...String(run ?? "").matchAll(/\bdpkg --remove (\S+)/g)].map(([, name]) => name),
   );
-  assert.deepEqual(removed, [await debPackageName()]);
+  const woowtechDeb = loadBrand("woowtech").desktop.appId.toLowerCase();
+  assert.deepEqual(removed, [woowtechDeb]);
+  if (appliedBrandId() === "woowtech") {
+    assert.equal(await debPackageName(), woowtechDeb);
+  }
 });
 
 test("the pre-commit hook formats and lints .mjs files, as CI does", () => {

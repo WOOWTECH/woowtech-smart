@@ -113,6 +113,7 @@ import {
   type MarkdownCopyInlineTag,
 } from "@/assistant-selection-copy/markup";
 import { capAssistantMessageForRender, getUtf8ByteLength } from "./assistant-message-render-limit";
+import { AiContentReportAction } from "@/components/ai-content-report/ai-content-report-sheet";
 export type { InlinePathTarget } from "@/assistant-file-links";
 export type { AssistantForkTarget };
 
@@ -451,9 +452,11 @@ export const UserMessage = memo(function UserMessage({
   const hasImages = images.length > 0;
   const hasAttachments = attachments.length > 0;
   const showTrailingRow = !isPending && hasText && (isCompact || isNative || isHovered);
+  // woowtech smart: in the app language, and again when it changes (utils/time.ts appDateLocale).
+  const dateLocale = t("woowtech.time.dateLocale");
   const formattedTimestamp = useMemo(
-    () => formatMessageTimestamp(new Date(timestamp)),
-    [timestamp],
+    () => formatMessageTimestamp(new Date(timestamp), new Date(), dateLocale),
+    [timestamp, dateLocale],
   );
   const rewindMutation = useRewindAgentMutation({ serverId, agentId, client, messageId });
 
@@ -647,9 +650,11 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
         : "",
     [durationMs, t],
   );
+  // woowtech smart: in the app language, and again when it changes (utils/time.ts appDateLocale).
+  const dateLocale = t("woowtech.time.dateLocale");
   const timestampLabel = useMemo(
-    () => (completedAt ? formatMessageTimestamp(completedAt) : ""),
-    [completedAt],
+    () => (completedAt ? formatMessageTimestamp(completedAt, new Date(), dateLocale) : ""),
+    [completedAt, dateLocale],
   );
 
   const primaryLabel = durationLabel || timestampLabel;
@@ -1512,6 +1517,7 @@ export const AssistantMessage = memo(function AssistantMessage({
     [],
   );
   const renderedMessage = useMemo(() => capAssistantMessageForRender(message), [message]);
+  const getReportContent = useCallback(() => message, [message]);
   // Paint a paced prefix while the turn is streaming so text arrives at a steady
   // rate instead of in whatever lumps the daemon's coalescing window produced.
   const revealedMessage = useRevealedText(renderedMessage.text, phase);
@@ -2009,6 +2015,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           {t("agentStream.messageCapped", { bytes: fullMessageByteLength })}
         </Text>
       ) : null}
+      {phase === "complete" ? <AiContentReportAction getContent={getReportContent} /> : null}
     </View>
   );
 });

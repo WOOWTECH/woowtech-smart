@@ -1,4 +1,5 @@
 import { i18n } from "@/i18n/i18next";
+import { woowtechModeLabel } from "./woowtech-mode-labels";
 
 interface ControlLabelInput {
   id: string;
@@ -29,7 +30,10 @@ function formatControlLabel(option: ControlLabelInput, splitHyphen: boolean): st
 }
 
 export function formatAgentModeLabel(mode: ControlLabelInput): string {
-  return formatControlLabel(mode, mode.label == null);
+  // woowtech smart: Traditional Chinese for the built-in providers' mode names.
+  return (
+    woowtechModeLabel(mode.label, i18n.language) ?? formatControlLabel(mode, mode.label == null)
+  );
 }
 
 export function formatThinkingOptionLabel(option: ControlLabelInput): string {

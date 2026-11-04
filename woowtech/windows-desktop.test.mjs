@@ -1,10 +1,14 @@
-// Merge guards for the Windows desktop seams (README §25): tray parity with the macOS Dock,
+// Merge guards for the Windows desktop seams (README §31): tray parity with the macOS Dock,
 // protocol toasts and launch-link redaction. The macOS Notification Center relaunch has its own
 // guard (desktop-notification-launch.test.mjs). The policies have unit tests in
 // packages/desktop/src/features/woowtech-*.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
+
+import YAML from "yaml";
+
+import { appliedBrand } from "./brands/index.cjs";
 
 function source(path) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -65,7 +69,7 @@ test("the packaged Windows app registers woowtech-smart: before notifications ar
   );
   const builder = source("packages/desktop/electron-builder.yml");
   assert.match(builder, /protocols:\s*\n\s*- name: [^\n]+\n\s*schemes:\s*\n\s*- woowtech-smart/);
-  // Electron's own Start Menu link and the NSIS one must be the same file (README §25).
+  // Electron's own Start Menu link and the NSIS one must be the same file (README §31).
   assert.doesNotMatch(builder, /shortcutName:/);
   assert.match(builder, /- from: assets\/icon.ico\s*\n\s*to: icon.ico/);
   const winSection = builder.slice(builder.indexOf("\nwin:"), builder.indexOf("\nnsis:"));
@@ -79,21 +83,18 @@ test("the Windows installer is x64 only, whatever the command line says (D11)", 
   assert.match(winSection, /- target: nsis\n\s+arch:\n\s+- x64$/);
 });
 
-test("Windows names WOOW TECH, not upstream's author, as the publisher", () => {
-  const builder = source("packages/desktop/electron-builder.yml");
-  const metadata = builder.slice(
-    builder.indexOf("\nextraMetadata:"),
-    builder.indexOf("\ntoolsets:"),
-  );
+test("Windows names the brand's company, not upstream's author, as the publisher", () => {
+  const brand = appliedBrand();
+  const { extraMetadata } = YAML.parse(source("packages/desktop/electron-builder.yml"));
   // electron-builder reads CompanyName and the Apps & features publisher from author.name, and
   // the installer's FileDescription from description. package.json still has upstream's.
-  assert.match(metadata, /author:\n\s+name: "WOOW TECH CO\., LTD\."\n/);
-  assert.match(metadata, /description: woowtech smart/);
+  assert.equal(extraMetadata.author.name, brand.company.copyright.replace(/^© \d{4} /, ""));
+  assert.equal(extraMetadata.description, `${brand.name} desktop app`);
 });
 
 test("the Windows build does not need the symlink privilege", () => {
   // Without this electron-builder unpacks the legacy winCodeSign archive, which holds symlinks,
-  // and a normal Windows account fails with exit status 2 (README §25).
+  // and a normal Windows account fails with exit status 2 (README §31).
   const builder = source("packages/desktop/electron-builder.yml");
   assert.match(builder, /\ntoolsets:\n\s+winCodeSign: "1\.1\.0"\n/);
 });
@@ -168,10 +169,8 @@ test("a real Windows uninstall removes the app's registrations and keeps user da
   const packageName = builder.match(/extraMetadata:\s*\n\s*name: (\S+)/)[1];
   assert.equal(define("WOOWTECH_UPDATER_CACHE"), `${packageName.toLowerCase()}-updater`);
   // ${APP_ID} names Windows' notification settings key, which belongs to the AUMID.
-  assert.equal(
-    builder.match(/^appId: (\S+)$/m)[1],
-    ids.match(/WOOWTECH_DESKTOP_APP_ID = "([^"]+)"/)[1],
-  );
+  assert.equal(builder.match(/^appId: (\S+)$/m)[1], appliedBrand().desktop.appId);
+  assert.match(ids, /WOOWTECH_DESKTOP_APP_ID = DESKTOP_APP_ID;/);
   // Install CLI writes the trampoline whose second line the uninstaller checks (G16).
   const shim = source("packages/desktop/src/integrations/cli-install/woowtech-windows-cli-shim.ts");
   assert.equal(

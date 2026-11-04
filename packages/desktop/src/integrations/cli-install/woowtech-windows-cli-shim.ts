@@ -1,5 +1,5 @@
 // woowtech smart: the Windows trampoline Settings > Install CLI writes to
-// %USERPROFILE%\.local\bin\woowtech-smart.cmd (woowtech/README.md §25, plan G16; a port of
+// %USERPROFILE%\.local\bin\woowtech-smart.cmd (woowtech/README.md §31, plan G16; a port of
 // upstream PR #4696). cmd.exe reads batch files in the console's OEM code page (950 on Traditional
 // Chinese Windows), so a Chinese user name in the baked-in install path turns into mojibake and the
 // trampoline never finds the bundled CLI. The path goes through the variable it lives under

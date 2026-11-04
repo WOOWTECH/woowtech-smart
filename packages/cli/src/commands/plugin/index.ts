@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { Command } from "commander";
 import path from "node:path";
 import type {
@@ -115,7 +116,7 @@ async function install(
   _command: Command,
 ): Promise<SingleResult<PluginListItem>> {
   process.stderr.write(
-    "Trusting plugin code: server code and Git build commands run unsandboxed on the daemon host; client code runs inside woowtech smart. Dependencies and future updates are part of the codebase you trust.\n",
+    `Trusting plugin code: server code and Git build commands run unsandboxed on the daemon host; client code runs inside ${PRODUCT_NAME}. Dependencies and future updates are part of the codebase you trust.\n`,
   );
   const isExplicitPath =
     path.isAbsolute(source) ||

@@ -1,3 +1,5 @@
+import { pathExtension } from "@/desktop/attachments/woowtech-attachment-extension";
+
 const RASTER_IMAGE_MIME_TYPE_BY_EXTENSION: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -20,12 +22,9 @@ export const RASTER_IMAGE_FILE_EXTENSIONS = Object.keys(RASTER_IMAGE_MIME_TYPE_B
 );
 
 export function getFileExtension(path: string): string {
-  const normalizedPath = path.split("#", 1)[0]?.split("?", 1)[0] ?? path;
-  const extensionIndex = normalizedPath.lastIndexOf(".");
-  if (extensionIndex < 0) {
-    return "";
-  }
-  return normalizedPath.slice(extensionIndex).toLowerCase();
+  // woowtech smart: a local file name keeps its "#" and "?", and only the last path segment has the
+  // extension (desktop/attachments/woowtech-attachment-extension.ts pathExtension).
+  return pathExtension(path);
 }
 
 export function getFileTypeLabel(path: string): string | null {

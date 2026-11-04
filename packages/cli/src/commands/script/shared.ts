@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { DaemonTarget } from "../../utils/daemon-target.js";
 import { resolve } from "node:path";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
@@ -61,8 +62,8 @@ export async function resolveWorkspaceScriptWorkspaceId(
   }
   throw {
     code: "WORKSPACE_NOT_FOUND",
-    message: `No woowtech smart workspace found for ${cwd}`,
-    details: "Open the directory in woowtech smart first, or pass --workspace <workspace-id>.",
+    message: `No ${PRODUCT_NAME} workspace found for ${cwd}`,
+    details: `Open the directory in ${PRODUCT_NAME} first, or pass --workspace <workspace-id>.`,
   } satisfies CommandError;
 }
 

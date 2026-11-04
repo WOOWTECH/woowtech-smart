@@ -46,9 +46,13 @@ describe("product name in translations", () => {
   });
 
   it("leaves no translation naming Paseo, including strings upstream adds later", () => {
+    // The notices page credits the project woowtech smart is derived from, as the Apache License
+    // 2.0 (section 4) asks: a title and one sentence, in English and in Traditional Chinese.
+    const credit =
+      /^Paseo — Apache|derived from Paseo\. This section reproduces Paseo's copyright|^渥屋智能改作自 Paseo。本節重製 Paseo 的著作權聲明/;
     for (const language of Object.keys(i18n.store.data)) {
-      const naming = allStrings(i18n.getResourceBundle(language, "translation")).filter((text) =>
-        text.includes("Paseo"),
+      const naming = allStrings(i18n.getResourceBundle(language, "translation")).filter(
+        (text) => text.includes("Paseo") && !credit.test(text),
       );
       expect({ language, naming }).toEqual({ language, naming: [] });
     }

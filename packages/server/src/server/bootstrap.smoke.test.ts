@@ -525,6 +525,13 @@ describe("paseo daemon bootstrap", () => {
     const paseoHome = path.join(paseoHomeRoot, ".paseo");
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));
     await mkdir(paseoHome, { recursive: true });
+    // woowtech smart: Hub connections stay off unless daemon.hub.enabled is true (woowtech/README.md
+    // section 28); without it the enrollment below never starts.
+    await writeFile(
+      path.join(paseoHome, "config.json"),
+      `${JSON.stringify({ version: 1, daemon: { hub: { enabled: true } } })}\n`,
+      "utf-8",
+    );
     await writeFile(
       path.join(paseoHome, "hub-relationship.json"),
       `${JSON.stringify({

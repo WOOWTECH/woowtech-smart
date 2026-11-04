@@ -44,6 +44,7 @@ import {
 } from "@/desktop/daemon/desktop-daemon-transport";
 import { getDesktopHost } from "@/desktop/host";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 import { BROWSER_AUTOMATION_COMMAND_NAMES } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 import {
   useSessionStore,
@@ -86,6 +87,8 @@ import {
   observeHostLabelServerInfo,
   type HostLabelServerInfo,
 } from "./woowtech-host-label";
+import { confirmProbedHost } from "./woowtech-host-confirmations";
+import { shouldAutoProbeLocalhost } from "./woowtech-localhost-probe-policy";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
 export type HostRegistryStatus = "loading" | "ready";
@@ -1345,7 +1348,7 @@ export class HostRuntimeController {
 }
 
 const REGISTRY_STORAGE_KEY = "@paseo:daemon-registry";
-const LOCALHOST_FALLBACK_ENDPOINT = "localhost:6770";
+const LOCALHOST_FALLBACK_ENDPOINT = `localhost:${DEFAULT_DAEMON_PORT}`;
 const DEFAULT_LOCALHOST_BOOTSTRAP_TIMEOUT_MS = 2500;
 const E2E_STORAGE_KEY = "@paseo:e2e";
 const INITIAL_DAEMON_CONNECTION_HINT_GLOBAL_KEY = "__PASEO_INITIAL_DAEMON_CONNECTION__";
@@ -1503,6 +1506,8 @@ export class HostRuntimeStore {
       }
     }
 
+    // woowtech smart: runtime/woowtech-localhost-probe-policy.ts decides, the override included.
+    if (!shouldAutoProbeLocalhost()) return;
     if (override) {
       this.bootstrapConfiguredOverride(override);
     } else {
@@ -1787,6 +1792,14 @@ export class HostRuntimeStore {
       host: probeHost,
       connection: input.connection,
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+    });
+    // woowtech smart: a probe cannot prove who answered (runtime/woowtech-host-confirmations.ts).
+    await confirmProbedHost({
+      serverId,
+      connection: input.connection,
+      savedHosts: this.hosts,
+      client,
+      background: input.timeoutMs !== undefined,
     });
     const profile = await this.upsertHostConnection({
       serverId,

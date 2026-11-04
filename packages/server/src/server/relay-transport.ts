@@ -141,9 +141,13 @@ export function startRelayTransport({
       clearTimeout(controlReadyTimeout);
       controlReadyTimeout = null;
     }
+    // woowtech smart: cut the sockets instead of closing them. A graceful close waits for the relay
+    // to answer (it did not, and an offline relay never can), and the daemon's shutdown waits for
+    // these sockets: it was killed by its 10 s deadline. The relay drops the paired client sockets,
+    // and the apps reconnect.
     if (controlWs) {
       try {
-        controlWs.close();
+        controlWs.terminate();
       } catch {
         // ignore
       }
@@ -151,7 +155,7 @@ export function startRelayTransport({
     }
     for (const ws of dataSockets.values()) {
       try {
-        ws.close();
+        ws.terminate();
       } catch {
         // ignore
       }

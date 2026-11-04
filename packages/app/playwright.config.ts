@@ -25,6 +25,11 @@ export default defineConfig({
   workers: Number(process.env.E2E_WORKERS ?? (process.env.CI ? "2" : "1")),
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
+  // woowtech smart: Node loads the built packages as they are. Playwright keeps one transpiled
+  // copy of each file, so a dist module that test code requires first (protocol's brand-values,
+  // through the app's host-routes) reaches the client's later import() as CommonJS, and the
+  // import fails with "does not provide an export named".
+  build: { external: ["**/packages/*/dist/**"] },
   use: {
     baseURL,
     trace: process.env.CI ? "on-first-retry" : "retain-on-failure",

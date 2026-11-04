@@ -1,5 +1,6 @@
 import type { ServerCapabilityState } from "@getpaseo/protocol/messages";
 import type { DaemonServerInfo } from "@/stores/session-store";
+import { voiceUnavailableText } from "@/voice/woowtech-voice-readiness-copy";
 
 export type VoiceReadinessMode = "dictation" | "voice";
 
@@ -44,7 +45,8 @@ export function resolveVoiceUnavailableMessage(params: {
   }
   const message = readiness.reason.trim();
   if (message.length > 0) {
-    return message;
+    // woowtech smart: the daemon's English in the app language (voice/woowtech-voice-readiness-copy.ts).
+    return voiceUnavailableText(message);
   }
   return null;
 }

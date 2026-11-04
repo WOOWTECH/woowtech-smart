@@ -1,4 +1,4 @@
-; woowtech smart: Windows installer customizations (woowtech/README.md section 25, plan G6, D14, D15).
+; woowtech smart: Windows installer customizations (woowtech/README.md section 31, plan G6, D14, D15).
 ; electron-builder includes build/installer.nsh by itself and compiles it twice, into the
 ; uninstaller and into the installer, with makensis -WX, so any warning fails the build. Hence no
 ; Var and no Function here, and registers are saved with Push/Pop (${isUpdated} itself uses $R9).

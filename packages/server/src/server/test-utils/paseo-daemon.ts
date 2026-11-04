@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 
 import pino from "pino";
 import {
@@ -51,6 +51,8 @@ interface TestPaseoDaemonOptions {
   autoArchiveAfterMerge?: boolean;
   pluginsEnabled?: PaseoDaemonConfig["pluginsEnabled"];
   plugins?: PaseoDaemonConfig["plugins"];
+  /** woowtech smart: write daemon.hub.enabled: true into the home's config.json (hub/woowtech-hub-gate.ts). */
+  hubEnabled?: boolean;
 }
 
 export interface TestPaseoDaemon {
@@ -63,6 +65,7 @@ export interface TestPaseoDaemon {
 }
 
 const TEST_DAEMON_START_TIMEOUT_MS = 20_000;
+const HUB_ENABLED_CONFIG = `${JSON.stringify({ version: 1, daemon: { hub: { enabled: true } } })}\n`;
 
 async function startDaemonWithTimeout(
   daemon: Awaited<ReturnType<typeof createPaseoDaemon>>,
@@ -176,6 +179,7 @@ async function prepareTestDaemonConfig(
   const paseoHomeRoot = options.paseoHomeRoot ?? (await createTempDir("paseo-home-", createdDirs));
   const paseoHome = path.join(paseoHomeRoot, ".paseo");
   await mkdir(paseoHome, { recursive: true });
+  if (options.hubEnabled) await writeFile(path.join(paseoHome, "config.json"), HUB_ENABLED_CONFIG);
   const staticDir = options.staticDir ?? (await createTempDir("paseo-static-", createdDirs));
   const listenHost = options.listen ?? "127.0.0.1";
   const listenPort = options.listenPort ?? 0;

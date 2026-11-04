@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { importSource } from "./source-modules.mjs";
+
 function source(path) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 }
@@ -60,7 +62,7 @@ test("renderer uses unknown permission, test policy and visible translated resul
   assert.match(section, /testNotificationState.status === "success"[\s\S]*?variant="success"/);
   const hook = source("packages/app/src/desktop/permissions/use-desktop-permissions.ts");
   assert.match(hook, /await runNotificationTest\(\{/);
-  // woowtech smart: Windows gets its own settings path (README §25, G19).
+  // woowtech smart: Windows gets its own settings path (README §31, G19).
   assert.match(
     hook,
     /const helpKeys = desktopNotificationHelpKeys\(getDesktopHost\(\)\?\.platform\);/,
@@ -185,7 +187,7 @@ test("notification clicks reopen a window and wait for the renderer's PushNotifi
   assert.match(router.slice(take), /openNotification\(data\)/);
 });
 
-test("Windows gets the electron-builder appId as AppUserModelID before the app is ready", () => {
+test("Windows gets the electron-builder appId as AppUserModelID before the app is ready", async () => {
   const desktopMain = source("packages/desktop/src/main.ts");
   const call = desktopMain.indexOf("applyWindowsAppUserModelId({");
   assert.notEqual(call, -1);
@@ -198,5 +200,33 @@ test("Windows gets the electron-builder appId as AppUserModelID before the app i
   const builder = source("packages/desktop/electron-builder.yml");
   const appId = builder.match(/^appId: (\S+)$/m)?.[1];
   assert.ok(appId);
-  assert.ok(helper.includes(`WOOWTECH_DESKTOP_APP_ID = "${appId}"`));
+  assert.ok(helper.includes("WOOWTECH_DESKTOP_APP_ID = DESKTOP_APP_ID;"));
+  const { DESKTOP_APP_ID } = await importSource("packages/protocol/src/brand-desktop.ts");
+  assert.equal(DESKTOP_APP_ID, appId);
+});
+
+// woowtech smart (README section 16): macOS keeps a new app's notifications hidden until the person
+// answers its first-launch prompt, and still reports them shown, so the desktop asks the person.
+test("the desktop asks whether the banner showed, in Settings and once in the sidebar", () => {
+  assert.match(
+    source("packages/app/src/app/_layout.tsx"),
+    /<NotificationBannerCheckCalloutSource \/>/,
+  );
+  const section = source("packages/app/src/desktop/components/desktop-notifications-section.tsx");
+  assert.match(
+    section,
+    /<NotificationBannerCheckPrompt onTestAgain=\{handleSendTestNotification\} \/>/,
+  );
+  assert.match(section, /void loadBannerCheck\(\);/);
+  const permissions = source("packages/app/src/desktop/permissions/use-desktop-permissions.ts");
+  assert.match(permissions, /if \(state\.status === "success"\) askAboutBanner\(\);/);
+  assert.match(
+    permissions,
+    /if \(state\.status === "error" \|\| state\.status === "unconfirmed"\) showBannerHelp\(\);/,
+  );
+  const callout = source(
+    "packages/app/src/desktop/woowtech-notification-banner-check-callout-source.tsx",
+  );
+  assert.match(callout, /if \(!isElectron \|\| !loaded \|\| confirmed\) \{/);
+  assert.match(callout, /dismissalKey: CALLOUT_ID,/, "closing the callout keeps it closed");
 });

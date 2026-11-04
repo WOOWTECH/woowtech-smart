@@ -1,4 +1,4 @@
-// woowtech smart's CLI is the woowtech-smart command. The official Paseo owns
+// The brand's CLI is its own command (woowtech-smart, apporo-smart). The official Paseo owns
 // `paseo`: its desktop app installs ~/.local/bin/paseo, and both apps' terminal
 // hooks call it. These checks run the CLI, the app's translations and the
 // desktop's CLI install from source, and read the sources and the packaging
@@ -22,8 +22,14 @@ import path from "node:path";
 import test from "node:test";
 import YAML from "yaml";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
 import { importSource, requireSource } from "./source-modules.mjs";
+
+// The brand this checkout builds (woowtech/brands): its command and its app's name.
+const brand = appliedBrand();
+const COMMAND = brand.cliCommand;
+const APP_NAME = brand.name;
 
 function read(relativePath) {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -55,13 +61,13 @@ function allStrings(value) {
   return Object.values(value).flatMap(allStrings);
 }
 
-test("every help page the CLI prints names woowtech-smart and woowtech smart", async () => {
+test("every help page the CLI prints names the brand's command and name", async () => {
   // Upstream's help text, rewritten as it prints (packages/cli/src/brand.ts).
   const { createCli } = await importSource("packages/cli/src/cli.ts");
   const pages = withSubcommands(createCli()).map(printedHelp);
 
   assert.deepEqual(
-    pages.filter((page) => !/^Usage: woowtech-smart /m.test(page)),
+    pages.filter((page) => !page.split("\n").some((line) => line.startsWith(`Usage: ${COMMAND} `))),
     [],
   );
   assert.deepEqual(
@@ -73,7 +79,7 @@ test("every help page the CLI prints names woowtech-smart and woowtech smart", a
   );
 });
 
-test("errors the CLI prints name the woowtech-smart command, for people and for agents", async () => {
+test("errors the CLI prints name the brand's command, for people and for agents", async () => {
   const { renderError } = await importSource("packages/cli/src/output/render.ts");
   const error = {
     code: "DAEMON_NOT_RUNNING",
@@ -83,12 +89,12 @@ test("errors the CLI prints name the woowtech-smart command, for people and for 
 
   for (const options of [{ noColor: true }, { format: "json" }, { format: "yaml" }]) {
     const printed = renderError(error, options);
-    assert.match(printed, /woowtech-smart daemon start/, JSON.stringify(options));
+    assert.ok(printed.includes(`${COMMAND} daemon start`), JSON.stringify(options));
     assert.doesNotMatch(printed, UPSTREAM_COMMAND, JSON.stringify(options));
   }
 });
 
-test("the app shows the woowtech-smart command in every language", async () => {
+test("the app shows the brand's command in every language", async () => {
   // Upstream's translations, rewritten as they load (packages/app/src/i18n/brand.ts).
   const { i18n } = requireSource("packages/app/src/i18n/i18next.ts");
   if (!i18n.isInitialized) {
@@ -103,7 +109,7 @@ test("the app shows the woowtech-smart command in every language", async () => {
   assert.deepEqual(showingPaseo, []);
   assert.equal(
     i18n.t("desktop.daemon.fullStatus.hint", { lng: "en" }),
-    "Runs `woowtech-smart daemon status` and shows the output",
+    `Runs \`${COMMAND} daemon status\` and shows the output`,
   );
 });
 
@@ -120,7 +126,7 @@ function macApp(root, name, clis) {
 }
 
 test(
-  "Install CLI adds woowtech-smart and leaves the official Paseo's paseo alone",
+  "Install CLI adds the brand's command and leaves the official Paseo's paseo alone",
   // The stand-in app bundles below are laid out the way macOS lays them out.
   { skip: process.platform !== "darwin" && "macOS app bundle layout" },
   async () => {
@@ -132,7 +138,7 @@ test(
       const localBin = path.join(home, ".local", "bin");
       mkdirSync(localBin, { recursive: true });
       Object.assign(process.env, { HOME: home, SHELL: "/bin/zsh", PATH: "/usr/bin:/bin" });
-      const ourApp = macApp(root, "woowtech smart", ["woowtech-smart", "paseo"]);
+      const ourApp = macApp(root, APP_NAME, [COMMAND, "paseo"]);
       const officialPaseo = path.join(
         macApp(root, "Paseo", ["paseo"]),
         "Resources",
@@ -142,15 +148,15 @@ test(
       symlinkSync(officialPaseo, path.join(localBin, "paseo"));
       // Left behind when our app moved: it runs no CLI of ours.
       symlinkSync(
-        path.join(root, "Moved.app", "Contents", "Resources", "bin", "woowtech-smart"),
-        path.join(localBin, "woowtech-smart"),
+        path.join(root, "Moved.app", "Contents", "Resources", "bin", COMMAND),
+        path.join(localBin, COMMAND),
       );
 
       const { getCliInstallStatus, installCli } = requireSource(
         "packages/desktop/src/integrations/cli-install/install.ts",
         {
           electron: {
-            app: { isPackaged: true, getPath: () => path.join(ourApp, "MacOS", "woowtech smart") },
+            app: { isPackaged: true, getPath: () => path.join(ourApp, "MacOS", APP_NAME) },
           },
           "electron-log/main": { info() {}, warn() {} },
         },
@@ -162,11 +168,11 @@ test(
         "a link that runs another app's CLI counted as ours",
       );
       assert.deepEqual(await installCli(), { installed: true });
-      assert.deepEqual(readdirSync(localBin).sort(), ["paseo", "woowtech-smart"]);
+      assert.deepEqual(readdirSync(localBin).sort(), ["paseo", COMMAND].sort());
       assert.equal(readlinkSync(path.join(localBin, "paseo")), officialPaseo);
       assert.equal(
-        readlinkSync(path.join(localBin, "woowtech-smart")),
-        path.join(ourApp, "Resources", "bin", "woowtech-smart"),
+        readlinkSync(path.join(localBin, COMMAND)),
+        path.join(ourApp, "Resources", "bin", COMMAND),
       );
     } finally {
       for (const [key, value] of Object.entries(launchEnv)) {
@@ -178,7 +184,7 @@ test(
   },
 );
 
-test("the desktop app bundles the CLI as woowtech-smart and keeps paseo for terminal hooks", () => {
+test("the desktop app bundles the CLI as the brand's command and keeps paseo for terminal hooks", () => {
   const builder = YAML.parse(read("packages/desktop/electron-builder.yml"));
   const bundledCli = (platform) =>
     (builder[platform]?.extraResources ?? [])
@@ -190,19 +196,19 @@ test("the desktop app bundles the CLI as woowtech-smart and keeps paseo for term
   // terminals find in the bundle's bin folder, so the shim stays there under
   // that name as well.
   for (const platform of ["mac", "linux"]) {
-    assert.deepEqual(bundledCli(platform), [
-      "bin/paseo -> bin/paseo",
-      "bin/paseo -> bin/woowtech-smart",
-    ]);
+    assert.deepEqual(
+      bundledCli(platform),
+      ["bin/paseo -> bin/paseo", `bin/paseo -> bin/${COMMAND}`].sort(),
+    );
   }
-  assert.deepEqual(bundledCli("win"), [
-    "bin/paseo.cmd -> bin/paseo.cmd",
-    "bin/paseo.cmd -> bin/woowtech-smart.cmd",
-  ]);
+  assert.deepEqual(
+    bundledCli("win"),
+    ["bin/paseo.cmd -> bin/paseo.cmd", `bin/paseo.cmd -> bin/${COMMAND}.cmd`].sort(),
+  );
 });
 
 test("terminal hooks keep upstream's exact text, so both apps install the same hooks", () => {
-  // Paseo and woowtech smart write these hooks into the same agent settings and
+  // Paseo and our brands write these hooks into the same agent settings and
   // recognise them by their text: any difference makes each daemon rewrite the
   // other's on every start. Our terminals reach our CLI through PASEO_HOOK_CLI
   // and the bundle's bin/paseo instead.
@@ -227,7 +233,7 @@ test("terminal hooks keep upstream's exact text, so both apps install the same h
   }
 });
 
-test("hints the CLI prints or returns itself name the woowtech-smart command", () => {
+test("hints the CLI prints or returns itself name the brand's command", () => {
   // Errors go through the CLI's renderError, which names our command. These
   // hints are printed directly or returned as result fields, so they spell out
   // CLI_COMMAND.
@@ -251,7 +257,7 @@ test("hints the CLI prints or returns itself name the woowtech-smart command", (
   );
 });
 
-test("the daemon's, the apps' and the client's messages name the woowtech-smart command", () => {
+test("the daemon's, the apps' and the client's messages name the brand's command", () => {
   // The CLI and the desktop app show the daemon's messages as they are.
   assert.deepEqual(
     findInShippedSources([/(?:^|[\s"'`(])paseo (?:[a-z]|-)/], {
@@ -276,7 +282,7 @@ test("the daemon's, the apps' and the client's messages name the woowtech-smart 
   );
 });
 
-test("the CLI's own messages name woowtech smart", () => {
+test("the CLI's own messages name the brand, not Paseo", () => {
   const naming = findInShippedSources([/\bPaseo\b(?! Hub\b)/], {
     dirs: ["packages/cli/src"],
     skipComments: true,
@@ -292,7 +298,7 @@ test("the CLI's own messages name woowtech smart", () => {
   assert.deepEqual(naming, []);
 });
 
-test("the desktop's CLI install names only woowtech-smart, never Paseo's command", () => {
+test("the desktop's CLI install names only the brand's command, never Paseo's", () => {
   assert.deepEqual(
     findInShippedSources([/["'`]paseo(?:\.cmd)?["'`]/, /\.local[/\\]bin[/\\]paseo\b/], {
       dirs: ["packages/desktop/src/integrations/cli-install"],

@@ -11,6 +11,7 @@ import { usePaneContext, usePaneFocus } from "@/panels/pane-context";
 import { definePanel, type PanelDescriptor } from "@/panels/panel-registry";
 import { queryClient } from "@/data/query-client";
 import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
+import { terminalDisplayName } from "@/terminal/woowtech-terminal-name";
 import { usePanelStore } from "@/stores/panel-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceDirectory, useWorkspaceFields } from "@/stores/session-store-hooks";
@@ -61,9 +62,9 @@ function useTerminalPanelDescriptor(
   );
   const terminal =
     terminalsQuery.data?.terminals.find((entry) => entry.id === target.terminalId) ?? null;
-  const label =
-    trimNonEmpty(terminal?.title ?? terminal?.name ?? null) ??
-    t("workspace.tabs.fallback.terminal");
+  const name = trimNonEmpty(terminal?.title ?? terminal?.name ?? null);
+  // woowtech smart: the daemon's default names in the app language (terminal/woowtech-terminal-name.ts).
+  const label = name ? terminalDisplayName(name, t) : t("workspace.tabs.fallback.terminal");
 
   return {
     label,

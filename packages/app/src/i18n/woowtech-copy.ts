@@ -1,7 +1,13 @@
-// Text only woowtech smart shows, and translations for text upstream hardcodes in
+// Text only the fork shows, and translations for text upstream hardcodes in
 // English. It loads under the `woowtech` key of every language's translations
 // (t("woowtech.changelog.empty.title")), so upstream's locale files stay untouched.
-// Every language has to carry every key: the type is English's shape.
+// Every language has to carry every key: the type is English's shape. The product
+// name is a token that woowtechCopyFor writes as the brand's name (i18n/product-name.ts):
+// {productName} for the English name, {productNameZh} for the Chinese name, with the
+// spaces a Latin name takes beside Chinese text.
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
+import { withProductNames } from "./product-name";
+
 const ENGLISH = {
   changelog: {
     empty: {
@@ -13,13 +19,13 @@ const ENGLISH = {
     browserTools: {
       title: "Browser tools",
       warning:
-        "Allow agents to access and control woowtech smart browser tabs, including logged-in browser state. Only enable this for agents you trust.",
+        "Allow agents to access and control {productName} browser tabs, including logged-in browser state. Only enable this for agents you trust.",
       updating: "Updating browser tools…",
       enable: "Enable browser tools",
     },
     autoArchiveMerged: {
       title: "Archive merged PR workspaces",
-      hint: "Automatically archive clean woowtech smart workspaces after their pull request is merged",
+      hint: "Automatically archive clean {productName} workspaces after their pull request is merged",
       updateFailed: "Unable to update workspaces",
     },
     terminalAgents: {
@@ -61,13 +67,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "瀏覽器工具",
         warning:
-          "允許 Agent 存取並控制渥屋智能的瀏覽器分頁，包括已登入的瀏覽器狀態。只對你信任的 Agent 開啟。",
+          "允許 Agent 存取並控制 {productNameZh} 的瀏覽器分頁，包括已登入的瀏覽器狀態。只對你信任的 Agent 開啟。",
         updating: "正在更新瀏覽器工具…",
         enable: "啟用瀏覽器工具",
       },
       autoArchiveMerged: {
         title: "封存 PR 已合併的工作區",
-        hint: "PR 合併後，自動封存沒有未提交變更的渥屋智能工作區",
+        hint: "PR 合併後，自動封存沒有未提交變更的 {productNameZh} 工作區",
         updateFailed: "無法更新工作區設定",
       },
       terminalAgents: {
@@ -104,13 +110,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "浏览器工具",
         warning:
-          "允许 Agent 访问并控制渥屋智能的浏览器标签页，包括已登录的浏览器状态。仅对你信任的 Agent 启用。",
+          "允许 Agent 访问并控制 {productNameZh} 的浏览器标签页，包括已登录的浏览器状态。仅对你信任的 Agent 启用。",
         updating: "正在更新浏览器工具…",
         enable: "启用浏览器工具",
       },
       autoArchiveMerged: {
         title: "归档 PR 已合并的工作区",
-        hint: "PR 合并后，自动归档没有未提交变更的渥屋智能工作区",
+        hint: "PR 合并后，自动归档没有未提交变更的 {productNameZh} 工作区",
         updateFailed: "无法更新工作区设置",
       },
       terminalAgents: {
@@ -147,13 +153,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "ブラウザツール",
         warning:
-          "エージェントが woowtech smart のブラウザタブにアクセスして操作できるようにします。ログイン中のブラウザの状態も含まれます。信頼できるエージェントにのみ有効にしてください。",
+          "エージェントが {productName} のブラウザタブにアクセスして操作できるようにします。ログイン中のブラウザの状態も含まれます。信頼できるエージェントにのみ有効にしてください。",
         updating: "ブラウザツールを更新しています…",
         enable: "ブラウザツールを有効にする",
       },
       autoArchiveMerged: {
         title: "PR がマージされたワークスペースをアーカイブ",
-        hint: "プルリクエストがマージされたら、未コミットの変更がない woowtech smart のワークスペースを自動的にアーカイブします",
+        hint: "プルリクエストがマージされたら、未コミットの変更がない {productName} のワークスペースを自動的にアーカイブします",
         updateFailed: "ワークスペースの設定を更新できません",
       },
       terminalAgents: {
@@ -190,13 +196,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "브라우저 도구",
         warning:
-          "에이전트가 로그인된 브라우저 상태를 포함해 woowtech smart 브라우저 탭에 접근하고 제어할 수 있도록 허용합니다. 신뢰하는 에이전트에만 사용하세요.",
+          "에이전트가 로그인된 브라우저 상태를 포함해 {productName} 브라우저 탭에 접근하고 제어할 수 있도록 허용합니다. 신뢰하는 에이전트에만 사용하세요.",
         updating: "브라우저 도구 업데이트 중…",
         enable: "브라우저 도구 사용",
       },
       autoArchiveMerged: {
         title: "PR이 병합된 워크스페이스 보관",
-        hint: "풀 리퀘스트가 병합되면 커밋되지 않은 변경 사항이 없는 woowtech smart 워크스페이스를 자동으로 보관합니다",
+        hint: "풀 리퀘스트가 병합되면 커밋되지 않은 변경 사항이 없는 {productName} 워크스페이스를 자동으로 보관합니다",
         updateFailed: "워크스페이스 설정을 업데이트할 수 없습니다",
       },
       terminalAgents: {
@@ -233,13 +239,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "Herramientas del navegador",
         warning:
-          "Permite que los agentes accedan a las pestañas del navegador de woowtech smart y las controlen, incluido el estado de las sesiones iniciadas. Actívalo solo para agentes de confianza.",
+          "Permite que los agentes accedan a las pestañas del navegador de {productName} y las controlen, incluido el estado de las sesiones iniciadas. Actívalo solo para agentes de confianza.",
         updating: "Actualizando las herramientas del navegador…",
         enable: "Activar las herramientas del navegador",
       },
       autoArchiveMerged: {
         title: "Archivar espacios de trabajo con la PR fusionada",
-        hint: "Archiva automáticamente los espacios de trabajo de woowtech smart sin cambios no confirmados cuando se fusiona su pull request",
+        hint: "Archiva automáticamente los espacios de trabajo de {productName} sin cambios no confirmados cuando se fusiona su pull request",
         updateFailed: "No se pudieron actualizar los espacios de trabajo",
       },
       terminalAgents: {
@@ -277,13 +283,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "Outils du navigateur",
         warning:
-          "Autorise les agents à accéder aux onglets du navigateur de woowtech smart et à les contrôler, y compris l'état des sessions connectées. N'activez cette option que pour des agents de confiance.",
+          "Autorise les agents à accéder aux onglets du navigateur de {productName} et à les contrôler, y compris l'état des sessions connectées. N'activez cette option que pour des agents de confiance.",
         updating: "Mise à jour des outils du navigateur…",
         enable: "Activer les outils du navigateur",
       },
       autoArchiveMerged: {
         title: "Archiver les espaces de travail dont la PR est fusionnée",
-        hint: "Archive automatiquement les espaces de travail woowtech smart sans modifications non validées une fois leur pull request fusionnée",
+        hint: "Archive automatiquement les espaces de travail {productName} sans modifications non validées une fois leur pull request fusionnée",
         updateFailed: "Impossible de mettre à jour les espaces de travail",
       },
       terminalAgents: {
@@ -320,13 +326,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "Ferramentas do navegador",
         warning:
-          "Permite que agentes acessem e controlem as abas do navegador do woowtech smart, incluindo o estado das sessões conectadas. Ative apenas para agentes em que você confia.",
+          "Permite que agentes acessem e controlem as abas do navegador do {productName}, incluindo o estado das sessões conectadas. Ative apenas para agentes em que você confia.",
         updating: "Atualizando as ferramentas do navegador…",
         enable: "Ativar as ferramentas do navegador",
       },
       autoArchiveMerged: {
         title: "Arquivar espaços de trabalho com PR mesclado",
-        hint: "Arquiva automaticamente os espaços de trabalho do woowtech smart sem alterações pendentes depois que o pull request deles é mesclado",
+        hint: "Arquiva automaticamente os espaços de trabalho do {productName} sem alterações pendentes depois que o pull request deles é mesclado",
         updateFailed: "Não foi possível atualizar os espaços de trabalho",
       },
       terminalAgents: {
@@ -363,13 +369,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "Инструменты браузера",
         warning:
-          "Разрешает агентам доступ к вкладкам браузера woowtech smart и управление ими, включая состояние входа в аккаунты. Включайте только для агентов, которым доверяете.",
+          "Разрешает агентам доступ к вкладкам браузера {productName} и управление ими, включая состояние входа в аккаунты. Включайте только для агентов, которым доверяете.",
         updating: "Обновление инструментов браузера…",
         enable: "Включить инструменты браузера",
       },
       autoArchiveMerged: {
         title: "Архивировать рабочие пространства с объединёнными PR",
-        hint: "Автоматически архивировать рабочие пространства woowtech smart без незафиксированных изменений после объединения их pull request",
+        hint: "Автоматически архивировать рабочие пространства {productName} без незафиксированных изменений после объединения их pull request",
         updateFailed: "Не удалось обновить рабочие пространства",
       },
       terminalAgents: {
@@ -406,13 +412,13 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
       browserTools: {
         title: "أدوات المتصفح",
         warning:
-          "يسمح للوكلاء بالوصول إلى علامات تبويب متصفح woowtech smart والتحكم فيها، بما في ذلك حالة تسجيل الدخول في المتصفح. فعّل هذا فقط للوكلاء الذين تثق بهم.",
+          "يسمح للوكلاء بالوصول إلى علامات تبويب متصفح {productName} والتحكم فيها، بما في ذلك حالة تسجيل الدخول في المتصفح. فعّل هذا فقط للوكلاء الذين تثق بهم.",
         updating: "جارٍ تحديث أدوات المتصفح…",
         enable: "تفعيل أدوات المتصفح",
       },
       autoArchiveMerged: {
         title: "أرشفة مساحات العمل بعد دمج طلب السحب",
-        hint: "أرشفة مساحات عمل woowtech smart التي لا تحتوي على تغييرات غير ملتزم بها تلقائيًا بعد دمج طلب السحب الخاص بها",
+        hint: "أرشفة مساحات عمل {productName} التي لا تحتوي على تغييرات غير ملتزم بها تلقائيًا بعد دمج طلب السحب الخاص بها",
         updateFailed: "تعذّر تحديث مساحات العمل",
       },
       terminalAgents: {
@@ -637,6 +643,36 @@ const HOST_PICKER_COPY: Readonly<Record<string, typeof HOST_PICKER_ENGLISH>> = {
   "zh-CN": HOST_PICKER_ZH_CN,
 };
 
+// Text upstream hardcodes in English in its components, seen in Traditional Chinese on 2026-09-30
+// (README section 14). English is upstream's text.
+const INTERFACE_TEXT_ENGLISH = {
+  markAsRead: "Mark as read",
+  markAsUnread: "Mark as unread",
+  pinWorkspace: "Pin chat",
+  project: "Project",
+  searchProjects: "Search projects",
+  noProjects: "No projects available.",
+  noMatchingHosts: "No matching hosts",
+  questionPosition: "Question {{index}} of {{total}}",
+  filterBy: "Filter: {{value}}",
+  workspaceProject: "Workspace project",
+  workspaceIsolation: "Workspace isolation",
+};
+
+const INTERFACE_TEXT_ZH_TW: typeof INTERFACE_TEXT_ENGLISH = {
+  markAsRead: "標示為已讀",
+  markAsUnread: "標示為未讀",
+  pinWorkspace: "置頂工作區",
+  project: "專案",
+  searchProjects: "搜尋專案",
+  noProjects: "沒有可用的專案。",
+  noMatchingHosts: "沒有符合的主機",
+  questionPosition: "第 {{index}} 題，共 {{total}} 題",
+  filterBy: "篩選：{{value}}",
+  workspaceProject: "工作區專案",
+  workspaceIsolation: "工作區隔離方式",
+};
+
 const DESKTOP_NOTIFICATIONS_ENGLISH = {
   supported: "Notifications are supported; system permission has not been confirmed.",
   unknown: "System notification permission could not be checked.",
@@ -652,9 +688,9 @@ const DESKTOP_NOTIFICATIONS_ENGLISH = {
   failed:
     "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
   unconfirmedWindows:
-    "Check Settings › System › Notifications and make sure woowtech smart is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
+    "Check Settings › System › Notifications and make sure {productName} is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
   failedWindows:
-    "Check Settings › System › Notifications and make sure woowtech smart is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
+    "Check Settings › System › Notifications and make sure {productName} is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
 };
 
 const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
@@ -669,26 +705,70 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
   unconfirmed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
   failed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
   unconfirmedWindows:
-    "請到「設定 › 系統 › 通知」確認 woowtech smart 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
+    "請到「設定 › 系統 › 通知」確認 {productName} 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
   failedWindows:
-    "請到「設定 › 系統 › 通知」確認 woowtech smart 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
+    "請到「設定 › 系統 › 通知」確認 {productName} 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
 };
 
 const NOTIFICATION_DISPLAY_ENGLISH = {
   title: "Notifications are not showing",
   description:
-    "The system did not show a woowtech smart notification. Notifications may be turned off or not allowed yet.",
+    "The system did not show a {productName} notification. Notifications may be turned off or not allowed yet.",
   sentToPhone: "That notification went to your phone instead.",
-  hostTooOld: "This host can't send them to your phone. Update it to the latest woowtech smart.",
+  hostTooOld: "This host can't send them to your phone. Update it to the latest {productName}.",
   openSettings: "Open notification settings",
 };
 
 const NOTIFICATION_DISPLAY_ZH_TW: typeof NOTIFICATION_DISPLAY_ENGLISH = {
   title: "這台電腦沒有顯示通知",
-  description: "系統沒有顯示 woowtech smart 的通知，可能是通知被關掉，或還沒按「允許」。",
+  description: "系統沒有顯示 {productName} 的通知，可能是通知被關掉，或還沒按「允許」。",
   sentToPhone: "那則通知已改送到你的手機。",
-  hostTooOld: "這台主機無法改送到手機，請把它更新到最新的 woowtech smart。",
+  hostTooOld: "這台主機無法改送到手機，請把它更新到最新的 {productName}。",
   openSettings: "打開通知設定",
+};
+
+const NOTIFICATION_BANNER_CHECK_ENGLISH = {
+  idleTitle: "Check that notifications show up",
+  idleDescription:
+    "Send a test notification and see whether a banner appears at the top right of your screen.",
+  send: "Send test notification",
+  askTitle: "Did you see the banner?",
+  askDescription:
+    "A test notification was just sent. It should appear as a banner at the top right of your screen.",
+  seen: "Yes, I saw it",
+  notSeen: "No",
+  helpTitle: "Notifications are not showing",
+  helpDescription:
+    "In System Settings → Notifications, find {productName}, turn on Allow Notifications and choose Banners or Alerts. Also check that Focus (Do Not Disturb) is off.",
+  openSettings: "Open notification settings",
+  testAgain: "Test again",
+  confirmedHint: "Confirmed: banners appear on this computer.",
+  idleDescriptionWindows:
+    "Send a test notification and see whether a banner appears at the bottom right of your screen.",
+  askDescriptionWindows:
+    "A test notification was just sent. It should appear as a banner at the bottom right of your screen.",
+  helpDescriptionWindows:
+    "In Settings › System › Notifications, turn on notifications and {productName}, and make sure Show notification banners is on. Also check that Focus Assist (Do Not Disturb on Windows 11) is off.",
+};
+
+const NOTIFICATION_BANNER_CHECK_ZH_TW: typeof NOTIFICATION_BANNER_CHECK_ENGLISH = {
+  idleTitle: "確認通知會跳出來",
+  idleDescription: "傳送一則測試通知，看看螢幕右上角有沒有跳出橫幅。",
+  send: "傳送測試通知",
+  askTitle: "你有看到通知橫幅嗎？",
+  askDescription: "剛才傳送了一則測試通知，它會以橫幅出現在螢幕右上角。",
+  seen: "有看到",
+  notSeen: "沒看到",
+  helpTitle: "通知沒有跳出來",
+  helpDescription:
+    "請到「系統設定 → 通知」，找到 {productName}，打開「允許通知」，並把樣式選成「橫幅」或「提示」。也確認「專注模式」（勿擾）沒有開著。",
+  openSettings: "打開通知設定",
+  testAgain: "再測一次",
+  confirmedHint: "已確認：這台電腦的通知會跳出橫幅。",
+  idleDescriptionWindows: "傳送一則測試通知，看看螢幕右下角有沒有跳出橫幅。",
+  askDescriptionWindows: "剛才傳送了一則測試通知，它會以橫幅出現在螢幕右下角。",
+  helpDescriptionWindows:
+    "請到「設定 › 系統 › 通知」，打開通知和 {productName}，並確認「顯示通知橫幅」已開啟。也確認「專注輔助」（Windows 11 叫「請勿打擾」）沒有開著。",
 };
 
 const AGENT_NOTIFICATION_TITLES_ENGLISH = {
@@ -705,9 +785,9 @@ const AGENT_NOTIFICATION_TITLES_ZH_TW: typeof AGENT_NOTIFICATION_TITLES_ENGLISH 
 
 const METADATA_GENERATION_ENGLISH = {
   projectInfo:
-    "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
+    "{productName} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
   description:
-    "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
+    "{productName} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
   automaticHint: "Automatic model selection is inactive while generation is disabled.",
   preferredHint: "Saved model preferences are inactive while generation is disabled.",
   fallbackHint: "This preference is retained; no model is called for metadata generation.",
@@ -715,9 +795,9 @@ const METADATA_GENERATION_ENGLISH = {
 
 const METADATA_GENERATION_ZH_TW: typeof METADATA_GENERATION_ENGLISH = {
   projectInfo:
-    "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。",
+    "{productName} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。",
   description:
-    "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
+    "{productName} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
   automaticHint: "自動產生已停用，目前不會自動選擇模型。",
   preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
   fallbackHint: "此偏好會保留；不會呼叫任何模型來產生後設資料。",
@@ -1089,7 +1169,7 @@ const WORKSPACE_RECOVERY_ENGLISH = {
     "The archived worktree has no branch recorded, so it cannot be restored.",
   project_directory_missing:
     "The source repository needed to restore this worktree no longer exists.",
-  unsupportedAction: "Update woowtech smart to recover this workspace.",
+  unsupportedAction: "Update {productName} to recover this workspace.",
 };
 
 const WORKSPACE_RECOVERY_ZH_TW: typeof WORKSPACE_RECOVERY_ENGLISH = {
@@ -1099,7 +1179,42 @@ const WORKSPACE_RECOVERY_ZH_TW: typeof WORKSPACE_RECOVERY_ENGLISH = {
   workspace_directory_missing: "封存工作區的資料夾已經不存在，無法重新建立。",
   worktree_branch_missing: "這個封存的 worktree 沒有記錄分支，無法恢復。",
   project_directory_missing: "恢復這個 worktree 需要的來源儲存庫已經不存在。",
-  unsupportedAction: "請更新渥屋智能，才能恢復這個工作區。",
+  unsupportedAction: "請更新 {productNameZh}，才能恢復這個工作區。",
+};
+
+// The daemon says why dictation or voice mode is unavailable in English, and the host info carries
+// only those words (voice/woowtech-voice-readiness-copy.ts). The English matches the daemon's text.
+const VOICE_READINESS_ENGLISH = {
+  dictationDisabled: "Dictation is disabled in daemon config.",
+  dictationSttUnavailable: "Dictation is unavailable: speech-to-text service is not ready.",
+  voiceDisabled: "Realtime voice is disabled in daemon config.",
+  voiceTurnDetectionUnavailable:
+    "Realtime voice is unavailable: turn-detection service is not ready.",
+  voiceSttUnavailable: "Realtime voice is unavailable: speech-to-text service is not ready.",
+  voiceTtsUnavailable: "Realtime voice is unavailable: text-to-speech service is not ready.",
+  modelsDownloading:
+    "Voice features are unavailable while models download in the background ({{models}}). Try again in a few minutes.",
+};
+
+const VOICE_READINESS_ZH_TW: typeof VOICE_READINESS_ENGLISH = {
+  dictationDisabled: "主機的設定關閉了聽寫。",
+  dictationSttUnavailable: "無法使用聽寫：主機的語音轉文字服務還沒準備好。",
+  voiceDisabled: "主機的設定關閉了語音模式。",
+  voiceTurnDetectionUnavailable: "無法使用語音模式：主機偵測說話停頓的服務還沒準備好。",
+  voiceSttUnavailable: "無法使用語音模式：主機的語音轉文字服務還沒準備好。",
+  voiceTtsUnavailable: "無法使用語音模式：主機的文字轉語音服務還沒準備好。",
+  modelsDownloading:
+    "主機正在背景下載語音模型（{{models}}），下載完成前無法使用語音功能。請過幾分鐘再試。",
+};
+
+// The daemon's default name for a new terminal (terminal/woowtech-terminal-name.ts). The English
+// matches the daemon's.
+const TERMINAL_NAME_ENGLISH = {
+  numbered: "Terminal {{number}}",
+};
+
+const TERMINAL_NAME_ZH_TW: typeof TERMINAL_NAME_ENGLISH = {
+  numbered: "終端機 {{number}}",
 };
 
 const COMPOSER_ENGLISH = {
@@ -1159,10 +1274,28 @@ const CLAUDE_AUTH_ZH_TW: typeof CLAUDE_AUTH_ENGLISH = {
 // Settings > Trademarks and third-party notices (woowtech/README.md §24). The marks' names,
 // owners, credits and license texts come from screens/settings/woowtech-third-party-notices.ts and
 // stay as their owners write them.
+const PERMISSION_ACTIONS_ENGLISH = {
+  implementWith: "Implement with {{mode}}",
+};
+
+const PERMISSION_ACTIONS_ZH_TW: typeof PERMISSION_ACTIONS_ENGLISH = {
+  implementWith: "以「{{mode}}」實作",
+};
+
+const PRIVACY_POLICY_ENGLISH = {
+  title: "Privacy policy",
+  hint: "What data the app handles and where it goes",
+};
+
+const PRIVACY_POLICY_ZH_TW: typeof PRIVACY_POLICY_ENGLISH = {
+  title: "隱私權政策",
+  hint: "App 處理哪些資料、送到哪裡",
+};
+
 const THIRD_PARTY_NOTICES_ENGLISH = {
   title: "Trademarks and third-party notices",
   statement:
-    "woowtech smart is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.",
+    "{productName} is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.",
   sections: {
     trademarks: "Trademarks",
     agents: "Agents",
@@ -1175,7 +1308,11 @@ const THIRD_PARTY_NOTICES_ENGLISH = {
     fileTypesInfo: "Icons for files written in these languages and formats, in the file explorer.",
     fileTypesChangesTitle: "Changes from the original logos",
     fileTypesChanges:
-      "material-icon-theme redrew these logos as file icons, and woowtech smart tones down their colors. Icons adapted from a logo under a Creative Commons ShareAlike license are shared under that same license.",
+      "material-icon-theme redrew these logos as file icons, and {productName} tones down their colors. Icons adapted from a logo under a Creative Commons ShareAlike license are shared under that same license.",
+    paseo: "Paseo — Apache License 2.0",
+    paseoInfo:
+      "{productName} is derived from Paseo. This section reproduces Paseo's copyright and complete distribution license.",
+    apacheTextTitle: "Apache License 2.0 text",
     mit: "MIT License",
     mitInfo:
       "The MIT License applies to each work below, under the copyright notice listed with it.",
@@ -1194,7 +1331,7 @@ const THIRD_PARTY_NOTICES_ENGLISH = {
 const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   title: "商標與第三方授權",
   statement:
-    "渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。",
+    "{productNameZh} 與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。",
   sections: {
     trademarks: "商標",
     agents: "Agent",
@@ -1207,7 +1344,10 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
     fileTypesInfo: "檔案總管裡，代表這些程式語言與格式的檔案圖示。",
     fileTypesChangesTitle: "與原始標誌的差異",
     fileTypesChanges:
-      "material-icon-theme 把這些標誌重新繪製成檔案圖示，渥屋智能再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。",
+      "material-icon-theme 把這些標誌重新繪製成檔案圖示，{productNameZh} 再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。",
+    paseo: "Paseo — Apache License 2.0",
+    paseoInfo: "{productNameZh} 改作自 Paseo。本節重製 Paseo 的著作權聲明與完整散布授權。",
+    apacheTextTitle: "Apache License 2.0 授權條文",
     mit: "MIT 授權",
     mitInfo: "MIT 授權適用於下列每項作品，著作權聲明列在各項作品下。",
     mitTextTitle: "授權條文",
@@ -1222,9 +1362,122 @@ const THIRD_PARTY_NOTICES_ZH_TW: typeof THIRD_PARTY_NOTICES_ENGLISH = {
   },
 };
 
-/** woowtech smart's own text in `language`. A language upstream adds later reads English. */
-export function woowtechCopyFor(language: string) {
+// The question before a pairing link, a probe or a direct connection adds a host
+// (hosts/woowtech-host-confirmation-sheet.tsx) and the welcome screen's "Connect to this computer"
+// (hosts/woowtech-this-computer-action.ts). The first seven are upstream's
+// pairing.hostConfirmation text word for word (364e6456e). The text names no web address: the
+// web app's address is written in one place (protocol/src/brand-web-app.ts).
+const PAIRING_CONFIRMATION_ENGLISH = {
+  title: "Connect to this host?",
+  description:
+    "This host will be able to run code in this app and reach your other connected hosts. Only connect if you recognize it.",
+  descriptionChanged:
+    "This link changes how you connect to this host. The host will be able to run code in this app and reach your other connected hosts. Only connect if you recognize it.",
+  hostLabel: "Host",
+  fingerprintLabel: "Key fingerprint",
+  relayLabel: "Relay",
+  connect: "Connect",
+  otherRelay:
+    "This link uses a relay other than {productName}'s ({{relay}}). Continue only if you set up that relay yourself.",
+  compareFingerprint:
+    "Compare the key fingerprint with the one shown under Pair device on your computer.",
+  savedRelayLabel: "Saved relay",
+  endpointLabel: "Address",
+  webWarning:
+    "In a browser, the hosts you add are kept in this browser: anyone who can use it can control them. A host you approve can also reach daemons on this computer that let this site connect directly. Only pair in your own browser.",
+  keyChangedTitle: "This host's key has changed",
+  keyChangedDescription:
+    'The key in this link is not the one saved for "{{label}}", so nothing was changed. If you reset the daemon on that computer, remove this host in Settings first, then pair again.',
+  savedHostTitle: 'Add this connection to "{{label}}"?',
+  savedHostDescription:
+    '{{endpoint}} says it is your saved host "{{label}}". A direct connection has no key, so this cannot be checked. Add it only if you are sure this address is that computer: the host will be able to run code in this app.',
+  relayNoTls: "{{endpoint}} (no TLS)",
+  keyUnverifiedTitle: "This link's key could not be checked",
+  keyUnverifiedDescription:
+    '"{{label}}" was added without a key, so this link\'s key can only be checked with that computer itself, and that did not work just now. Nothing was changed. Make sure the computer is on and connected here, then try again. If you reset the daemon on it, remove this host in Settings first, then pair again.',
+  hostIdChangedTitle: 'Is this still "{{label}}"?',
+  hostIdChangedDescription:
+    'This connection ({{endpoint}}) is saved for "{{label}}", but it now comes with a different host ID. If you connect, "{{label}}" becomes that host, and it will be able to run code in this app. Connect only if you reset or reinstalled the daemon behind this connection.',
+  savedServerIdLabel: "Saved host ID",
+  reportedServerIdLabel: "Host ID now",
+  thisComputer: "Connect to this computer",
+  thisComputerFailedTitle: "No daemon found on this computer",
+  thisComputerFailed: `Start the {productName} desktop app or its daemon (localhost:${DEFAULT_DAEMON_PORT}), then try again. If your browser asks to access apps and services on this device, choose Allow.`,
+};
+
+const PAIRING_CONFIRMATION_ZH_TW: typeof PAIRING_CONFIRMATION_ENGLISH = {
+  title: "要連線到這台主機嗎？",
+  description:
+    "這台主機將可以在 {productNameZh} 裡執行程式，也能存取你其他已連線的主機。只有在你認得這台主機時才連線。",
+  descriptionChanged:
+    "這個連結會改變你連到這台主機的方式。這台主機將可以在 {productNameZh} 裡執行程式，也能存取你其他已連線的主機。只有在你認得這台主機時才連線。",
+  hostLabel: "主機",
+  fingerprintLabel: "金鑰指紋",
+  relayLabel: "中繼",
+  connect: "連線",
+  otherRelay:
+    "這個連結用的不是 {productNameZh} 的中繼（{{relay}}）。除非那是你自己架設的中繼，否則不要繼續。",
+  compareFingerprint: "請和你電腦上「配對裝置」畫面顯示的金鑰指紋比對。",
+  savedRelayLabel: "已存的中繼",
+  endpointLabel: "位址",
+  webWarning:
+    "在瀏覽器裡，你加入的主機會存在這個瀏覽器：能使用這個瀏覽器的人，都能控制這些主機。你核准的主機，也能操作這台電腦上允許這個網站直接連線的 daemon。只在你自己的瀏覽器配對。",
+  keyChangedTitle: "這台主機的金鑰變了",
+  keyChangedDescription:
+    "這個連結裡的金鑰，跟這裡為「{{label}}」存的不一樣，所以什麼都沒有改。如果你重設過那台電腦上的 daemon，請先在設定裡移除這台主機，再重新配對。",
+  savedHostTitle: "要替「{{label}}」加入這條連線嗎？",
+  savedHostDescription:
+    "{{endpoint}} 說它是你已存的主機「{{label}}」。直接連線沒有金鑰，無法確認這件事。只有在你確定這個位址就是那台電腦時才加入：加入後，這台主機可以在 {productNameZh} 裡執行程式。",
+  relayNoTls: "{{endpoint}}（無 TLS）",
+  keyUnverifiedTitle: "無法核對這個連結的金鑰",
+  keyUnverifiedDescription:
+    "「{{label}}」加入時沒有金鑰，所以只能向那台電腦本身核對這個連結的金鑰，而剛才沒有成功。什麼都沒有改。請確認那台電腦已開機、並已連上這裡，再試一次。如果你重設過那台電腦上的 daemon，請先在設定裡移除這台主機，再重新配對。",
+  hostIdChangedTitle: "這還是「{{label}}」嗎？",
+  hostIdChangedDescription:
+    "這條連線（{{endpoint}}）原本存在「{{label}}」底下，但現在帶來的主機 ID 不一樣。如果你連線，「{{label}}」就會變成那台主機，並可以在 {productNameZh} 裡執行程式。只有在你重設或重新安裝了這條連線後面的 daemon 時才連線。",
+  savedServerIdLabel: "已存的主機 ID",
+  reportedServerIdLabel: "現在的主機 ID",
+  thisComputer: "連到這台電腦",
+  thisComputerFailedTitle: "這台電腦上找不到 daemon",
+  thisComputerFailed: `請先打開 {productNameZh} 桌面版或啟動 daemon（localhost:${DEFAULT_DAEMON_PORT}），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。`,
+};
+
+// The pairing confirmation, apart from woowtechCopyFor so it stays within the complexity limit.
+function pairingCopyFor(language: string) {
   return {
+    pairingConfirmation:
+      language === "zh-TW" ? PAIRING_CONFIRMATION_ZH_TW : PAIRING_CONFIRMATION_ENGLISH,
+  };
+}
+
+/** The app's text for English the daemon sends: reasons, readiness sentences, default names. */
+function daemonTextCopyFor(language: string) {
+  const traditionalChinese = language === "zh-TW";
+  return {
+    workspaceRecovery: traditionalChinese ? WORKSPACE_RECOVERY_ZH_TW : WORKSPACE_RECOVERY_ENGLISH,
+    voiceReadiness: traditionalChinese ? VOICE_READINESS_ZH_TW : VOICE_READINESS_ENGLISH,
+    terminalName: traditionalChinese ? TERMINAL_NAME_ZH_TW : TERMINAL_NAME_ENGLISH,
+  };
+}
+// The About page's legal entries, apart from woowtechCopyFor so it stays within the complexity limit.
+function legalCopyFor(language: string) {
+  const traditionalChinese = language === "zh-TW";
+  return {
+    thirdPartyNotices: traditionalChinese ? THIRD_PARTY_NOTICES_ZH_TW : THIRD_PARTY_NOTICES_ENGLISH,
+    privacyPolicy: traditionalChinese ? PRIVACY_POLICY_ZH_TW : PRIVACY_POLICY_ENGLISH,
+  };
+}
+
+// The agent stream's own words for provider buttons (agent-stream/woowtech-permission-actions.ts).
+function agentStreamCopyFor(language: string) {
+  return {
+    permissionActions: language === "zh-TW" ? PERMISSION_ACTIONS_ZH_TW : PERMISSION_ACTIONS_ENGLISH,
+  };
+}
+
+/** The fork's own text in `language`. A language upstream adds later reads English. */
+export function woowtechCopyFor(language: string) {
+  return withProductNames({
     ...(WOOWTECH_COPY[language] ?? ENGLISH),
     claudeSdk: language === "zh-TW" ? CLAUDE_SDK_ZH_TW : CLAUDE_SDK_ENGLISH,
     claudeAuth: language === "zh-TW" ? CLAUDE_AUTH_ZH_TW : CLAUDE_AUTH_ENGLISH,
@@ -1233,18 +1486,22 @@ export function woowtechCopyFor(language: string) {
       language === "zh-TW" ? METADATA_GENERATION_ZH_TW : METADATA_GENERATION_ENGLISH,
     addProject: ADD_PROJECT_COPY[language] ?? ADD_PROJECT_ENGLISH,
     hostPicker: HOST_PICKER_COPY[language] ?? HOST_PICKER_ENGLISH,
+    interfaceText: language === "zh-TW" ? INTERFACE_TEXT_ZH_TW : INTERFACE_TEXT_ENGLISH,
     desktopNotifications:
       language === "zh-TW" ? DESKTOP_NOTIFICATIONS_ZH_TW : DESKTOP_NOTIFICATIONS_ENGLISH,
     agentNotificationTitles:
       language === "zh-TW" ? AGENT_NOTIFICATION_TITLES_ZH_TW : AGENT_NOTIFICATION_TITLES_ENGLISH,
     notificationDisplay:
       language === "zh-TW" ? NOTIFICATION_DISPLAY_ZH_TW : NOTIFICATION_DISPLAY_ENGLISH,
+    notificationBannerCheck:
+      language === "zh-TW" ? NOTIFICATION_BANNER_CHECK_ZH_TW : NOTIFICATION_BANNER_CHECK_ENGLISH,
     composer: language === "zh-TW" ? COMPOSER_ZH_TW : COMPOSER_ENGLISH,
     schedules: language === "zh-TW" ? SCHEDULES_ZH_TW : SCHEDULES_ENGLISH,
     time: language === "zh-TW" ? TIME_ZH_TW : TIME_ENGLISH,
     message: language === "zh-TW" ? MESSAGE_ZH_TW : MESSAGE_ENGLISH,
-    workspaceRecovery: language === "zh-TW" ? WORKSPACE_RECOVERY_ZH_TW : WORKSPACE_RECOVERY_ENGLISH,
-    thirdPartyNotices:
-      language === "zh-TW" ? THIRD_PARTY_NOTICES_ZH_TW : THIRD_PARTY_NOTICES_ENGLISH,
-  };
+    ...daemonTextCopyFor(language),
+    ...legalCopyFor(language),
+    ...agentStreamCopyFor(language),
+    ...pairingCopyFor(language),
+  });
 }

@@ -1,6 +1,6 @@
 // woowtech smart: tree-kill 1.2.2 runs `taskkill /pid N /T /F` through cmd.exe without
 // windowsHide. The daemon has no console of its own, so on Windows every kill flashed a
-// console window (woowtech/README.md §25, G11). Run taskkill.exe directly and hidden.
+// console window (woowtech/README.md §31, G11). Run taskkill.exe directly and hidden.
 // tree-kill ignores the signal on Windows and always forces the whole tree; so does this.
 import { execFile } from "node:child_process";
 import path from "node:path";

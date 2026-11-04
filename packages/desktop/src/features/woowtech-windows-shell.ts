@@ -1,13 +1,14 @@
-// woowtech smart: the Windows app behaves like the Mac app (README §25). Closing the last
+// woowtech smart: the Windows app behaves like the Mac app (README §31). Closing the last
 // window leaves the app in the notification area the way macOS leaves it in the Dock: the
 // daemon and agents keep running and, with no window open, the next notification goes to
 // the phones. Quit from the tray menu is Cmd+Q. Opening the app again brings back the
 // existing window instead of adding one.
 
 import path from "node:path";
+import { DESKTOP_APP_NAME } from "@getpaseo/protocol/brand-desktop";
 
 /** electron-builder names the NSIS uninstaller after productName, next to the app's exe. */
-export const WINDOWS_UNINSTALLER_NAME = "Uninstall woowtech smart.exe";
+export const WINDOWS_UNINSTALLER_NAME = `Uninstall ${DESKTOP_APP_NAME}.exe`;
 
 export function windowsUninstallerPath(execPath: string): string {
   return path.win32.join(path.win32.dirname(execPath), WINDOWS_UNINSTALLER_NAME);

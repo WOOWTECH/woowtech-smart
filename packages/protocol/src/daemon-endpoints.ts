@@ -1,3 +1,4 @@
+import { DEFAULT_DAEMON_PORT } from "./brand-daemon.js";
 import { BRAND_RELAY } from "./brand-relay.js";
 
 export interface HostPortParts {
@@ -61,7 +62,7 @@ export function parseHostPort(input: string): HostPortParts {
   if (trimmed.startsWith("[")) {
     const match = trimmed.match(/^\[([^\]]+)\]:(\d{1,5})$/);
     if (!match) {
-      throw new Error("Invalid host:port (expected [::1]:6770)");
+      throw new Error(`Invalid host:port (expected [::1]:${DEFAULT_DAEMON_PORT})`);
     }
     const host = match[1].trim();
     if (!host) throw new Error("Host is required");
@@ -71,7 +72,7 @@ export function parseHostPort(input: string): HostPortParts {
 
   const match = trimmed.match(/^(.+):(\d{1,5})$/);
   if (!match) {
-    throw new Error("Invalid host:port (expected localhost:6770)");
+    throw new Error(`Invalid host:port (expected localhost:${DEFAULT_DAEMON_PORT})`);
   }
   const host = match[1].trim();
   if (!host) throw new Error("Host is required");

@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { Command } from "commander";
 import { isCompleteGitRemote } from "@getpaseo/protocol/git-remote";
 import { connectToDaemon } from "../utils/client.js";
@@ -51,7 +52,7 @@ export async function runCloneCommand(
     throw cmdError(
       "UNSUPPORTED_BY_HOST",
       "This daemon does not support cloning GitHub repos.",
-      "Update the host to a newer woowtech smart version.",
+      `Update the host to a newer ${PRODUCT_NAME} version.`,
     );
   }
 

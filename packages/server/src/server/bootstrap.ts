@@ -171,6 +171,7 @@ import { loadOrCreateDaemonKeyPair } from "./daemon-keypair.js";
 import { createRelayRuntime, type RelayRuntime } from "./relay-runtime.js";
 import { DEFAULT_RELAY_ENDPOINT } from "@getpaseo/protocol/daemon-endpoints";
 import { BRAND_PAIRING } from "@getpaseo/protocol/brand-pairing";
+import { DESKTOP_APP_ORIGIN } from "@getpaseo/protocol/brand-desktop";
 import type { PushNotificationSender } from "./push/index.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
@@ -719,8 +720,8 @@ export async function createPaseoDaemon(
 
   // CORS - allow same-origin + configured origins
   const fixedAllowedOrigins = [
-    // Packaged woowtech smart desktop renderers use the custom woowtech-smart:// scheme.
-    "woowtech-smart://app",
+    // The packaged desktop app's renderers load from the brand's own scheme (woowtech-smart://).
+    DESKTOP_APP_ORIGIN,
     // For TCP, add localhost variants
     ...(listenTarget.type === "tcp"
       ? [

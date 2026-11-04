@@ -1,0 +1,17 @@
+{
+  "name": "woowtech-ai-content-report-cloudrun",
+  "version": "0.1.0",
+  "private": true,
+  "description": "woowtech smart: receiver for AI content reports (Cloud Run + Firestore, behind a Cloudflare Worker)",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "9.3.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -2,10 +2,11 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DESKTOP_APP_ID } from "@getpaseo/protocol/brand-desktop";
 import { app } from "electron";
 import { tailFile } from "./tail-file.js";
 
-const SHIPIT_DIRECTORY_NAME = "io.woowtech.smart.desktop.ShipIt";
+const SHIPIT_DIRECTORY_NAME = `${DESKTOP_APP_ID}.ShipIt`;
 const SHIPIT_LOG_TAIL_LINES = 100;
 
 export interface DesktopUpdaterDiagnosticFile {

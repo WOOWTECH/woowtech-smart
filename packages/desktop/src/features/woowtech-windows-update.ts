@@ -1,4 +1,4 @@
-// woowtech smart: how a downloaded update installs on Windows (woowtech/README.md §25, plan G37,
+// woowtech smart: how a downloaded update installs on Windows (woowtech/README.md §31, plan G37,
 // D20). Installing at quit is unsafe there: quitting and then shutting Windows down kills the
 // silent installer half-way and leaves the app uninstalled (electron-builder #7807), and with the
 // tray (G1) a quit is often followed by a shutdown. So Windows installs only from an explicit

@@ -7,6 +7,7 @@ import {
 import { signalProcessTree } from "../src/utils/tree-kill.js";
 import { withHiddenWindow } from "../src/utils/woowtech-hidden-fork.js";
 import { createCrashBackoff } from "../src/utils/woowtech-crash-backoff.js";
+import { workerCwd } from "./woowtech-worker-cwd.js";
 
 const WORKER_HEARTBEAT_INTERVAL_MS = 1_000;
 const WORKER_TERMINATION_GRACE_MS = 10_000;
@@ -176,7 +177,7 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
   const resolveWorkerSpawnSpec = options.resolveWorkerSpawnSpec;
 
   let child: ChildProcess | null = null;
-  // woowtech smart: crashes in a row restart with growing delays (README §25, G12).
+  // woowtech smart: crashes in a row restart with growing delays (README §31, G12).
   const crashBackoff = createCrashBackoff();
   let workerStartedAt = Date.now();
   let crashRestartTimer: NodeJS.Timeout | null = null;
@@ -282,11 +283,14 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
     const spawnSpec = resolveWorkerSpawnSpec?.(workerEntry) ?? null;
     workerStartedAt = Date.now();
     writeLifecycleLog("Spawning worker", { workerEntry });
+    // woowtech smart: not in a working directory that was removed (scripts/woowtech-worker-cwd.ts).
+    const cwd = workerCwd();
     if (spawnSpec) {
       child = spawn(spawnSpec.command, spawnSpec.args, {
         stdio: ["inherit", "pipe", "pipe", "ipc"],
         env: spawnSpec.env ?? workerEnv,
         windowsHide: true,
+        cwd,
       });
     } else {
       child = fork(
@@ -296,6 +300,7 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
           stdio: ["inherit", "pipe", "pipe", "ipc"],
           env: workerEnv,
           execArgv: workerExecArgv,
+          cwd,
         }),
       );
     }

@@ -1,18 +1,22 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { appliedBrand } = require("../../../woowtech/brands/index.cjs");
 
 // woowtech smart push (fork-owned): an iOS build links React Native Firebase only when it has a
 // GoogleService-Info.plist for its variant. app.config.js (through plugins/with-woowtech-push.js)
 // and react-native.config.js both decide with this module, so prebuild and autolinking agree.
 
+// The brand's own secrets folder, as app.config.js reads it.
+const SECRETS_DIR = `./${appliedBrand().mobileSecretsDir}`;
+
 const PLISTS = {
   production: {
     envKey: "GOOGLE_SERVICE_INFO_PLIST_PROD",
-    fallbackRelativePath: "./.secrets/GoogleService-Info.prod.plist",
+    fallbackRelativePath: `${SECRETS_DIR}/GoogleService-Info.prod.plist`,
   },
   development: {
     envKey: "GOOGLE_SERVICE_INFO_PLIST_DEBUG",
-    fallbackRelativePath: "./.secrets/GoogleService-Info.debug.plist",
+    fallbackRelativePath: `${SECRETS_DIR}/GoogleService-Info.debug.plist`,
   },
 };
 

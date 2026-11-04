@@ -1,4 +1,4 @@
-// woowtech smart: how the daemon starts a program on Windows (woowtech/README.md §25, plan G17,
+// woowtech smart: how the daemon starts a program on Windows (woowtech/README.md §31, plan G17,
 // G30). Upstream runs .cmd/.bat files and bare names through cmd.exe, which looks in the current
 // folder first, re-parses every argument and cuts them at line breaks. Here a bare name is found on
 // PATH without the current folder; a program starts directly, so its arguments arrive as written;

@@ -82,7 +82,7 @@ export function spawnProcess(
           resolvedBaseEnv,
           ...(envOverlay ? [envOverlay] : []),
         );
-  // woowtech smart: Windows starts programs without cmd.exe when it can (README §25, plan G17).
+  // woowtech smart: Windows starts programs without cmd.exe when it can (README §31, plan G17).
   const windowsPlan = planDirectWindowsSpawn({
     platform: process.platform,
     command,
@@ -130,7 +130,7 @@ export async function execCommand(
           resolvedBaseEnv,
           ...(envOverlay ? [envOverlay] : []),
         );
-  // woowtech smart: Windows starts programs without cmd.exe when it can (README §25, plan G17).
+  // woowtech smart: Windows starts programs without cmd.exe when it can (README §31, plan G17).
   const windowsPlan = planDirectWindowsSpawn({
     platform: process.platform,
     command,

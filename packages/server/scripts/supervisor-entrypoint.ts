@@ -16,8 +16,9 @@ import { runSupervisor } from "./supervisor.js";
 import { resolveSupervisorLogFile } from "./supervisor-log-config.js";
 import { applySherpaLoaderEnv } from "../src/server/speech/providers/local/sherpa/sherpa-runtime-env.js";
 import { blockCurrentFolderExeSearch } from "../src/utils/woowtech-windows-exe-search.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
-process.title = "woowtech smart Supervisor";
+process.title = `${PRODUCT_NAME} Supervisor`;
 
 interface DaemonRunnerConfig {
   devMode: boolean;

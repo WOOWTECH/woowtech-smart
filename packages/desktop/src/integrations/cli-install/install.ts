@@ -47,7 +47,7 @@ export async function installCli(): Promise<InstallStatus> {
     // Only the app install path is baked in — internal details (asar layout,
     // entrypoint scripts) live in the bundled shim and update with the app.
     // woowtech smart: an ASCII trampoline cmd.exe reads under any code page, and the user PATH
-    // gets .local\bin like the Mac's shell rc (README §25, plan G16, upstream #4696).
+    // gets .local\bin like the Mac's shell rc (README §31, plan G16, upstream #4696).
     await fs.writeFile(targetPath, renderWindowsCliTrampoline({ shimPath }));
     const userPath = await ensureWindowsUserPathEntry();
     if (userPath.error) {

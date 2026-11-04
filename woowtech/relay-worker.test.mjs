@@ -14,12 +14,15 @@ import { test } from "node:test";
 import { tsImport } from "tsx/esm/api";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
 
+import { appliedBrandId } from "./brands/index.cjs";
 import { repoRoot } from "./shipped-sources.mjs";
 
 const relayDir = path.join(repoRoot, "packages/relay");
 const OUR_CONFIG = path.join(relayDir, "wrangler.woowtech.toml");
 const UPSTREAM_CONFIG = path.join(relayDir, "wrangler.toml");
 const WOOWTECH_ACCOUNT_ID = "9c27f623ee596e0b67be56263bcb1974";
+// Alan's account, which holds apporo.ai.
+const APPORO_ACCOUNT_ID = "9f14a17191df1e77889566d848f063ad";
 const RELAY_HOST = "relay.woowtech.io";
 
 const { default: relayWorker } = await tsImport(
@@ -70,9 +73,20 @@ test("our Worker config deploys the relay to WoowTech's account at relay.woowtec
   assert.equal(config.workers_dev, false, "no second address on workers.dev");
 });
 
-test("daemons and pairing offers use this Worker's domain", () => {
-  // packages/protocol/src/brand-relay.ts sets the daemon's default relay endpoint.
-  const [route] = readConfig(OUR_CONFIG).routes;
+test("Apporo smart's Worker config deploys its relay to the account that holds apporo.ai", () => {
+  const config = readConfig(path.join(relayDir, "wrangler.apporo.toml"));
+  assert.equal(config.name, "apporo-smart-relay");
+  assert.equal(config.account_id, APPORO_ACCOUNT_ID);
+  assert.deepEqual(config.routes, [{ pattern: "relay.apporo.ai", custom_domain: true }]);
+  assert.equal(config.workers_dev, false, "no second address on workers.dev");
+  assert.equal(config.vars.PASEO_RELAY_UPSTREAM, undefined);
+});
+
+test("daemons and pairing offers use the domain of the brand's Worker", () => {
+  // packages/protocol/src/brand-relay.ts sets the daemon's default relay endpoint. Each brand
+  // deploys the Worker with its own config: wrangler.woowtech.toml, wrangler.apporo.toml.
+  const brandConfig = path.join(relayDir, `wrangler.${appliedBrandId()}.toml`);
+  const [route] = readConfig(brandConfig).routes;
   assert.equal(BRAND_RELAY.host, route.pattern);
   assert.equal(BRAND_RELAY.endpoint, `${route.pattern}:443`);
 });
@@ -122,6 +136,16 @@ test("our Worker runs upstream's relay: same code, Durable Object and migrations
   assert.deepEqual(ours.compatibility_flags, upstream.compatibility_flags);
   assert.deepEqual(ours.durable_objects, upstream.durable_objects);
   assert.deepEqual(ours.migrations, upstream.migrations);
+});
+
+test("our relay answers a Close frame before anything else in webSocketClose", () => {
+  // Under the compatibility date the runtime does not answer it for a hibernated socket: the peer
+  // waited 20 s and got 1006, and a stopping daemon was killed at its 10 s deadline (README 11).
+  const adapter = readFileSync(path.join(relayDir, "src/cloudflare-adapter.ts"), "utf8");
+  assert.match(
+    adapter,
+    /webSocketClose\(ws: WebSocket, code: number, reason: string, _wasClean: boolean\): void \{\s*\/\/ woowtech smart:[^\n]*\n\s*answerCloseFrame\(ws, code, reason\);/,
+  );
 });
 
 test("our Worker keeps no Workers Logs", () => {

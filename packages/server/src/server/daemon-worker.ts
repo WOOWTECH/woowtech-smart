@@ -6,8 +6,9 @@ import { resolvePaseoHome } from "./paseo-home.js";
 import { createRootLogger } from "./logger.js";
 import type { DaemonLifecycleIntent } from "./bootstrap.js";
 import { getProcessDiagnostics } from "./process-diagnostics.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
-process.title = "woowtech smart Daemon";
+process.title = `${PRODUCT_NAME} Daemon`;
 
 type SupervisorLifecycleMessage =
   | {

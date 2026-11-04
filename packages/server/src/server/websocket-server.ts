@@ -1,3 +1,9 @@
+import {
+  BRAND_IDENTITY,
+  OTHER_BRAND_CLIENT_REASON,
+  OTHER_BRAND_CLOSE_CODE,
+  isSameBrandClient,
+} from "@getpaseo/protocol/brand-match";
 import { stat } from "node:fs/promises";
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import { CreationService } from "./creation/index.js";
@@ -76,6 +82,12 @@ import {
   woowtechNotificationPlanWhileStopping,
 } from "./woowtech-attention-presence.js";
 import { WoowtechAttentionFallback } from "./woowtech-attention-fallback.js";
+import {
+  readEscalationDelayMs,
+  recipientAttendedTo,
+  waitsBeforePhoneGetsNotice,
+  type NoticeTarget,
+} from "./woowtech-attention-escalation.js";
 import {
   buildAgentAttentionNotificationPayload,
   findLatestPermissionRequest,
@@ -556,7 +568,12 @@ export class VoiceAssistantWebSocketServer {
   private readonly pushNotifications: PushNotifications;
   private readonly pushNotificationSender: PushNotificationSender;
   // woowtech smart: pushes a notice the picked client could not show (woowtech-attention-fallback.ts).
-  private readonly woowtechAttentionFallback = new WoowtechAttentionFallback();
+  private readonly woowtechAttentionFallback = new WoowtechAttentionFallback({
+    hasPushTargets: () => this.pushNotifications.hasActiveTokens(),
+    escalationMs: readEscalationDelayMs(process.env),
+    onEscalated: (target) =>
+      this.logger.info({ target }, "A notice nobody dealt with is going to the phone"),
+  });
   private readonly mcpBaseUrl: string | null;
   private speech!: SpeechService | null;
   private terminalManager!: TerminalManager | null;
@@ -1035,6 +1052,7 @@ export class VoiceAssistantWebSocketServer {
 
   public prepareForShutdown(): void {
     this.connectionLifecycle = "stopping";
+    this.woowtechAttentionFallback.close();
   }
 
   public beginAcceptingConnections(): void {
@@ -1568,6 +1586,10 @@ export class VoiceAssistantWebSocketServer {
       return;
     }
 
+    if (this.turnAwayOtherBrandApp({ ws, message, pending })) {
+      return;
+    }
+
     const clientId = message.clientId.trim();
     if (clientId.length === 0) {
       this.clearPendingConnection(ws);
@@ -1682,6 +1704,7 @@ export class VoiceAssistantWebSocketServer {
       permissions: session.getPermissions(),
       // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
       desktopManaged: this.daemonRuntimeConfig?.desktopManaged === true,
+      brand: BRAND_IDENTITY,
       ...(this.serverCapabilities ? { capabilities: this.serverCapabilities } : {}),
       features: {
         ownedSubscriptions: true,
@@ -1841,6 +1864,51 @@ export class VoiceAssistantWebSocketServer {
         agentConfigApply: true,
       },
     };
+  }
+
+  /**
+   * woowtech smart: only same-brand pairing (brand-match.ts). The apps (mobile, and the browser
+   * the desktop app runs) carry the push tokens, so another brand's app is turned away; one that
+   * names no brand predates the check and counts as woowtech smart's. The CLI, MCP, Hub and
+   * plugin clients send no push token and stay welcome. True when it turned the client away.
+   */
+  private turnAwayOtherBrandApp(params: {
+    ws: WebSocketLike;
+    message: WSHelloMessage;
+    pending: PendingConnection;
+  }): boolean {
+    const { ws, message, pending } = params;
+    const isApp = message.clientType === "mobile" || message.clientType === "browser";
+    if (!isApp || isSameBrandClient(message.brand)) {
+      return false;
+    }
+    this.clearPendingConnection(ws);
+    pending.connectionLogger.warn(
+      { clientBrand: message.brand, daemonBrand: BRAND_IDENTITY.id },
+      "Rejected hello from a client of another brand",
+    );
+    // The app reads the brand from server_info and says why it stopped; through the relay, the
+    // close frame's reason does not reach it.
+    this.sendBrandServerInfo(ws);
+    try {
+      ws.close(OTHER_BRAND_CLOSE_CODE, OTHER_BRAND_CLIENT_REASON);
+    } catch {
+      // ignore close errors
+    }
+    return true;
+  }
+
+  /** server_info with the daemon's brand only, for an app this daemon turns away. */
+  private sendBrandServerInfo(ws: WebSocketLike): void {
+    const message: WSOutboundMessage = {
+      type: "session",
+      message: {
+        type: "status",
+        payload: { status: "server_info", serverId: this.serverId, brand: BRAND_IDENTITY },
+      },
+    };
+    const frame = JSON.stringify(message);
+    this.sendFrameToClient(ws, frame, outboundFrameByteLength(frame), () => {});
   }
 
   private createServerInfoMessage(session: Session): WSOutboundMessage {
@@ -2487,6 +2555,45 @@ export class VoiceAssistantWebSocketServer {
     return woowtechClientPresenceState(activity);
   }
 
+  /**
+   * woowtech smart: a computer's notice waits, then goes to the phone if nobody dealt with it
+   * (woowtech-attention-escalation.ts). A phone's notice does not wait.
+   */
+  private woowtechEscalationFor(input: {
+    ws: WebSocketLike;
+    session: Session;
+    target: NoticeTarget;
+    isSettled: () => boolean;
+  }): { isAttendedTo: () => boolean } | undefined {
+    if (!waitsBeforePhoneGetsNotice(input.session.getClientActivity(input.ws))) {
+      return undefined;
+    }
+    const noticedAtMs = Date.now();
+    return {
+      isAttendedTo: () =>
+        input.isSettled() ||
+        recipientAttendedTo({
+          activity: input.session.getClientActivity(input.ws),
+          noticedAtMs,
+          target: input.target,
+        }),
+    };
+  }
+
+  /** Someone looked at the agent (its attention is cleared) or answered its permission request. */
+  private woowtechAgentNoticeSettled(
+    agentId: string,
+    reason: "finished" | "error" | "permission",
+  ): boolean {
+    const agent = this.agentManager.getAgent(agentId);
+    if (!agent) {
+      return true;
+    }
+    return reason === "permission"
+      ? agent.pendingPermissions.size === 0
+      : !agent.attention.requiresAttention;
+  }
+
   private async broadcastAgentAttention(params: {
     agentId: string;
     provider: AgentProvider;
@@ -2566,6 +2673,12 @@ export class VoiceAssistantWebSocketServer {
               );
             });
           },
+          escalation: this.woowtechEscalationFor({
+            ws,
+            session: connection.session,
+            target: { kind: "agent", id: params.agentId },
+            isSettled: () => this.woowtechAgentNoticeSettled(params.agentId, params.reason),
+          }),
         });
       }
       const attentionPayload = {
@@ -2695,6 +2808,12 @@ export class VoiceAssistantWebSocketServer {
           target: { kind: "terminal", terminalId: params.terminalId },
           recipient,
           push: sendPush,
+          escalation: this.woowtechEscalationFor({
+            ws,
+            session: recipient,
+            target: { kind: "terminal", id: params.terminalId },
+            isSettled: () => false,
+          }),
         });
       }
       const message = wrapSessionMessage({

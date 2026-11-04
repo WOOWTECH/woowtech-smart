@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 import { terminateWithTreeKill } from "../../../utils/tree-kill.js";
 import type { ProcessTerminator } from "../../../utils/tree-kill.js";
@@ -1410,7 +1411,7 @@ export class ACPAgentClient implements AgentClient {
               this.clientCapabilityMeta,
               this.clientCapabilities,
             ),
-            clientInfo: { name: "woowtech smart", version: "dev" },
+            clientInfo: { name: PRODUCT_NAME, version: "dev" },
           }),
           transport.spawnError,
           ...(initializeTimeoutPromise ? [initializeTimeoutPromise] : []),
@@ -2773,7 +2774,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
             this.clientCapabilityMeta,
             this.clientCapabilities,
           ),
-          clientInfo: { name: "woowtech smart", version: "dev" },
+          clientInfo: { name: PRODUCT_NAME, version: "dev" },
         }),
         spawnError,
       ]),

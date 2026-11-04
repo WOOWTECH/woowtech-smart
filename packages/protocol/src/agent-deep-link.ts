@@ -1,5 +1,7 @@
-// woowtech smart links use their own scheme; paseo:// belongs to an upstream Paseo install.
-export const AGENT_DEEP_LINK_SCHEME = "woowtech-smart";
+import { BRAND } from "./brand-values.js";
+
+// The brand's links use its own scheme; paseo:// belongs to an upstream Paseo install.
+export const AGENT_DEEP_LINK_SCHEME = BRAND.scheme;
 
 export interface AgentDeepLinkTarget {
   serverId: string;

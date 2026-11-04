@@ -14,6 +14,7 @@ import {
   type TestNotificationState,
 } from "./woowtech-notification-test";
 import { desktopNotificationHelpKeys } from "./woowtech-notification-help";
+import { askAboutBanner, showBannerHelp } from "@/utils/woowtech-notification-banner-check";
 
 export interface UseDesktopPermissionsReturn {
   isDesktopApp: boolean;
@@ -140,6 +141,9 @@ export function useDesktopPermissions(): UseDesktopPermissionsReturn {
         unconfirmedMessage: t(helpKeys.unconfirmed),
         onState: (state) => {
           if (isMountedRef.current) setTestNotificationState(state);
+          // woowtech smart: the same test also asks "Did you see the banner?" (README section 16).
+          if (state.status === "success") askAboutBanner();
+          if (state.status === "error" || state.status === "unconfirmed") showBannerHelp();
         },
       });
     } finally {

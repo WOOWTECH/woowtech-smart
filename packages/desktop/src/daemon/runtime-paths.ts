@@ -101,7 +101,7 @@ export function resolveNodeExecPath(): string {
 
 let woowtechTestBuild: boolean | null = null;
 
-/** woowtech smart: whether this packaged app is a test build (README §25, G26). */
+/** woowtech smart: whether this packaged app is a test build (README §31, G26). */
 export function isWoowtechTestBuild(): boolean {
   woowtechTestBuild ??= readWoowtechTestBuild({
     isPackaged: app.isPackaged,

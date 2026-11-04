@@ -17,8 +17,9 @@ import type {
   LocalSpeechWorkerToParentMessage,
 } from "./worker-protocol.js";
 import { bufferToWorkerBytes, workerBytesToBuffer } from "./worker-bytes.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
-process.title = "woowtech smart Voice";
+process.title = `${PRODUCT_NAME} Voice`;
 
 type LocalSttEngine = SherpaOfflineRecognizerEngine;
 

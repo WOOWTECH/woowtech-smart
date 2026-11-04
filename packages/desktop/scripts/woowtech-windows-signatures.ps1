@@ -1,5 +1,5 @@
 # woowtech smart: lists the Authenticode signature of every .exe, .dll and .node file under the
-# given folders (woowtech/README.md §25, plan D8). With -RequireSigned it fails unless each one is
+# given folders (woowtech/README.md §31, plan D8). With -RequireSigned it fails unless each one is
 # validly signed and timestamped, by Microsoft or by -Publisher. The release job runs it after
 # electron-builder, because Smart App Control blocks any module that loads without a valid
 # signature; on the test PC, point it at the installed app to see what Smart App Control sees.

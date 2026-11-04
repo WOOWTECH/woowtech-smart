@@ -28,7 +28,7 @@ interface NotificationInput {
   data?: unknown;
 }
 
-// Windows keeps a toast that timed out into Action Center (README §25), so references are
+// Windows keeps a toast that timed out into Action Center (README §31), so references are
 // capped; the oldest is dropped first. A dropped protocol toast still opens its agent.
 const MAX_ACTIVE_NOTIFICATIONS = 50;
 const activeNotifications = new Set<Notification>();
@@ -191,7 +191,7 @@ export function registerNotificationHandlers(options: {
     const silent = !settings.notifications.playSound;
     const agent = agentTargetForNotificationData(data);
     // Windows: the toast launches woowtech-smart://…/agent/… itself, so a click from Action
-    // Center, or after the app quit, opens the agent (README §25). macOS: the id carries the
+    // Center, or after the app quit, opens the agent (README §31). macOS: the id carries the
     // agent, so a Notification Center click that relaunches the quit app finds it in launchInfo
     // (woowtech-notification-launch.ts).
     const protocolToast =

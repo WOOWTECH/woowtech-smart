@@ -3,13 +3,14 @@
 // it, and the built-in daemon then cannot listen (getpaseo #1552, #3333). Before starting
 // it, the Windows app checks the default address and passes a free one in PASEO_LISTEN.
 // The app and the CLI find the daemon through its instance record, so they follow
-// (woowtech/README.md §25, G12). An address the user chose is never replaced.
+// (woowtech/README.md §31, G12). An address the user chose is never replaced.
 import { readFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 
 /** packages/server/src/server/config.ts DEFAULT_PORT (a guard keeps them equal). */
-export const WOOWTECH_DAEMON_DEFAULT_PORT = 6770;
+export const WOOWTECH_DAEMON_DEFAULT_PORT = DEFAULT_DAEMON_PORT;
 
 const LOOPBACK = "127.0.0.1";
 // New homes get the default written into config.json, so it is not a user choice.

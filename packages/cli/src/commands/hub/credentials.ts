@@ -1,3 +1,4 @@
+import { DEFAULT_DAEMON_HOME } from "@getpaseo/protocol/brand-daemon";
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -137,7 +138,7 @@ export class PrivateHubCredentialStore implements HubCredentialStore {
 }
 
 function resolvePaseoHome(env: Readonly<Record<string, string | undefined>>): string {
-  const configured = env.PASEO_HOME ?? "~/.woowtech-smart";
+  const configured = env.PASEO_HOME ?? DEFAULT_DAEMON_HOME;
   const expanded = configured === "~" ? homedir() : configured.replace(/^~\//u, `${homedir()}/`);
   return path.resolve(expanded);
 }

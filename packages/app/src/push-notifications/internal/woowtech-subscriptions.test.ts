@@ -248,11 +248,26 @@ describe("woowtech push subscription", () => {
     expect(phone.storage.get(CACHE_KEY)).toBe(`wsp1:zh-TW:${FCM_TOKEN}`);
     expect(phone.events).toEqual([
       "disableExpoServerRegistration",
-      "permission(mayAsk=true)",
       "channels",
+      "permission(mayAsk=true)",
       "getToken",
       "onTokenRefresh",
     ]);
+  });
+
+  it("creates the Android channels before it asks for permission, because Android 13 shows no prompt to an app without a channel", async () => {
+    const phone = createPhone();
+    const client = new FakeDaemonClient(WOOWTECH_DAEMON);
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+
+    const channelsAt = phone.events.indexOf("channels");
+    const askedAt = phone.events.indexOf("permission(mayAsk=true)");
+    expect(channelsAt).toBeGreaterThan(-1);
+    expect(askedAt).toBeGreaterThan(channelsAt);
   });
 
   it("creates the Android channels the relay names, in the app's language", async () => {
@@ -457,7 +472,13 @@ describe("woowtech push subscription", () => {
     expect(client.received).toEqual([`revoke wsp1:zh-TW:${FCM_TOKEN}`]);
     expect(phone.storage.has(CACHE_KEY)).toBe(false);
     expect(phone.events).not.toContain("getToken");
-    expect(phone.channelSets).toEqual([]);
+    // The channels exist before the question (Android 13 needs one to show its prompt), and stay
+    // when the answer is no: a user who allows notifications later in the system settings finds them.
+    expect(phone.events).toEqual([
+      "disableExpoServerRegistration",
+      "channels",
+      "permission(mayAsk=true)",
+    ]);
   });
 
   it("registers nothing without an FCM token, as in a build without Firebase files", async () => {

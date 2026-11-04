@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { withUnistyles } from "react-native-unistyles";
@@ -7,8 +7,11 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { DesktopPermissionRow } from "@/desktop/components/desktop-permission-row";
+import { NotificationBannerCheckPrompt } from "@/desktop/components/notification-banner-check-prompt";
 import { useDesktopPermissions } from "@/desktop/permissions/use-desktop-permissions";
 import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
+import { useNotificationBannerCheck } from "@/hooks/use-notification-banner-check";
+import { loadBannerCheck } from "@/utils/woowtech-notification-banner-check";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { canTestNotification } from "@/desktop/permissions/woowtech-notification-test";
 import { settingsStyles } from "@/styles/settings";
@@ -31,6 +34,11 @@ export function DesktopNotificationsSection() {
     requestPermission,
     sendTestNotification,
   } = useDesktopPermissions();
+  const { confirmed: bannerConfirmed } = useNotificationBannerCheck();
+
+  useEffect(() => {
+    void loadBannerCheck();
+  }, []);
 
   const handleRefreshPress = useCallback(() => {
     void refreshPermissions();
@@ -117,6 +125,11 @@ export function DesktopNotificationsSection() {
                 ? t("woowtech.desktopNotifications.testHint")
                 : t("settings.notifications.permissionRequired")}
             </Text>
+            {bannerConfirmed ? (
+              <Text style={settingsStyles.rowHint}>
+                {t("woowtech.notificationBannerCheck.confirmedHint")}
+              </Text>
+            ) : null}
           </View>
           <Button
             variant="outline"
@@ -154,6 +167,7 @@ export function DesktopNotificationsSection() {
           testID="desktop-notifications-test-error"
         />
       ) : null}
+      <NotificationBannerCheckPrompt onTestAgain={handleSendTestNotification} />
     </SettingsSection>
   );
 }

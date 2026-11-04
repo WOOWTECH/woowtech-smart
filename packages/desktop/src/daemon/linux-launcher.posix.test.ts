@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,8 +55,20 @@ async function launch(
     }
     writeFileSync(join(app, "chrome-sandbox"), "helper");
     chmodSync(join(app, "chrome-sandbox"), 0o755);
-    await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1 });
-    if (options.rerun) await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1 });
+    // woowtech smart: after-pack flips the Electron fuses with electron-builder's packager first,
+    // while the executable is still Electron and not the launcher script.
+    const flipped: string[] = [];
+    const packager = {
+      generateFuseConfig: (fuses: object) => fuses,
+      addElectronFuses: async (context: { appOutDir: string }) => {
+        flipped.push(readFileSync(join(context.appOutDir, EXECUTABLE), "utf8"));
+      },
+    };
+    await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1, packager });
+    expect(flipped[0]).toContain("JSON.stringify(process.argv.slice(2))");
+    if (options.rerun) {
+      await afterPack({ appOutDir: app, electronPlatformName: "linux", arch: 1, packager });
+    }
     const executablePath = options.symlink ? join(root, "paseo") : join(app, EXECUTABLE);
     if (options.symlink) symlinkSync(join(app, EXECUTABLE), executablePath);
     const args = options.args ?? ["path with spaces", "$(touch never)", "semi;colon", "*.txt"];

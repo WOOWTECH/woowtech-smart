@@ -1,4 +1,4 @@
-// woowtech smart: electron-builder's Windows sign hook (woowtech/README.md §25, plan §4.8 D8).
+// woowtech smart: electron-builder's Windows sign hook (woowtech/README.md §31, plan §4.8 D8).
 // electron-builder 26.17.0 calls it once for every file it signs: the app's exe, the .dll and
 // .node files win.signExts adds, every .exe under app.asar.unpacked, the uninstaller before the
 // installer embeds it, and the installer. Only the release job signs (WOOWTECH_SIGN=1), with jsign

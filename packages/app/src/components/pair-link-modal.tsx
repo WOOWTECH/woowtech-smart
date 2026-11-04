@@ -10,6 +10,7 @@ import { decodeOfferFragmentPayload, normalizeHostPort } from "@/utils/daemon-en
 import { connectToDaemon } from "@/utils/test-daemon-connection";
 import { ConnectionOfferSchema } from "@getpaseo/protocol/connection-offer";
 import { BRAND_PAIRING } from "@getpaseo/protocol/brand-pairing";
+import { confirmPairingLink } from "@/runtime/woowtech-pairing-confirmation";
 import { AdaptiveModalSheet, AdaptiveTextInput, type SheetHeader } from "./adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import type { EditingTextInputHandle } from "@/components/ui/text-input";
@@ -135,6 +136,8 @@ export function PairLinkModal({ visible, onClose, onCancel, onSaved }: PairLinkM
     try {
       setIsSaving(true);
       setErrorMessage("");
+      // woowtech smart: ask before connecting (runtime/woowtech-pairing-confirmation.ts).
+      if (!(await confirmPairingLink(raw))) return;
 
       const { client, hostname } = await connectToDaemon(
         {

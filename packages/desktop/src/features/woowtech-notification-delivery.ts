@@ -28,7 +28,7 @@ export interface NotificationDeliveryInput {
   closeOnTimeout?: boolean;
   /**
    * Windows closes a toast with reason timedOut when the banner moves to Action Center. It
-   * can still be clicked there, so the listeners and the reference stay (README §25).
+   * can still be clicked there, so the listeners and the reference stay (README §31).
    */
   keepAfterTimedOutClose?: boolean;
   /** Reports native events as they arrive, for the main-process log. */

@@ -4,6 +4,38 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "./i18next";
 import { woowtechCopyFor } from "./woowtech-copy";
 
+// These newer fork surfaces are translated only in Traditional Chinese.
+const TRADITIONAL_CHINESE_ONLY_SURFACES = [
+  "desktopNotifications.",
+  "notificationDisplay.",
+  "notificationBannerCheck.",
+  "interfaceText.",
+  "agentNotificationTitles.",
+  "metadataGeneration.",
+  "confirmDialog.",
+  "composer.",
+  "schedules.",
+  "time.",
+  "message.",
+  "workspaceRecovery.",
+  "voiceReadiness.",
+  "terminalName.",
+  "claudeSdk.",
+  "claudeAuth.",
+  "thirdPartyNotices.",
+  "privacyPolicy.",
+  "permissionActions.",
+  "pairingConfirmation.",
+] as const;
+
+function isTraditionalChineseOnly(key: string): boolean {
+  return TRADITIONAL_CHINESE_ONLY_SURFACES.some((surface) => key.startsWith(surface));
+}
+
+// A project and its license, named as they are written, so Traditional Chinese reads the same as
+// English: the notices page credits the project woowtech smart is derived from.
+const KEPT_AS_WRITTEN = new Set(["thirdPartyNotices.sections.paseo"]);
+
 // Text upstream hardcodes in English, which these files now read from the
 // woowtech.* translations. An upstream merge can bring a literal back.
 const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
@@ -15,6 +47,21 @@ const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
     'title ?? "Host"',
   ],
   "components/hosts/host-filter.tsx": ['title="Filter by host"', "`Filter: ${selectedHostLabel}`"],
+  // 2026-09-30 RC (README section 14).
+  "components/sidebar/sidebar-workspace-menu.tsx": ["Mark as read\n", "Mark as unread\n"],
+  "screens/new-workspace-screen.tsx": [
+    'searchPlaceholder="Search projects"',
+    'title="Project"',
+    'emptyText="No projects available."',
+    'title="Host"',
+    'accessibilityLabel="Workspace project"',
+    'accessibilityLabel="Workspace isolation"',
+    'accessibilityLabel="Host"',
+    '?? "Host"',
+  ],
+  "hosts/host-chooser.tsx": ['placeholder="Search hosts..."', ">No matching hosts<"],
+  "components/question-form-card.tsx": ["`Question ${"],
+  "components/import-session-sheet.tsx": ["`Filter: ${"],
   "components/add-project-flow.tsx": [
     '"Add project"',
     '"Search for directory"',
@@ -108,22 +155,8 @@ describe("woowtech smart's own text", () => {
       const untranslated = [...english].flatMap(([key, text]) => {
         const newSurface = key.startsWith("addProject.") || key.startsWith("hostPicker.");
         if (newSurface && !["zh-TW", "zh-CN"].includes(language)) return [];
-        // These newer fork surfaces are translated only in Traditional Chinese.
-        const traditionalChineseOnly =
-          key.startsWith("desktopNotifications.") ||
-          key.startsWith("notificationDisplay.") ||
-          key.startsWith("agentNotificationTitles.") ||
-          key.startsWith("metadataGeneration.") ||
-          key.startsWith("confirmDialog.") ||
-          key.startsWith("composer.") ||
-          key.startsWith("schedules.") ||
-          key.startsWith("time.") ||
-          key.startsWith("message.") ||
-          key.startsWith("workspaceRecovery.") ||
-          key.startsWith("claudeSdk.") ||
-          key.startsWith("claudeAuth.") ||
-          key.startsWith("thirdPartyNotices.");
-        if (traditionalChineseOnly && language !== "zh-TW") return [];
+        if (isTraditionalChineseOnly(key) && language !== "zh-TW") return [];
+        if (KEPT_AS_WRITTEN.has(key)) return [];
         return copy.get(key) && copy.get(key) !== text ? [] : [key];
       });
       expect({ language, untranslated }).toEqual({ language, untranslated: [] });

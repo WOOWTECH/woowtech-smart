@@ -1,4 +1,4 @@
-// How upstream's agent skills become woowtech smart's. generate-skills.mjs runs
+// How upstream's agent skills become the brand's (woowtech smart's). generate-skills.mjs runs
 // every SKILL.md through the rewriter: first the passages rewritten by hand,
 // then the patterns that apply everywhere.
 //
@@ -10,7 +10,7 @@
  * Passages rewritten by hand. Each must appear exactly once in its upstream
  * skill: when upstream edits one, generation stops until it is updated here.
  */
-function passageRewrites({ cliCommand, links, port, productName, relayHost }) {
+function passageRewrites({ cliCommand, links, operator, port, productName, relayHost }) {
   const cliFallback = [
     `The CLI command is \`${cliCommand}\`. If it is not on \`PATH\`, run \`"$PASEO_CLI"\``,
     "instead when that variable is set; the desktop app sets it to its bundled CLI for the",
@@ -67,7 +67,7 @@ function passageRewrites({ cliCommand, links, port, productName, relayHost }) {
       skill: "paseo-help",
       find: "   - relay connection\n   - direct LAN, VPN, or Tailscale connection\n",
       replace: [
-        `   - relay connection through WoowTech's relay at \`${relayHost}\`, which is on unless the user turned it off (\`daemon.relay.enabled: false\` in \`config.json\`); turn it back on with **Pair a device → Enable relay** in the desktop app or \`${cliCommand} daemon pair --relay\``,
+        `   - relay connection through ${operator}'s relay at \`${relayHost}\`, which is on unless the user turned it off (\`daemon.relay.enabled: false\` in \`config.json\`); turn it back on with **Pair a device → Enable relay** in the desktop app or \`${cliCommand} daemon pair --relay\``,
         `   - direct LAN, VPN, or Tailscale connection; the daemon listens only on \`127.0.0.1:${port}\` unless \`daemon.listen\` in its \`config.json\` names another address`,
         "",
       ].join("\n"),
@@ -100,7 +100,7 @@ function passageRewrites({ cliCommand, links, port, productName, relayHost }) {
       ].join("\n"),
     },
     {
-      // WoowTech's help channels instead of Paseo's GitHub and Discord. Quick help
+      // The brand's help channels instead of Paseo's GitHub and Discord. Quick help
       // goes to the website's home page (the LINE account was retired on 2026-09-26).
       skill: "paseo-help",
       find: [

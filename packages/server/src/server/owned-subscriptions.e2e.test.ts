@@ -1263,7 +1263,8 @@ test("archive and delete replies retain their historical names and reach only th
 });
 
 test("Hub bootstrap sends its server ID before the producer's synchronous snapshot", async () => {
-  const daemon = await createTestPaseoDaemon({ mcpEnabled: false });
+  // woowtech smart: Hub connections are off unless config.json turns them on (woowtech-hub-gate.ts).
+  const daemon = await createTestPaseoDaemon({ mcpEnabled: false, hubEnabled: true });
   const admin = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
   const frames: WSOutboundMessage[] = [];
   const hub = createServer(async (request, response) => {

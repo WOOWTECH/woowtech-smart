@@ -19,6 +19,12 @@ const customWebPlatform = (process.env.PASEO_WEB_PLATFORM ?? "")
   .toLowerCase();
 
 const config = getDefaultConfig(projectRoot);
+// External dependency stores must be visible to Metro's file map as well as Node's resolver.
+const externalWatchFolders = (process.env.WOOWTECH_METRO_WATCH_FOLDERS ?? "")
+  .split(path.delimiter)
+  .filter(Boolean)
+  .map((folder) => fs.realpathSync(folder));
+config.watchFolders = [...new Set([...(config.watchFolders ?? []), ...externalWatchFolders])];
 const defaultResolveRequest = config.resolver.resolveRequest ?? resolve;
 
 // Keep app exports deterministic across dev machines and CI. Metro's Watchman

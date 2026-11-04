@@ -11,6 +11,7 @@ import {
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./diagnostics.js";
 import type { ProviderAvailability } from "../../agent/agent-manager.js";
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
+import { HubDisabledError, hubDisabledMessage } from "../../hub/woowtech-hub-gate.js";
 import type { SessionOutboundMessage } from "../../messages.js";
 import type { DaemonConfigReloadResult } from "../../daemon-config-store.js";
 
@@ -178,6 +179,69 @@ describe("DaemonSession", () => {
           requestType: "hub.management.daemon.disconnect.request",
           error: "Hub revocation failed (503)",
           code: "handler_error",
+        },
+      },
+    ]);
+  });
+
+  // woowtech smart: the Hub switch (hub/woowtech-hub-gate.ts) refuses connecting and permission
+  // changes with its own code, so the CLI and the app can tell "Hub connections are off on this
+  // daemon" from a failed enrollment.
+  test("Hub requests refused because Hub connections are off keep the hub_disabled code", async () => {
+    const refusal = new HubDisabledError(hubDisabledMessage("/srv/smart"));
+    const { subsystem, emitted } = makeSubsystem({
+      hubRelationships: {
+        connect: async () => {
+          throw refusal;
+        },
+        updatePermissions: async () => {
+          throw refusal;
+        },
+        status: () => ({
+          state: "not_connected",
+          daemonId: null,
+          hubOrigin: null,
+          permissions: [],
+          connectedAt: null,
+          lastError: refusal.message,
+        }),
+        disconnect: async () => {
+          throw new Error("Hub revocation failed (503)");
+        },
+      },
+    });
+
+    await subsystem.handleHubRelationshipRequest({
+      type: "hub.management.daemon.connect.request",
+      requestId: "connect-2",
+      hubUrl: "https://hub.test",
+      token: "token",
+      permissions: ["hub.execute"],
+    });
+    await subsystem.handleHubRelationshipRequest({
+      type: "hub.management.daemon.permissions.update.request",
+      requestId: "permissions-1",
+      grant: ["daemon.manage"],
+      revoke: [],
+    });
+
+    expect(emitted).toEqual([
+      {
+        type: "rpc_error",
+        payload: {
+          requestId: "connect-2",
+          requestType: "hub.management.daemon.connect.request",
+          error: refusal.message,
+          code: "hub_disabled",
+        },
+      },
+      {
+        type: "rpc_error",
+        payload: {
+          requestId: "permissions-1",
+          requestType: "hub.management.daemon.permissions.update.request",
+          error: refusal.message,
+          code: "hub_disabled",
         },
       },
     ]);

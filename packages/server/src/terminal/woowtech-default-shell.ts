@@ -1,4 +1,4 @@
-// woowtech smart: the shell a new terminal opens (woowtech/README.md §25, plan G27, D16).
+// woowtech smart: the shell a new terminal opens (woowtech/README.md §31, plan G27, D16).
 // macOS opens the user's $SHELL. Upstream opens cmd.exe on Windows; Windows Terminal opens
 // PowerShell, and upstream already runs worktree setup commands in Windows PowerShell, so here
 // Windows opens PowerShell 7 when installed, else Windows PowerShell, else cmd.exe.

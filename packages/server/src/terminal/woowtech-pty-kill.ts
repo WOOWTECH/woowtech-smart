@@ -1,6 +1,6 @@
 // woowtech smart: node-pty's Windows kill() closes the pseudoconsole, and a second call closes
 // it again (ClosePseudoConsole without clearing the handle), corrupting the heap and taking the
-// terminal worker and every terminal down with it (node-pty #983; woowtech/README.md §25, G10).
+// terminal worker and every terminal down with it (node-pty #983; woowtech/README.md §31, G10).
 // Upstream's close path can call kill() three times on Windows. On Windows the pty is killed
 // once; a later SIGKILL ends the shell's process tree with the hidden taskkill instead of
 // touching the pseudoconsole again.

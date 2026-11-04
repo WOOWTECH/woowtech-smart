@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Linking, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -10,6 +10,7 @@ import { useHostMutations } from "@/runtime/host-runtime";
 import { decodeOfferFragmentPayload, normalizeHostPort } from "@/utils/daemon-endpoints";
 import { connectToDaemon } from "@/utils/test-daemon-connection";
 import { ConnectionOfferSchema } from "@getpaseo/protocol/connection-offer";
+import { confirmPairingLink } from "@/runtime/woowtech-pairing-confirmation";
 import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
 import { isWeb } from "@/constants/platform";
 import { BackHeader } from "@/components/headers/back-header";
@@ -174,6 +175,8 @@ export default function PairScanScreen() {
         const encoded = offerUrl.slice(idx + "#offer=".length).trim();
         const offerPayload = decodeOfferFragmentPayload(encoded);
         const offer = ConnectionOfferSchema.parse(offerPayload);
+        // woowtech smart: ask before connecting (runtime/woowtech-pairing-confirmation.ts).
+        if (!(await confirmPairingLink(offerUrl))) return;
 
         const { client, hostname } = await connectToDaemon(
           {
@@ -191,7 +194,8 @@ export default function PairScanScreen() {
 
         navigateToPairedHost(profile.serverId);
       } catch (error) {
-        lastScannedRef.current = null;
+        // woowtech smart: lastScannedRef stays, so the code still in front of the camera is not
+        // retried and asked about again on every frame.
         const message = error instanceof Error ? error.message : t("pairing.scan.unableToPair");
         Alert.alert(t("pairing.scan.errorTitle"), message);
       } finally {
@@ -203,8 +207,15 @@ export default function PairScanScreen() {
 
   const handleRouterBack = useCallback(() => router.back(), [router]);
   const handleRequestPermission = useCallback(() => {
+    // woowtech smart: once the system will not ask again (after the first denial on iOS, the second
+    // on Android) requestPermission() resolves without a dialog, and the button did nothing. Send
+    // the user to the app's page in the system settings instead.
+    if (permission && !permission.granted && !permission.canAskAgain) {
+      void Linking.openSettings().catch(() => undefined);
+      return;
+    }
     void requestPermission();
-  }, [requestPermission]);
+  }, [permission, requestPermission]);
 
   const bodyStyle = useMemo(
     () => [styles.body, { paddingBottom: insets.bottom + theme.spacing[6] }],

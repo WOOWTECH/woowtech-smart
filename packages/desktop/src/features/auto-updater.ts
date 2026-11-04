@@ -213,7 +213,7 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
   }
 
   quitAndInstall({ targetVersion, ...requested }: AppUpdateInstallRequest): void {
-    // woowtech smart: a Windows restart installs silently (README §25, plan G37, D20).
+    // woowtech smart: a Windows restart installs silently (README §31, plan G37, D20).
     const { isSilent, isForceRunAfter } = updateInstallMode({
       platform: process.platform,
       ...requested,

@@ -1,7 +1,7 @@
 // woowtech smart: on Windows an agent notification is a protocol toast. A click makes Windows
 // run `"woowtech smart.exe" "woowtech-smart://h/<server>/agent/<agent>"`, which lands in the
 // existing argv / second-instance routing whether the app is running, sitting in the tray,
-// or was quit long ago (README §25). Electron's default toast has no launch argument, so a
+// or was quit long ago (README §31). Electron's default toast has no launch argument, so a
 // click from Action Center after the notification object is gone opens nothing.
 
 export interface ProtocolToastInput {
@@ -64,7 +64,7 @@ export function shouldUseProtocolToast(input: {
   protocolRegistered: boolean;
   hasAgentTarget: boolean;
 }): boolean {
-  // Unpackaged runs toast as "Electron" and have no registered scheme (README §25).
+  // Unpackaged runs toast as "Electron" and have no registered scheme (README §31).
   return (
     input.platform === "win32" &&
     input.isPackaged &&

@@ -10,8 +10,9 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
-import { requireSource } from "./source-modules.mjs";
+import { importSource, requireSource } from "./source-modules.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
 const desktopDir = new URL("packages/desktop/", repoRoot);
@@ -68,9 +69,15 @@ test("desktop packaging excludes relay deployment configs without excluding its 
   assert.equal(filters.has("!node_modules/@getpaseo/relay/**"), false);
 });
 
-const DESKTOP_APP_ID = "io.woowtech.smart.desktop";
-const APP_NAME = "woowtech smart";
-const LINK_SCHEME = "woowtech-smart";
+// The brand this checkout builds (woowtech/brands). woowtech/brand-layer.test.mjs keeps every
+// brand's values apart from upstream's and from each other's.
+const brand = appliedBrand();
+const DESKTOP_APP_ID = brand.desktop.appId;
+const APP_NAME = brand.name;
+const LINK_SCHEME = brand.scheme;
+
+/** The protocol's brand modules, which the desktop app, the CLI and the daemon read. */
+const brandModule = (name) => importSource(`packages/protocol/src/${name}.ts`);
 
 test("shipped code defaults to our daemon home, not upstream's ~/.paseo", () => {
   assert.deepEqual(findInShippedSources([/~\/\.paseo\b/]), []);
@@ -143,10 +150,14 @@ test("the desktop app has its own id, name and update cache, used consistently",
   // helpers after productName, so keep them equal, as upstream does.
   assert.equal(capture(builder, /^executableName:\s*(.+?)\s*$/m, "executableName"), APP_NAME);
   // app.setName(APP_NAME) picks the userData folder, which must not be upstream's.
-  assert.equal(capture(main, /const APP_NAME = .*\|\| "(.+?)";/, "APP_NAME in main.ts"), APP_NAME);
-  assert.equal(
-    capture(updater, /const SHIPIT_DIRECTORY_NAME = "(.+?)";/, "SHIPIT_DIRECTORY_NAME"),
-    `${appId}.ShipIt`,
+  const { DESKTOP_APP_ID: brandAppId, DESKTOP_APP_NAME } = await brandModule("brand-desktop");
+  assert.equal(DESKTOP_APP_NAME, APP_NAME);
+  assert.equal(brandAppId, appId);
+  assert.match(main, /const APP_NAME = .*\|\| DESKTOP_APP_NAME;/, "main.ts names the app itself");
+  assert.match(
+    updater,
+    /const SHIPIT_DIRECTORY_NAME = `\$\{DESKTOP_APP_ID\}\.ShipIt`;/,
+    "the updater diagnostics look for another ShipIt folder",
   );
   // The official Paseo downloads updates into @getpaseodesktop-updater, named after
   // upstream's package name.
@@ -157,7 +168,7 @@ test("the desktop app has its own id, name and update cache, used consistently",
   assert.equal((await desktopPackager()).metadata.desktopName, `${APP_NAME}.desktop`);
 });
 
-test("the desktop app, mobile app, deep links and daemon share one link scheme", () => {
+test("the desktop app, mobile app, deep links and daemon share one link scheme", async () => {
   const builder = read("packages/desktop/electron-builder.yml");
   const protocolBlock = capture(builder, /^protocols:\n((?:[ -].*\n)+)/m, "protocols block");
   const registeredSchemes = [...protocolBlock.matchAll(/^\s+- ([a-z][a-z0-9+.-]*)\s*$/gm)].map(
@@ -165,24 +176,21 @@ test("the desktop app, mobile app, deep links and daemon share one link scheme",
   );
 
   assert.deepEqual(registeredSchemes, [LINK_SCHEME]);
-  assert.equal(
-    capture(read("packages/desktop/src/main.ts"), /const APP_SCHEME = "(.+?)";/, "APP_SCHEME"),
-    LINK_SCHEME,
+  assert.equal((await brandModule("agent-deep-link")).AGENT_DEEP_LINK_SCHEME, LINK_SCHEME);
+  assert.match(
+    read("packages/desktop/src/main.ts"),
+    /const APP_SCHEME = AGENT_DEEP_LINK_SCHEME;/,
+    "the desktop app registers another scheme",
   );
-  assert.equal(
-    capture(read("packages/app/app.config.js"), /^\s*scheme: "(.+?)",/m, "app.config.js scheme"),
-    LINK_SCHEME,
+  assert.match(
+    read("packages/app/app.config.js"),
+    /^\s*scheme: brand\.scheme,/m,
+    "app.config.js registers another scheme",
   );
-  assert.equal(
-    capture(
-      read("packages/protocol/src/agent-deep-link.ts"),
-      /export const AGENT_DEEP_LINK_SCHEME = "(.+?)";/,
-      "AGENT_DEEP_LINK_SCHEME",
-    ),
-    LINK_SCHEME,
-  );
-  assert.ok(
-    read("packages/server/src/server/bootstrap.ts").includes(`"${LINK_SCHEME}://app"`),
+  assert.equal((await brandModule("brand-desktop")).DESKTOP_APP_ORIGIN, `${LINK_SCHEME}://app`);
+  assert.match(
+    read("packages/server/src/server/bootstrap.ts"),
+    /^\s*DESKTOP_APP_ORIGIN,$/m,
     "the daemon does not admit the desktop renderer origin",
   );
 });
@@ -193,10 +201,12 @@ test("the CLI and packaging scripts find the desktop app under our name", () => 
     "packages/desktop/scripts/after-sign.js",
     "packages/desktop/e2e/packaged-app-smoke.js",
   ];
+  // They read the name electron-builder.yml gives the app from the brand's JSON.
   for (const script of packagingScripts) {
-    assert.equal(
-      capture(read(script), /const EXECUTABLE_NAME = "(.+?)";/, `EXECUTABLE_NAME in ${script}`),
-      APP_NAME,
+    assert.match(
+      read(script),
+      /^const EXECUTABLE_NAME = (?:require\("\.\.\/\.\.\/\.\.\/woowtech\/brands\/index\.cjs"\)\.)?appliedBrand\(\)\.name;$/m,
+      `EXECUTABLE_NAME in ${script} is not the brand's app name`,
     );
   }
   assert.ok(

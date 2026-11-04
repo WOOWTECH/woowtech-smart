@@ -507,7 +507,7 @@ export function inheritLoginShellEnv(input: LoginShellEnvDependencies = {}): voi
     userInfo: input.userInfo ?? defaultUserInfo,
   };
   // woowtech smart: Windows has no login shell to read, so skip it without a warning on every
-  // start; the daemon re-reads the saved PATH itself (README §25, plan G29, H5 F9).
+  // start; the daemon re-reads the saved PATH itself (README §31, plan G29, H5 F9).
   if (deps.platform === "win32") {
     deps.logger.info("[login-shell-env] skipped on Windows", { path: pathEnv(deps.env) });
     return;

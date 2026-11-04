@@ -22,7 +22,7 @@ extraMetadata:
   description: woowtech smart desktop app
 # woowtech smart: the legacy winCodeSign archive holds macOS symlinks. Unpacking it needs the
 # "create symbolic links" privilege, which a normal Windows account does not have, and the build
-# stops with exit status 2. This toolset is plain zip files (README §25).
+# stops with exit status 2. This toolset is plain zip files (README §31).
 toolsets:
   winCodeSign: "1.1.0"
 protocols:
@@ -31,6 +31,7 @@ protocols:
       - woowtech-smart
 afterPack: ./scripts/after-pack.js
 afterSign: ./scripts/after-sign.js
+# woowtech smart: scripts/after-pack.js flips the Electron fuses (scripts/woowtech-fuses.js).
 directories:
   output: release
 files:
@@ -128,7 +129,7 @@ win:
   artifactName: "woowtech-smart-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
   # woowtech smart: the hook signs only in the release job (WOOWTECH_SIGN=1), SHA-256 only; other
-  # builds stay unsigned (README §25, plan D8). The release job passes publisherName: an unsigned
+  # builds stay unsigned (README §31, plan D8). The release job passes publisherName: an unsigned
   # test build that carried it would refuse its own unsigned updates.
   signtoolOptions:
     sign: ./scripts/woowtech-sign-windows.js
@@ -144,12 +145,12 @@ win:
     # woowtech smart: notification toast icon (README §16 桌面通知).
     - from: assets/icon.png
       to: icon.png
-    # woowtech smart: notification-area and window icon, 16–256 px (README §25).
+    # woowtech smart: notification-area and window icon, 16–256 px (README §31).
     - from: assets/icon.ico
       to: icon.ico
   # woowtech smart: no Windows zip. electron-updater uses the NSIS installer, and an extracted
   # copy would take the woowtech-smart: scheme, the Start menu link and the toast activator
-  # for itself (README §25, plan B5/D17).
+  # for itself (README §31, plan B5/D17).
   # x64 only (plan D11). This list wins over --x64 on the command line: with a second architecture
   # electron-builder also builds a combined installer of 259 MB and points latest.yml at it.
   target:

@@ -122,17 +122,19 @@ import { registerBrowserAutomationIpc } from "./features/browser-automation/ipc.
 import { BrowserKeyboard } from "./features/browser-keyboard/index.js";
 import { installAppUpdateOnQuit } from "./features/auto-updater.js";
 import {
+  AGENT_DEEP_LINK_SCHEME,
   buildAgentDeepLinkRoute,
   parseAgentDeepLink,
   type AgentDeepLinkTarget,
 } from "@getpaseo/protocol/agent-deep-link";
+import { DESKTOP_APP_NAME } from "@getpaseo/protocol/brand-desktop";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
-const APP_SCHEME = "woowtech-smart";
+const APP_SCHEME = AGENT_DEEP_LINK_SCHEME;
 const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
 const DISABLE_SINGLE_INSTANCE_LOCK = process.env.PASEO_DISABLE_SINGLE_INSTANCE_LOCK === "1";
-const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "woowtech smart";
+const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || DESKTOP_APP_NAME;
 const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,
   override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,
@@ -150,7 +152,7 @@ const bootstrapComplete = new Promise<void>((resolve) => {
   resolveBootstrapComplete = resolve;
 });
 let bootstrapIsComplete = false;
-// woowtech smart: Windows notification-area icon and protocol state (README §25).
+// woowtech smart: Windows notification-area icon and protocol state (README §31).
 let windowsTray: Tray | null = null;
 let agentLinkProtocolRegistered = false;
 
@@ -377,8 +379,8 @@ if (electronFlags) {
 
 if (process.platform === "linux") {
   // Keep the desktop/dock identity independent of the wrapped Electron filename.
-  app.setDesktopName("woowtech smart.desktop");
-  if (!app.commandLine.hasSwitch("class")) app.commandLine.appendSwitch("class", "woowtech smart");
+  app.setDesktopName(`${DESKTOP_APP_NAME}.desktop`);
+  if (!app.commandLine.hasSwitch("class")) app.commandLine.appendSwitch("class", DESKTOP_APP_NAME);
   log.info("[linux-sandbox]", {
     enabled: !app.commandLine.hasSwitch("no-sandbox"),
     reason: process.env.PASEO_DESKTOP_SANDBOX_REASON ?? "Chromium default",
@@ -1177,7 +1179,7 @@ app.on("before-quit", quitLifecycle.handleBeforeQuit);
 registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
 
 app.on("window-all-closed", () => {
-  // woowtech smart: Windows stays in the tray the way macOS stays in the Dock (README §25).
+  // woowtech smart: Windows stays in the tray the way macOS stays in the Dock (README §31).
   if (quitWhenAllWindowsClosed({ platform: process.platform, trayActive: windowsTray !== null })) {
     app.quit();
     return;

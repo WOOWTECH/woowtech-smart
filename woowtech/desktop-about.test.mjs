@@ -1,5 +1,6 @@
-// The Mac app's About window and Finder's Get Info name WOOW TECH as the copyright holder
-// and the About window shows the product website (woowtech/README.md, 第 6 節). Left alone,
+// The Mac app's About window and Finder's Get Info name the brand's copyright holder (WOOW
+// TECH for woowtech smart) and the About window shows the product website (woowtech/README.md,
+// 第 6 節). Left alone,
 // electron-builder writes "Copyright © <year> <package.json author>", and the desktop's
 // package.json author is upstream's, synced from the root package.json. A merge can drop
 // electron-builder.yml's `copyright`, main.ts's setAboutPanelOptions call or the menu's
@@ -14,13 +15,15 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { appliedBrand } from "./brands/index.cjs";
 import { requireSource } from "./source-modules.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
 const desktopDir = new URL("packages/desktop/", repoRoot);
 
-const COPYRIGHT = "© 2026 WOOW TECH CO., LTD.";
-const WEBSITE = "https://aiot.woowtech.io/";
+const brand = appliedBrand();
+const COPYRIGHT = brand.company.copyright;
+const WEBSITE = `https://${brand.links.websiteHost}/`;
 
 function read(relativePath) {
   return readFileSync(new URL(relativePath, repoRoot), "utf8");
@@ -40,7 +43,7 @@ async function builderCopyright() {
   return new builder.AppInfo(packager, null).copyright;
 }
 
-test("the packaged app names WOOW TECH as the copyright holder", async () => {
+test("the packaged app names the brand's copyright holder", async () => {
   assert.equal(await builderCopyright(), COPYRIGHT);
 });
 

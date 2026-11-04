@@ -1,4 +1,4 @@
-// woowtech smart: a desktop test build (Windows plan G26, README §25) lets the packaged app's
+// woowtech smart: a desktop test build (Windows plan G26, README §31) lets the packaged app's
 // built-in daemon offer the mock agent providers, so notification tests need no real agent.
 // It is packaged with `-c.extraMetadata.woowtechTestBuild=true`; electron-builder writes the
 // field into the packaged package.json, so a release build without it cannot turn on, whatever

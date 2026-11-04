@@ -38,6 +38,8 @@ const SHIPPED_DIRS = [
   "packages/desktop/assets",
   "packages/server/src",
   "packages/cli/src",
+  // The brand's logo is data in the protocol package (brand-values.ts).
+  "packages/protocol/src",
 ];
 const SHIPPED_FILES = /\.(?:[cm]?[jt]sx?|json|svg|html|css|xml)$/;
 const IMAGE_FILES = /\.(?:png|jpe?g|gif|webp|bmp|tiff?|ico|icns|svg)$/i;
@@ -61,7 +63,8 @@ const ALLOWED_DRAWINGS = {
   "packages/app/src/components/icons/forgejo-icon.tsx": "git forge mark, kept by the owner",
   "packages/app/src/components/icons/codeberg-icon.tsx":
     "git forge mark, kept by the owner, in pure black or white (section 24)",
-  "packages/app/src/components/icons/paseo-logo.tsx": "the WOOW logo, our own mark",
+  "packages/protocol/src/brand-values.ts":
+    "the brand's logo (woowtech/brands): the WOOW symbol or Apporo's mark, our own",
   "packages/app/src/components/icons/manual-status-icon.tsx": "a plain gear for pipeline status",
   "packages/app/src/components/sidebar/workspace-meta-row/check-indicator.tsx":
     "check and cross marks",
@@ -76,6 +79,7 @@ const ALLOWED_DRAWINGS = {
 // The bitmap images of woowtech smart's own that ship (woowtech/tools/generate-icons.mjs).
 const OUR_IMAGES = new Set([
   "packages/app/assets/images/android-icon-foreground.png",
+  "packages/app/assets/images/android-icon-monochrome.png",
   "packages/app/assets/images/favicon-dark-attention.png",
   "packages/app/assets/images/favicon-dark-running.png",
   "packages/app/assets/images/favicon-dark.png",
@@ -84,8 +88,10 @@ const OUR_IMAGES = new Set([
   "packages/app/assets/images/favicon-light.png",
   "packages/app/assets/images/favicon.png",
   "packages/app/assets/images/icon.png",
+  "packages/app/assets/images/ios-icon-dark.png",
   "packages/app/assets/images/notification-icon.png",
   "packages/app/assets/images/splash-icon.png",
+  "packages/app/assets/images/splash-icon-dark.png",
   "packages/app/public/apple-touch-icon.png",
   "packages/app/public/pwa-icon-192.png",
   "packages/app/public/pwa-icon-512.png",

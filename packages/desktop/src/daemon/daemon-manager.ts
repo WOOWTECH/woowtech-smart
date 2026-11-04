@@ -282,7 +282,7 @@ function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
   }
 }
 
-// woowtech smart: a free address when Windows reserved the default port (README §25, G12).
+// woowtech smart: a free address when Windows reserved the default port (README §31, G12).
 async function desktopDaemonListenOverride(home: string): Promise<string | null> {
   const decision = await chooseDesktopDaemonListen({
     platform: process.platform,

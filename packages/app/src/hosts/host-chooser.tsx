@@ -1,4 +1,5 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Modal,
   Pressable,
@@ -15,7 +16,11 @@ import { router } from "expo-router";
 import { Server } from "lucide-react-native";
 import { create } from "zustand";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { HostStatusDotSlot } from "@/components/hosts/host-picker";
+import {
+  HostStatusDotSlot,
+  hostsSharingAName,
+  useHostSubtitle,
+} from "@/components/hosts/host-picker";
 import { isWeb } from "@/constants/platform";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import {
@@ -104,13 +109,18 @@ export function useHostChooser() {
 function HostChooserRow({
   host,
   active,
+  sharesName,
   onChooseHost,
 }: {
   host: HostProfile;
   active: boolean;
+  sharesName: boolean;
   onChooseHost: (serverId: string) => void;
 }) {
   const { theme } = useUnistyles();
+  // woowtech smart: the address, with a short id tag when another host has the same name, instead
+  // of the whole server id (components/hosts/host-picker.tsx hostSubtitle).
+  const subtitle = useHostSubtitle(host.serverId, sharesName);
   const handlePress = useCallback(() => onChooseHost(host.serverId), [host.serverId, onChooseHost]);
   const rowStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -135,7 +145,7 @@ function HostChooserRow({
           {host.label}
         </Text>
         <Text style={styles.rowSubtitle} numberOfLines={1}>
-          {host.serverId}
+          {subtitle ?? host.serverId}
         </Text>
       </View>
       <Server size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
@@ -144,8 +154,10 @@ function HostChooserRow({
 }
 
 export function HostChooserModal() {
+  const { t } = useTranslation();
   const { theme } = useUnistyles();
   const hosts = useHosts();
+  const sharedNames = useMemo(() => hostsSharingAName(hosts), [hosts]);
   const request = useHostChooserStore((state) => state.request);
   const close = useHostChooserStore((state) => state.close);
   const inputRef = useRef<EditingTextInputHandle>(null);
@@ -252,7 +264,7 @@ export function HostChooserModal() {
               ref={inputRef}
               initialValue={query}
               onChangeText={handleQueryChange}
-              placeholder="Search hosts..."
+              placeholder={t("woowtech.hostPicker.search")}
               placeholderTextColor={theme.colors.foregroundMuted}
               style={styles.input}
               autoCapitalize="none"
@@ -266,12 +278,15 @@ export function HostChooserModal() {
             keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator={false}
           >
-            {options.length === 0 ? <Text style={styles.emptyText}>No matching hosts</Text> : null}
+            {options.length === 0 ? (
+              <Text style={styles.emptyText}>{t("woowtech.interfaceText.noMatchingHosts")}</Text>
+            ) : null}
             {options.map((host, index) => (
               <HostChooserRow
                 key={host.serverId}
                 host={host}
                 active={index === activeOptionIndex}
+                sharesName={sharedNames.has(host.serverId)}
                 onChooseHost={chooseHost}
               />
             ))}

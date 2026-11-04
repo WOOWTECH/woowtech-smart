@@ -369,7 +369,7 @@ jobs:
           fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
           NODE
 
-      # woowtech smart: every Windows build of this job is signed (README §25, plan D8), so a
+      # woowtech smart: every Windows build of this job is signed (README §31, plan D8), so a
       # missing secret or variable fails it instead of shipping an unsigned build.
       - name: Check Windows signing settings
         shell: bash
@@ -377,7 +377,7 @@ jobs:
           WIN_PUBLISHER_DN: ${{ vars.WIN_PUBLISHER_DN }}
         run: |
           if [[ "$WIN_PUBLISHER_DN" != *CN=* ]]; then
-            echo "::error::Set the WIN_PUBLISHER_DN variable to the signing certificate's subject (README §25)"
+            echo "::error::Set the WIN_PUBLISHER_DN variable to the signing certificate's subject (README §31)"
             exit 1
           fi
 

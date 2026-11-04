@@ -1,4 +1,4 @@
-// Merge guards for the Windows daemon (README §25, G11). The daemon has no console of its
+// Merge guards for the Windows daemon (README §31, G11). The daemon has no console of its
 // own, so on Windows a console-subsystem child started without windowsHide flashes a console
 // window. A new upstream fork() or spawn() fails here until it hides its window.
 import assert from "node:assert/strict";
@@ -78,11 +78,12 @@ test("process trees are killed through the hidden taskkill wrapper", () => {
 test("the Windows app moves its daemon off a reserved default port (G12)", () => {
   const read = (file) => readFileSync(join(root, file), "utf8");
   const fallback = read("packages/desktop/src/daemon/woowtech-listen-fallback.ts");
-  const serverPort = read("packages/server/src/server/config.ts").match(
-    /const DEFAULT_PORT = (\d+);/,
-  )?.[1];
-  assert.ok(serverPort);
-  assert.ok(fallback.includes(`WOOWTECH_DAEMON_DEFAULT_PORT = ${serverPort};`));
+  // The app and the daemon read the same default port, the brand's.
+  assert.match(
+    read("packages/server/src/server/config.ts"),
+    /const DEFAULT_PORT = DEFAULT_DAEMON_PORT;/,
+  );
+  assert.match(fallback, /WOOWTECH_DAEMON_DEFAULT_PORT = DEFAULT_DAEMON_PORT;/);
   const manager = read("packages/desktop/src/daemon/daemon-manager.ts");
   assert.match(manager, /const listenOverride = await desktopDaemonListenOverride\(home\);/);
   assert.match(manager, /\.\.\.\(listenOverride \? \{ PASEO_LISTEN: listenOverride \} : \{\}\)/);

@@ -329,6 +329,34 @@ describe("relay-transport control lifecycle", () => {
     expect(completed).toBe(true);
   });
 
+  // woowtech smart: a graceful close waits for the relay's answer, and the daemon's shutdown waits
+  // for these sockets (woowtech/README.md section 11).
+  test("cuts its sockets on stop instead of closing them gracefully", async () => {
+    const logger = createMockLogger();
+    const controller = startRelayTransport({
+      logger: logger as unknown as pino.Logger,
+      attachSocket: async () => {},
+      relayEndpoint: "relay.paseo.sh:443",
+      relayUseTls: true,
+      serverId: "srv_test",
+      createWebSocket: relay.createWebSocket,
+    });
+    controllers.push(controller);
+    const control = relay.sockets[0];
+    control.open();
+    control.message(JSON.stringify({ type: "sync", connectionIds: [] }));
+    control.message(JSON.stringify({ type: "connected", connectionId: "clt_test" }));
+    const dataSocket = relay.sockets[1];
+    dataSocket.open();
+    const gracefulCloses = [vi.spyOn(control, "close"), vi.spyOn(dataSocket, "close")];
+
+    await controller.stop();
+
+    expect(control.terminateCalls).toBe(1);
+    expect(dataSocket.terminateCalls).toBe(1);
+    for (const close of gracefulCloses) expect(close).not.toHaveBeenCalled();
+  });
+
   test("uses relayUseTls for control and data socket URLs", () => {
     const logger = createMockLogger();
     const controller = startRelayTransport({

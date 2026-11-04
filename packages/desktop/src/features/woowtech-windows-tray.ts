@@ -1,5 +1,5 @@
 // woowtech smart: the Windows notification-area icon, the Windows counterpart of the Dock
-// icon (README §25). Policy lives in woowtech-windows-shell.ts.
+// icon (README §31). Policy lives in woowtech-windows-shell.ts.
 import { existsSync, writeFileSync } from "node:fs";
 import { Menu, Notification, Tray, nativeImage } from "electron";
 import type { TrayHintText, TrayLabels } from "./woowtech-windows-shell.js";

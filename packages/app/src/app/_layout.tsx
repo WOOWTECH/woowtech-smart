@@ -44,6 +44,7 @@ import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
 import { WorkspaceShortcutTargetsSubscriber } from "@/components/workspace-shortcut-targets-subscriber";
 import { FloatingPanelPortalHost } from "@/components/ui/floating-panel-portal";
 import { HostChooserModal, useHostChooser } from "@/hosts/host-chooser";
+import { WoowtechHostConfirmationSheet } from "@/hosts/woowtech-host-confirmation-sheet";
 import {
   getIsElectronRuntime,
   HEADER_INNER_HEIGHT,
@@ -82,6 +83,8 @@ import { loadDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { RosettaCalloutSource } from "@/desktop/updates/rosetta-callout-source";
 import { UpdateCalloutSource } from "@/desktop/updates/update-callout-source";
 import { NotificationDisplayCalloutSource } from "@/desktop/woowtech-notification-display-callout-source";
+import { NotificationBannerCheckCalloutSource } from "@/desktop/woowtech-notification-banner-check-callout-source";
+import { useSettingsScreenOptions } from "@/navigation/woowtech-settings-swipe-back";
 import { useActiveWorktreeNewAction } from "@/hooks/use-active-worktree-new-action";
 import { useGlobalNewWorkspaceAction } from "@/hooks/use-global-new-workspace-action";
 import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
@@ -584,6 +587,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <UpdateCalloutSource />
         {/* woowtech smart: notices the system did not show (woowtech-notification-fallback.ts). */}
         <NotificationDisplayCalloutSource />
+        <NotificationBannerCheckCalloutSource />
         <LegacyAgentSkillsMigration />
         <WorktreeSetupCalloutSource />
         <CommandCenterRootActions />
@@ -594,6 +598,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
         <CommandCenter />
         <AddProjectFlowHost />
         <HostChooserModal />
+        <WoowtechHostConfirmationSheet />
         <ProviderSettingsHost />
         <WorkspaceSetupDialog />
         <KeyboardShortcutsDialog />
@@ -695,7 +700,7 @@ function OfferLinkListener({
 
   useEffect(() => {
     let cancelled = false;
-    // woowtech smart: pairing links open the app (runtime/woowtech-pairing-link.ts).
+    // woowtech smart: pairing links (runtime/woowtech-pairing-link.ts).
     const handleUrl = (url: string | null) =>
       void handlePairingLink(url, {
         importOffer: upsertDaemonFromOfferUrl,
@@ -868,6 +873,8 @@ const ROOT_STACK_NESTED_NAVIGATOR_SCREENS = ["h/[serverId]"] as const;
 
 function RootStack() {
   const storeReady = useStoreReady();
+  // woowtech smart: iOS edge swipe back on settings pages (navigation/woowtech-settings-swipe-back.ts).
+  const settingsOptions = useSettingsScreenOptions();
   return (
     <ThemedStack
       screenOptions={ROOT_STACK_SCREEN_OPTIONS}
@@ -876,8 +883,8 @@ function RootStack() {
       <Stack.Screen name="index" />
       <Stack.Protected guard={storeReady}>
         <Stack.Screen name="welcome" />
-        <Stack.Screen name="settings/index" />
-        <Stack.Screen name="settings/[section]" />
+        <Stack.Screen name="settings/index" options={settingsOptions} />
+        <Stack.Screen name="settings/[section]" options={settingsOptions} />
         <Stack.Screen name="new" />
         <Stack.Screen name="open-project" />
         <Stack.Screen name="sessions" />
@@ -885,11 +892,17 @@ function RootStack() {
         <Stack.Screen name="pair-scan" />
       </Stack.Protected>
       <Stack.Screen name="h/[serverId]" />
-      <Stack.Screen name="settings/hosts/[serverId]/index" />
-      <Stack.Screen name="settings/hosts/[serverId]/[hostSection]" />
-      <Stack.Screen name="settings/hosts/[serverId]/plugins/[pluginId]/[screenId]" />
-      <Stack.Screen name="settings/hosts/[serverId]/projects/index" />
-      <Stack.Screen name="settings/hosts/[serverId]/projects/[projectId]" />
+      <Stack.Screen name="settings/hosts/[serverId]/index" options={settingsOptions} />
+      <Stack.Screen name="settings/hosts/[serverId]/[hostSection]" options={settingsOptions} />
+      <Stack.Screen
+        name="settings/hosts/[serverId]/plugins/[pluginId]/[screenId]"
+        options={settingsOptions}
+      />
+      <Stack.Screen name="settings/hosts/[serverId]/projects/index" options={settingsOptions} />
+      <Stack.Screen
+        name="settings/hosts/[serverId]/projects/[projectId]"
+        options={settingsOptions}
+      />
     </ThemedStack>
   );
 }

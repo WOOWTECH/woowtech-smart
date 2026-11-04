@@ -16,7 +16,7 @@ export type NodeEntrypointArgvMode = "bare" | "node-script";
 interface CreateNodeEntrypointInvocationInput {
   execPath: string;
   isPackaged: boolean;
-  /** woowtech smart: packaged test build (README §25, G26). */
+  /** woowtech smart: packaged test build (README §31, G26). */
   testBuild?: boolean;
   packagedRunnerPath: string | null;
   entrypoint: NodeEntrypointSpec;
@@ -30,7 +30,7 @@ export function createElectronNodeEnv(
   options?: { isPackaged?: boolean; testBuild?: boolean },
 ): NodeJS.ProcessEnv {
   // woowtech smart: in the daemon, development mode only adds the mock agent providers, which
-  // a packaged test build needs (README §25, G26).
+  // a packaged test build needs (README §31, G26).
   const production = options?.isPackaged === true && options.testBuild !== true;
   return {
     ...baseEnv,

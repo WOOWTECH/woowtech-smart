@@ -1,6 +1,6 @@
 // woowtech smart: a daemon worker that keeps crashing right after it starts was restarted
 // at once, forever. On Windows each restart can also open a console window (getpaseo #3333;
-// woowtech/README.md §25, G12). The first crash after a stable run still restarts at once;
+// woowtech/README.md §31, G12). The first crash after a stable run still restarts at once;
 // crashes in a row wait 1 s, 2 s, 4 s … up to 30 s.
 
 export interface CrashBackoffOptions {

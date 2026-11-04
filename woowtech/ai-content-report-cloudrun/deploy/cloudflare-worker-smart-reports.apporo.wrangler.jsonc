@@ -1,0 +1,45 @@
+// Apporo smart's smart reports Worker: cloudflare-worker-smart-reports.js on the single path
+// www.apporo.ai/api/smart/v1/ai-content-reports, in the Cloudflare account that holds the apporo.ai
+// zone (the client's, not WOOW's), the way Apporo aiot's Worker serves www.apporo.ai/api/*. This route
+// is more specific than aiot's, so Cloudflare sends this path here and everything else under /api/
+// to aiot as before. Everything else is as in cloudflare-worker-smart-reports.wrangler.jsonc, whose
+// notes apply: do not edit the RELAY_ORIGIN placeholder but pass the Cloud Run URL with --var (taken
+// from gcloud, as woowtech-smart-reports-deploy.sh --brand=apporo prints it), use wrangler 4.149.0 with
+// its own profile, and set CLOUDFLARE_ACCOUNT_ID to the account that holds the apporo.ai zone. The
+// first time:
+//   npx --yes wrangler@4.149.0 secret put EDGE_KEY --config "$CFG"
+//   npx --yes wrangler@4.149.0 deploy --config "$CFG" --var "RELAY_ORIGIN:<Cloud Run URL>"
+// A wrangler deploy replaces the text variables set in the dashboard with the ones below, and keeps
+// every secret. It runs on the account's plan, as aiot's Worker does. On Workers Free all Workers of
+// the account share 100,000 requests a day. namespace_id must be unique among the rate limiting
+// namespaces of that account.
+{
+  "name": "smart-reports-proxy",
+  "main": "cloudflare-worker-smart-reports.js",
+  "compatibility_date": "2026-09-01",
+  // workers.dev and Preview URLs off: they are outside the apporo.ai zone and its rate limiting.
+  "workers_dev": false,
+  "preview_urls": false,
+  // One exact path on the existing website host: never a wildcard, which would take over the site.
+  "routes": [
+    { "pattern": "www.apporo.ai/api/smart/v1/ai-content-reports", "zone_name": "apporo.ai" },
+  ],
+  // No Workers Logs and no Logpush: the Worker sees client addresses and request bodies.
+  "observability": { "enabled": false },
+  "logpush": false,
+  "vars": {
+    "RELAY_ORIGIN": "set-me:the-run.app-URL-printed-by-woowtech-smart-reports-deploy.sh",
+    // The address this Worker serves, and the origins of Apporo smart's desktop App and web app
+    // (woowtech/brands/apporo.json: scheme and web.host).
+    "PUBLIC_HOST": "www.apporo.ai",
+    "PUBLIC_PATH": "/api/smart/v1/ai-content-reports",
+    "ALLOWED_ORIGINS": "apporosmart://app https://smart.apporo.ai",
+  },
+  "ratelimits": [
+    {
+      "name": "IP_RATE_LIMITER",
+      "namespace_id": "4102",
+      "simple": { "limit": 10, "period": 60 },
+    },
+  ],
+}
