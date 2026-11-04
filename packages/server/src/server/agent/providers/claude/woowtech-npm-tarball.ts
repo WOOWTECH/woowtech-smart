@@ -9,9 +9,12 @@ import path from "node:path";
 import { gunzipSync } from "node:zlib";
 
 export class NpmTarballError extends Error {
-  constructor(public readonly reason: string) {
+  readonly reason: string;
+
+  constructor(reason: string) {
     super(`Refused the npm tarball: ${reason}`);
     this.name = "NpmTarballError";
+    this.reason = reason;
   }
 }
 

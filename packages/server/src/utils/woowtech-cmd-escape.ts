@@ -10,12 +10,17 @@ import path from "node:path";
 const CMD_EXE_METACHAR_PATTERN = /([()%!^"`<>&|;, *?])/g;
 
 export class WindowsCommandScriptArgumentError extends Error {
-  constructor(public readonly script: string) {
+  // A plain field: the terminal worker runs this file with Node's type stripping when it runs from
+  // source, and that refuses a constructor parameter property.
+  readonly script: string;
+
+  constructor(script: string) {
     super(
       `${path.win32.basename(script)} is a batch script, and cmd.exe cannot pass it an argument ` +
         "that contains a line break. Install the program's .exe version instead.",
     );
     this.name = "WindowsCommandScriptArgumentError";
+    this.script = script;
   }
 }
 

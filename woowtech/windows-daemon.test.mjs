@@ -63,6 +63,19 @@ test("every daemon fork() and direct spawn() hides its window", () => {
   assert.deepEqual(missing, []);
 });
 
+test("the fork's server files load under Node's type stripping", () => {
+  // Run from source, the terminal worker loads the server's files with --experimental-strip-types,
+  // which refuses these. The packaged app runs compiled JavaScript, so it would not notice.
+  const offenders = sourceFiles("packages/server/src")
+    .filter((file) => /\/woowtech-[^/]*\.ts$/.test(file))
+    .filter((file) =>
+      /constructor\([^)]*\b(?:public|private|protected|readonly)\b|^\s*(?:export\s+)?enum\s/m.test(
+        readFileSync(join(root, file), "utf8"),
+      ),
+    );
+  assert.deepEqual(offenders, []);
+});
+
 test("process trees are killed through the hidden taskkill wrapper", () => {
   const offenders = sourceFiles("packages/server/src").filter((file) =>
     /from "tree-kill"/.test(readFileSync(join(root, file), "utf8")),
