@@ -2165,7 +2165,7 @@ Windows 的更新（G37、D20）：
 - Windows 不在結束 App 時安裝下載好的更新：結束後馬上關機，Windows 會把正在跑的靜默安裝程式砍掉，App 就變成沒安裝（electron-builder #7807）；App 常駐系統匣，結束後常常就是關機。
 - 只在使用者按「安裝並重啟」時安裝，而且安裝程式靜默執行，跟 Mac 的重新啟動一樣，不再跳出安裝精靈。裝完 App 會帶 `--updated` 自己重開（B1 已經把它當成開 App；這個參數不會寫進 `main.log`，要驗證更新看版本號和 `quitAndInstall` 那一行）。
 - 政策在 `features/woowtech-windows-update.ts`，接點是 `auto-updater.ts` 的 `installAppUpdateOnQuit` 和 `quitAndInstall`。macOS、Linux 照上游。
-- 實機（2026-11-04，WI-6）：下載好後從系統匣結束，30 秒內沒有安裝、版本不變、下載保留；再開按「安裝並重啟」，沒有精靈、沒有 UAC，19 秒內以新版重開、daemon 回來，更新前的 agent 還在。測的是本機更新來源，來源沒有舊版 blockmap，走完整下載；差異下載和有 agent 正在跑時的更新沒測到。
+- 實機（2026-11-04，WI-6）：下載好後從系統匣結束，30 秒內沒有安裝、版本不變、下載保留；再開按「安裝並重啟」，沒有精靈、沒有 UAC，19 秒內以新版重開、daemon 回來，更新前的 agent 還在。0.8.0 更新到合併後的 0.9.0 也一樣（20 秒）。測的是本機更新來源，來源沒有舊版 blockmap，走完整下載；差異下載、有 agent 正在跑時的更新，以及真 agent 的對話歷史沒測到（假 agent 不存歷史，連只重啟 daemon 都會消失）。
 - 還沒做：下次啟動時自動安裝已下載的更新、更新前一律正常停掉 daemon（不管是誰啟動的）、系統匣的更新選項。WI-6 沒看到需要馬上做的問題。
 
 daemon 的埠被保留或占用（G12）：
@@ -2231,6 +2231,7 @@ daemon 的埠被保留或占用（G12）：
 Electron 與 electron-builder（G7、G8）：
 
 - Electron 44.2.0 升到 44.5.1：44.4.1 修了通知物件的生命週期問題。在 macOS 用 dev 模式測通知時，換版後要用 Apple Development 身分重新簽 `node_modules/electron/dist/Electron.app`（`codesign --force --deep --sign <身分>`），未簽的 Electron 發通知會失敗。
+- `generateFuseConfig` 在 26.17.0 變成非同步，`scripts/woowtech-fuses.js` 要 `await`，否則每個平台都停在 `Unsupported fuse version number: undefined`（合併 0.9.0 時發現，`woowtech/desktop-fuses.test.mjs` 守著）。
 - electron-builder 26.8.1 升到 26.17.0：26.8.1 的 NSIS 首次安裝可能當掉、更新時會殺掉 daemon、遇到中文使用者名稱可能卡住（上游 PR #5481、#5663）。26.15.0–26.15.5 的安裝檔是壞的，不要用；npm 的 `latest` 標籤目前停在 26.15.3。
 - 新版的相依套件不再提升到根目錄，`app-builder-lib` 留在 `packages/desktop/node_modules`，守門 `claude-sdk.test.mjs` 改從 desktop 解析。
 - lockfile 只收這次升級的變動。這台的 npm 10.9.9 重新整理 lockfile 時會順手刪掉 35 個選用的 peer（`@react-native/metro-config` 一系），跟升級無關，沒有收進來。
@@ -2238,7 +2239,7 @@ Electron 與 electron-builder（G7、G8）：
 驗證：
 
 - 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`、`terminal/woowtech-default-shell`；desktop 的 `cli-install/woowtech-windows-cli-shim`、`cli-install/woowtech-windows-user-path`、`scripts/woowtech-sign-windows`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
-- 實機（2026-11-04，一台 Windows 10 22H2 x64，未簽章的測試版，只測 x64）：建置、安裝（沒有 UAC、沒有「所有使用者」那頁）、SmartScreen 畫面（不明的發行者）、內建 daemon、系統匣、通知橫幅和控制中心、關窗常駐、更新、解除安裝都走過。通知的點擊是用程式注入的，路徑正確，但前景落在哪裡沒有定論（連記事本也一樣），要真人點一次（WD-14）。
+- 實機（2026-11-04，一台 Windows 10 22H2 x64，未簽章的測試版，只測 x64）：建置、安裝（沒有 UAC、沒有「所有使用者」那頁）、SmartScreen 畫面（不明的發行者）、內建 daemon、系統匣、通知橫幅和控制中心、關窗常駐、更新、解除安裝都走過。通知的點擊是用程式注入的，路徑正確，但前景落在哪裡沒有定論（連記事本也一樣），要真人點一次（WD-14）。fuse 也實測過：改動 `app.asar` 表頭後，App 以 `Integrity check failed` 拒絕啟動。
 - 實機還沒做：Windows 11（Smart App Control 只有 11 有）、手機推播（WP、D6、D12）、中文帳號（WI-7）、WT-1～7、「安裝 CLI」（會改使用者 PATH）；真的簽章要等憑證核發後在發行流程上跑；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
 - 章節撞號：main 的第 25 節是「上架候選全面驗收」，Windows 原本也編 25，第 30 節是品牌層 ⇒ Windows 改成第 31 節，指向它的引用一併改掉。
 - 品牌層：Windows 的程式碼用品牌的名字，但 `build/installer.nsh` 和 `scripts/woowtech-sign-windows.js` 還寫著 woowtech 的值。Apporo 的 Windows 版要先把這兩個檔案接上 `woowtech/brands`。
