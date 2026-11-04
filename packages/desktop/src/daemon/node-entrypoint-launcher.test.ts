@@ -41,6 +41,33 @@ describe("node-entrypoint-launcher", () => {
       });
     });
 
+    // woowtech smart: a packaged test build offers the mock providers (README §31, G26).
+    it("runs a packaged test build's node entrypoints in development mode", () => {
+      const invocation = createNodeEntrypointInvocation({
+        execPath: "C:\\Programs\\woowtech smart\\woowtech smart.exe",
+        isPackaged: true,
+        testBuild: true,
+        packagedRunnerPath: "C:\\runner.js",
+        entrypoint: CLI_ENTRYPOINT,
+        argvMode: "node-script",
+        args: [],
+        baseEnv: { PASEO_NODE_ENV: "production" },
+      });
+      expect(invocation.env.PASEO_NODE_ENV).toBe("development");
+      expect(
+        createNodeEntrypointInvocation({
+          execPath: "C:\\x.exe",
+          isPackaged: true,
+          testBuild: false,
+          packagedRunnerPath: "C:\\runner.js",
+          entrypoint: CLI_ENTRYPOINT,
+          argvMode: "node-script",
+          args: [],
+          baseEnv: { PASEO_NODE_ENV: "development" },
+        }).env.PASEO_NODE_ENV,
+      ).toBe("production");
+    });
+
     it("uses the entrypoint directly in development", () => {
       expect(
         createNodeEntrypointInvocation({

@@ -39,7 +39,7 @@ afterEach(() => {
  * directory and PATH directory. Nothing here reaches the real home or the real
  * /opt/homebrew and /usr/local, so no real `claude` ever runs.
  */
-function fakeMachine(options: { platform?: NodeJS.Platform } = {}) {
+function fakeMachine(options: { platform?: NodeJS.Platform; appData?: string | null } = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), "woowtech-claude-fallback-"));
   tempDirs.push(root);
   const home = path.join(root, "home", "someone");
@@ -58,10 +58,15 @@ function fakeMachine(options: { platform?: NodeJS.Platform } = {}) {
     return file;
   };
 
+  const appData =
+    options.appData === null
+      ? undefined
+      : (options.appData ?? path.join(root, "AppData", "Roaming"));
   const io: ClaudeExecutableIo = {
     platform: options.platform ?? process.platform,
     homeDir: () => home,
     rootDir: root,
+    env: appData === undefined ? {} : { APPDATA: appData },
     // PATH holds only this machine's PATH directory.
     findOnPath: async (name) => {
       pathLookups.push(name);
@@ -165,11 +170,48 @@ describe.skipIf(isPlatform("win32"))("findDefaultClaudeExecutable", () => {
     await expect(findDefaultClaudeExecutable(machine.io)).resolves.toBeNull();
   });
 
-  test("has no fallback locations on Windows", async () => {
+  test("on Windows tries the native installer's claude.exe, then npm's claude.cmd", () => {
+    expect(
+      claudeFallbackLocations({
+        homeDir: "/home",
+        rootDir: "/",
+        platform: "win32",
+        env: { APPDATA: "/home/AppData/Roaming" },
+      }),
+    ).toEqual([
+      path.join("/home", ".local", "bin", "claude.exe"),
+      path.join("/home/AppData/Roaming", "npm", "claude.cmd"),
+    ]);
+  });
+
+  test("on Windows uses the native installer's claude.exe before npm's shim", async () => {
+    const machine = fakeMachine({ platform: "win32" });
+    machine.installClaude("~/.local/bin/claude.exe");
+    machine.installClaude("/AppData/Roaming/npm/claude.cmd");
+
+    await expect(findDefaultClaudeExecutable(machine.io)).resolves.toBe(
+      machine.at("~/.local/bin/claude.exe"),
+    );
+  });
+
+  test("on Windows uses npm's claude.cmd when the native installer left none", async () => {
     const machine = fakeMachine({ platform: "win32" });
     machine.installClaude("~/.local/bin/claude");
+    machine.installClaude("/AppData/Roaming/npm/claude.cmd");
 
+    await expect(findDefaultClaudeExecutable(machine.io)).resolves.toBe(
+      machine.at("/AppData/Roaming/npm/claude.cmd"),
+    );
+  });
+
+  test("on Windows skips npm's location when APPDATA is unset, and still prefers PATH", async () => {
+    const machine = fakeMachine({ platform: "win32", appData: null });
+    machine.makeDirectory("~/.local/bin/claude.exe");
+    expect(machine.io.env).toEqual({});
     await expect(findDefaultClaudeExecutable(machine.io)).resolves.toBeNull();
+
+    const onPath = machine.installClaudeOnPath();
+    await expect(findDefaultClaudeExecutable(machine.io)).resolves.toBe(onPath);
   });
 });
 

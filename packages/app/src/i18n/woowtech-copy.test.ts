@@ -226,6 +226,10 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
       "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
     failed:
       "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+    unconfirmedWindows:
+      "Check Settings › System › Notifications and make sure woowtech smart is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
+    failedWindows:
+      "Check Settings › System › Notifications and make sure woowtech smart is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
   };
   expect(woowtechCopyFor("zh-TW").desktopNotifications).toEqual({
     supported: "系統支援通知，但尚未確認系統授權狀態。",
@@ -238,6 +242,10 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
     unconfirmedTitle: "無法確認通知是否顯示",
     unconfirmed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
     failed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+    unconfirmedWindows:
+      "請到「設定 › 系統 › 通知」確認 woowtech smart 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
+    failedWindows:
+      "請到「設定 › 系統 › 通知」確認 woowtech smart 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
   });
   for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
     const copy = woowtechCopyFor(language).desktopNotifications;

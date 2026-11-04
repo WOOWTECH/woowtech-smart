@@ -61,7 +61,10 @@ test("the supervisor starts workers outside a working directory that was removed
   const supervisor = source("packages/server/scripts/supervisor.ts");
   assert.match(supervisor, /const cwd = workerCwd\(\);/);
   assert.match(supervisor, /spawn\(spawnSpec\.command, spawnSpec\.args, \{[^}]*\bcwd,/s);
-  assert.match(supervisor, /fork\(workerEntry, workerArgs, \{[^}]*\bcwd,/s);
+  assert.match(
+    supervisor,
+    /fork\(\s*workerEntry,\s*workerArgs,\s*withHiddenWindow\(\{[^}]*\bcwd,/s,
+  );
 });
 
 test("dictation and voice mode say why they are unavailable in the app language (10/8)", () => {

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { fork } from "node:child_process";
+import { withHiddenWindow } from "../utils/woowtech-hidden-fork.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { assertAbsolutePath, isSameOrDescendantPath } from "../server/path-utils.js";
 import type { TerminalState } from "@getpaseo/protocol/messages";
@@ -140,11 +141,15 @@ function cloneTerminalInfo(info: RequiredWorkerTerminalInfo): RequiredWorkerTerm
 }
 
 function forkTerminalWorker(): TerminalWorkerProcess {
-  return fork(fileURLToPath(resolveWorkerUrl()), [], {
-    execArgv: resolveWorkerExecArgv(),
-    serialization: "advanced",
-    stdio: ["ignore", "ignore", "inherit", "ipc"],
-  }) as TerminalWorkerProcess;
+  return fork(
+    fileURLToPath(resolveWorkerUrl()),
+    [],
+    withHiddenWindow({
+      execArgv: resolveWorkerExecArgv(),
+      serialization: "advanced",
+      stdio: ["ignore", "ignore", "inherit", "ipc"],
+    }),
+  ) as TerminalWorkerProcess;
 }
 
 export function createWorkerTerminalManager(

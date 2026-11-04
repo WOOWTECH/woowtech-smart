@@ -27,6 +27,8 @@ test("Traditional Chinese is regenerated from upstream's current Simplified Chin
     {
       cwd: repoRoot,
       encoding: "utf8",
+      // npx is a command script on Windows, which only cmd.exe can start.
+      shell: process.platform === "win32",
     },
   );
   assert.equal(check.status, 0, check.stderr || check.stdout);

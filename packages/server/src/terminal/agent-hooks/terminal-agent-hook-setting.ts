@@ -5,11 +5,14 @@ import {
   uninstallRegisteredAgentHooks,
 } from "./provider-registry.js";
 import type { DaemonConfigStore } from "../../server/daemon-config-store.js";
+import { terminalAgentHooksSupported } from "./woowtech-hook-platform.js";
 
 interface ApplyTerminalAgentHookSettingOptions {
   store: DaemonConfigStore;
   logger?: AgentHookInstallLogger;
   install?: AgentHookInstallOptions;
+  /** woowtech smart: hooks are not installed on Windows hosts yet (plan G9). */
+  platform?: NodeJS.Platform;
 }
 
 // Installing agent hooks edits the user's real agent config files, so it only
@@ -22,14 +25,22 @@ export function applyTerminalAgentHookSetting(
 ): () => void {
   const { store, logger, install } = options;
   const installOptions: RegisteredAgentHookInstallOptions = { ...install, logger };
+  const supported = terminalAgentHooksSupported(options.platform);
+  function installIfSupported(): void {
+    if (!supported) {
+      logger?.warn({ platform: options.platform }, "Terminal agent hooks are not supported here");
+      return;
+    }
+    installRegisteredAgentHooks(installOptions);
+  }
 
   if (store.get().enableTerminalAgentHooks) {
-    installRegisteredAgentHooks(installOptions);
+    installIfSupported();
   }
 
   return store.onFieldChange("enableTerminalAgentHooks", (value) => {
     if (value === true) {
-      installRegisteredAgentHooks(installOptions);
+      installIfSupported();
       return;
     }
     try {

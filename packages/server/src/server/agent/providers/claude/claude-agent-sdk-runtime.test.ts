@@ -46,7 +46,11 @@ async function makeSdkTarball(
   await writeFile(path.join(packageDir, "package.json"), '{"type":"module","main":"sdk.mjs"}');
   await writeFile(path.join(packageDir, "sdk.mjs"), sdkSource);
   const tarballPath = path.join(scratchDir, "sdk.tgz");
-  execFileSync("tar", ["-czf", tarballPath, "-C", path.join(scratchDir, "src"), "package"]);
+  // COPYFILE_DISABLE keeps macOS tar from adding AppleDouble ._ entries, which no registry
+  // tarball has and the JS extractor refuses (woowtech-npm-tarball.ts).
+  execFileSync("tar", ["-czf", tarballPath, "-C", path.join(scratchDir, "src"), "package"], {
+    env: { ...process.env, COPYFILE_DISABLE: "1" },
+  });
   const bytes = new Uint8Array(await readFile(tarballPath));
   const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
   return { bytes, integrity };

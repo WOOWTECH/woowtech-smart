@@ -3529,6 +3529,9 @@ export const ServerInfoStatusPayloadSchema = z
         // woowtech smart (fork-owned, not upstream): pushes go through WoowTech's relay, so
         // the app may register wsp1 push tokens (woowtech-push.ts). Never set by Paseo.
         woowtechPush: z.boolean().optional(),
+        // woowtech smart (fork-owned): false when this host cannot run terminal agent hooks yet
+        // (Windows until the v1.1 port). Older daemons omit it and run them.
+        woowtechTerminalAgentHooks: z.boolean().optional(),
         // woowtech smart (fork-owned, not upstream): the daemon pushes a notice the picked client
         // could not show (woowtech-attention-fallback.ts). Never set by Paseo.
         woowtechAttentionFallback: z.boolean().optional(),

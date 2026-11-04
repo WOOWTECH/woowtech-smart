@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getDesktopHost } from "@/desktop/host";
+import { desktopBannerCheckKeys } from "@/desktop/permissions/woowtech-notification-help";
 import { useNotificationBannerCheck } from "@/hooks/use-notification-banner-check";
 import { answerBannerSeen, showBannerHelp } from "@/utils/woowtech-notification-banner-check";
 
@@ -16,6 +17,7 @@ export function NotificationBannerCheckPrompt({ onTestAgain }: NotificationBanne
   const { t } = useTranslation();
   const { phase } = useNotificationBannerCheck();
   const canOpenSettings = typeof getDesktopHost()?.notification?.openSystemSettings === "function";
+  const keys = desktopBannerCheckKeys(getDesktopHost()?.platform);
 
   const openSettings = useCallback(() => {
     void getDesktopHost()?.notification?.openSystemSettings?.();
@@ -26,7 +28,7 @@ export function NotificationBannerCheckPrompt({ onTestAgain }: NotificationBanne
       <Alert
         variant="info"
         title={t("woowtech.notificationBannerCheck.askTitle")}
-        description={t("woowtech.notificationBannerCheck.askDescription")}
+        description={t(keys.askDescription)}
         testID="notification-banner-check-asking"
       >
         <Button size="sm" onPress={answerBannerSeen} testID="notification-banner-check-seen">
@@ -49,7 +51,7 @@ export function NotificationBannerCheckPrompt({ onTestAgain }: NotificationBanne
       <Alert
         variant="warning"
         title={t("woowtech.notificationBannerCheck.helpTitle")}
-        description={t("woowtech.notificationBannerCheck.helpDescription")}
+        description={t(keys.helpDescription)}
         testID="notification-banner-check-help"
       >
         {canOpenSettings ? (

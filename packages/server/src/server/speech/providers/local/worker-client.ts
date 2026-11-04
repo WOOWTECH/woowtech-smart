@@ -1,4 +1,5 @@
 import { fork } from "node:child_process";
+import { withHiddenWindow } from "../../../../utils/woowtech-hidden-fork.js";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
@@ -95,12 +96,16 @@ function resolveWorkerExecArgv(): string[] {
 function forkLocalSpeechWorker(): LocalSpeechWorkerProcess {
   const env = { ...process.env };
   applySherpaLoaderEnv(env);
-  return fork(fileURLToPath(resolveWorkerUrl()), [], {
-    env,
-    execArgv: resolveWorkerExecArgv(),
-    serialization: "advanced",
-    stdio: ["ignore", "ignore", "pipe", "ipc"],
-  }) as LocalSpeechWorkerProcess;
+  return fork(
+    fileURLToPath(resolveWorkerUrl()),
+    [],
+    withHiddenWindow({
+      env,
+      execArgv: resolveWorkerExecArgv(),
+      serialization: "advanced",
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
+    }),
+  ) as LocalSpeechWorkerProcess;
 }
 
 function isResponse(

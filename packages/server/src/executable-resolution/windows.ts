@@ -1,6 +1,8 @@
 import { readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 
+import { wingetCommandFileNames } from "./woowtech-winget-names.js";
+
 interface WindowsFindExecutableOptions {
   enumeratePathCandidates: (name: string) => Promise<string[]>;
   probeExecutable: (executablePath: string, timeoutMs: number) => Promise<boolean>;
@@ -42,8 +44,11 @@ function enumerateWingetPackageCandidates(
     return [];
   }
 
-  const exeName = `${name}.exe`;
-  return packageDirs.map((packageDir) => join(wingetPackages, packageDir, exeName));
+  // woowtech smart: also the names WinGet keeps some CLIs under, e.g. Codex (plan G14).
+  const exeNames = wingetCommandFileNames(name);
+  return packageDirs.flatMap((packageDir) =>
+    exeNames.map((exeName) => join(wingetPackages, packageDir, exeName)),
+  );
 }
 
 async function find(input: string, options: WindowsFindExecutableOptions): Promise<string | null> {

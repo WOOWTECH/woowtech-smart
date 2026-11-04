@@ -36,6 +36,13 @@ import {
   closeLocalTransportSession,
 } from "./local-transport.js";
 import { createNodeEntrypointInvocation, resolveDaemonRunnerEntrypoint } from "./runtime-paths.js";
+import {
+  WOOWTECH_DAEMON_DEFAULT_PORT,
+  allocateTcpPort,
+  chooseDesktopDaemonListen,
+  probeTcpPort,
+  readConfiguredListen,
+} from "./woowtech-listen-fallback.js";
 import { runExternalCliJsonCommand, runExternalCliTextCommand } from "./cli/external.js";
 import {
   createDesktopSettingsCommandHandlers,
@@ -223,6 +230,12 @@ export async function resolveDesktopDaemonStatus(): Promise<DesktopDaemonStatus>
   const home = getPaseoHome();
 
   try {
+    // The app polls this while no local daemon runs. Answer that case in-process,
+    // since launching the CLI once per poll keeps spawning processes while idle.
+    if (!(await readDaemonInstance(home))) {
+      return statusFromDaemonProbe({ localDaemon: "stopped" }, home);
+    }
+
     const payload = (await runExternalCliJsonCommand([
       "daemon",
       "status",
@@ -233,7 +246,7 @@ export async function resolveDesktopDaemonStatus(): Promise<DesktopDaemonStatus>
     return statusFromDaemonProbe(payload, home);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logDesktopDaemonLifecycle("resolveStatus CLI command failed", { error: errorMessage });
+    logDesktopDaemonLifecycle("resolveStatus failed", { error: errorMessage });
     return {
       serverId: "",
       status: "errored",
@@ -269,6 +282,29 @@ function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
   }
 }
 
+// woowtech smart: a free address when Windows reserved the default port (README §31, G12).
+async function desktopDaemonListenOverride(home: string): Promise<string | null> {
+  const decision = await chooseDesktopDaemonListen({
+    platform: process.platform,
+    envListen: process.env.PASEO_LISTEN,
+    configListen: readConfiguredListen(home),
+    defaultPort: WOOWTECH_DAEMON_DEFAULT_PORT,
+    probe: probeTcpPort,
+    allocatePort: allocateTcpPort,
+  });
+  if (decision.kind === "fallback") {
+    logDesktopDaemonLifecycle("default listen address unavailable, using a fallback", {
+      code: decision.code,
+      listen: decision.listen,
+    });
+    return decision.listen;
+  }
+  if (process.platform === "win32") {
+    logDesktopDaemonLifecycle("listen address check", { ...decision });
+  }
+  return null;
+}
+
 async function startDaemon(): Promise<DesktopDaemonStatus> {
   assertBuiltInDaemonManagementEnabled(await getDesktopSettingsStore().get());
 
@@ -300,12 +336,17 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     args: [],
     baseEnv: process.env,
   });
+  const listenOverride = await desktopDaemonListenOverride(home);
   try {
     await startDaemonInstance({
       home,
       timeoutMs: 30_000,
       ...invocation,
-      env: { ...invocation.env, PASEO_CLI: getBundledCliShimPath() },
+      env: {
+        ...invocation.env,
+        PASEO_CLI: getBundledCliShimPath(),
+        ...(listenOverride ? { PASEO_LISTEN: listenOverride } : {}),
+      },
       mode: "managed",
       desktopManaged: true,
       onAcquired: (instance) => {

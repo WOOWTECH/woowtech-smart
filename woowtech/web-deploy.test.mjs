@@ -27,11 +27,14 @@ import {
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import nodeTest from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { importSource } from "./source-modules.mjs";
+
+// deploy-web.sh and its checks run on a Mac or Linux machine: /bin/bash, symbolic links, POSIX paths.
+const test = process.platform === "win32" ? nodeTest.skip : nodeTest;
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const DEPLOY_SCRIPT = "woowtech/scripts/deploy-web.sh";

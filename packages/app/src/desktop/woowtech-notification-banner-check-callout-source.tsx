@@ -10,6 +10,7 @@ import { SidebarCalloutDescriptionText } from "@/components/sidebar-callout";
 import { getIsElectron } from "@/constants/platform";
 import { useSidebarCallouts } from "@/contexts/sidebar-callout-context";
 import { getDesktopHost } from "@/desktop/host";
+import { desktopBannerCheckKeys } from "@/desktop/permissions/woowtech-notification-help";
 import { sendDesktopTestNotification } from "@/desktop/permissions/woowtech-notification-test";
 import { useNotificationBannerCheck } from "@/hooks/use-notification-banner-check";
 import { useStableEvent } from "@/hooks/use-stable-event";
@@ -44,10 +45,11 @@ function bannerCheckCalloutContent(
   t: (key: string) => string,
   handlers: BannerCheckCalloutHandlers,
 ): BannerCheckCalloutContent {
+  const keys = desktopBannerCheckKeys(getDesktopHost()?.platform);
   if (phase === "asking") {
     return {
       title: t("woowtech.notificationBannerCheck.askTitle"),
-      description: t("woowtech.notificationBannerCheck.askDescription"),
+      description: t(keys.askDescription),
       actions: [
         {
           label: t("woowtech.notificationBannerCheck.seen"),
@@ -71,9 +73,7 @@ function bannerCheckCalloutContent(
     return {
       title: t("woowtech.notificationBannerCheck.helpTitle"),
       description: (
-        <SidebarCalloutDescriptionText>
-          {t("woowtech.notificationBannerCheck.helpDescription")}
-        </SidebarCalloutDescriptionText>
+        <SidebarCalloutDescriptionText>{t(keys.helpDescription)}</SidebarCalloutDescriptionText>
       ),
       actions: [
         ...openSettings,
@@ -83,7 +83,7 @@ function bannerCheckCalloutContent(
   }
   return {
     title: t("woowtech.notificationBannerCheck.idleTitle"),
-    description: t("woowtech.notificationBannerCheck.idleDescription"),
+    description: t(keys.idleDescription),
     actions: [
       {
         label: t("woowtech.notificationBannerCheck.send"),

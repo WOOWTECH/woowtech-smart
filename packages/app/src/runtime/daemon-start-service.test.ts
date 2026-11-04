@@ -325,6 +325,29 @@ describe("upsertDesktopDaemonConnection", () => {
     expect(fake.upserts).toEqual([]);
   });
 
+  // woowtech smart: the Windows app can move its daemon off a reserved port (README §31).
+  it("adds the new address when the registered local daemon moved to another port", async () => {
+    const fake = createFakeStore([
+      {
+        ...makeRelayOnlyHost("srv_desktop"),
+        connections: [
+          { id: "direct:localhost:6767", type: "directTcp", endpoint: "localhost:6767" },
+        ],
+        preferredConnectionId: "direct:localhost:6767",
+      },
+    ]);
+
+    const result = await upsertDesktopDaemonConnection(
+      fake.store,
+      makeStatus({ listen: "127.0.0.1:16770" }),
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(fake.upserts).toEqual([
+      { listenAddress: "127.0.0.1:16770", serverId: "srv_desktop", hostname: "desktop" },
+    ]);
+  });
+
   it("rejects a missing listen address without upserting", async () => {
     const fake = createFakeStore();
 

@@ -14,6 +14,8 @@ export interface NotificationClickWindow {
   restore(): void;
   show(): void;
   focus(): void;
+  /** Windows replacement for show/restore/focus (plan B4). */
+  raise?(): void;
   sendClick(payload: NotificationClickPayload): void;
 }
 
@@ -53,11 +55,15 @@ export function createNotificationClickRouter(
       if (!window) {
         return;
       }
-      window.show();
-      if (window.isMinimized()) {
-        window.restore();
+      if (window.raise) {
+        window.raise();
+      } else {
+        window.show();
+        if (window.isMinimized()) {
+          window.restore();
+        }
+        window.focus();
       }
-      window.focus();
       if (!data || Object.keys(data).length === 0) {
         return;
       }

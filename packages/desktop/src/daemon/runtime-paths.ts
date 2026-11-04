@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { app } from "electron";
@@ -14,6 +14,7 @@ import {
   resolvePackagedAsarPath,
   type PackageInfo,
 } from "./package-paths.js";
+import { readWoowtechTestBuild } from "../features/woowtech-test-build.js";
 
 const SERVER_PACKAGE_NAME = "@getpaseo/server";
 
@@ -98,6 +99,17 @@ export function resolveNodeExecPath(): string {
   return process.execPath;
 }
 
+let woowtechTestBuild: boolean | null = null;
+
+/** woowtech smart: whether this packaged app is a test build (README §31, G26). */
+export function isWoowtechTestBuild(): boolean {
+  woowtechTestBuild ??= readWoowtechTestBuild({
+    isPackaged: app.isPackaged,
+    readPackageJson: () => readFileSync(path.join(app.getAppPath(), "package.json"), "utf8"),
+  });
+  return woowtechTestBuild;
+}
+
 export function createNodeEntrypointInvocation(input: {
   entrypoint: NodeEntrypointSpec;
   argvMode: NodeEntrypointArgvMode;
@@ -107,6 +119,7 @@ export function createNodeEntrypointInvocation(input: {
   return createSharedNodeEntrypointInvocation({
     execPath: resolveNodeExecPath(),
     isPackaged: app.isPackaged,
+    testBuild: isWoowtechTestBuild(),
     packagedRunnerPath: app.isPackaged
       ? assertPathExists({
           label: "Bundled node entrypoint runner",

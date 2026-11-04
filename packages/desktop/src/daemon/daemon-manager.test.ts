@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,7 +51,8 @@ vi.mock("electron-log/main", () => ({
   },
 }));
 
-vi.mock("@getpaseo/server/daemon-control", () => ({
+vi.mock("@getpaseo/server/daemon-control", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   resolvePaseoHome: vi.fn(() => mocks.paseoHome),
   spawnProcess: mocks.spawnProcess,
 }));
@@ -122,5 +123,36 @@ describe("daemon-manager commands", () => {
       platform: process.platform,
       currentVersion: "1.2.3",
     });
+  });
+
+  // woowtech smart: upstream #5636 (Windows G13), the idle app launched the CLI every poll.
+  it("reports a stopped daemon without launching the CLI when no local daemon runs", async () => {
+    mkdirSync(mocks.paseoHome);
+    writeFileSync(path.join(mocks.paseoHome, "server-id"), "srv_existing\n");
+    mocks.runExternalCliJsonCommand.mockResolvedValue({
+      home: mocks.paseoHome,
+      pid: null,
+      startedAt: null,
+      listen: null,
+      hostname: null,
+      localDaemon: "stopped",
+      desktopManaged: false,
+      connectedDaemon: "not_probed",
+    });
+
+    const status = await createDaemonCommandHandlers().desktop_daemon_status();
+
+    expect(status).toMatchObject({ serverId: "", status: "stopped", pid: null });
+    expect(mocks.runExternalCliJsonCommand).not.toHaveBeenCalled();
+  });
+
+  it("reports an errored daemon when the local daemon state cannot be read", async () => {
+    mkdirSync(mocks.paseoHome);
+    writeFileSync(path.join(mocks.paseoHome, "paseo.pid"), "garbage");
+
+    const status = await createDaemonCommandHandlers().desktop_daemon_status();
+
+    expect(status).toMatchObject({ serverId: "", status: "errored", pid: null });
+    expect(status.error).toBeTruthy();
   });
 });

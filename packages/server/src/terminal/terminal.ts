@@ -7,6 +7,9 @@ import { basename, delimiter, dirname, extname, join, resolve as resolvePath } f
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createExternalProcessEnv } from "../server/paseo-env.js";
+import { withCurrentFolderExeSearch } from "../utils/woowtech-windows-exe-search.js";
+import { createPtyKiller, woowtechConptyOptions } from "./woowtech-pty-kill.js";
+import { prepareWoowtechDefaultShell } from "./woowtech-default-shell.js";
 import { withoutClaudeCodeSession } from "../server/agent/parent-claude-session-env.js";
 import { writePrivateFileAtomicSync } from "../server/private-files.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
@@ -493,11 +496,14 @@ function prepareZshShellIntegrationRuntimeDir(sourceDir = resolveZshShellIntegra
 export function buildTerminalEnvironment(
   input: BuildTerminalEnvironmentInput,
 ): Record<string, string> {
-  const baseEnv: Record<string, string> = withoutClaudeCodeSession(
-    createExternalProcessEnv(process.env, input.env, {
-      TERM: "xterm-256color",
-      TERM_PROGRAM: "kitty",
-    }),
+  // woowtech smart: the user's shell keeps Windows' current-folder command search (plan G28).
+  const baseEnv: Record<string, string> = withCurrentFolderExeSearch(
+    withoutClaudeCodeSession(
+      createExternalProcessEnv(process.env, input.env, {
+        TERM: "xterm-256color",
+        TERM_PROGRAM: "kitty",
+      }),
+    ),
   );
   const envWithAgentHooks = prependPaseoCliToPath(
     baseEnv,
@@ -899,7 +905,6 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
     command,
     args = [],
   } = options;
-  const resolvedShell = shell ?? resolveDefaultTerminalShell();
 
   const id = options.id ?? randomUUID();
   const listeners = new Set<(msg: ServerMessage) => void>();
@@ -941,9 +946,10 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
   ensureNodePtySpawnHelperExecutableForCurrentPlatform();
 
   // Create PTY
+  // woowtech smart: Windows terminals open PowerShell, like Windows Terminal (plan G27, D16).
   const { command: spawnCommand, args: spawnArgs } = command
     ? await resolveTerminalSpawnCommand(command, args)
-    : { command: resolvedShell, args: [] as string[] };
+    : await prepareWoowtechDefaultShell({ shell, upstreamDefault: resolveDefaultTerminalShell });
   const ptyProcess = pty.spawn(spawnCommand, spawnArgs, {
     name: "xterm-256color",
     cols,
@@ -957,7 +963,10 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
         PASEO_WORKSPACE_ID: workspaceId,
       },
     }),
+    ...woowtechConptyOptions(process.platform, process.env),
   });
+  // woowtech smart: one native kill per pty on Windows (node-pty #983, plan G10).
+  const ptyKiller = createPtyKiller({ pty: ptyProcess, platform: process.platform });
 
   function emitTitleChange(nextTitle: string | undefined): void {
     if (title === nextTitle) {
@@ -1468,11 +1477,7 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
   }
 
   function killPtyProcess(signal?: NodeJS.Signals): void {
-    if (process.platform === "win32") {
-      ptyProcess.kill();
-      return;
-    }
-    ptyProcess.kill(signal);
+    ptyKiller.kill(signal);
   }
 
   function waitForProcessExit(timeoutMs: number): Promise<boolean> {

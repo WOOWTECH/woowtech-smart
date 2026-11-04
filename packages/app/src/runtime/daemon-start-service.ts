@@ -1,5 +1,6 @@
 import { startDesktopDaemon, type DesktopDaemonStatus } from "@/desktop/daemon/desktop-daemon";
 import { connectionFromListen } from "@/types/host-connection";
+import { localDaemonAddressMoved } from "@/runtime/woowtech-local-daemon-address";
 import type { HostRuntimeStore } from "@/runtime/host-runtime";
 
 export type DaemonStartResult = { ok: true } | { ok: false; error: string };
@@ -24,7 +25,16 @@ export async function upsertDesktopDaemonConnection(
   if (!serverId) {
     return { ok: false, error: "Desktop daemon did not return a server id." };
   }
-  if (store.getHosts().some((host) => host.serverId === serverId)) {
+  const existing = store.getHosts().find((host) => host.serverId === serverId);
+  if (existing) {
+    const moved = connectionFromListen(daemon.listen?.trim() ?? "");
+    if (moved && localDaemonAddressMoved(existing, moved)) {
+      await store.upsertConnectionFromListen({
+        listenAddress: daemon.listen?.trim() ?? "",
+        serverId,
+        hostname: daemon.hostname,
+      });
+    }
     return { ok: true };
   }
 

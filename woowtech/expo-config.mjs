@@ -10,6 +10,8 @@ function expoConfig(variant, type, env = {}) {
     env: { ...process.env, APP_VARIANT: variant, EXPO_NO_TELEMETRY: "1", ...env },
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
+    // npx is a command script on Windows, which only cmd.exe can start.
+    shell: process.platform === "win32",
   });
   return JSON.parse(output);
 }

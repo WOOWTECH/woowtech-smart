@@ -15,6 +15,7 @@ import { loadPersistedConfig } from "../src/server/persisted-config.js";
 import { runSupervisor } from "./supervisor.js";
 import { resolveSupervisorLogFile } from "./supervisor-log-config.js";
 import { applySherpaLoaderEnv } from "../src/server/speech/providers/local/sherpa/sherpa-runtime-env.js";
+import { blockCurrentFolderExeSearch } from "../src/utils/woowtech-windows-exe-search.js";
 import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 process.title = `${PRODUCT_NAME} Supervisor`;
@@ -110,6 +111,8 @@ async function main(): Promise<void> {
       : null;
 
   applySherpaLoaderEnv(workerEnv);
+  // woowtech smart: never run a git.exe or copilot.cmd that a project carries (plan G28).
+  blockCurrentFolderExeSearch(workerEnv, process.platform);
 
   const paseoHome = resolvePaseoHome(workerEnv);
   const persistedConfig = loadPersistedConfig(paseoHome);

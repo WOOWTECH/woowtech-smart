@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type * as ClaudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
 
-import { execCommand } from "../../../../utils/spawn.js";
+import { renameWithRetry } from "../../../../utils/woowtech-rename-retry.js";
 import { resolvePaseoHome } from "../../../paseo-home.js";
 import {
   ClaudeAgentSdkRuntimeError,
@@ -16,6 +16,7 @@ import {
   fetchFromRegistry,
   ClaudeAgentSdkDownloadError,
 } from "./claude-agent-sdk-download.js";
+import { extractNpmTarball } from "./woowtech-npm-tarball.js";
 
 export { ClaudeAgentSdkDownloadError } from "./claude-agent-sdk-download.js";
 
@@ -173,18 +174,18 @@ function verifyIntegrity(bytes: Uint8Array, integrity: string): void {
   }
 }
 
-/** Extracts into a scratch directory first so a half-written install is never visible. */
+/**
+ * Extracts into a scratch directory first so a half-written install is never visible. The JS
+ * extractor replaces the tar on PATH, which on Windows can be Git's GNU tar (plan G15).
+ */
 async function extractTarball(bytes: Uint8Array, installDir: string): Promise<void> {
   const scratch = `${installDir}.partial-${randomUUID()}`;
-  const tarballPath = `${scratch}.tgz`;
   await mkdir(scratch, { recursive: true });
   try {
-    await writeFile(tarballPath, bytes);
-    await execCommand("tar", ["-xzf", tarballPath, "-C", scratch]);
-    await rename(scratch, installDir);
+    await extractNpmTarball({ bytes, destination: scratch });
+    await renameWithRetry({ from: scratch, to: installDir });
   } finally {
     await rm(scratch, { recursive: true, force: true });
-    await rm(tarballPath, { force: true });
   }
 }
 

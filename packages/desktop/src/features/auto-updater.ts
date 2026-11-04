@@ -22,6 +22,7 @@ import {
   type AppReleaseChannel,
   type AppUpdateCheckIntent,
 } from "./app-update-rollout.js";
+import { installsUpdateOnQuit, updateInstallMode } from "./woowtech-windows-update.js";
 
 export {
   bucketFromStagingUserId,
@@ -211,7 +212,12 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
     return autoUpdater.downloadUpdate();
   }
 
-  quitAndInstall({ targetVersion, isSilent, isForceRunAfter }: AppUpdateInstallRequest): void {
+  quitAndInstall({ targetVersion, ...requested }: AppUpdateInstallRequest): void {
+    // woowtech smart: a Windows restart installs silently (README §31, plan G37, D20).
+    const { isSilent, isForceRunAfter } = updateInstallMode({
+      platform: process.platform,
+      ...requested,
+    });
     autoUpdater.autoRunAppAfterInstall = isForceRunAfter;
     updateLifecycleLog.quitAndInstallRequested({
       targetVersion,
@@ -298,7 +304,9 @@ export async function installAppUpdateOnQuit({
     !shouldInstallAppUpdateOnQuit({
       platform: process.platform,
       isAppImage: Boolean(process.env.APPIMAGE),
-    })
+    }) ||
+    // woowtech smart: Windows installs only from an explicit restart (plan G37, D20).
+    !installsUpdateOnQuit(process.platform)
   ) {
     return false;
   }

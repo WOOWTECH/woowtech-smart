@@ -25,6 +25,7 @@ import {
   session,
   shell,
   webContents,
+  type Tray,
 } from "electron";
 import { registerDaemonManager } from "./daemon/daemon-manager.js";
 import { parsePassthroughCliArgsFromArgv, runPassthroughCli } from "./daemon/cli/passthrough.js";
@@ -54,6 +55,22 @@ import { createBrowserCaptureService } from "./features/browser-capture.js";
 import { registerEditorTargetHandlers } from "./features/editor-targets/ipc.js";
 import { resolveAppIconPath } from "./features/stamped-icon.js";
 import { applyWindowsAppUserModelId } from "./features/woowtech-app-user-model-id.js";
+import {
+  createDuplicateLaunchFilter,
+  hasAppSchemeLink,
+  redactLaunchArguments,
+} from "./features/woowtech-launch-links.js";
+import {
+  hasWindowsLaunchFlag,
+  quitWhenAllWindowsClosed,
+  registerAgentLinkProtocol,
+  relaunchAction,
+  trayHintText,
+  trayLabels,
+  windowsUninstallerPath,
+} from "./features/woowtech-windows-shell.js";
+import { createWindowsTray, showTrayHintOnce } from "./features/woowtech-windows-tray.js";
+import { raiseWindowsWindow } from "./features/woowtech-windows-focus.js";
 import { woowtechAboutPanelOptions } from "./features/woowtech-about-panel.js";
 import { agentTargetFromLaunchInfo } from "./features/woowtech-notification-launch.js";
 import { setupApplicationMenu } from "./features/menu.js";
@@ -100,6 +117,7 @@ import {
   stopDesktopManagedDaemonOnQuitIfNeeded,
 } from "./daemon/quit-lifecycle.js";
 import { runDesktopStartup } from "./desktop-startup.js";
+import { isWoowtechTestBuild } from "./daemon/runtime-paths.js";
 import { registerBrowserAutomationIpc } from "./features/browser-automation/ipc.js";
 import { BrowserKeyboard } from "./features/browser-keyboard/index.js";
 import { installAppUpdateOnQuit } from "./features/auto-updater.js";
@@ -134,6 +152,9 @@ const bootstrapComplete = new Promise<void>((resolve) => {
   resolveBootstrapComplete = resolve;
 });
 let bootstrapIsComplete = false;
+// woowtech smart: Windows notification-area icon and protocol state (README §31).
+let windowsTray: Tray | null = null;
+let agentLinkProtocolRegistered = false;
 
 app.setName(APP_NAME);
 // woowtech smart: WOOW TECH's copyright and website in the About window.
@@ -141,14 +162,15 @@ app.setAboutPanelOptions(woowtechAboutPanelOptions());
 applyWindowsAppUserModelId({
   platform: process.platform,
   isPackaged: app.isPackaged,
-  execPath: process.execPath,
   setAppUserModelId: (id) => app.setAppUserModelId(id),
+  setToastActivatorCLSID: (clsid) => app.setToastActivatorCLSID(clsid),
 });
 log.info("[desktop] app startup", {
   version: app.getVersion(),
   platform: process.platform,
   arch: process.arch,
   isPackaged: app.isPackaged,
+  testBuild: isWoowtechTestBuild(),
 });
 
 interface AttachedBrowserInput {
@@ -370,6 +392,9 @@ let pendingOpenProjectPath = parseOpenProjectPathFromArgv({
   isDefaultApp: process.defaultApp,
 });
 let pendingAgentNavigation = parseAgentDeepLinkFromArgv(process.argv);
+if (pendingAgentNavigation) {
+  log.info("[launch] agent link via argv", pendingAgentNavigation);
+}
 
 // woowtech smart: a Notification Center click after the app quit relaunches it on macOS with
 // that notification's id in launchInfo; the id carries the agent (woowtech-notification-launch.ts).
@@ -389,7 +414,7 @@ app.once("ready", (_event, launchInfo) => {
 let desktopWindowOwner: DesktopWindowOwner<AgentDeepLinkTarget>;
 
 if (PASEO_DEBUG) {
-  log.info("[open-project] argv:", process.argv);
+  log.info("[open-project] argv:", redactLaunchArguments(process.argv));
   log.info("[open-project] isDefaultApp:", process.defaultApp);
   log.info("[open-project] pendingOpenProjectPath:", pendingOpenProjectPath);
 }
@@ -798,7 +823,9 @@ async function createWindow(
   });
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+    // woowtech smart: a window created late (tray click, relaunch) may open behind others (B4).
+    if (process.platform === "win32") raiseWindowsWindow(mainWindow);
+    else mainWindow.show();
   });
 
   if (!app.isPackaged) {
@@ -824,6 +851,7 @@ function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AgentDeepLin
     restore: () => win.restore(),
     show: () => win.show(),
     focus: () => win.focus(),
+    ...(process.platform === "win32" ? { raise: () => raiseWindowsWindow(win) } : {}),
     sendAgent: (target) => win.webContents.send("paseo:event:open-agent", target),
   };
 }
@@ -858,7 +886,17 @@ function receiveAgentDeepLink(input: string): void {
   if (!target) {
     return;
   }
+  receiveAgentTarget(target, "open-url");
+}
 
+const isNewAgentLaunch = createDuplicateLaunchFilter();
+
+function receiveAgentTarget(target: AgentDeepLinkTarget, via: string): void {
+  if (!isNewAgentLaunch(target)) {
+    log.info(`[launch] duplicate agent link via ${via} ignored`, target);
+    return;
+  }
+  log.info(`[launch] agent link via ${via}`, target);
   if (bootstrapIsComplete) {
     void desktopWindowOwner
       .openOrFocusAgent(target)
@@ -892,25 +930,36 @@ function setupSingleInstanceLock(): boolean {
 
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {
-    app.quit();
+    // woowtech smart: the first instance owns quit handling; this one only hands over argv.
+    app.exit(0);
     return false;
   }
 
   app.on("second-instance", (_event, commandLine) => {
     const agentTarget = parseAgentDeepLinkFromArgv(commandLine);
     if (agentTarget) {
-      void bootstrapComplete
-        .then(() => desktopWindowOwner.openOrFocusAgent(agentTarget))
-        .catch((error) => log.error("[window] failed to route second-instance agent link", error));
+      receiveAgentTarget(agentTarget, "second-instance");
       return;
     }
 
-    log.info("[open-project] second-instance commandLine:", commandLine);
+    // woowtech smart: a pairing link in the command line is a secret (README §19).
+    log.info("[open-project] second-instance commandLine:", redactLaunchArguments(commandLine));
     const openProjectPath = parseOpenProjectPathFromArgv({
       argv: commandLine,
       isDefaultApp: false,
     });
     log.info("[open-project] second-instance openProjectPath:", openProjectPath);
+    const action = relaunchAction({
+      platform: process.platform,
+      hasAppLink: hasAppSchemeLink(commandLine),
+      openProjectPath,
+    });
+    if (action === "focus") {
+      void bootstrapComplete
+        .then(() => desktopWindowOwner.showOrOpenPrimary())
+        .catch((error) => log.error("[window] failed to show a window for second-instance", error));
+      return;
+    }
     // Relaunching the app (CLI `paseo [path]`, double-click, etc.) opens a new
     // window rather than focusing the existing one. Wait for bootstrap (not just
     // app.whenReady) so the protocol + IPC handlers exist before the window loads.
@@ -949,6 +998,23 @@ async function bootstrap(): Promise<void> {
 
   await app.whenReady();
 
+  agentLinkProtocolRegistered = registerAgentLinkProtocol({
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    isInstalledCopy: () => existsSync(windowsUninstallerPath(process.execPath)),
+    scheme: APP_SCHEME,
+    setAsDefaultProtocolClient: (scheme) => app.setAsDefaultProtocolClient(scheme),
+  });
+  if (process.platform === "win32") {
+    log.info("[launch] agent link protocol registered:", agentLinkProtocolRegistered, {
+      isDefault: app.isDefaultProtocolClient(APP_SCHEME),
+    });
+    void app
+      .getApplicationInfoForProtocol(`${APP_SCHEME}://`)
+      .then((handler) => log.info("[launch] agent link protocol handler:", handler.path))
+      .catch(() => log.info("[launch] agent link protocol handler: none"));
+  }
+
   const appDistDir = getAppDistDir();
   protocol.handle(APP_SCHEME, (request) => {
     const { pathname, search, hash } = new URL(request.url);
@@ -984,12 +1050,31 @@ async function bootstrap(): Promise<void> {
       });
     },
   });
+  if (process.platform === "win32") {
+    windowsTray = createWindowsTray({
+      iconPath: getWindowIconPath(),
+      labels: trayLabels({
+        appName: APP_NAME,
+        preferredLanguages: app.getPreferredSystemLanguages(),
+        testBuild: isWoowtechTestBuild(),
+      }),
+      onOpen: () => {
+        void desktopWindowOwner.showOrOpenPrimary().catch((error) => {
+          log.error("[tray] failed to show a window", error);
+        });
+      },
+      onQuit: () => app.quit(),
+    });
+    log.info("[tray] created:", windowsTray !== null);
+  }
   ensureNotificationCenterRegistration();
   registerDaemonManager();
   registerWindowManager({ mode: DESKTOP_WINDOW_CHROME_MODE });
   registerDialogHandlers();
   registerNotificationHandlers({
     ensureWindow: () => desktopWindowOwner.restoreWhenActivated(),
+    openAgent: receiveAgentTarget,
+    protocolRegistered: () => agentLinkProtocolRegistered,
   });
   const openExternalUrl = createExternalUrlOpener({ open: shell.openExternal });
   ipcMain.handle("paseo:opener:openUrl", (_event, value: unknown) => openExternalUrl(value));
@@ -1036,7 +1121,13 @@ async function bootstrap(): Promise<void> {
 }
 
 void runDesktopStartup({
-  hasPendingGuiLaunchRequest: Boolean(pendingOpenProjectPath || pendingAgentNavigation),
+  // woowtech smart: any woowtech-smart: link is a GUI launch, never CLI arguments.
+  hasPendingGuiLaunchRequest: Boolean(
+    pendingOpenProjectPath ||
+    pendingAgentNavigation ||
+    hasAppSchemeLink(process.argv) ||
+    hasWindowsLaunchFlag(process.argv),
+  ),
   runCliPassthroughIfRequested,
   inheritLoginShellEnv,
   bootstrapGui: bootstrap,
@@ -1088,7 +1179,23 @@ app.on("before-quit", quitLifecycle.handleBeforeQuit);
 registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  // woowtech smart: Windows stays in the tray the way macOS stays in the Dock (README §31).
+  if (quitWhenAllWindowsClosed({ platform: process.platform, trayActive: windowsTray !== null })) {
     app.quit();
+    return;
+  }
+  if (windowsTray) {
+    showTrayHintOnce({
+      markerPath: path.join(app.getPath("userData"), "woowtech-tray-hint-shown"),
+      text: trayHintText({
+        appName: APP_NAME,
+        preferredLanguages: app.getPreferredSystemLanguages(),
+      }),
+      onClick: () => {
+        void desktopWindowOwner.showOrOpenPrimary().catch((error) => {
+          log.error("[tray] failed to show a window from the hint", error);
+        });
+      },
+    });
   }
 });

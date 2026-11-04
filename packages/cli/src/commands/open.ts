@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -5,6 +6,7 @@ import { spawnProcess } from "@getpaseo/server/process";
 import { buildAgentDeepLink, type AgentDeepLinkTarget } from "@getpaseo/protocol/agent-deep-link";
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { DESKTOP_APP_NAME } from "@getpaseo/protocol/brand-desktop";
+import { windowsDesktopAppPath } from "./woowtech-windows-desktop-app.js";
 
 function findDesktopApp(): string | null {
   if (process.platform === "darwin") {
@@ -39,18 +41,11 @@ function findDesktopApp(): string | null {
   }
 
   if (process.platform === "win32") {
-    const localAppData = process.env.LOCALAPPDATA;
-    if (!localAppData) {
-      return null;
-    }
-
-    const candidate = path.join(
-      localAppData,
-      "Programs",
-      DESKTOP_APP_NAME,
-      `${DESKTOP_APP_NAME}.exe`,
-    );
-    return existsSync(candidate) ? candidate : null;
+    return windowsDesktopAppPath({
+      env: process.env,
+      execPath: process.execPath,
+      exists: existsSync,
+    });
   }
 
   return null;
@@ -94,6 +89,18 @@ function launchDesktop(args: string[]): void {
     // instance relays its argv to the existing one through Electron's
     // single-instance lock. -g keeps the terminal in the foreground.
     spawnDetached("open", ["-n", "-g", "-a", desktopApp, "--args", ...args]);
+    return;
+  }
+
+  if (process.platform === "win32") {
+    // woowtech smart: spawnProcess hides every child's window, and Windows applies that to a GUI
+    // app's first window, so a cold start would show nothing (H5 F4).
+    spawn(desktopApp, args, {
+      detached: true,
+      stdio: "ignore",
+      env: cleanEnvForDesktopLaunch(),
+      windowsHide: false,
+    }).unref();
     return;
   }
 

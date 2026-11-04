@@ -34,6 +34,8 @@ const ENGLISH = {
         title: "Enable terminal agent hooks",
         hint: "Get notifications and status from terminal agents. This installs hooks in your agent config files.",
         updateFailed: "Unable to update terminal agent hooks",
+        unsupportedHost:
+          "Not supported on Windows hosts yet. Terminal agents still run; their status and notifications come in a later version.",
       },
     },
     unknownError: "Unknown error",
@@ -80,6 +82,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "啟用終端機 Agent hooks",
           hint: "接收終端機 Agent 的通知和狀態。這會在你的 Agent 設定檔中安裝 hooks。",
           updateFailed: "無法更新終端機 Agent hooks",
+          unsupportedHost:
+            "Windows 主機尚未支援。終端機 Agent 仍可使用，狀態和通知會在之後的版本加入。",
         },
       },
       unknownError: "未知錯誤",
@@ -121,6 +125,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "启用终端 Agent hooks",
           hint: "接收终端 Agent 的通知和状态。这会在你的 Agent 配置文件中安装 hooks。",
           updateFailed: "无法更新终端 Agent hooks",
+          unsupportedHost:
+            "Windows 主机暂不支持。终端 Agent 仍可使用，状态和通知将在之后的版本加入。",
         },
       },
       unknownError: "未知错误",
@@ -162,6 +168,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "ターミナルエージェントのフックを有効にする",
           hint: "ターミナルエージェントから通知とステータスを受け取ります。エージェントの設定ファイルにフックがインストールされます。",
           updateFailed: "ターミナルエージェントのフックを更新できません",
+          unsupportedHost:
+            "Windows ホストではまだサポートされていません。ターミナルエージェントは引き続き使えます。ステータスと通知は今後のバージョンで対応します。",
         },
       },
       unknownError: "不明なエラー",
@@ -203,6 +211,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "터미널 에이전트 훅 사용",
           hint: "터미널 에이전트의 알림과 상태를 받습니다. 에이전트 설정 파일에 훅이 설치됩니다.",
           updateFailed: "터미널 에이전트 훅을 업데이트할 수 없습니다",
+          unsupportedHost:
+            "Windows 호스트에서는 아직 지원되지 않습니다. 터미널 에이전트는 계속 사용할 수 있으며, 상태와 알림은 이후 버전에서 제공됩니다.",
         },
       },
       unknownError: "알 수 없는 오류",
@@ -244,6 +254,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "Activar los hooks de los agentes de terminal",
           hint: "Recibe notificaciones y el estado de los agentes de terminal. Esto instala hooks en los archivos de configuración de tus agentes.",
           updateFailed: "No se pudieron actualizar los hooks de los agentes de terminal",
+          unsupportedHost:
+            "Aún no es compatible con hosts Windows. Los agentes de terminal siguen funcionando; su estado y sus notificaciones llegarán en una versión posterior.",
         },
       },
       unknownError: "Error desconocido",
@@ -286,6 +298,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "Activer les hooks des agents de terminal",
           hint: "Recevez les notifications et l'état des agents de terminal. Des hooks sont installés dans les fichiers de configuration de vos agents.",
           updateFailed: "Impossible de mettre à jour les hooks des agents de terminal",
+          unsupportedHost:
+            "Pas encore pris en charge sur les hôtes Windows. Les agents de terminal fonctionnent toujours ; leur statut et leurs notifications arriveront dans une prochaine version.",
         },
       },
       unknownError: "Erreur inconnue",
@@ -327,6 +341,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "Ativar hooks dos agentes de terminal",
           hint: "Receba notificações e o status dos agentes de terminal. Isso instala hooks nos arquivos de configuração dos seus agentes.",
           updateFailed: "Não foi possível atualizar os hooks dos agentes de terminal",
+          unsupportedHost:
+            "Ainda não é compatível com hosts Windows. Os agentes de terminal continuam funcionando; o status e as notificações chegam em uma versão futura.",
         },
       },
       unknownError: "Erro desconhecido",
@@ -368,6 +384,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "Включить хуки агентов в терминале",
           hint: "Получайте уведомления и статус от агентов в терминале. В конфигурационные файлы агентов будут установлены хуки.",
           updateFailed: "Не удалось обновить хуки агентов в терминале",
+          unsupportedHost:
+            "Пока не поддерживается на хостах Windows. Терминальные агенты продолжают работать; статус и уведомления появятся в следующей версии.",
         },
       },
       unknownError: "Неизвестная ошибка",
@@ -409,6 +427,8 @@ const WOOWTECH_COPY: Readonly<Record<string, WoowtechCopy>> = {
           title: "تفعيل خطافات وكلاء الطرفية",
           hint: "احصل على الإشعارات والحالة من وكلاء الطرفية. يؤدي هذا إلى تثبيت خطافات في ملفات إعدادات الوكلاء.",
           updateFailed: "تعذّر تحديث خطافات وكلاء الطرفية",
+          unsupportedHost:
+            "غير مدعوم على أجهزة Windows المضيفة حتى الآن. ما زال وكلاء الطرفية يعملون، وستتوفر الحالة والإشعارات في إصدار لاحق.",
         },
       },
       unknownError: "خطأ غير معروف",
@@ -667,6 +687,10 @@ const DESKTOP_NOTIFICATIONS_ENGLISH = {
     "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
   failed:
     "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
+  unconfirmedWindows:
+    "Check Settings › System › Notifications and make sure {productName} is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
+  failedWindows:
+    "Check Settings › System › Notifications and make sure {productName} is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
 };
 
 const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
@@ -680,6 +704,10 @@ const DESKTOP_NOTIFICATIONS_ZH_TW: typeof DESKTOP_NOTIFICATIONS_ENGLISH = {
   unconfirmedTitle: "無法確認通知是否顯示",
   unconfirmed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
   failed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
+  unconfirmedWindows:
+    "請到「設定 › 系統 › 通知」確認 {productName} 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
+  failedWindows:
+    "請到「設定 › 系統 › 通知」確認 {productName} 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
 };
 
 const NOTIFICATION_DISPLAY_ENGLISH = {
@@ -715,6 +743,12 @@ const NOTIFICATION_BANNER_CHECK_ENGLISH = {
   openSettings: "Open notification settings",
   testAgain: "Test again",
   confirmedHint: "Confirmed: banners appear on this computer.",
+  idleDescriptionWindows:
+    "Send a test notification and see whether a banner appears at the bottom right of your screen.",
+  askDescriptionWindows:
+    "A test notification was just sent. It should appear as a banner at the bottom right of your screen.",
+  helpDescriptionWindows:
+    "In Settings › System › Notifications, turn on notifications and {productName}, and make sure Show notification banners is on. Also check that Focus Assist (Do Not Disturb on Windows 11) is off.",
 };
 
 const NOTIFICATION_BANNER_CHECK_ZH_TW: typeof NOTIFICATION_BANNER_CHECK_ENGLISH = {
@@ -731,6 +765,10 @@ const NOTIFICATION_BANNER_CHECK_ZH_TW: typeof NOTIFICATION_BANNER_CHECK_ENGLISH 
   openSettings: "打開通知設定",
   testAgain: "再測一次",
   confirmedHint: "已確認：這台電腦的通知會跳出橫幅。",
+  idleDescriptionWindows: "傳送一則測試通知，看看螢幕右下角有沒有跳出橫幅。",
+  askDescriptionWindows: "剛才傳送了一則測試通知，它會以橫幅出現在螢幕右下角。",
+  helpDescriptionWindows:
+    "請到「設定 › 系統 › 通知」，打開通知和 {productName}，並確認「顯示通知橫幅」已開啟。也確認「專注輔助」（Windows 11 叫「請勿打擾」）沒有開著。",
 };
 
 const AGENT_NOTIFICATION_TITLES_ENGLISH = {

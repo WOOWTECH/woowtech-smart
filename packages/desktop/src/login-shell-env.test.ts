@@ -111,6 +111,30 @@ async function createShellHome(): Promise<string> {
   return await mkdtemp(path.join(os.tmpdir(), "paseo-login-shell-env-"));
 }
 
+// woowtech smart: Windows keeps Explorer's environment; the daemon refreshes PATH itself (G29).
+describe("login shell env on Windows", () => {
+  it("skips the login shell without a warning and leaves the environment alone", () => {
+    const logger = new RecordingLoginShellLogger();
+    const env: NodeJS.ProcessEnv = { Path: "C:\\Windows\\System32" };
+    let spawned = false;
+    inheritLoginShellEnv({
+      env,
+      logger,
+      platform: "win32",
+      spawnSync: (() => {
+        spawned = true;
+        throw new Error("no login shell on Windows");
+      }) as unknown as LoginShellSpawnSync,
+    });
+    expect(spawned).toBe(false);
+    expect(env).toEqual({ Path: "C:\\Windows\\System32" });
+    expect(logger.warnings).toEqual([]);
+    expect(logger.infos.map((entry) => entry.message)).toEqual([
+      "[login-shell-env] skipped on Windows",
+    ]);
+  });
+});
+
 describe("login shell env retry behavior", () => {
   it("applies the interactive env without retrying", () => {
     const env = createEnv(fakeHome);

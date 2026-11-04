@@ -98,19 +98,26 @@ test("an x64 app packed with only the arm64 esbuild stops the build (0.8.1)", (t
   );
 });
 
-test("the x64 app keeps only the x64 esbuild and its launcher becomes that binary", (t) => {
-  const x64Esbuild = thin("x64", { tag: "esbuild x64" });
-  const root = crossBuiltX64(t, {
-    [`${UNPACKED}/@esbuild/darwin-x64/bin/esbuild`]: x64Esbuild,
-    [`${UNPACKED}/@esbuild/darwin-x64/package.json`]: "{}",
-  });
-  prepareWoowtechNativeArch(path.join(root, APP), "x64");
-  assert.ok(!existsSync(path.join(root, UNPACKED, "@esbuild/darwin-arm64")));
-  assert.ok(existsSync(path.join(root, UNPACKED, "@esbuild/darwin-x64/package.json")));
-  const launcher = path.join(root, UNPACKED, "esbuild/bin/esbuild");
-  assert.deepEqual(readFileSync(launcher), x64Esbuild);
-  assert.equal(statSync(launcher).mode & 0o111, 0o111);
-});
+// The Mac build step: it needs execute bits and symbolic links, which a Windows checkout lacks.
+const macOnly = { skip: process.platform === "win32" };
+
+test(
+  "the x64 app keeps only the x64 esbuild and its launcher becomes that binary",
+  macOnly,
+  (t) => {
+    const x64Esbuild = thin("x64", { tag: "esbuild x64" });
+    const root = crossBuiltX64(t, {
+      [`${UNPACKED}/@esbuild/darwin-x64/bin/esbuild`]: x64Esbuild,
+      [`${UNPACKED}/@esbuild/darwin-x64/package.json`]: "{}",
+    });
+    prepareWoowtechNativeArch(path.join(root, APP), "x64");
+    assert.ok(!existsSync(path.join(root, UNPACKED, "@esbuild/darwin-arm64")));
+    assert.ok(existsSync(path.join(root, UNPACKED, "@esbuild/darwin-x64/package.json")));
+    const launcher = path.join(root, UNPACKED, "esbuild/bin/esbuild");
+    assert.deepEqual(readFileSync(launcher), x64Esbuild);
+    assert.equal(statSync(launcher).mode & 0o111, 0o111);
+  },
+);
 
 test("the arm64 app packed on Apple silicon passes unchanged", (t) => {
   const arm64Esbuild = thin("arm64", { tag: "esbuild arm64" });
@@ -136,7 +143,7 @@ test("a JavaScript esbuild launcher is left alone", (t) => {
   );
 });
 
-test("any Mach-O file without the target architecture stops the build", (t) => {
+test("any Mach-O file without the target architecture stops the build", macOnly, (t) => {
   const root = tree(t, {
     [`${APP}/Contents/MacOS/${APP.slice(0, -".app".length)}`]: thin("arm64"),
     [`${APP}/Contents/Frameworks/Universal.dylib`]: fat("x64", "arm64"),

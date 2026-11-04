@@ -3,9 +3,8 @@
 // the identifier of that notification to Electron's `ready` event as launchInfo. The identifier
 // carries the agent's link, so the relaunched app opens that agent instead of the last workspace.
 //
-// The same functions live in features/woowtech-launch-links.ts on the Windows branch
-// (woowtech/windows-v1), which also handles Windows protocol toasts; merge the two when that
-// branch lands.
+// Windows does not use this: its agent notifications are protocol toasts that launch the agent
+// link themselves (woowtech-windows-toast.ts, woowtech-launch-links.ts).
 import {
   buildAgentDeepLink,
   parseAgentDeepLink,

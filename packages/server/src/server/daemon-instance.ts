@@ -12,17 +12,13 @@ import {
 } from "./pid-lock.js";
 import { daemonLaunchEnvironment } from "./config-environment.js";
 import { readPersistedConfig } from "./persisted-config.js";
-import treeKill from "tree-kill";
-const killTree = (pid: number, signal: string): Promise<void> =>
-  new Promise((resolve, reject) =>
-    treeKill(pid, signal, (error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    }),
-  );
+import { killProcessTree } from "../utils/woowtech-process-tree-kill.js";
+const killTree = async (pid: number, signal: string): Promise<void> => {
+  const error = await killProcessTree(pid, signal);
+  if (error) {
+    throw error;
+  }
+};
 
 // Process ownership only: desktop and CLI load this entry in their own processes.
 // Keep daemon bootstrap and WebSocket schemas out of its dependency tree.

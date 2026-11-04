@@ -68,7 +68,7 @@ export function findInShippedSources(patterns, options = {}) {
   } = options;
   const hits = [];
   for (const file of filesToSearch(dirs, files, fileTypes)) {
-    const relativeFile = path.relative(repoRoot, file);
+    const relativeFile = path.relative(repoRoot, file).split(path.sep).join("/");
     if (skipPaths.some((skipped) => relativeFile.startsWith(skipped))) continue;
     readFileSync(file, "utf8")
       .split("\n")

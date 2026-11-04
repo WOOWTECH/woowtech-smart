@@ -121,6 +121,10 @@ export function brandElectronBuilderConfig(text, brand) {
   setScalar(doc, ["copyright"], company.copyright);
   setScalar(doc, ["extraMetadata", "name"], desktop.appId);
   setScalar(doc, ["extraMetadata", "desktopName"], `${name}.desktop`);
+  // The publisher in Windows' Apps & features and the exe's CompanyName: who holds the copyright.
+  setScalar(doc, ["extraMetadata", "author", "name"], company.copyright.replace(/^© \d{4} /, ""));
+  setScalar(doc, ["extraMetadata", "author", "email"], brand.links.supportEmail);
+  setScalar(doc, ["extraMetadata", "description"], `${name} desktop app`);
   setScalar(doc, ["protocols", 0, "name"], `${name} agent link`);
   setScalar(doc, ["protocols", 0, "schemes", 0], scheme);
   setScalar(doc, ["publish", "owner"], releasesOwner);

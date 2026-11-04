@@ -1,7 +1,8 @@
 // woowtech smart: where the daemon looks for the user's `claude` when PATH has none.
 // The desktop app started from the Dock gets the login shell's PATH, which may not
-// include ~/.local/bin, where Claude Code's native installer puts `claude`. Only the
-// built-in default command gets these locations; a command the user set is resolved
+// include ~/.local/bin, where Claude Code's native installer puts `claude`. On Windows the
+// native installer does not reliably add %USERPROFILE%\.local\bin to PATH either (plan G14).
+// Only the built-in default command gets these locations; a command the user set is resolved
 // exactly as upstream resolves it. woowtech/README.md section 3 has the order.
 import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
@@ -16,6 +17,8 @@ export interface ClaudeExecutableIo {
   homeDir: () => string;
   /** The directory the system-wide locations sit under: "/" except in tests. */
   rootDir: string;
+  /** The daemon's environment: %APPDATA% on Windows. */
+  env: NodeJS.ProcessEnv;
   /** Upstream's PATH search: `which -a`, then the --version probe on each candidate. */
   findOnPath: (name: string) => Promise<string | null>;
 }
@@ -24,6 +27,8 @@ export interface ClaudeExecutableIo {
 export interface ClaudeLocationRoots {
   homeDir: string;
   rootDir: string;
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
 }
 
 /** A launch default in the shape checkProviderLaunchAvailable takes. */
@@ -36,11 +41,25 @@ export const realClaudeExecutableIo: ClaudeExecutableIo = {
   platform: process.platform,
   homeDir: () => os.homedir(),
   rootDir: "/",
+  env: process.env,
   findOnPath: (name) => findExecutable(name),
 };
 
 /** Where Claude Code's installers put `claude`, in the order the daemon tries them. */
-export function claudeFallbackLocations({ homeDir, rootDir }: ClaudeLocationRoots): string[] {
+export function claudeFallbackLocations({
+  homeDir,
+  rootDir,
+  platform = process.platform,
+  env = process.env,
+}: ClaudeLocationRoots): string[] {
+  if (platform === "win32") {
+    // The native installer (install.ps1, the WinGet bootstrap), then npm's global prefix.
+    // WinGet's own package folder is already searched by upstream's Windows lookup.
+    return [
+      path.join(homeDir, ".local", "bin", "claude.exe"),
+      ...(env.APPDATA ? [path.join(env.APPDATA, "npm", "claude.cmd")] : []),
+    ];
+  }
   return [
     path.join(homeDir, ".local", "bin", "claude"),
     path.join(homeDir, ".claude", "local", "claude"),
@@ -50,12 +69,15 @@ export function claudeFallbackLocations({ homeDir, rootDir }: ClaudeLocationRoot
 }
 
 /** A regular file, or a symlink to one, that this user may execute. */
-async function isExecutableFile(filePath: string): Promise<boolean> {
+async function isExecutableFile(filePath: string, platform: NodeJS.Platform): Promise<boolean> {
   try {
     if (!(await stat(filePath)).isFile()) {
       return false;
     }
-    await access(filePath, constants.X_OK);
+    // Windows has no execute bit; its locations carry .exe or .cmd.
+    if (platform !== "win32") {
+      await access(filePath, constants.X_OK);
+    }
     return true;
   } catch {
     return false;
@@ -74,12 +96,14 @@ export async function findDefaultClaudeExecutable(
   if (onPath) {
     return onPath;
   }
-  // The locations are POSIX install paths; Windows is not in v1.
-  if (io.platform === "win32") {
-    return null;
-  }
-  for (const location of claudeFallbackLocations({ homeDir: io.homeDir(), rootDir: io.rootDir })) {
-    if ((await isExecutableFile(location)) && (await probeExecutable(location))) {
+  const locations = claudeFallbackLocations({
+    homeDir: io.homeDir(),
+    rootDir: io.rootDir,
+    platform: io.platform,
+    env: io.env,
+  });
+  for (const location of locations) {
+    if ((await isExecutableFile(location, io.platform)) && (await probeExecutable(location))) {
       return location;
     }
   }

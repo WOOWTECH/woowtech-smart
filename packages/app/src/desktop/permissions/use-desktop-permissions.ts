@@ -13,6 +13,7 @@ import {
   sendDesktopTestNotification,
   type TestNotificationState,
 } from "./woowtech-notification-test";
+import { desktopNotificationHelpKeys } from "./woowtech-notification-help";
 import { askAboutBanner, showBannerHelp } from "@/utils/woowtech-notification-banner-check";
 
 export interface UseDesktopPermissionsReturn {
@@ -125,6 +126,7 @@ export function useDesktopPermissions(): UseDesktopPermissionsReturn {
     }
 
     testNotificationPendingRef.current = true;
+    const helpKeys = desktopNotificationHelpKeys(getDesktopHost()?.platform);
     try {
       await runNotificationTest({
         send: () =>
@@ -135,8 +137,8 @@ export function useDesktopPermissions(): UseDesktopPermissionsReturn {
               body: t("desktop.permissions.testNotification.body"),
             },
           }),
-        failureMessage: t("woowtech.desktopNotifications.failed"),
-        unconfirmedMessage: t("woowtech.desktopNotifications.unconfirmed"),
+        failureMessage: t(helpKeys.failed),
+        unconfirmedMessage: t(helpKeys.unconfirmed),
         onState: (state) => {
           if (isMountedRef.current) setTestNotificationState(state);
           // woowtech smart: the same test also asks "Did you see the banner?" (README section 16).

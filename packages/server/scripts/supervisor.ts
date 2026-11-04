@@ -5,6 +5,8 @@ import {
   type RotatingFileStream,
 } from "rotating-file-stream";
 import { signalProcessTree } from "../src/utils/tree-kill.js";
+import { withHiddenWindow } from "../src/utils/woowtech-hidden-fork.js";
+import { createCrashBackoff } from "../src/utils/woowtech-crash-backoff.js";
 import { workerCwd } from "./woowtech-worker-cwd.js";
 
 const WORKER_HEARTBEAT_INTERVAL_MS = 1_000;
@@ -175,6 +177,10 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
   const resolveWorkerSpawnSpec = options.resolveWorkerSpawnSpec;
 
   let child: ChildProcess | null = null;
+  // woowtech smart: crashes in a row restart with growing delays (README §31, G12).
+  const crashBackoff = createCrashBackoff();
+  let workerStartedAt = Date.now();
+  let crashRestartTimer: NodeJS.Timeout | null = null;
   let restarting = false;
   let shuttingDown = false;
   let exiting = false;
@@ -275,6 +281,7 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
     }
 
     const spawnSpec = resolveWorkerSpawnSpec?.(workerEntry) ?? null;
+    workerStartedAt = Date.now();
     writeLifecycleLog("Spawning worker", { workerEntry });
     // woowtech smart: not in a working directory that was removed (scripts/woowtech-worker-cwd.ts).
     const cwd = workerCwd();
@@ -282,15 +289,20 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
       child = spawn(spawnSpec.command, spawnSpec.args, {
         stdio: ["inherit", "pipe", "pipe", "ipc"],
         env: spawnSpec.env ?? workerEnv,
+        windowsHide: true,
         cwd,
       });
     } else {
-      child = fork(workerEntry, workerArgs, {
-        stdio: ["inherit", "pipe", "pipe", "ipc"],
-        env: workerEnv,
-        execArgv: workerExecArgv,
-        cwd,
-      });
+      child = fork(
+        workerEntry,
+        workerArgs,
+        withHiddenWindow({
+          stdio: ["inherit", "pipe", "pipe", "ipc"],
+          env: workerEnv,
+          execArgv: workerExecArgv,
+          cwd,
+        }),
+      );
     }
 
     const currentChild = child;
@@ -400,12 +412,21 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
           ((code !== 0 && code !== null) || (signal !== null && signal !== "SIGTERM"));
 
         if (restarting || crashed) {
+          const delayMs =
+            crashed && !restarting ? crashBackoff.nextDelayMs(Date.now() - workerStartedAt) : 0;
           restarting = false;
           log(
             crashed
-              ? `Worker crashed (${exitDescriptor}). Restarting worker...`
+              ? `Worker crashed (${exitDescriptor}). Restarting worker${delayMs > 0 ? ` in ${delayMs} ms` : ""}...`
               : `Worker exited (${exitDescriptor}). Restarting worker...`,
           );
+          if (delayMs > 0) {
+            crashRestartTimer = setTimeout(() => {
+              crashRestartTimer = null;
+              if (!shuttingDown) spawnWorker();
+            }, delayMs);
+            return;
+          }
           spawnWorker();
           return;
         }
@@ -468,6 +489,10 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
     }
     shuttingDown = true;
     restarting = false;
+    if (crashRestartTimer) {
+      clearTimeout(crashRestartTimer);
+      crashRestartTimer = null;
+    }
     writeLifecycleLog("Supervisor shutdown requested", { reason });
     log(`${reason}. Stopping worker...`);
     if (!child) {

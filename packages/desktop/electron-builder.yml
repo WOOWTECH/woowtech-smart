@@ -10,9 +10,21 @@ copyright: "© 2026 WOOW TECH CO., LTD."
 # woowtech smart: electron-builder names electron-updater's download cache after the
 # package name, and @getpaseo/desktop gives the official Paseo's @getpaseodesktop-updater.
 # package.json's desktopName is Paseo's desktop entry; Linux names ours after executableName.
+# electron-builder also takes the exe's and the installer's CompanyName, and the publisher in
+# Windows' Apps & features, from author.name, and the installer's FileDescription from
+# description. In package.json both are still upstream's.
 extraMetadata:
   name: io.woowtech.smart.desktop
   desktopName: woowtech smart.desktop
+  author:
+    name: "WOOW TECH CO., LTD."
+    email: woowtech@designsmart.com.tw
+  description: woowtech smart desktop app
+# woowtech smart: the legacy winCodeSign archive holds macOS symlinks. Unpacking it needs the
+# "create symbolic links" privilege, which a normal Windows account does not have, and the build
+# stops with exit status 2. This toolset is plain zip files (README §31).
+toolsets:
+  winCodeSign: "1.1.0"
 protocols:
   - name: woowtech smart agent link
     schemes:
@@ -116,6 +128,15 @@ appImage:
 win:
   artifactName: "woowtech-smart-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
+  # woowtech smart: the hook signs only in the release job (WOOWTECH_SIGN=1), SHA-256 only; other
+  # builds stay unsigned (README §31, plan D8). The release job passes publisherName: an unsigned
+  # test build that carried it would refuse its own unsigned updates.
+  signtoolOptions:
+    sign: ./scripts/woowtech-sign-windows.js
+    signingHashAlgorithms: ["sha256"]
+  # Smart App Control checks every module that loads, so every .dll and .node file goes to the
+  # hook too. The hook keeps a signature a file already has (Microsoft's) and signs the rest.
+  signExts: [".dll", ".node"]
   extraResources:
     - from: bin/paseo.cmd
       to: bin/paseo.cmd
@@ -124,15 +145,18 @@ win:
     # woowtech smart: notification toast icon (README §16 桌面通知).
     - from: assets/icon.png
       to: icon.png
+    # woowtech smart: notification-area and window icon, 16–256 px (README §31).
+    - from: assets/icon.ico
+      to: icon.ico
+  # woowtech smart: no Windows zip. electron-updater uses the NSIS installer, and an extracted
+  # copy would take the woowtech-smart: scheme, the Start menu link and the toast activator
+  # for itself (README §31, plan B5/D17).
+  # x64 only (plan D11). This list wins over --x64 on the command line: with a second architecture
+  # electron-builder also builds a combined installer of 259 MB and points latest.yml at it.
   target:
     - target: nsis
       arch:
         - x64
-        - arm64
-    - target: zip
-      arch:
-        - x64
-        - arm64
 nsis:
   oneClick: false
   perMachine: false

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import { renameWithRetry } from "../../../../utils/woowtech-rename-retry.js";
 
 export class ClaudeAgentSdkRuntimeError extends Error {
   constructor() {
@@ -88,7 +90,7 @@ export async function loadManagedClaudeSdk<T>(options: {
       // The selected path is immutable and unique: another daemon's winner is never moved.
       await assertSafeTree(selected);
       try {
-        await rename(selected, `${selected}.quarantine-${randomUUID()}`);
+        await renameWithRetry({ from: selected, to: `${selected}.quarantine-${randomUUID()}` });
       } catch (error) {
         if (!isMissingPathError(error)) throw new ClaudeAgentSdkRuntimeError();
       }
@@ -110,7 +112,7 @@ export async function loadManagedClaudeSdk<T>(options: {
     }
     await writeFile(pendingPointer, JSON.stringify(generation), { flag: "wx" });
     await assertSafePath(pointer);
-    await rename(pendingPointer, pointer);
+    await renameWithRetry({ from: pendingPointer, to: pointer });
     published = true;
     return sdk;
   } finally {

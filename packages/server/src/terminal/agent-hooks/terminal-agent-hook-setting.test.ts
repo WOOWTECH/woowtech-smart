@@ -60,7 +60,7 @@ describe("applyTerminalAgentHookSetting", () => {
     const root = createTempDir("paseo-hook-setting-");
     const store = createStore(createTempDir("paseo-hook-setting-home-"), false);
 
-    applyTerminalAgentHookSetting({ store, install: createInstallEnv(root) });
+    applyTerminalAgentHookSetting({ store, install: createInstallEnv(root), platform: "darwin" });
 
     const paths = hookPaths(root);
     expect(existsSync(paths.claude)).toBe(false);
@@ -72,7 +72,7 @@ describe("applyTerminalAgentHookSetting", () => {
     const root = createTempDir("paseo-hook-setting-");
     const store = createStore(createTempDir("paseo-hook-setting-home-"), true);
 
-    applyTerminalAgentHookSetting({ store, install: createInstallEnv(root) });
+    applyTerminalAgentHookSetting({ store, install: createInstallEnv(root), platform: "darwin" });
 
     const paths = hookPaths(root);
     expect(existsSync(paths.claude)).toBe(true);
@@ -85,13 +85,58 @@ describe("applyTerminalAgentHookSetting", () => {
     const store = createStore(createTempDir("paseo-hook-setting-home-"), false);
     const paths = hookPaths(root);
 
-    applyTerminalAgentHookSetting({ store, install: createInstallEnv(root) });
+    applyTerminalAgentHookSetting({ store, install: createInstallEnv(root), platform: "darwin" });
     expect(existsSync(paths.opencode)).toBe(false);
 
     store.patch({ enableTerminalAgentHooks: true });
     expect(existsSync(paths.codex)).toBe(true);
     expect(existsSync(paths.opencode)).toBe(true);
 
+    store.patch({ enableTerminalAgentHooks: false });
+    expect(existsSync(paths.opencode)).toBe(false);
+  });
+});
+
+// woowtech smart: a Windows host never installs terminal agent hooks yet (plan G9).
+describe("applyTerminalAgentHookSetting on a Windows host", () => {
+  it("writes nothing at boot or when enabled live", () => {
+    const root = createTempDir("paseo-hook-setting-");
+    const enabledAtBoot = createStore(createTempDir("paseo-hook-setting-home-"), true);
+    applyTerminalAgentHookSetting({
+      store: enabledAtBoot,
+      install: createInstallEnv(root),
+      platform: "win32",
+    });
+    const paths = hookPaths(root);
+    expect([existsSync(paths.claude), existsSync(paths.codex), existsSync(paths.opencode)]).toEqual(
+      [false, false, false],
+    );
+
+    const toggled = createStore(createTempDir("paseo-hook-setting-home-"), false);
+    applyTerminalAgentHookSetting({
+      store: toggled,
+      install: createInstallEnv(root),
+      platform: "win32",
+    });
+    toggled.patch({ enableTerminalAgentHooks: true });
+    expect([existsSync(paths.claude), existsSync(paths.codex), existsSync(paths.opencode)]).toEqual(
+      [false, false, false],
+    );
+  });
+
+  it("still removes hooks an older version installed when switched off", () => {
+    const root = createTempDir("paseo-hook-setting-");
+    const paths = hookPaths(root);
+    const older = createStore(createTempDir("paseo-hook-setting-home-"), true);
+    applyTerminalAgentHookSetting({
+      store: older,
+      install: createInstallEnv(root),
+      platform: "darwin",
+    });
+    expect(existsSync(paths.opencode)).toBe(true);
+
+    const store = createStore(createTempDir("paseo-hook-setting-home-"), true);
+    applyTerminalAgentHookSetting({ store, install: createInstallEnv(root), platform: "win32" });
     store.patch({ enableTerminalAgentHooks: false });
     expect(existsSync(paths.opencode)).toBe(false);
   });

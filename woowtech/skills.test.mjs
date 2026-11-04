@@ -67,6 +67,8 @@ test("the committed skills are what the generator makes from upstream's current 
   const check = spawnSync("npx", ["tsx", "woowtech/tools/generate-skills.mjs", "--check"], {
     cwd: repoRoot,
     encoding: "utf8",
+    // npx is a command script on Windows, which only cmd.exe can start.
+    shell: process.platform === "win32",
   });
   assert.equal(check.status, 0, check.stderr || check.stdout);
 });

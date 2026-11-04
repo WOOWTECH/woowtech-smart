@@ -2,7 +2,7 @@
 
 這個 repo 是 [getpaseo/paseo](https://github.com/getpaseo/paseo)（Apache-2.0）的商用 fork。
 運作方式跟 Home Assistant Core 加 HA App 一樣：使用者在自己的電腦上跑 daemon，App 只連自己的 daemon。
-v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
+v1 平台是 iOS、Android、macOS 桌面版和 CLI。Windows 桌面版照 Mac 版的行為移植中（第 31 節）：2026-11-04 在一台 Windows 10 x64 上用未簽章的測試版實測過安裝、通知和更新；Windows 11、真人點通知、手機推播和簽章還沒測。
 
 `woowtech/` 放 fork 專屬的東西。上游的檔案盡量不動，之後合併上游才不會一直衝突。
 
@@ -56,6 +56,7 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   1. node_modules 裡有就直接用。開發機會有，因為它是 devDependency。
   2. 否則讀 `$PASEO_HOME/runtime-deps/claude-agent-sdk-<版本>.json` 指向的同版本 generation；沒有 pointer 時仍相容舊的 `claude-agent-sdk-<版本>/` 目錄。
   3. 沒有可載入副本，才從 npm registry 或鏡像下載；sha512 對不上就拒絕。下載約 1.33 MB，解壓後約 4.6 MB；首次等待時間取決於網路。
+     解壓用 JS（`woowtech-npm-tarball.ts`），不呼叫 PATH 上的 `tar`：Windows 上它可能是 Git 的 GNU tar，會把 `C:\…` 當成「主機:路徑」（plan G15）。只收一般檔案和資料夾、路徑都在 `package/` 底下、不含 Windows 會另作解釋的名稱（`..`、磁碟代號、`:`、結尾的點或空白、`CON` 這類裝置名稱），大小和數量有上限，整份驗過才開始寫；結果跟系統 `tar` 解開的逐檔相同。Windows 上解壓後的改名，遇到 Defender 暫時鎖檔（EPERM、EACCES、EBUSY）會等一下重試（`utils/woowtech-rename-retry.ts`）。
 - 受管理副本缺檔、語法錯誤或初始化失敗時，只把選中的副本移到同層 quarantine，重新下載一次。新副本用獨立實體 generation 目錄，完整性驗證與真正 import 成功後才原子更新 pointer，避免 Node 把舊 entry／相對依賴的失敗快取帶回來。local/dev SDK 的其他載入錯誤不自動修復。
 - pointer 只接受同版本、合法 UUID 的 basename；格式錯誤、越界或含符號連結的路徑安全拒絕。失敗時清自己的 partial／未發布副本，不刪其他 generation 或整個 runtime-deps；舊副本與 quarantine 不自動回收。這是路徑檢查，不是防同權限惡意程序競態的檔案系統沙箱。
 - `claudeQuery()` 必須立刻回傳 Query，所以 SDK 還沒載入時，它會先回傳 `DeferredQuery`（`deferred-query.ts`）。
@@ -65,11 +66,12 @@ v1 平台是 iOS、Android、macOS 桌面版和 CLI，Windows 延後。
   1. 使用者在 `agents.providers.claude.command` 手動指定的指令一律優先，解析方式跟上游一樣，不看下面兩步：找不到就顯示不可用，不會改用別的 `claude`。指令寫的是 `claude` 這個名字時也只找 PATH；要在 Dock 啟動的桌面版加自訂參數，請寫絕對路徑。
   2. daemon 的 PATH：`which -a claude`，每個候選各跑一次 `--version`（2 秒逾時），跟上游一樣。
   3. PATH 沒有可用的 `claude`，才依序試 `~/.local/bin/claude`、`~/.claude/local/claude`、`/opt/homebrew/bin/claude`、`/usr/local/bin/claude`。`~` 是 daemon 環境的 home（`os.homedir()`）。
+     Windows 依序試 `%USERPROFILE%\.local\bin\claude.exe`（原生安裝程式和 WinGet 的 bootstrap）、`%APPDATA%\npm\claude.cmd`（npm 全域安裝）。WinGet 的套件資料夾上游本來就會找。Windows 的原生安裝程式不一定把 `.local\bin` 加進 PATH（plan G14）。
   - 原因：桌面版從 Dock 啟動時用的是登入 shell 的 PATH，裡面不一定有 `~/.local/bin`，而 Claude Code 的原生安裝程式把 `claude` 放在那裡。
-  - 備援位置只算存在、可執行、不是資料夾的檔案，也要通過同樣的 `--version`。符號連結指向的檔案也算：原生安裝程式的 `~/.local/bin/claude` 就是指向版本資料夾的連結。回傳連結本身的路徑，Claude Code 更新換版後照樣有效。
-  - PATH 查詢本身出錯（不是找不到）時照上游拋出錯誤，不改試備援位置。Windows 不套用備援位置（不在 v1）。
+  - 備援位置只算存在、可執行（Windows 沒有執行權限，看副檔名）、不是資料夾的檔案，也要通過同樣的 `--version`。符號連結指向的檔案也算：原生安裝程式的 `~/.local/bin/claude` 就是指向版本資料夾的連結。回傳連結本身的路徑，Claude Code 更新換版後照樣有效。
+  - PATH 查詢本身出錯（不是找不到）時照上游拋出錯誤，不改試備援位置。
   - 寫在 fork 檔 `packages/server/src/executable-resolution/woowtech-claude-fallback.ts`。接點只有上游 `provider-launch-config.ts` 的 `checkProviderLaunchAvailable`（+4／-2 行）：呼叫端沒給 launch default、指令是預設的 `claude` 時補上備援。Claude 的可用狀態、診斷、版本和啟動都經過這裡；其他 provider 和熱檔 `agent.ts` 都沒動。
-  - 測試：`woowtech-claude-fallback.test.ts` 在暫存目錄模擬 home、PATH 和 `/opt/homebrew`、`/usr/local`，不碰真的 home，也不執行真的 `claude`：四個位置各自、前面的位置優先、PATH 優先、手動指令優先（也不會改用備援）、不可執行／資料夾／`--version` 失敗的檔案跳過、原生安裝程式的連結、都沒有時找不到、Windows 不套用。守門 `woowtech/claude-executable.test.mjs` 把 HOME、PATH 指到暫存目錄，從原始碼確認 Claude provider 真的找得到 `~/.local/bin/claude`、版本由那個檔案回報，手動指令照舊；上游改寫 `checkProviderLaunchAvailable` 或 Claude provider 改傳自己的 launch default 時會失敗。
+  - 測試：`woowtech-claude-fallback.test.ts` 在暫存目錄模擬 home、PATH 和 `/opt/homebrew`、`/usr/local`，不碰真的 home，也不執行真的 `claude`：四個位置各自、前面的位置優先、PATH 優先、手動指令優先（也不會改用備援）、不可執行／資料夾／`--version` 失敗的檔案跳過、原生安裝程式的連結、都沒有時找不到、Windows 的兩個位置和順序。守門 `woowtech/claude-executable.test.mjs` 把 HOME、PATH 指到暫存目錄，從原始碼確認 Claude provider 真的找得到 `~/.local/bin/claude`、版本由那個檔案回報，手動指令照舊；上游改寫 `checkProviderLaunchAvailable` 或 Claude provider 改傳自己的 launch default 時會失敗。
   - 上游測試 `provider-availability.test.ts` 的「Claude reports unavailable when the default command cannot be resolved」原本只把 PATH 指到空資料夾，現在也把 HOME 指過去（+8 行）。`/opt/homebrew/bin`、`/usr/local/bin` 沒辦法用環境變數隔開：在那裡裝了 `claude` 的機器上，這個上游測試會找到它、執行它的 `--version` 而失敗。
 - 登入狀態：設定頁的供應商列表（App、桌面版）和 Claude 的診斷會顯示 Claude 的登入狀態。**只顯示，不擋**：可用狀態（ready）、`isAvailable` 和建立 Agent 都不看它。有些 API 設定偵測不到，擋下來反而錯。
   - 判斷順序照 Claude Code 的認證優先序（code.claude.com/docs/en/authentication）。先看 provider 的有效環境：daemon 的環境加上 provider 設定的 `env`，值是空字串等於沒設。環境決定不了，才執行 `claude auth status`（5 秒逾時）：
@@ -1013,7 +1015,7 @@ node --test woowtech/*.test.mjs
 
 - owner 2026-10-02 決定 Mac 和 Windows 都要開到那個 agent（D2 選 a）；2026-10-05 決定 Mac 不等 Windows 分支，自己先做。
 - macOS 在 App 結束後點通知中心的舊通知時，重新啟動 App，把那則通知的 identifier 放在 Electron `ready` 事件的 launchInfo。`features/notifications.ts` 在 macOS 建 agent 通知時給 `id`：`woowtech-agent:<uuid>:<agent 連結>`（`features/woowtech-notification-launch.ts`，uuid 讓同一個 agent 的兩則通知不互相取代）；`main.ts` 在 `app.whenReady()` 之前掛 `app.once("ready")`，讀回 agent，交給第一個視窗開啟（跟 argv 的 agent 連結同一條路）。沒有 agent 的通知（terminal）照舊只打開 App。
-- 同樣的函式也在 Windows 分支的 `features/woowtech-launch-links.ts`（它另外處理 Windows 的 protocol toast）；Windows 分支合進 main 時合成一個檔。
+- Windows 不用這個 id：agent 通知是協定 toast，自己帶 agent 連結（第 31 節）。這些函式只在這個檔；Windows 分支原本在 `features/woowtech-launch-links.ts` 的同一份，10/5 合併 main 時拿掉了。
 - 接點：`notifications.ts`（import 和 `id`，+11 行）、`main.ts`（import 和 ready listener，+12 行）。測試 `woowtech-notification-launch.test.ts`，守門 `woowtech/desktop-notification-launch.test.mjs`。
 - 要實機：簽章的打包版，App 結束後從通知中心點舊的 agent 通知，要直接開到那個 agent；點 terminal 通知只打開 App。
 
@@ -1027,9 +1029,9 @@ node --test woowtech/*.test.mjs
 - Agent 通知標題由 renderer 依 reason 與當下 App 語言翻譯：繁中 finished「工作完成了」、permission「需要你的授權」、attention「需要你的注意」；其他語言（含簡中）沿用上游英文。`utils/woowtech-agent-notification.ts` 只改 title，不比較或翻譯 body，保留 daemon 預覽與導頁 data。`contexts/session-context.tsx` 是上游接點，保留聚焦抑制、去重與 error 不送出的行為；翻譯函式存入 ref 並在 render 同步更新，通知 callback 只依賴 `serverId`，避免切換語言使 `observeEvents` 拆掉再訂閱；送出時仍讀最新翻譯。
 - 通知圖示：上游從 `dist/features` 找 `../assets`，指到從來不會產生的 `dist/assets`，所以圖示一直是空的（macOS 仍用 App 圖示，Windows 與 Linux 橫幅沒有圖示）。改由 `features/woowtech-notification-icon.ts` 決定：打包版讀 resources 的 `icon.png`，開發版讀 `packages/desktop/assets`。`electron-builder.yml` 原本只有 mac 複製 `icon.png`，現在 linux 與 win 也複製；main.ts 打包版的視窗圖示本來就找這個檔，因此 Linux 視窗，以及 Windows 打包版（之前 `icon.ico`、`icon.png` 都沒有出貨）的視窗也會有圖示。macOS 不給通知圖示（`notificationIconCandidates` 對 darwin 回空清單）：橫幅本來就顯示 App 圖示，Electron 在 macOS 會把另外給的圖示畫成右側的內容圖片，等於多出第二個圖示，所以 macOS 維持修正前的外觀。
 - 沒有視窗時點通知：macOS 關掉所有視窗後 App 仍在，上游點擊只送給既有視窗，所以沒反應。`features/woowtech-notification-click.ts` 先找發出通知的視窗，再找任何視窗；都沒有時呼叫 `desktopWindowOwner.restoreWhenActivated()` 重開主視窗。目標先排隊，等該視窗 renderer 的 `PushNotificationRouter` 訂閱點擊後，以 `woowtech:notification:takePendingClick` 取走，再走原本的 `openNotification`（agent 或 `buildNotificationRoute`）。視窗重新載入時回到未就緒，關閉時丟棄。macOS 的 activate 與點擊可能同時要求視窗，所以 `restoreWhenActivated` 共用同一次開窗。上游接點：`notifications.ts`、`main.ts`、`preload.ts`、`window/desktop-window-owner.ts`、App 的 `desktop/host.ts` 與 `app/_layout.tsx`（取件放 `utils/woowtech-notification-click.ts`）。
-- App 結束後從通知中心點舊通知（冷啟動、macOS `launchInfo`／`getHistory`、Windows `handleActivation`）仍不導頁：通知資料只存在記憶體，要支援得另存 id 對應資料，且只能在簽章產物上驗證，先不做。
-- Windows：`features/woowtech-app-user-model-id.ts` 在 `app.setName` 後、whenReady 前呼叫 `app.setAppUserModelId`。打包版用 `io.woowtech.smart.desktop`（與 `electron-builder.yml` 的 appId 一致，NSIS 捷徑用的就是它，守門核對），未打包用 `process.execPath`；macOS 與 Linux 不做事。
-- 合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs`，以及 desktop 的 `woowtech-notification-{icon,click}.test.ts`、`woowtech-app-user-model-id.test.ts`、`window/desktop-window-owner.test.ts` 與 App 的 `utils/woowtech-notification-click.test.ts`。
+- App 結束後從通知中心點舊通知（冷啟動）：macOS 從 `ready` 的 `launchInfo` 讀回通知 id，Windows 用協定 toast，都開到那個 agent（第 31 節）。App 開著時點上一次執行留下的舊通知，macOS 仍只把 App 帶到前面。
+- Windows：`features/woowtech-app-user-model-id.ts` 在 `app.setName` 後、whenReady 前呼叫 `app.setAppUserModelId` 和 `app.setToastActivatorCLSID`。打包版用 `io.woowtech.smart.desktop`（與 `electron-builder.yml` 的 appId 一致，NSIS 捷徑用的就是它，守門核對），未打包用 `io.woowtech.smart.desktop.dev`（第 31 節）；macOS 與 Linux 不做事。
+- 合併上游後跑 `node --test woowtech/desktop-notifications.test.mjs woowtech/windows-desktop.test.mjs`，以及 desktop 的 `woowtech-notification-{icon,click,delivery}.test.ts`、`woowtech-app-user-model-id.test.ts`、`window/desktop-window-owner.test.ts`、第 31 節列的測試與 App 的 `utils/woowtech-notification-click.test.ts`。
 - 正式簽章產物仍須另驗首次授權、拒絕、通知中心／橫幅及點擊；單元測試不能證明 macOS 實際顯示。圖示、關窗後點擊與 Windows AppUserModelID 也只有單元測試與守門，實機驗證待做：macOS 要簽章的打包版；Windows 與 Linux 的圖示和點擊要各自的打包版與機器。
 
 ### 17. daemon 自己的訊息用 woowtech smart
@@ -2048,6 +2050,200 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
 - **線上服務**（2026-10-30 從外面查過）：relay.apporo.ai 的 `/health` 回 200；`www.apporo.ai/api/smart/v1/notify`（推播）和 `…/ai-content-reports`（AI 回報）兩條路徑由 Alan 帳戶裡的 Worker 回應。Apporo 的推播中繼程式在私有 repo `WOOWTECH/woowtech-push-relay` 的 `apporo-smart` 分支。
 - **還沒做**：桌面版和 CLI 發版腳本的品牌參數。網頁版的 `deploy-web.sh` 已經有 `--brand`（第 27 節）。
 
+### 31. Windows 桌面版：跟 Mac 版一樣
+
+owner 的決定（2026-10-02）：Windows 版跟 Mac 版的定位和使用效果一樣，只是換作業系統實作。缺口編號（G1–G27）沿用 Windows 規劃書。
+
+關窗與系統匣（G1）：
+
+- 關掉最後一個視窗，App 留在通知區域（系統匣），跟 macOS 留在 Dock 一樣：daemon 和 agent 繼續跑；沒有畫面就不算在場，agent 完成時推到手機。
+- 點系統匣圖示，或從開始功能表再開一次：有視窗就叫到前面，沒有才開主視窗（`desktopWindowOwner.showOrOpenPrimary`）。上游在 Windows 再開一次會多開一個視窗。帶專案路徑的重開（CLI `woowtech-smart <path>`）照舊開新視窗；Linux 維持上游。
+- 系統匣選單的「結束」等於 Cmd+Q，daemon 要不要一起停照 `keepRunningAfterQuit`。沒有開機自動啟動，跟 Mac 一樣。
+- 選單文字看系統語言：繁中是「開啟 woowtech smart」「結束」，其他（含簡中）用英文。主程序讀不到 App 裡的語言設定。
+- 建不出系統匣圖示（找不到圖示檔）時，關窗照上游結束 App，免得留下看不到的程序。圖示是 resources 的 `icon.ico`（16–256 px，含 125%、175%、200% 縮放用的 20、28、36、40 px），由 `electron-builder.yml` 的 win `extraResources` 出貨。
+- Windows 11 把新的系統匣圖示放在「隱藏的圖示」裡，App 不能自己移出來。第一次關窗時跳一則提示（`showTrayHintOnce`，userData 裡的 `woowtech-tray-hint-shown` 記錄已經提示過），說明圖示在 ^ 裡，點提示會叫回視窗。
+- 把視窗帶到前面（`features/woowtech-windows-focus.ts`）：Windows 不讓背景程式搶前景，從通知啟動時第二個實例交出的前景權限也常常失效。所以先切一次「永遠在最上層」再 focus，這是 Signal Desktop 用的作法；已經顯示的視窗不再呼叫 `show()`，以免移動貼齊的視窗。用在點通知、second-instance、系統匣，以及晚建立的視窗第一次顯示時。實機用 `GetForegroundWindow` 判定（WD-14），不夠的話改成送一次無害的按鍵。
+- 政策在 `features/woowtech-windows-shell.ts`，Electron 接點在 `features/woowtech-windows-tray.ts`。上游接點：`main.ts`（`window-all-closed`、`second-instance`、bootstrap）、`window/desktop-window-owner.ts`。
+
+點通知開到 agent（G2–G5，加上 macOS 的冷啟動）：
+
+- Windows 打包版每次啟動呼叫 `app.setAsDefaultProtocolClient("woowtech-smart")`，寫在 HKCU。electron-builder 的 NSIS 範本只登記檔案關聯，不登記協定。只有安裝程式放好的那一份會登記（執行檔旁邊有 `Uninstall woowtech smart.exe`）；開發版、解壓出來的那一份都不登記，免得把協定指到別的副本。Windows 也不再出 zip：解壓出來的副本會把協定、開始功能表捷徑和通知啟動器都搶過去。
+- Windows 啟動時先建立通知元件（`Notification.isSupported()`）。Electron 這時就把通知啟動器寫進開始功能表捷徑，不必等第一則通知；通知中心只保留捷徑帶有啟動器的通知。
+- Windows 打包版的 agent 通知用自己組的 `toastXml`（`features/woowtech-windows-toast.ts`）：`activationType="protocol"`，`launch` 是 `woowtech-smart://h/<server>/agent/<agent>`。點通知時 Windows 執行 `"woowtech smart.exe" "<連結>"`：App 在跑（含縮在系統匣）走 `second-instance`，沒在跑走 argv 冷啟動，兩條都是原本的 agent 連結處理。通知滑進通知中心、App 結束過、電腦重開過都有效，不依賴記憶體裡的通知物件。協定登記失敗、開發版、終端機通知（沒有 agentId）仍用 Electron 預設的 toast。
+- App 開著時，協定 toast 也可能觸發 Electron 的 `click`。兩條路都走 `receiveAgentTarget`，2 秒內同一個 agent 只開一次（second-instance 收到的 agent 連結也走這裡）。
+- `toastXml` 會取代 title、body、icon 和 silent，所以 XML 自己帶文字、圖示（`appLogoOverride`）和靜音。XML 1.0 不允許的字元先拿掉，不然整則通知會被拒。
+- Windows 的 toast 在橫幅結束、滑進通知中心時觸發 `close`（reason 是 `timedOut`），之後還能點。`keepAfterTimedOutClose` 讓它保留監聽和引用，點擊或使用者關掉時才釋放。引用最多 50 則，超過先丟最舊的；丟掉的協定 toast 仍能開到 agent。
+- AUMID 與 toast activator：打包版用 `io.woowtech.smart.desktop` 加固定的 CLSID；開發版改用 `io.woowtech.smart.desktop.dev` 和另一個固定 CLSID（原本是執行檔路徑，含空白和反斜線）。Electron 40.5 起，第一次發通知時會自己寫開始功能表捷徑和 HKCU 的 CLSID，沒固定的話每次執行都換。兩組分開，開發用的 Electron 才不會改寫安裝版的登記。
+- macOS：agent 通知的 id 是 `woowtech-agent:<uuid>:<agent 連結>`（`features/woowtech-notification-launch.ts`，第 16 節）。App 結束後從通知中心點舊通知，macOS 重開 App，並在 `ready` 事件的 `launchInfo` 帶回這個 id；主程序在 bootstrap 開第一個視窗前讀出 agent。uuid 讓同一個 agent 的兩則通知不會互相取代。
+
+連結與 log（G24、G25）：
+
+- 第二個實例的命令列，以及 `PASEO_DEBUG` 的 argv，寫進 log 前先遮蔽：woowtech-smart: 連結只留 `?`、`#` 之前的部分，其他參數從 `offer=` 起拿掉。協定登記後，配對連結（第 19 節）也會出現在命令列，不遮蔽的話密鑰會留在 main.log。
+- 不是 agent 的 woowtech-smart: 連結（例如配對連結）只把現有視窗帶到前面，不多開視窗。冷啟動帶這種連結時一律當成開 App，不會被當成 CLI 參數執行（`hasPendingGuiLaunchRequest`）。
+- Windows 自己加的啟動參數也一樣當成開 App：更新後安裝程式用 `--updated` 重開 App；App 結束後點一般通知，COM 用 `-Embedding` 啟動（路徑沒加引號，資料夾名稱還會被切成好幾個參數）。原本這兩種都會被當成 CLI 參數，執行完 App 就結束，更新後的 App 打不開。
+- 拿不到單一實例鎖的第二個實例交出參數後用 `app.exit(0)` 結束，不跑第一個實例的結束流程。
+- main.log 的觀察點：`[launch] agent link via …`（argv、second-instance、open-url、notification center、notification-click）、`[launch] duplicate agent link … ignored`、`[launch] agent link protocol registered`（含 `isDefault`）和 `protocol handler`、`[tray] created`、`[notification] presenter`、`[notification] posting／show／failed／click／close`（帶 kind：protocol 或 default，以及 close 的 reason）。
+
+daemon 不跳主控台視窗（G11）：
+
+- daemon 自己沒有主控台。在 Windows 上，它啟動的主控台程式沒加 `windowsHide` 就會各自跳出一個黑色視窗。大部分指令走 `utils/spawn.ts`，本來就隱藏；這次補上 supervisor 的 worker、終端機 worker、外掛 runtime 和本地語音 worker。`fork()` 的型別沒有 `windowsHide`（執行時 Node 會照用），所以經 `utils/woowtech-hidden-fork.ts`。
+- tree-kill 1.2.2 在 Windows 透過 cmd.exe 執行 `taskkill`，不隱藏視窗。改由 `utils/woowtech-process-tree-kill.ts` 直接執行 System32 的 `taskkill.exe`，並隱藏視窗。跟 tree-kill 一樣強制結束整棵程序樹，不看 signal。
+- 開瀏覽器（`rundll32`）和開編輯器的程序不加 `windowsHide`：它會把對方要開的視窗一起藏起來。
+- 工作區的 setup、teardown 指令（`utils/worktree.ts`）在 Windows 用 PowerShell 執行，也要隱藏視窗。它用 `execFile`，守門的 `fork()`／`spawn()` 掃描抓不到，另有一條守門。
+
+關閉終端機（G10）：
+
+- node-pty 在 Windows 的 `kill()` 會關掉 pseudoconsole；再呼叫一次會重複關閉、弄壞記憶體（node-pty #983），終端機 worker 和所有終端機一起掛掉，worker 也不會重開。上游的關閉流程在 Windows 最多會呼叫三次。
+- `terminal/woowtech-pty-kill.ts`：Windows 只呼叫一次 `kill()`；之後的 SIGKILL 改用隱藏的 taskkill 結束 shell 的整棵程序樹，不再碰 pseudoconsole。macOS、Linux 照上游傳 signal。
+- node-pty 自帶的 `conpty.dll`＋`OpenConsole.exe`（#965，可能減少 conhost 外洩）先用 `WOOWTECH_CONPTY_DLL=1` 才開；#983 正是在它開著時重現的，要等實機 WT-2 的數字再決定預設。
+
+通知測試的說明（G19）：
+
+- 測試通知失敗或無法確認時，Windows 版改成指向「設定 › 系統 › 通知」，並提醒「請勿打擾」會擋橫幅、Smart App Control 可能擋未簽章的測試版（`desktop/permissions/woowtech-notification-help.ts`，依桌面 App 回報的 `platform` 決定）。macOS、Linux 維持原本的「系統設定 → 通知」。
+
+終端機 agent hook（G9 v1）：
+
+- Windows 主機一律不裝 hook（`terminal/agent-hooks/woowtech-hook-platform.ts`）：Claude 會拿到 PowerShell 跑不動的 POSIX 指令，Codex 的 hook 會在這台電腦的每個 Codex 工作階段失敗（上游 #3632）。設定打開時只記一行 log；關掉時照樣清掉舊版本裝過的 hook。
+- daemon 用 fork 自己的 `server_info.features.woowtechTerminalAgentHooks` 告訴 App。設定頁看的是主機的系統，不是 App 的：Windows 主機的開關變灰，說明改成「Windows 主機尚未支援」；手機或 Windows 桌面連到 Mac 主機時照常可以開。舊 daemon 沒有這個欄位，當成支援。
+- v1.1 再把上游 #3877、#4591 合成一個 PowerShell `-EncodedCommand` helper 移植過來（兩者會互相衝突）。
+
+不執行專案帶來的程式（G28）：
+
+- Windows 找沒寫路徑的指令時，會先找目前的資料夾。daemon 在使用者的專案資料夾裡執行 `git`，也用名稱啟動 Copilot、Pi，專案裡放一個 `git.exe` 或 `copilot.cmd` 就會被執行。
+- supervisor 啟動 worker 前，在 worker 的環境設 `NoDefaultCurrentDirectoryInExePath=1`（`utils/woowtech-windows-exe-search.ts`）。libuv 1.48 起和 cmd.exe 都會因此跳過目前的資料夾；agent 和它們的子程序也會繼承。
+- App 內的終端機把它拿掉，使用者的 shell 照 Windows 原本的行為找指令。只拿掉我們自己設的（另記一個標記變數），使用者自己設過就保留。
+- 第二批的 G17、G30 讓 daemon 用完整路徑啟動程式（見下一段），這個設定留作第二道防線。
+- 守門 `woowtech/windows-daemon.test.mjs`：daemon 新增的 `fork()`、直接 `spawn()` 沒有隱藏視窗，或有程式直接引用 tree-kill，就會失敗。
+
+Windows 怎麼啟動程式（G17、G30）：
+
+- 上游在 Windows 把 `.cmd`、`.bat` 和沒寫副檔名的指令都交給 cmd.exe。cmd.exe 會先找目前資料夾，重新解析每個參數（`"fix (wip)"` 會變成 `fix ^(wip^)`），遇到換行就把參數截斷。
+- daemon 的 `spawnProcess`、`execCommand` 在 Windows 先經過 `utils/woowtech-windows-spawn.ts` 規劃：
+  - 沒寫路徑的指令照 PATH 和 PATHEXT 找，不找目前資料夾，也跳過相對路徑的 PATH 項目（`woowtech-windows-path-search.ts`）。
+  - 找到 `.exe`、`.com` 就直接執行，參數原樣送到。
+  - npm 產生的 `.cmd`（npm 7 以後的 cmd-shim 範本，例如用 npm 裝的 Claude、Codex）改成直接執行它背後的程式：`node.exe` 加腳本，或它包裝的 exe（`woowtech-npm-cmd-shim.ts`）。node 跟 shim 一樣，先找 shim 旁邊的 `node.exe`，再找 PATH。會設環境變數或用其他直譯器的 shim 不算，照舊經 cmd.exe。
+  - 其他 `.cmd`、`.bat` 仍經 cmd.exe，參數用跟終端機同一套的跳脫，另加 `/d /v:off`（`woowtech-cmd-escape.ts`）。參數有換行時直接報錯（D18），不默默截斷。
+  - 呼叫端自己要求 shell（`shell: true` 或指定 shell）、找不到程式，或設了環境變數 `WOOWTECH_LEGACY_WINDOWS_SPAWN=1` 時，照上游的方式。
+- 守門 `woowtech/windows-daemon.test.mjs` 確認兩個函式都先經過規劃。實機：WT-3（npm 裝的 agent 能啟動）、WT-4（路徑有空白、中文、`&`、`%`）、WT-7（GitHub PR 狀態，`gh` 的多行 GraphQL）。
+
+App 開著時才裝的工具（G29）：
+
+- App 和 daemon 一直用啟動時 Explorer 給的 PATH。App 常駐系統匣（G1），這個 PATH 可能是好幾天前的；安裝程式把新資料夾寫進登錄裡的 PATH（npm、WinGet 的 Links、GitHub CLI、Claude 的 `.local\bin`），App 看不到。macOS 只在啟動時讀一次登入 shell 的 PATH（`login-shell-env.ts`）。
+- daemon 在 Windows 找程式（`findExecutable`）找不到時，用 Windows PowerShell 讀一次登錄裡電腦和使用者的 PATH，把目前沒有的資料夾接在後面，再找一次（`utils/woowtech-windows-registry-path.ts`）。不刪、不重排；還含 `%變數%` 的項目跳過。
+- 最多每 10 秒讀一次，同時發生的查詢共用一次讀取。讀不到（PowerShell 被擋、逾時）只記一次 log，PATH 不變。改的是 daemon 自己的 `process.env`，之後啟動的 agent 和終端機都會繼承。
+- 桌面 App 在 Windows 不讀登入 shell（Windows 沒有），main.log 只記一行 `[login-shell-env] skipped on Windows`，不再每次啟動都記一筆失敗。
+- 找到新資料夾時 log 一行 `[woowtech] PATH refreshed from registry`。所以裝完 CLI 後，到「供應商」按重新整理就找得到，不用從系統匣結束 App。
+- 守門：`woowtech/windows-daemon.test.mjs`。實機：WT-6。
+
+Windows 偵測 agent（G14 第一部分）：
+
+- Claude 的 Windows 備援位置見第 3 節。
+- 用 WinGet 裝的 Codex，在套件資料夾裡叫 `codex-x86_64-pc-windows-msvc.exe`；只有 WinGet 能建符號連結時才有 `codex` 這個名字（winget-cli #4043）。上游只找 `<名稱>.exe`，現在也找這種檔名（`executable-resolution/woowtech-winget-names.ts`）。
+- Windows 上 `--version` 逾時不算找到（上游算找到）：舊版 Claude Desktop 的 alias 會開視窗，不會回答。逾時至少 10 秒，讓 Defender 第一次掃描大檔案也來得及（`executable-resolution/woowtech-windows-probe.ts`）。macOS 照上游。
+- 還沒做：Copilot、OpenCode、Pi、omp 的 Windows 安裝位置，以及檢查 `--version` 的輸出含 `(Claude Code)`。等實機（WT-3）看到真的安裝結果再補。
+
+終端機的預設 shell（G27、D16）：
+
+- macOS 開使用者的 `$SHELL`。上游在 Windows 開 cmd.exe；Windows Terminal 開 PowerShell，上游的工作區 setup 指令本來也在 Windows PowerShell 跑。所以 Windows 的新終端機依序用：環境變數 `WOOWTECH_TERMINAL_SHELL`（等於 Mac 的 `$SHELL`）→ PATH 上的 `pwsh` → `%ProgramFiles%\PowerShell\7\pwsh.exe` → Microsoft Store 版的 `pwsh` → Windows PowerShell → cmd.exe（`terminal/woowtech-default-shell.ts`）。
+- PowerShell 加 `-NoLogo`，不印開頭的 4 行說明（手機畫面很小）；使用者的 profile 照樣載入。
+- 工作區腳本也在這個終端機跑。`a && b` 要 PowerShell 7 才支援（`winget install Microsoft.PowerShell`），或設 `WOOWTECH_TERMINAL_SHELL=cmd.exe` 改回 cmd。
+- 開新終端機前先重讀一次登錄裡的 PATH（最多等 2 秒，見 G29），跟 Windows Terminal 開新分頁一樣，看得到 daemon 啟動後才裝的工具。
+- 指定了 profile 指令的終端機（claude、codex 等）不受影響。守門：`woowtech/windows-daemon.test.mjs`。實機：WT-1。
+
+Windows 的 CLI 安裝（G16）：
+
+- 設定頁的「安裝 CLI」在 Windows 寫 `%USERPROFILE%\.local\bin\woowtech-smart.cmd`。cmd.exe 用主控台的字碼頁（繁中 Windows 是 950）讀批次檔，原本把安裝路徑原樣寫進 UTF-8 檔案，使用者名稱有中文時就讀成亂碼，CLI 找不到（上游 #4684）。
+- 現在移植上游 PR #4696（還沒合併）：路徑改寫成 `%LOCALAPPDATA%` 等變數開頭，檔案只有 ASCII、CRLF；安裝在這些位置以外、路徑又有中文時，只有那一行切到 UTF-8（`chcp 65001`）讀（`cli-install/woowtech-windows-cli-shim.ts`）。
+- 跟 #4696 不同的地方：第二行是解除安裝要認的標記；`setlocal`，變數不留在使用者的主控台；訊息裡的路徑加引號（`Program Files (x86)` 的 `)` 會提早結束區塊）；最後直接跳到內附的 CLI，不用 `call`，參數裡的 `%` 和 `^` 不會再被展開一次。
+- 同時把 `%USERPROFILE%\.local\bin` 加進使用者 PATH，等於 Mac 在 shell rc 加的那一行（`cli-install/woowtech-windows-user-path.ts`）：已經在使用者或電腦的 PATH 裡就不動；保留登錄值原本的型別（`REG_EXPAND_SZ` 寫 `%USERPROFILE%\.local\bin`），不用 `setx`（會改成 `REG_SZ`、還可能截斷）；寫完廣播設定變更，新開的終端機就看得到。失敗只記 log，安裝照樣成功。
+- `woowtech-smart open <路徑>` 在 Windows：內附的 CLI 是在 App 自己的 exe 裡跑的，所以直接開那個 exe，裝在自訂資料夾也找得到；啟動時不隱藏視窗（`spawnProcess` 會把子程序的視窗都藏起來，Windows 會套用到 App 的第一個視窗），App 沒開時也看得到視窗（`cli/src/commands/woowtech-windows-desktop-app.ts`，H5 F4）。
+- 設定頁的「已安裝」也認新寫法（`ownership.ts`）。`.gitattributes` 讓 `*.cmd`、`*.bat` 一律 CRLF，送到 Windows 電腦的 `git archive` 也是。
+- 守門：`woowtech/windows-desktop.test.mjs`。實機：WI-9（含中文帳號 WI-7）。
+
+Windows 的更新（G37、D20）：
+
+- Windows 不在結束 App 時安裝下載好的更新：結束後馬上關機，Windows 會把正在跑的靜默安裝程式砍掉，App 就變成沒安裝（electron-builder #7807）；App 常駐系統匣，結束後常常就是關機。
+- 只在使用者按「安裝並重啟」時安裝，而且安裝程式靜默執行，跟 Mac 的重新啟動一樣，不再跳出安裝精靈。裝完 App 會帶 `--updated` 自己重開（B1 已經把它當成開 App；這個參數不會寫進 `main.log`，要驗證更新看版本號和 `quitAndInstall` 那一行）。
+- 政策在 `features/woowtech-windows-update.ts`，接點是 `auto-updater.ts` 的 `installAppUpdateOnQuit` 和 `quitAndInstall`。macOS、Linux 照上游。
+- 實機（2026-11-04，WI-6）：下載好後從系統匣結束，30 秒內沒有安裝、版本不變、下載保留；再開按「安裝並重啟」，沒有精靈、沒有 UAC，19 秒內以新版重開、daemon 回來，更新前的 agent 還在。0.8.0 更新到合併後的 0.9.0 也一樣（20 秒）。測的是本機更新來源，來源沒有舊版 blockmap，走完整下載；差異下載、有 agent 正在跑時的更新，以及真 agent 的對話歷史沒測到（假 agent 不存歷史，連只重啟 daemon 都會消失）。
+- 還沒做：下次啟動時自動安裝已下載的更新、更新前一律正常停掉 daemon（不管是誰啟動的）、系統匣的更新選項。WI-6 沒看到需要馬上做的問題。
+
+daemon 的埠被保留或占用（G12）：
+
+- Windows 可能把預設埠 6770 劃進 Hyper-V 或 WSL 的保留範圍（`netsh interface ipv4 show excludedportrange protocol=tcp`），或被別的程式占用，內建 daemon 就啟動不了（上游 #1552、#3333，都還沒修）。
+- Windows 版啟動內建 daemon 前，先試著綁定 127.0.0.1:6770。遇到 EACCES 或 EADDRINUSE 時，依序試 16770、26770、36770、46770，都不行就用系統分配的埠，以 `PASEO_LISTEN` 傳給 daemon，並寫進 main.log（`default listen address unavailable, using a fallback`）。App 和 CLI 都從 daemon 的執行紀錄（`paseo.pid`）讀位址，會跟著換。政策在 `daemon/woowtech-listen-fallback.ts`。
+- 使用者自己設的位址不換：`PASEO_LISTEN`，或 config.json 裡不是預設值的 `daemon.listen`。新 home 的 config.json 本來就寫著 `127.0.0.1:6770`，所以這個值算預設。從終端機用 CLI 啟動的 daemon 不在這個範圍。
+- 保留範圍可能在重開機後改變，所以備用埠不寫回設定。存著 localhost 連線的主機遇到 daemon 換埠時，App 把新位址加進這台主機（`runtime/woowtech-local-daemon-address.ts`），主機會探測每個位址；只靠 relay 的主機照上游，不加 localhost。
+- worker 啟動後連續當掉時，supervisor 改成等 1、2、4 秒……最多 30 秒再重開；跑滿 60 秒就重新計算，第一次當掉仍然馬上重開（`utils/woowtech-crash-backoff.ts`）。所有平台都適用，只影響連續當掉的情況。
+
+在 Windows 電腦上建置（2026-11-04 實機時補上）：
+
+- `toolsets.winCodeSign: "1.1.0"`：舊的 winCodeSign 壓縮檔裡有 macOS 符號連結，一般 Windows 帳號沒有「建立符號連結」的權限，解壓失敗、建置停在 exit status 2。這個工具組是純 zip，不用開發人員模式。
+- 只出 x64（D11）：`win.target` 的架構清單比命令列的 `--x64` 優先。清單裡有第二個架構時，electron-builder 會多建一個 259 MB 的合併安裝檔，`latest.yml` 也會指向它。
+- 發行者：electron-builder 從 `author.name` 取 exe 和安裝檔的 CompanyName，以及「應用程式與功能」的發行者，從 `description` 取安裝檔的 FileDescription，`package.json` 裡都還是上游的，所以寫在 `extraMetadata`。值由 `woowtech/brands/apply.mjs` 從品牌的版權人和客服信箱帶入。
+- `.gitattributes` 讓文字檔一律 LF：Windows 上的 Git 預設 `core.autocrlf=true` 會換成 CRLF，讀原始碼的守門測試就會失敗。
+- `install.test.ts`（CLI 安裝）不在 Windows 上跑：要建立連結的權限，而且 `os.homedir()` 不看 `HOME`，會寫進真的家目錄。Windows 的 CLI 寫法有 `woowtech-windows-cli-shim` 的單元測試。
+- 8 GB 記憶體的電腦：Metro 預設開 11 個 worker 會把記憶體用完，匯出網頁時加 `--max-workers 2`，並設 `NODE_OPTIONS=--max-old-space-size=2048`。
+
+通知橫幅檢查（第 16 節）：
+
+- 「你有看到通知橫幅嗎？」在 Windows 改說右下角，教學改成「設定 › 系統 › 通知」和專注輔助（`desktop/permissions/woowtech-notification-help.ts` 的 `desktopBannerCheckKeys`）。提示照 Mac 版也會出現在側欄：Windows 同樣會在系統回報「已顯示」時收起橫幅（專注輔助、關掉通知）。
+
+測試專用建置（G26）：
+
+- 實測桌面通知和「關窗後推播」時，內建 daemon 要有 mock provider，才不用花真的 agent 額度。打包版的內建 daemon 固定是正式模式，沒有 mock。
+- 建置時加 `-c.extraMetadata.woowtechTestBuild=true`，例如：
+
+  ```bash
+  npm run build:desktop -- --win --x64 --publish never -c.extraMetadata.woowtechTestBuild=true -c.win.artifactName='woowtech-smart-TEST-Setup-${version}-${arch}.${ext}'
+  ```
+
+  electron-builder 把欄位寫進打包後的 package.json。打包版讀到它，啟動 daemon 和 CLI 時用開發模式，在 daemon 裡只會多出 mock provider（`features/woowtech-test-build.ts`、`daemon/node-entrypoint-launcher.ts`）。正式建置沒有這個欄位，環境變數也打不開。main.log 的 `[desktop] app startup` 會記 `testBuild`。Windows 的系統匣提示寫「woowtech smart（測試版）」（英文系統是 `(test build)`），裝好後也分得出來。
+
+- 守門：`.github/workflows/` 裡不能出現 `woowtechTestBuild`。
+
+安裝與解除安裝（G6、D14、D15）：
+
+- 安裝程式只裝給目前的使用者（`build/installer.nsh` 的 `customInstallMode`）。Electron 的通知啟動器、開始功能表捷徑和協定本來就只登記給目前的使用者。不再出現「所有使用者」那一頁，也不用系統管理員權限，非靜默的更新也一樣。
+- 解除安裝時清掉 Windows 還指向 App 的東西：
+  - `woowtech-smart:` 協定和通知啟動器的 CLSID，都只在還指向這一份時才刪。開發版的 CLSID 不碰。
+  - Windows 對這個 App 的通知設定（`Notifications\Settings\io.woowtech.smart.desktop`）。
+  - 「安裝 CLI」寫的 `%USERPROFILE%\.local\bin\woowtech-smart.cmd`，第二行是我們的標記（`rem woowtech-smart CLI trampoline`）才刪。
+  - electron-updater 的下載快取 `%LOCALAPPDATA%\io.woowtech.smart.desktop-updater`。
+  - 開始功能表捷徑由範本刪。Electron 寫的是同一個檔案。
+- 使用者資料保留，跟把 Mac 版丟進垃圾桶一樣：`%APPDATA%\woowtech smart`（設定、log）和 `%USERPROFILE%\.woowtech-smart`（agent、配對金鑰、可能有沒 commit 內容的 worktree）。`.local\bin` 和使用者 PATH 也不動，Claude Code 的 `claude.exe` 裝在那裡。要連設定和 log 一起刪，用 `"Uninstall woowtech smart.exe" /S --delete-app-data`；`.woowtech-smart` 仍會保留。
+- 每次更新和重新安裝，新的安裝程式都會帶 `--updated` 執行舊版的解除安裝程式。清理全部包在 `${ifNot} ${isUpdated}` 裡，所以更新時什麼都不刪。這段程式會留在已安裝的版本裡，直到那一版更新，所以只做盡力而為：不中止、不跳對話框。
+- electron-builder 自動帶入 `build/installer.nsh`，用 `makensis -WX` 編譯兩次（解除安裝程式、安裝程式），任何警告都會讓建置失敗，所以裡面不宣告變數、不寫函式。不要改成完整的 `nsis.script`：那樣 electron-builder 就不簽解除安裝程式。根目錄的 `.gitignore` 忽略 `build/`，這個檔案（跟 entitlements 一樣）是用 `git add -f` 加進來的。
+- 在 Mac 上建 Windows 安裝檔可以確認 NSIS 編譯得過，但產出的解除安裝程式是壞的（electron-builder #10258），不能拿去測或發佈。10/3 在 Mac 上用 `--win nsis --x64 -c.win.signAndEditExecutable=false` 編過一次：兩次編譯都過；electron-builder 的 makensis 3.04 比對巨集名稱不分大小寫，範本檢查的 `customInstallmode` 也認得我們的 `customInstallMode`。
+- 安裝資料夾目前仍可以選（D19 待決定）。
+
+程式碼簽章（D8，2026-10-04 付款）：
+
+- 憑證是 SSL.com 的 OV 程式碼簽章憑證，私鑰在 SSL.com 的 eSigner 雲端，發行流程用 jsign 7.5 簽。憑證最長 460 天，大約每 12–15 個月續一次；續約不要換公司名稱或 CA，SmartScreen 的信譽會重新累積。
+- `electron-builder.yml` 的 `win.signtoolOptions.sign` 指到 `scripts/woowtech-sign-windows.js`。只有發行流程設 `WOOWTECH_SIGN=1` 才簽，其他建置（含測試版）都不簽。只簽 SHA-256，時間戳用 RFC 3161（`ts.ssl.com`，連不上改用 DigiCert 的），憑證到期後簽章仍有效。
+- Smart App Control 檢查每個載入的模組，只簽安裝程式不夠，所以 `signExts` 把每個 `.dll`、`.node` 都交給簽章函式。已經有簽章的檔案保留原簽章：Electron 的 `d3dcompiler_47.dll`、`dxil.dll` 和 node-pty 的 `conpty.dll`、`OpenConsole.exe` 是微軟簽的，都有時間戳。x64 一版要簽 10 個檔案：App 執行檔、`dxcompiler.dll`、`ffmpeg.dll`、`vk_swiftshader.dll`、`vulkan-1.dll`、兩個 `conpty*.node`、`esbuild.exe`、解除安裝程式和安裝程式。
+- 發行流程（`desktop-release.yml` 的 Windows job）每次都簽，只出 x64：裝 Java 21，下載 jsign 7.5 並比對 SHA-256（GitHub release 和 Maven Central 的檔案相同）。要在 GitHub 設的 secrets：`ESIGNER_STOREPASS`（`<SSL.com 帳號>|<密碼>`）、`ESIGNER_CREDENTIAL_ID`、`ESIGNER_TOTP_SECRET`（啟用 eSigner 自動簽章時 QR code 旁的 base64 secret）；變數 `WIN_PUBLISHER_DN`。jsign 用 `env:` 前綴從環境變數讀密碼和 TOTP，不會出現在 log 或程序清單。少任何一個，建置就失敗：有自訂簽章函式時，`win.forceCodeSigning` 擋不住未簽的建置。
+- `WIN_PUBLISHER_DN` 是憑證的 Subject，例如 `CN="WOOW TECH CO., LTD.", O="WOOW TECH CO., LTD.", C=TW`（值裡有逗號要加引號），由發行流程用 `-c.win.signtoolOptions.publisherName` 帶入；electron-updater 只接受這個發行者簽的更新。不寫在設定檔：沒有它，electron-updater 不驗更新檔的簽章；測試版帶了它，會拒絕自己未簽的更新。
+- `scripts/woowtech-windows-signatures.ps1` 列出每個 `.exe`、`.dll`、`.node` 的簽章；加 `-RequireSigned -Publisher '<憑證的 CN>'` 時，有任何一個不是有效簽章加時間戳，或簽署者不是我們也不是微軟，就失敗。發行流程建完先檢查 release 資料夾，再靜默安裝、檢查安裝好的資料夾（解除安裝程式只在安裝程式裡，要裝了才看得到），最後解除安裝。在測試電腦上不加 `-RequireSigned`、指向安裝好的資料夾，可以看 Smart App Control 會看到什麼。
+- 手動執行發行流程、`platform=windows`、`publish=false`，就是一個已簽章的測試版（workflow 的 artifact），可以拿去 Smart App Control 開著的電腦測。eSigner 前 30 天不限簽章次數。
+- 10/4 在 Mac 上用 jsign 7.5 和拋棄式的本機金鑰實簽過 `esbuild.exe`、`conpty.node`，確認參數、`.node` 簽得了、SSL.com 時間戳拿得到；檢查腳本用 Mac 的 pwsh 換上假的 `Get-AuthenticodeSignature` 測過全簽、缺簽、缺時間戳、簽署者不符四種結果；workflow 用 actionlint 1.7.12 檢查過，裡面的 PowerShell 用 pwsh 剖析過。真的 eSigner 簽章和 runner 上的安裝、解除安裝，要等憑證核發後第一次執行。
+
+Electron 與 electron-builder（G7、G8）：
+
+- Electron 44.2.0 升到 44.5.1：44.4.1 修了通知物件的生命週期問題。在 macOS 用 dev 模式測通知時，換版後要用 Apple Development 身分重新簽 `node_modules/electron/dist/Electron.app`（`codesign --force --deep --sign <身分>`），未簽的 Electron 發通知會失敗。
+- `generateFuseConfig` 在 26.17.0 變成非同步，`scripts/woowtech-fuses.js` 要 `await`，否則每個平台都停在 `Unsupported fuse version number: undefined`（合併 0.9.0 時發現，`woowtech/desktop-fuses.test.mjs` 守著）。
+- electron-builder 26.8.1 升到 26.17.0：26.8.1 的 NSIS 首次安裝可能當掉、更新時會殺掉 daemon、遇到中文使用者名稱可能卡住（上游 PR #5481、#5663）。26.15.0–26.15.5 的安裝檔是壞的，不要用；npm 的 `latest` 標籤目前停在 26.15.3。
+- 新版的相依套件不再提升到根目錄，`app-builder-lib` 留在 `packages/desktop/node_modules`，守門 `claude-sdk.test.mjs` 改從 desktop 解析。
+- lockfile 只收這次升級的變動。這台的 npm 10.9.9 重新整理 lockfile 時會順手刪掉 35 個選用的 peer（`@react-native/metro-config` 一系），跟升級無關，沒有收進來。
+
+驗證：
+
+- 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`、`terminal/woowtech-default-shell`；desktop 的 `cli-install/woowtech-windows-cli-shim`、`cli-install/woowtech-windows-user-path`、`scripts/woowtech-sign-windows`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
+- 實機（2026-11-04，一台 Windows 10 22H2 x64，未簽章的測試版，只測 x64）：建置、安裝（沒有 UAC、沒有「所有使用者」那頁）、SmartScreen 畫面（不明的發行者）、內建 daemon、系統匣、通知橫幅和控制中心、關窗常駐、更新、解除安裝都走過。通知的點擊是用程式注入的，路徑正確，但前景落在哪裡沒有定論（連記事本也一樣），要真人點一次（WD-14）。fuse 也實測過：改動 `app.asar` 表頭後，App 以 `Integrity check failed` 拒絕啟動。
+- 實機還沒做：Windows 11（Smart App Control 只有 11 有）、手機推播（WP、D6、D12）、中文帳號（WI-7）、WT-1～7、「安裝 CLI」（會改使用者 PATH）；真的簽章要等憑證核發後在發行流程上跑；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
+- 章節撞號：main 的第 25 節是「上架候選全面驗收」，Windows 原本也編 25，第 30 節是品牌層 ⇒ Windows 改成第 31 節，指向它的引用一併改掉。
+- 品牌層：Windows 的程式碼用品牌的名字，但 `build/installer.nsh` 和 `scripts/woowtech-sign-windows.js` 還寫著 woowtech 的值。Apporo 的 Windows 版要先把這兩個檔案接上 `woowtech/brands`。
+
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 
 ### 第一批：上游 `836f1a9..d6861f81e`
@@ -2433,6 +2629,19 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
   - Codex 串流中的 Mermaid 圖（`f4ba16a0b`）、背景 `send_agent_prompt` 回報執行中（`8de52a3c9`）、外掛 provider 重新載入後已完成的工作階段沒有錯誤（`849a876bc`）。
 - 延後的 `78a0f093e`、`792715e76` 和不拿的 `a43c8d888`（Cursor 圖示）要 owner 決定。2026-09-29 owner 決定先關掉用量功能，`792715e76` 仍延後，見第 23 節。
 - 這個分支沒有 push。main 仍在 `ea9f49e49`；合進 main 之後重跑守門和 T1 測試，並重建 server 的 dist。
+
+### Windows 準備：單項挑選（2026-10-02 起）
+
+- 分支 `woowtech/windows-v1`（Windows 規劃的 Phase 0，第 31 節）。這個 clone 沒有上游 remote，上游 commit 也不在本機，所以照 PR 的 diff 套用，commit 訊息註明上游 PR、merge commit 和作者。
+
+| 上游                                             | 內容                                                                                                                                                                                                                                                     |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #5636（`87818812a`，paseo-bot）                  | 沒有本機 daemon 時，桌面版的狀態輪詢在主程序直接回「已停止」，不再每秒啟動一次 CLI（Windows 上游標一直轉圈，#4805）。測試對 `daemon-control` 的 mock 改成保留原本的匯出，跟上游一樣                                                                      |
+| #5560（未合併就關閉，head `fb2d13a86`，wonfeel） | cmd.exe 逐行解析命令列，含換行的參數會被截斷：`gh api graphql` 的查詢在 Windows 全壞，PR 狀態一直重試。有換行的參數改成不經 shell 直接執行，GraphQL 查詢也先把換行換成空白。上游的新貢獻規則預設關閉社群 PR，所以由我們維護                              |
+| #5845（上游 issue，還沒修）                      | Claude Code 的 Notification hook 把原因放在 `notification_type`，原本只看 `matcher`／`reason`，「需要你的注意」永遠不會觸發（Mac 也一樣）。改成也認 `notification_type` 的 `idle_prompt`、`permission_prompt`（`terminal/agent-hooks/claude/claude.ts`） |
+| #1987（`cf4509631`，boudra）                     | Windows 的檔案連結提示改成顯示相對於工作區的路徑（原本是完整的 `C:\…` 路徑），開檔時也用同一套路徑判斷。上游已合併，diff 原樣套用                                                                                                                        |
+| #3891（未合併，head `16dc251d2`，kueronya）      | Windows 的 Git 狀態用 `C:\repo`、工作區用 `C:/repo`，兩個快取鍵對不上，標題列停在舊的「Push」（上游 #4028）。daemon 推來和抓回來的狀態都先統一路徑格式。`checkout-status-cache.ts` 在 fork 裡多了上游後來的分支切換處理，所以手動移植                    |
+| #5198 的 Windows 片段（`c906c2f4a`，boudra）     | 新版 OpenCode 的 npm 套件把 `opencode.exe` 放在平台套件 `opencode-windows-<arch>`，原本只找舊的 `opencode-ai/bin/opencode.exe`，找不到就退回 `opencode.cmd`。只搬 `resolveOpenCodeBinary` 這一段；整個 PR（OpenCode v2）不搬                             |
 
 ## Mac 開發環境
 

@@ -1,8 +1,21 @@
 export type NotificationDeliveryResult = "shown" | "failed" | "unconfirmed";
 
+export type NotificationDeliveryEvent = "show" | "failed" | "click" | "close";
+
+/** Electron passes the close reason on Windows: userCanceled, applicationHidden or timedOut. */
+export interface NotificationCloseDetails {
+  reason?: string;
+}
+
 export interface NotificationDeliveryPort {
-  on(event: "show" | "failed" | "click" | "close", listener: () => void): unknown;
-  removeListener(event: "show" | "failed" | "click" | "close", listener: () => void): unknown;
+  on(
+    event: NotificationDeliveryEvent,
+    listener: (details?: NotificationCloseDetails) => void,
+  ): unknown;
+  removeListener(
+    event: NotificationDeliveryEvent,
+    listener: (details?: NotificationCloseDetails) => void,
+  ): unknown;
   show(): void;
   close(): void;
 }
@@ -13,6 +26,13 @@ export interface NotificationDeliveryInput {
   release: () => void;
   schedule?: (callback: () => void, delayMs: number) => () => void;
   closeOnTimeout?: boolean;
+  /**
+   * Windows closes a toast with reason timedOut when the banner moves to Action Center. It
+   * can still be clicked there, so the listeners and the reference stay (README §31).
+   */
+  keepAfterTimedOutClose?: boolean;
+  /** Reports native events as they arrive, for the main-process log. */
+  trace?: (event: NotificationDeliveryEvent, reason?: string) => void;
 }
 
 function scheduleTimeout(callback: () => void, delayMs: number): () => void {
@@ -49,20 +69,31 @@ export function showNotificationWithDelivery(
     }
 
     function shown(): void {
+      input.trace?.("show");
       finish("shown");
     }
     function failed(): void {
+      input.trace?.("failed");
       finish("failed");
       cleanup();
     }
     function clicked(): void {
+      input.trace?.("click");
       try {
         onClick();
       } finally {
-        closed();
+        done();
       }
     }
-    function closed(): void {
+    function closed(details?: NotificationCloseDetails): void {
+      input.trace?.("close", details?.reason);
+      if (input.keepAfterTimedOutClose && details?.reason === "timedOut") {
+        finish("unconfirmed");
+        return;
+      }
+      done();
+    }
+    function done(): void {
       // A close without show is not delivery evidence.
       finish("unconfirmed");
       cleanup();

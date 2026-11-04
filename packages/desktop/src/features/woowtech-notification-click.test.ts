@@ -81,6 +81,22 @@ describe("notification click router", () => {
     expect(h.ensureCalls()).toBe(0);
   });
 
+  // woowtech smart: Windows lifts the window its own way (plan B4).
+  it("uses the window's raise() instead of show/restore/focus when it has one", async () => {
+    const h = harness();
+    const sender = h.addWindow(1);
+    let raised = 0;
+    sender.raise = () => {
+      raised += 1;
+    };
+    sender.minimized = true;
+    h.router.rendererReady(1);
+    await h.router.routeClick(1, agent);
+    expect(raised).toBe(1);
+    expect([sender.shown, sender.restored, sender.focused]).toEqual([0, 0, 0]);
+    expect(sender.sent).toEqual([{ data: agent }]);
+  });
+
   it("falls back to another window when the sender closed", async () => {
     const h = harness();
     h.addWindow(1).destroyed = true;

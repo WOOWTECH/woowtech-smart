@@ -38,22 +38,25 @@ describe("the directory a worker starts in", () => {
   });
 });
 
-describe("a supervisor whose working directory was removed", () => {
-  test("still starts the next worker, which can read its working directory", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "woowtech-worker-cwd-"));
-    const startDir = path.join(tempDir, "started-here");
-    await mkdir(startDir);
-    const marker = path.join(tempDir, "first-worker-ran");
-    const secondCwd = path.join(tempDir, "second-worker-cwd");
-    const workerPath = path.join(tempDir, "worker.mjs");
-    const runnerPath = path.join(tempDir, "runner.mjs");
+// Windows refuses to remove a directory a process is running in, so this cannot happen there.
+describe.skipIf(process.platform === "win32")(
+  "a supervisor whose working directory was removed",
+  () => {
+    test("still starts the next worker, which can read its working directory", async () => {
+      const tempDir = await mkdtemp(path.join(tmpdir(), "woowtech-worker-cwd-"));
+      const startDir = path.join(tempDir, "started-here");
+      await mkdir(startDir);
+      const marker = path.join(tempDir, "first-worker-ran");
+      const secondCwd = path.join(tempDir, "second-worker-cwd");
+      const workerPath = path.join(tempDir, "worker.mjs");
+      const runnerPath = path.join(tempDir, "runner.mjs");
 
-    // The first worker removes the directory the supervisor runs in, then crashes after it was
-    // ready, so the supervisor starts another one. That one reads its working directory first,
-    // as the daemon's dependencies do when they load.
-    await writeFile(
-      workerPath,
-      `
+      // The first worker removes the directory the supervisor runs in, then crashes after it was
+      // ready, so the supervisor starts another one. That one reads its working directory first,
+      // as the daemon's dependencies do when they load.
+      await writeFile(
+        workerPath,
+        `
         import { existsSync, rmSync, writeFileSync } from "node:fs";
         const ready = () => process.send?.({ type: "paseo:ready", listen: "fixture", serverId: "srv_fixture" });
         if (!existsSync(${JSON.stringify(marker)})) {
@@ -68,12 +71,12 @@ describe("a supervisor whose working directory was removed", () => {
           setTimeout(() => process.exit(0), 200);
         }
       `,
-    );
-    // The runner starts in the repo, where --import tsx resolves, then moves into the directory
-    // the first worker removes.
-    await writeFile(
-      runnerPath,
-      `
+      );
+      // The runner starts in the repo, where --import tsx resolves, then moves into the directory
+      // the first worker removes.
+      await writeFile(
+        runnerPath,
+        `
         import { runSupervisor } from ${JSON.stringify(pathToFileURL(supervisorPath).href)};
         process.chdir(${JSON.stringify(startDir)});
         runSupervisor({
@@ -87,32 +90,33 @@ describe("a supervisor whose working directory was removed", () => {
           logFile: { path: ${JSON.stringify(path.join(tempDir, "daemon.log"))}, rotate: { maxSize: "1m", maxFiles: 2 } },
         });
       `,
-    );
+      );
 
-    const child = spawn(process.execPath, ["--import", "tsx", runnerPath], {
-      cwd: repoRoot,
-      env: { ...process.env },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stderr = "";
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        child.kill("SIGKILL");
-        reject(new Error(`supervisor fixture timed out\n${stderr}`));
-      }, 20_000);
-      child.on("error", reject);
-      child.on("close", () => {
-        clearTimeout(timeout);
-        resolve();
+      const child = spawn(process.execPath, ["--import", "tsx", runnerPath], {
+        cwd: repoRoot,
+        env: { ...process.env },
+        stdio: ["ignore", "pipe", "pipe"],
       });
-    });
+      let stderr = "";
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk;
+      });
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          child.kill("SIGKILL");
+          reject(new Error(`supervisor fixture timed out\n${stderr}`));
+        }, 20_000);
+        child.on("error", reject);
+        child.on("close", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
 
-    expect(existsSync(startDir)).toBe(false);
-    expect(existsSync(secondCwd), stderr).toBe(true);
-    expect(await readFile(secondCwd, "utf8")).toBe(await realpath(homedir()));
-  }, 30_000);
-});
+      expect(existsSync(startDir)).toBe(false);
+      expect(existsSync(secondCwd), stderr).toBe(true);
+      expect(await readFile(secondCwd, "utf8")).toBe(await realpath(homedir()));
+    }, 30_000);
+  },
+);

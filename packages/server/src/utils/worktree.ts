@@ -429,6 +429,8 @@ async function execSetupCommand(
     const { stdout, stderr } = await execFileAsync(shellInvocation.shell, shellInvocation.args, {
       cwd: options.cwd,
       env: options.env,
+      // woowtech smart: workspace setup scripts run in PowerShell on Windows (plan B7).
+      windowsHide: true,
     });
     return {
       command,
