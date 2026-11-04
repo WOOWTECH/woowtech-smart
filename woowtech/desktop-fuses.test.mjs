@@ -46,6 +46,20 @@ test("after-pack flips the fuses README section 26 lists", () => {
   }
 });
 
+test("after-pack hands electron-builder a finished fuse config", async () => {
+  const { flipWoowtechFuses } = requireDesktop("./scripts/woowtech-fuses.js");
+  const { WinPackager } = requireDesktop("electron-builder");
+  const flipped = [];
+  await flipWoowtechFuses({
+    packager: {
+      // electron-builder's own method, so a change in how it returns the config fails here.
+      generateFuseConfig: WinPackager.prototype.generateFuseConfig,
+      addElectronFuses: async (_context, fuses) => flipped.push(fuses),
+    },
+  });
+  assert.ok(flipped[0].version, "@electron/fuses refuses a config without a version");
+});
+
 test("electron-builder does not flip fuses again after the Linux launcher is in place", async () => {
   const config = await builderConfig();
   assert.equal(config.electronFuses, undefined);

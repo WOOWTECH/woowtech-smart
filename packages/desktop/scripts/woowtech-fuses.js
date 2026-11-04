@@ -16,7 +16,8 @@ const WOOWTECH_FUSES = {
 /** Flips WOOWTECH_FUSES with electron-builder's own @electron/fuses, as its afterPack docs show. */
 async function flipWoowtechFuses(context) {
   const { packager } = context;
-  await packager.addElectronFuses(context, packager.generateFuseConfig(WOOWTECH_FUSES));
+  // electron-builder 26.17 builds the config asynchronously; 26.8 did not.
+  await packager.addElectronFuses(context, await packager.generateFuseConfig(WOOWTECH_FUSES));
 }
 
 module.exports = { WOOWTECH_FUSES, flipWoowtechFuses };
