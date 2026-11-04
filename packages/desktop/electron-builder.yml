@@ -10,9 +10,21 @@ copyright: "© 2026 WOOW TECH CO., LTD."
 # woowtech smart: electron-builder names electron-updater's download cache after the
 # package name, and @getpaseo/desktop gives the official Paseo's @getpaseodesktop-updater.
 # package.json's desktopName is Paseo's desktop entry; Linux names ours after executableName.
+# electron-builder also takes the exe's and the installer's CompanyName, and the publisher in
+# Windows' Apps & features, from author.name, and the installer's FileDescription from
+# description. In package.json both are still upstream's.
 extraMetadata:
   name: io.woowtech.smart.desktop
   desktopName: woowtech smart.desktop
+  author:
+    name: "WOOW TECH CO., LTD."
+    email: woowtech@designsmart.com.tw
+  description: woowtech smart desktop app
+# woowtech smart: the legacy winCodeSign archive holds macOS symlinks. Unpacking it needs the
+# "create symbolic links" privilege, which a normal Windows account does not have, and the build
+# stops with exit status 2. This toolset is plain zip files (README §25).
+toolsets:
+  winCodeSign: "1.1.0"
 protocols:
   - name: woowtech smart agent link
     schemes:
@@ -138,11 +150,12 @@ win:
   # woowtech smart: no Windows zip. electron-updater uses the NSIS installer, and an extracted
   # copy would take the woowtech-smart: scheme, the Start menu link and the toast activator
   # for itself (README §25, plan B5/D17).
+  # x64 only (plan D11). This list wins over --x64 on the command line: with a second architecture
+  # electron-builder also builds a combined installer of 259 MB and points latest.yml at it.
   target:
     - target: nsis
       arch:
         - x64
-        - arm64
 nsis:
   oneClick: false
   perMachine: false

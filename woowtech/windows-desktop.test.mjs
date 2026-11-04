@@ -72,6 +72,32 @@ test("the packaged Windows app registers woowtech-smart: before notifications ar
   assert.doesNotMatch(winSection, /target: zip/, "a portable copy would take over the scheme");
 });
 
+test("the Windows installer is x64 only, whatever the command line says (D11)", () => {
+  const builder = source("packages/desktop/electron-builder.yml");
+  const winSection = builder.slice(builder.indexOf("\nwin:"), builder.indexOf("\nnsis:"));
+  // A second architecture here also makes a combined installer, and latest.yml points at it.
+  assert.match(winSection, /- target: nsis\n\s+arch:\n\s+- x64$/);
+});
+
+test("Windows names WOOW TECH, not upstream's author, as the publisher", () => {
+  const builder = source("packages/desktop/electron-builder.yml");
+  const metadata = builder.slice(
+    builder.indexOf("\nextraMetadata:"),
+    builder.indexOf("\ntoolsets:"),
+  );
+  // electron-builder reads CompanyName and the Apps & features publisher from author.name, and
+  // the installer's FileDescription from description. package.json still has upstream's.
+  assert.match(metadata, /author:\n\s+name: "WOOW TECH CO\., LTD\."\n/);
+  assert.match(metadata, /description: woowtech smart/);
+});
+
+test("the Windows build does not need the symlink privilege", () => {
+  // Without this electron-builder unpacks the legacy winCodeSign archive, which holds symlinks,
+  // and a normal Windows account fails with exit status 2 (README §25).
+  const builder = source("packages/desktop/electron-builder.yml");
+  assert.match(builder, /\ntoolsets:\n\s+winCodeSign: "1\.1\.0"\n/);
+});
+
 test("Windows agent notifications are protocol toasts kept clickable in Action Center", () => {
   const notifications = source("packages/desktop/src/features/notifications.ts");
   assert.match(notifications, /shouldUseProtocolToast\(\{/);
