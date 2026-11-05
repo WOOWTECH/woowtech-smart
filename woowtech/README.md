@@ -638,12 +638,15 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
   - `thisComputer`（歡迎頁「連到這台電腦」按鈕的標籤（testID `welcome-this-computer`））
     - 繁中：連到這台電腦
     - English: Connect to this computer
+  - `thisComputerWaiting`（連線超過 3 秒時，按鈕的標籤）
+    - 繁中：請在瀏覽器的詢問視窗按「允許」…
+    - English: Choose Allow in your browser's prompt…
   - `thisComputerFailedTitle`（找不到 daemon 時 toast 的第一行）
     - 繁中：這台電腦上找不到 daemon
     - English: No daemon found on this computer
   - `thisComputerFailed`（找不到 daemon 時 toast 的第二行）
-    - 繁中：請先打開渥屋智能桌面版或啟動 daemon（localhost:6770），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。
-    - English: Start the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow.
+    - 繁中：請先打開渥屋智能桌面版或啟動 daemon（localhost:6770），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。剛按下「允許」的話，請再按一次「連到這台電腦」。
+    - English: Start the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow. If you chose Allow just now, press the button again.
 - `screens/settings/**` 寫死的英文已經全部盤點過，使用者看得到的 14 處都改用 `t()`。刻意沒改的：
   - `daemon-lifecycle.ts` 的技術性錯誤細節，顯示在已經翻譯的失敗訊息裡。
   - `plugins-page.tsx` 裡執行不到的離線錯誤。
@@ -1260,7 +1263,7 @@ owner 2026-10-26 決定照上游的做法（D2）：配對連結和 QR Code 打�
 
 開機探測（O2）：
 
-- 公開的 https 網域（smart.woowtech.io、pages.dev、自架的）不在開機時探測 `localhost:6770`。桌面瀏覽器的歡迎頁多一顆「連到這台電腦」（`hosts/woowtech-this-computer-action.ts`，testID `welcome-this-computer`），按了才探測（呼叫 `probeAndUpsertDirectConnection`，端點跟開機探測的 `LOCALHOST_FALLBACK_ENDPOINT` 相同；連線中顯示「正在連線」且不重複送，被拒絕不提示，其他錯誤用 toast 顯示兩句說明）；手機瀏覽器（`userAgentData.mobile`、UA 含 Android、iPhone、iPad、iPod，或 MacIntel 而且 `maxTouchPoints` 大於 1）不出這顆。原生 iOS、Android 的正式版也不探測，開發版照舊（iOS 模擬器和 Mac 共用 localhost）。
+- 公開的 https 網域（smart.woowtech.io、pages.dev、自架的）不在開機時探測 `localhost:6770`。桌面瀏覽器的歡迎頁多一顆「連到這台電腦」（`hosts/woowtech-this-computer-action.ts`，testID `welcome-this-computer`），按了才探測（呼叫 `probeAndUpsertDirectConnection`，端點跟開機探測的 `LOCALHOST_FALLBACK_ENDPOINT` 相同；連線中顯示「正在連線」且不重複送，被拒絕不提示，其他錯誤用 toast 顯示兩句說明）。瀏覽器的本機網路詢問會把連線擋住，直到使用者回答，而讀完詢問要的時間常常超過直連預設的 6 秒（2026-11-02 Firefox 159 實測：詢問還沒讀完，畫面就先說「找不到 daemon」，按了允許還要再按一次）。所以這顆按鈕等 30 秒（`connectTimeoutMs`；daemon 沒開時連線會立刻被拒，不會多等），連線超過 3 秒按鈕改顯示「請在瀏覽器的詢問視窗按『允許』…」，失敗 toast 多一句「剛按下『允許』的話，請再按一次」。連線客戶端自己也有一個 15 秒的連線上限（`DEFAULT_CONNECT_TIMEOUT_MS`，`packages/client/src/daemon-client.ts`），所以光把探測的等待改成 30 秒，實際上等到 15 秒就斷：單元測試只看得到 `connectToDaemon` 收到的參數，2026-11-06 用真的 Chrome 加一個故意拖住連線的假 daemon 才量到 15.65 秒就放棄。`utils/test-daemon-connection.ts` 現在在探測等得比 15 秒久時，把客戶端的上限一起調成同樣的秒數，等 15 秒或更短的探測照舊。真瀏覽器的測試在 `~/.local/share/woowtech-smart/plans/release-0.10.0-20261105/connect-wait-e2e/`（0.9.0 的網頁版：6.7 秒放棄；補洞前：12 秒的拖延過關、永遠不回應的 15.65 秒放棄；補洞後見下面的驗證紀錄）。`connectTimeoutMs` 跟給背景探測用的 `timeoutMs` 分開，所以不會被當成背景探測：使用者按的每一次都照樣會被問（`runtime/woowtech-probe-guard.test.ts`）；手機瀏覽器（`userAgentData.mobile`、UA 含 Android、iPhone、iPad、iPod，或 MacIntel 而且 `maxTouchPoints` 大於 1）不出這顆。原生 iOS、Android 的正式版也不探測，開發版照舊（iOS 模擬器和 Mac 共用 localhost）。
 - dev server、http 的頁面（例如 daemon 自帶的網頁介面）、loopback 的頁面和沒有 `window` 的測試環境照上游探測。判斷看「https 而且不是 loopback」，不比對網址常數，pages.dev 和自架的網址也算公開。
 - 政策在 `runtime/woowtech-localhost-probe-policy.ts`（`decideLocalhostProbe`）。`host-runtime.ts` 的 `runBoot` 在 initial connection hint 之後多一行 `if (!shouldAutoProbeLocalhost()) return;`，`EXPO_PUBLIC_LOCAL_DAEMON` 設定的位址和預設的 localhost 探測都在它後面，所以兩者都受政策管。`deploy-web.sh` 另外不准公開建置帶 `EXPO_PUBLIC_LOCAL_DAEMON`（第 27 節）。
 - 原生正式版沒有 `window.location`（React Native 設了 `window`，但 `app.config.js` 的 `router: {}` 沒有 origin，`@expo/metro-runtime` 就不裝 `location`）。政策的 `currentLocation()` 用 `window.location ?? null`，探測 hook 只在瀏覽器讀頁面的主機名稱，出任何例外都先關掉探測的 client 再丟出。
@@ -1354,7 +1357,7 @@ Hub 關係預設關閉（A-HUB，owner 2026-10-27 已知悉；細節、限制和
 - protocol：`connection-offer.ts`（+1／−1，一行註解）。新檔 `brand-web-app.ts`；`brand-pairing.ts`（fork 的檔）。
 - server：`persisted-config.ts`（+11／−2：CORS 預設換成網頁版並加 import；`daemon.hub.enabled` 的 schema）、`config.ts`（+2／−1，只改註解）、`session/daemon/diagnostics.ts`（+1，遮罩）、`session/daemon/daemon-session.ts`（+3／−1，A-HUB 的 `hub_disabled` 碼）、`hub/relationship-controller.ts`（+9／−2，A-HUB）。`bootstrap.ts`（熱檔）的固定 CORS 清單不放網頁版，沒有改。
 - CLI：`onboard.ts`（+5／−3：加 import 和「Web app」一行，後面的編號順延）。
-- App：`_layout.tsx`（熱檔，+3／−1：import、一行 JSX、一行註解）、`runtime/host-runtime.ts`（熱檔，+12 行，全是新增、沒有改到上游的行：2 行 import、`runBoot` 的條件 2 行、`probeAndUpsertConnection` 的 hook 8 行）、`components/pair-link-modal.tsx`（+3）、`app/pair-scan.tsx`（+5／−1；掃描器的 catch 拿掉 `lastScannedRef.current = null`，連線失敗後同一個 QR Code 不會每一格畫面都重問）、`components/welcome-screen.tsx`（+5／−1，「連到這台電腦」）、`components/add-host-modal.tsx`、`add-remote-ssh-host-modal.tsx`（各 +3）、`desktop/components/pair-device-section.tsx`（+2）、`diagnostics/app-diagnostic-report.ts`（+1，遮罩）、`package.json`（`deploy:web` 一行，第 27 節）。
+- App：`_layout.tsx`（熱檔，+3／−1：import、一行 JSX、一行註解）、`runtime/host-runtime.ts`（熱檔，+21 行，全是新增、沒有改到上游的行：2 行 import、`runBoot` 的條件 2 行、`probeAndUpsertConnection` 的 hook 8 行；2026-11-05 再加 9 行：`connectTimeoutMs` 貫穿 `probeAndUpsertDirectConnection` 的型別和實作、`probeAndUpsertConnection`）、`utils/test-daemon-connection.ts`（+12 行，只動 `connectToDaemon`：探測等得比客戶端自己的 15 秒久時，把探測的秒數一起放進客戶端的設定；`buildClientConfig` 沒動，它的複雜度已在 lint 上限，2026-11-06）、`components/pair-link-modal.tsx`（+3）、`app/pair-scan.tsx`（+5／−1；掃描器的 catch 拿掉 `lastScannedRef.current = null`，連線失敗後同一個 QR Code 不會每一格畫面都重問）、`components/welcome-screen.tsx`（+5／−1，「連到這台電腦」）、`components/add-host-modal.tsx`、`add-remote-ssh-host-modal.tsx`（各 +3）、`desktop/components/pair-device-section.tsx`（+2）、`diagnostics/app-diagnostic-report.ts`（+1，遮罩）、`package.json`（`deploy:web` 一行，第 27 節）。
 
 連線後補主機名稱：
 
@@ -2172,6 +2175,8 @@ daemon 的埠被保留或占用（G12）：
 
 - Windows 可能把預設埠 6770 劃進 Hyper-V 或 WSL 的保留範圍（`netsh interface ipv4 show excludedportrange protocol=tcp`），或被別的程式占用，內建 daemon 就啟動不了（上游 #1552、#3333，都還沒修）。
 - Windows 版啟動內建 daemon 前，先試著綁定 127.0.0.1:6770。遇到 EACCES 或 EADDRINUSE 時，依序試 16770、26770、36770、46770，都不行就用系統分配的埠，以 `PASEO_LISTEN` 傳給 daemon，並寫進 main.log（`default listen address unavailable, using a fallback`）。App 和 CLI 都從 daemon 的執行紀錄（`paseo.pid`）讀位址，會跟著換。政策在 `daemon/woowtech-listen-fallback.ts`。
+  - **2026-11-05 雲端 Windows 11 實測抓到一個洞，已修**：另一支程式佔住 6770 時，main.log 寫了「using a fallback … 127.0.0.1:16770」，daemon 卻照舊去搶 6770 然後 `listen EADDRINUSE`、「Worker exited before successful readiness」。原因是 App 用 managed 模式啟動 daemon，managed 模式會把所有 daemon 設定環境變數（含 `PASEO_LISTEN`）刪掉，只讀 config.json（`daemon-instance.ts` 的 `daemonLaunchEnvironment`；上游同時拿掉了 `--listen` 啟動旗標）。單元測試只測了「選哪個位址」，沒測「位址到不到 daemon」。現在這次啟動改用 deployment 模式（它保留環境變數），環境先照 managed 的規則刪一遍設定變數、再把 `PASEO_LISTEN` 放回去（`desktopDaemonLaunch`），守門在 `daemon-manager.test.ts`（用真的 `daemonLaunchEnvironment` 算出 spawn 時的環境）。沒有備用埠時行為不變（照舊 managed）。
+  - Windows 的保留埠（`netsh int ipv4 add excludedportrange`）在雲端機器（管理員 session）擋不住綁定，所以只能驗到「埠被別的程式佔住」這條路（EADDRINUSE），EACCES 那條沒有實機證據。
 - 使用者自己設的位址不換：`PASEO_LISTEN`，或 config.json 裡不是預設值的 `daemon.listen`。新 home 的 config.json 本來就寫著 `127.0.0.1:6770`，所以這個值算預設。從終端機用 CLI 啟動的 daemon 不在這個範圍。
 - 保留範圍可能在重開機後改變，所以備用埠不寫回設定。存著 localhost 連線的主機遇到 daemon 換埠時，App 把新位址加進這台主機（`runtime/woowtech-local-daemon-address.ts`），主機會探測每個位址；只靠 relay 的主機照上游，不加 localhost。
 - worker 啟動後連續當掉時，supervisor 改成等 1、2、4 秒……最多 30 秒再重開；跑滿 60 秒就重新計算，第一次當掉仍然馬上重開（`utils/woowtech-crash-backoff.ts`）。所有平台都適用，只影響連續當掉的情況。
@@ -2181,6 +2186,7 @@ daemon 的埠被保留或占用（G12）：
 - `toolsets.winCodeSign: "1.1.0"`：舊的 winCodeSign 壓縮檔裡有 macOS 符號連結，一般 Windows 帳號沒有「建立符號連結」的權限，解壓失敗、建置停在 exit status 2。這個工具組是純 zip，不用開發人員模式。
 - 只出 x64（D11）：`win.target` 的架構清單比命令列的 `--x64` 優先。清單裡有第二個架構時，electron-builder 會多建一個 259 MB 的合併安裝檔，`latest.yml` 也會指向它。
 - 發行者：electron-builder 從 `author.name` 取 exe 和安裝檔的 CompanyName，以及「應用程式與功能」的發行者，從 `description` 取安裝檔的 FileDescription，`package.json` 裡都還是上游的，所以寫在 `extraMetadata`。值由 `woowtech/brands/apply.mjs` 從品牌的版權人和客服信箱帶入。
+- 網址：安裝程式把 `package.json` 的 `homepage` 寫成「應用程式與功能」那一筆的說明連結、關於連結和更新資訊連結（登錄 `URLInfoAbout`、`HelpLink`、`URLUpdateInfo`），Linux 套件拿它當 Homepage；上游的值是 `https://paseo.sh`。2026-11-05 在 `extraMetadata.homepage` 補上品牌的網站（`links.websiteHost`，渥屋是 `https://aiot.woowtech.io/`，跟 macOS「關於」視窗同一個），守門 `woowtech/windows-desktop.test.mjs`。
 - `.gitattributes` 讓文字檔一律 LF：Windows 上的 Git 預設 `core.autocrlf=true` 會換成 CRLF，讀原始碼的守門測試就會失敗。
 - `install.test.ts`（CLI 安裝）不在 Windows 上跑：要建立連結的權限，而且 `os.homedir()` 不看 `HOME`，會寫進真的家目錄。Windows 的 CLI 寫法有 `woowtech-windows-cli-shim` 的單元測試。
 - 8 GB 記憶體的電腦：Metro 預設開 11 個 worker 會把記憶體用完，匯出網頁時加 `--max-workers 2`，並設 `NODE_OPTIONS=--max-old-space-size=2048`。
@@ -2215,18 +2221,20 @@ daemon 的埠被保留或占用（G12）：
 - 每次更新和重新安裝，新的安裝程式都會帶 `--updated` 執行舊版的解除安裝程式。清理全部包在 `${ifNot} ${isUpdated}` 裡，所以更新時什麼都不刪。這段程式會留在已安裝的版本裡，直到那一版更新，所以只做盡力而為：不中止、不跳對話框。
 - electron-builder 自動帶入 `build/installer.nsh`，用 `makensis -WX` 編譯兩次（解除安裝程式、安裝程式），任何警告都會讓建置失敗，所以裡面不宣告變數、不寫函式。不要改成完整的 `nsis.script`：那樣 electron-builder 就不簽解除安裝程式。根目錄的 `.gitignore` 忽略 `build/`，這個檔案（跟 entitlements 一樣）是用 `git add -f` 加進來的。
 - 在 Mac 上建 Windows 安裝檔可以確認 NSIS 編譯得過，但產出的解除安裝程式是壞的（electron-builder #10258），不能拿去測或發佈。10/3 在 Mac 上用 `--win nsis --x64 -c.win.signAndEditExecutable=false` 編過一次：兩次編譯都過；electron-builder 的 makensis 3.04 比對巨集名稱不分大小寫，範本檢查的 `customInstallmode` 也認得我們的 `customInstallMode`。
-- 安裝資料夾目前仍可以選（D19 待決定）。
+- 安裝資料夾（2026-11-05 owner 決定：固定）：安裝程式沒有「選擇安裝位置」那一頁（`nsis.allowToChangeInstallationDirectory: false`），一律裝在 `%LOCALAPPDATA%\Programs\woowtech smart`。理由：只裝給目前使用者、不跳 UAC，選到要系統管理員權限的資料夾會寫不進去；路徑有中文、空格、`&`、`%` 的組合要各自測；更新永遠更新同一個位置。預設位置在中文帳號下已在雲端 Windows 11 驗過（見驗證紀錄第一條），自訂路徑沒測過所以不開放。公司 IT 做靜默安裝應該仍可以用 `Setup.exe /S /D=<資料夾>`（NSIS 內建參數，`/D=` 要放最後、路徑不加引號；還沒在我們的安裝檔上實測，下一次雲端測試要補）。守門 `woowtech/windows-desktop.test.mjs`。
 
 程式碼簽章（D8，2026-10-04 付款）：
 
 - 憑證是 SSL.com 的 OV 程式碼簽章憑證，私鑰在 SSL.com 的 eSigner 雲端，發行流程用 jsign 7.5 簽。憑證最長 460 天，大約每 12–15 個月續一次；續約不要換公司名稱或 CA，SmartScreen 的信譽會重新累積。
 - `electron-builder.yml` 的 `win.signtoolOptions.sign` 指到 `scripts/woowtech-sign-windows.js`。只有發行流程設 `WOOWTECH_SIGN=1` 才簽，其他建置（含測試版）都不簽。只簽 SHA-256，時間戳用 RFC 3161（`ts.ssl.com`，連不上改用 DigiCert 的），憑證到期後簽章仍有效。
 - Smart App Control 檢查每個載入的模組，只簽安裝程式不夠，所以 `signExts` 把每個 `.dll`、`.node` 都交給簽章函式。已經有簽章的檔案保留原簽章：Electron 的 `d3dcompiler_47.dll`、`dxil.dll` 和 node-pty 的 `conpty.dll`、`OpenConsole.exe` 是微軟簽的，都有時間戳。x64 一版要簽 10 個檔案：App 執行檔、`dxcompiler.dll`、`ffmpeg.dll`、`vk_swiftshader.dll`、`vulkan-1.dll`、兩個 `conpty*.node`、`esbuild.exe`、解除安裝程式和安裝程式。
-- 發行流程（`desktop-release.yml` 的 Windows job）每次都簽，只出 x64：裝 Java 21，下載 jsign 7.5 並比對 SHA-256（GitHub release 和 Maven Central 的檔案相同）。要在 GitHub 設的 secrets：`ESIGNER_STOREPASS`（`<SSL.com 帳號>|<密碼>`）、`ESIGNER_CREDENTIAL_ID`、`ESIGNER_TOTP_SECRET`（啟用 eSigner 自動簽章時 QR code 旁的 base64 secret）；變數 `WIN_PUBLISHER_DN`。jsign 用 `env:` 前綴從環境變數讀密碼和 TOTP，不會出現在 log 或程序清單。少任何一個，建置就失敗：有自訂簽章函式時，`win.forceCodeSigning` 擋不住未簽的建置。
+- 發行流程（`desktop-release.yml` 的 Windows job）每次都簽，只出 x64：裝 Java 21，下載 jsign 7.5 並比對 SHA-256（GitHub release 和 Maven Central 的檔案相同）。要在 GitHub 設的 secrets：`ESIGNER_STOREPASS`（`<SSL.com 帳號>|<密碼>`）、`ESIGNER_CREDENTIAL_ID`、`ESIGNER_TOTP_SECRET`（QR code 的秘密碼，**必須是 Base64**：jsign 7.5 的 `ESignerSigningService.generateOTP` 用 `Base64.getDecoder()` 解碼它，再以 HMAC-SHA1、30 秒、6 位數算驗證碼；手機驗證器用的是 Base32。Base32 的字串也是合法的 Base64，貼錯不會當場報錯，簽章時才一直 `invalid otp`。2026-11-05 之前這裡寫成「QR code 旁的 base64 secret」，沒有講清楚）；變數 `WIN_PUBLISHER_DN`。三個 secret 和變數用 `~/.local/share/woowtech-smart/jobs/windows-signing-wizard.sh` 設定：它用手機上現在的 6 位數對答案，自動判斷秘密碼的格式並轉成 Base64，再用 `gh` 寫進 GitHub（`gh` 沒登入就改成把值放進剪貼簿，由人貼進網頁）；值不印在畫面、不寫進檔案。測試在 `plans/release-0.10.0-20261105/wizard-tests/`（RFC 6238 標準向量、隨機金鑰、七種情境的假演練，故意改壞兩處確認測試會紅）。jsign 用 `env:` 前綴從環境變數讀密碼和 TOTP，不會出現在 log 或程序清單。少任何一個，建置就失敗：有自訂簽章函式時，`win.forceCodeSigning` 擋不住未簽的建置。
 - `WIN_PUBLISHER_DN` 是憑證的 Subject，例如 `CN="WOOW TECH CO., LTD.", O="WOOW TECH CO., LTD.", C=TW`（值裡有逗號要加引號），由發行流程用 `-c.win.signtoolOptions.publisherName` 帶入；electron-updater 只接受這個發行者簽的更新。不寫在設定檔：沒有它，electron-updater 不驗更新檔的簽章；測試版帶了它，會拒絕自己未簽的更新。
-- `scripts/woowtech-windows-signatures.ps1` 列出每個 `.exe`、`.dll`、`.node` 的簽章；加 `-RequireSigned -Publisher '<憑證的 CN>'` 時，有任何一個不是有效簽章加時間戳，或簽署者不是我們也不是微軟，就失敗。發行流程建完先檢查 release 資料夾，再靜默安裝、檢查安裝好的資料夾（解除安裝程式只在安裝程式裡，要裝了才看得到），最後解除安裝。在測試電腦上不加 `-RequireSigned`、指向安裝好的資料夾，可以看 Smart App Control 會看到什麼。
+- `scripts/woowtech-windows-signatures.ps1` 列出每個 `.exe`、`.dll`、`.node` 的簽章；加 `-RequireSigned -Publisher '<憑證的 CN>'` 時，有任何一個不是有效簽章加時間戳，或簽署者不是我們也不是微軟，就失敗（微軟簽自己的檔案有兩個名字：「Microsoft Corporation」和「Microsoft Windows」，2026-11-06 的簽章演練才發現後者，見驗證紀錄第一條）。發行流程建完先檢查 release 資料夾，再靜默安裝、檢查安裝好的資料夾（解除安裝程式只在安裝程式裡，要裝了才看得到），最後解除安裝。在測試電腦上不加 `-RequireSigned`、指向安裝好的資料夾，可以看 Smart App Control 會看到什麼。
 - 手動執行發行流程、`platform=windows`、`publish=false`，就是一個已簽章的測試版（workflow 的 artifact），可以拿去 Smart App Control 開著的電腦測。eSigner 前 30 天不限簽章次數。
-- 10/4 在 Mac 上用 jsign 7.5 和拋棄式的本機金鑰實簽過 `esbuild.exe`、`conpty.node`，確認參數、`.node` 簽得了、SSL.com 時間戳拿得到；檢查腳本用 Mac 的 pwsh 換上假的 `Get-AuthenticodeSignature` 測過全簽、缺簽、缺時間戳、簽署者不符四種結果；workflow 用 actionlint 1.7.12 檢查過，裡面的 PowerShell 用 pwsh 剖析過。真的 eSigner 簽章和 runner 上的安裝、解除安裝，要等憑證核發後第一次執行。
+- 10/4 在 Mac 上用 jsign 7.5 和拋棄式的本機金鑰實簽過 `esbuild.exe`、`conpty.node`，確認參數、`.node` 簽得了、SSL.com 時間戳拿得到；檢查腳本用 Mac 的 pwsh 換上假的 `Get-AuthenticodeSignature` 測過全簽、缺簽、缺時間戳、簽署者不符四種結果；workflow 用 actionlint 1.7.12 檢查過，裡面的 PowerShell 用 pwsh 剖析過。真的 eSigner 簽章要等憑證核發後第一次執行；runner 上的簽章檢查、安裝、解除安裝已在 2026-11-06 用拋棄式憑證演練過（見驗證紀錄第一條），只剩「jsign 向 SSL.com 的 eSigner 簽」這一段沒走過。
+- SSL.com 帳號裡要看的地方（2026-11-05 讀官方說明整理，**還沒登入實測**，畫面可能和這裡不同）：登入 `https://login.ssl.com/user_session/new`，帳號首頁 `https://secure.ssl.com/account`；Orders → 那一筆訂單的 download 連結（核發後狀態標 `eSigner Ready`）；憑證在設好 4 位數 PIN 時才建立 eSigner 憑證，QR 碼出現在下載表格上方、只出現一次，之後要輸入 PIN 按 Show QR Code 才看得到，`click to reset eSigner PIN or get new QR Code` 底下的 Reset QR Code 會換新的（官方沒寫舊的會不會失效）；憑證 ID 在同一頁往下的 SIGNING CREDENTIALS；方案與用量：OV 每月 20／100／300／1000 次（20／85／175／250 美元，超過每次 1.00／0.85／0.58／0.25 美元，SSL.com 頁面 2026-03-25 更新），前 30 天不限次數，本月已簽次數在訂單頁 END ENTITY CERTIFICATES → Show Details → Signings This Month。官方沒說一個檔案算一次還是一批算一次，而一版 Windows 要簽 10 個檔案。官方的 QR 碼說明頁沒提到文字形式的秘密碼，他們的自動化說明頁卻寫「複製 QR 碼旁的 secret code」；兩邊都沒有的話，QR 碼本身就是 `otpauth://totp/…?secret=<Base32>`，精靈也吃這種整串。
+- `WIN_PUBLISHER_DN` 怎麼比對：electron-updater 把它拆成各個欄位，**只比對你寫了的欄位**是否和憑證主旨相同（`CN`、`O`、`C` 逐字相等，主旨裡其他欄位如 `L`、`S` 不管）；只寫 CN 也行，但它會警告「請補完整 DN」。發行流程的簽章檢查（`woowtech-windows-signatures.ps1 -Publisher`）只比對 CN。所以 CN 寫錯建置會立刻紅；`O` 或 `C` 寫錯只有在使用者更新時才被拒收，第一次簽章測試要用簽好的檔案核對實際的主旨。
 
 Electron 與 electron-builder（G7、G8）：
 
@@ -2240,7 +2248,7 @@ Electron 與 electron-builder（G7、G8）：
 
 - 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`、`terminal/woowtech-default-shell`；desktop 的 `cli-install/woowtech-windows-cli-shim`、`cli-install/woowtech-windows-user-path`、`scripts/woowtech-sign-windows`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機（2026-11-04，一台 Windows 10 22H2 x64，未簽章的測試版，只測 x64）：建置、安裝（沒有 UAC、沒有「所有使用者」那頁）、SmartScreen 畫面（不明的發行者）、內建 daemon、系統匣、通知橫幅和控制中心、關窗常駐、更新、解除安裝都走過。通知的點擊是用程式注入的，路徑正確，但前景落在哪裡沒有定論（連記事本也一樣），要真人點一次（WD-14）。fuse 也實測過：改動 `app.asar` 表頭後，App 以 `Integrity check failed` 拒絕啟動。
-- 實機還沒做：Windows 11（Smart App Control 只有 11 有）、手機推播（WP、D6、D12）、中文帳號（WI-7）、WT-1～7、「安裝 CLI」（會改使用者 PATH）；真的簽章要等憑證核發後在發行流程上跑；macOS 的冷啟動點通知要簽章的打包版和真人點擊。
+- 實機還沒做：Windows 11 上的 Smart App Control 和 SmartScreen 畫面（雲端機器的 Smart App Control 是關的）、真人點通知（WD-14）、手機推播（WP、D6、D12）、「安裝 CLI」（設定頁的按鈕，會改使用者 PATH）；真的簽章要等憑證核發後在發行流程上跑；macOS 的冷啟動點通知要簽章的打包版和真人點擊。2026-11-05 在 GitHub 雲端的 Windows 11 ARM64 和 Server 2025 補測了 Windows 11 的安裝／啟動、備用埠、中文帳號（WI-7）、WT-1、WT-3、WT-4、WT-6，見驗證紀錄第一條。
 - 章節撞號：main 的第 25 節是「上架候選全面驗收」，Windows 原本也編 25，第 30 節是品牌層 ⇒ Windows 改成第 31 節，指向它的引用一併改掉。
 - 品牌層：Windows 的程式碼用品牌的名字，但 `build/installer.nsh` 和 `scripts/woowtech-sign-windows.js` 還寫著 woowtech 的值。Apporo 的 Windows 版要先把這兩個檔案接上 `woowtech/brands`。
 
@@ -2694,6 +2702,32 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 
 ## 驗證紀錄
 
+- Windows 簽章演練和 Intel Mac 原生啟動測試（2026-11-06，GitHub 雲端；owner 同意這一次；公開 repo 免費、不用金鑰、不碰公司的憑證、不發佈；暫時分支和 workflow 測完已刪、已停用；腳本和報告在 `~/.local/share/woowtech-smart/plans/release-0.10.0-20261105/rehearsal/`）。Windows（`windows-latest`，Server 2025）：當場建一張拋棄式的自簽程式碼簽章憑證（只在那台機器上信任），用**真的** `woowtech-sign-windows.js` 簽（只把 jsign 的參數從 eSigner 換成本機金鑰庫，其餘一樣：簽哪些檔、已有簽章的保留、重試、時間戳伺服器），再走發行流程後面的每一步。第一次推上去在第一步就倒了：從 PowerShell 7 叫出的 Windows PowerShell 5.1 繼承了 7 的 `PSModulePath`，找不到憑證功能（我的腳本錯，修後重推一次）。結果：
+  - 簽了 10 個檔案（安裝檔、App 執行檔、`dxcompiler.dll`、`ffmpeg.dll`、`vk_swiftshader.dll`、`vulkan-1.dll`、`elevate.exe`、`esbuild.exe`、兩個 `conpty*.node` 等，跟第 31 節寫的數目一樣）；另外 10 個本來就有微軟的簽章（8 個「Microsoft Corporation」、2 個「Microsoft Windows」）。20 個全部有效、有時間戳（SSL.com 的時間戳伺服器有答），安裝檔演算法 sha256RSA，解除安裝程式也簽了。
+  - **找到並修好一個會讓第一次正式發行失敗的錯**：`woowtech-windows-signatures.ps1 -RequireSigned` 只認「Microsoft Corporation」，Electron 的 `d3dcompiler_47.dll` 和 `dxil.dll` 是「Microsoft Windows」簽的，所以發行流程的簽章檢查會在簽完之後失敗——簽章本身沒問題，但每失敗一次就白用約 10 次簽章額度。現在兩個名字都認，守門 `windows-desktop.test.mjs`（改前紅、改後綠）。
+  - 檢查會失敗（不是空轉）：換成別的發行者名稱被拒；一個位元組被改過的 `ffmpeg.dll` 被拒（`HashMismatch`）。
+  - electron-updater 自己的簽署者檢查（App 檢查更新時用的那個，`WIN_PUBLISHER_DN` 的用途）：完整 DN（`CN="…", O="…", C=TW`）接受、只寫 CN 接受（會警告「請補完整 DN」）、別的 CN 拒絕、國別不同拒絕。公司真正的 DN 含逗號（`CN="WOOW TECH CO., LTD.", O="WOOW TECH CO., LTD.", C=TW`），另外在本機用同一個解析器（`builder-util-runtime` 的 `parseDn`）試過：Windows 印出的兩種 Subject 寫法（值加引號、逗號用反斜線跳脫）都接受。
+  - 簽好章的安裝檔：靜默安裝到固定資料夾、App 和內附 CLI 能啟動、解除安裝清乾淨（App、「安裝 CLI」寫的 `.cmd`、`woowtech-smart:` 協定、更新快取、通知設定、「應用程式與功能」那一筆）；使用者資料和 PATH 裡的 `.local\bin` 照設計保留。`app-update.yml` 的 `publisherName` 是建置時帶入的 DN。
+  - 「安裝 CLI」（用 App 自己的指令：透過 DevTools 埠從 App 的頁面呼叫 `install_cli`，等於設定頁的按鈕）：狀態從未安裝變已安裝，寫出 `%USERPROFILE%\.local\bin\woowtech-smart.cmd`（有標記行），使用者 PATH 是 `REG_EXPAND_SZ`、尾端多了 `%USERPROFILE%\.local\bin`，新開的終端機（PATH 從登錄重讀）打 `woowtech-smart --version` 得到 0.10.0。
+  - `Setup.exe /S /D=<資料夾>`：資料夾含中文加空格、含 `&` 兩種都裝到指定位置、沒有裝到預設位置，App、CLI、daemon 都能跑，解除安裝乾淨。
+  - 沒涵蓋：真的 eSigner（SSL.com 的認證、OTP、額度）、Smart App Control（機器上關著）、SmartScreen 的信譽、用拋棄式憑證做一次真的更新下載（只測了簽署者比對那一段）。「應用程式與功能」的 `InstallLocation` 是空的（NSIS 沒寫，只影響顯示）。
+  - Intel Mac（`macos-15-intel`：Intel Core i7-8700B、macOS 15.7.9、不是轉譯）：未簽章的 x64 App 原生建置，打包後啟動測試通過（daemon 冷啟動、畫面和 preload、內附 CLI、終端機）；主執行檔 x86_64、沒有別的架構的 Mach-O、兩個 esbuild 都是 x86_64；建置加測試約 14 分鐘。這補上了「x64 沒在 Intel 上跑過」（M2 的 Rosetta 跑不完 60 秒的啟動測試）。沒涵蓋：簽章、公證和 Gatekeeper（這次沒簽）。
+
+- 「連到這台電腦」等瀏覽器詢問的真瀏覽器實測（2026-11-06，這台 Mac，Chrome 156，全在本機、不對外）。工具是 `~/.local/share/woowtech-smart/plans/release-0.10.0-20261105/connect-wait-e2e/connect-wait-e2e.mjs`：在 127.0.0.1:6770 放一個每條新連線先擋住一段時間才轉給後面的 TCP 代理（瀏覽器的詢問視窗對頁面做的就是這件事），後面接一個真的 daemon（設定都用預設，所以預設的跨來源白名單也一起驗了）；用 Playwright 把 `https://smart.woowtech.io` 的請求餵成本機的網頁匯出（連 `_headers` 的回應標頭），頁面以為自己在公開站，才會出現按鈕。網頁匯出來自 `jobs/web-dryrun-1105.sh`（部署腳本的 dry-run，`check-export` 通過：40 個檔、118 個來源＝基準檔、5 個 script URL、sinks 不變，兩次都一樣）。結果：
+  - 對照（0.9.0 的網頁版，擋 12 秒）：6.7 秒放棄，顯示「No daemon found on this computer」，沒有「按允許」的提示、沒存主機。重現了 11/02 在 Firefox 看到的回報。
+  - 補洞前（`4be423ae2`：探測等 30 秒、客戶端仍是自己的 15 秒）：擋 12 秒的過關；擋不完的在 **15.65 秒**就放棄，不是 30 秒。單元測試看不到這個（它們把 `connectToDaemon` 換成假的），這是 `fca387cfa` 的理由。
+  - 補洞後（`fca387cfa`）：擋 12 秒：3.18 秒按鈕改成「Choose Allow in your browser's prompt…」、6 秒後沒有失敗訊息、12.19 秒存好主機；一直擋住：**30.61 秒**才放棄，toast 多了「If you chose Allow just now, press the button again.」、沒存；沒有 daemon：0.74 秒就失敗、顯示「No daemon found…」；繁中、擋 5 秒：3.31 秒按鈕改成「請在瀏覽器的詢問視窗按「允許」…」、5.37 秒存好。截圖在同資料夾 `results/shots-*`。
+  - 測的方法跟真實的差別：用 `local-network-access` 權限預先允許加上代理拖延，來模擬「詢問視窗開著、使用者還沒回答」；沒有跳出 Chrome 真的詢問視窗，也沒測 Firefox、Safari 和手機瀏覽器。
+
+- Windows 版在 GitHub 雲端機器補測（2026-11-05；owner 對每一輪都先同意，公開 repo 免費，不簽章、不發佈、不用金鑰；暫時分支與 workflow 測完已刪、已停用）。原因：Mac 上的 Parallels Windows 11 虛擬機試用 11/02 到期，喚醒被拒。四輪（第一輪只建安裝檔，後三輪檢查），兩台機器：`windows-11-arm`（Windows 11 Enterprise 10.0.26200，ARM64，有互動 session 和 explorer，Smart App Control 關，x64 的 App 靠轉譯跑）和 `windows-latest`（Server 2025 x64）。腳本、workflow 和各輪報告在 `~/.local/share/woowtech-smart/plans/windows-cloud-checks-20261105/`。
+  - 安裝與啟動：未簽章的 x64 安裝檔靜默安裝 29–31 秒、不跳 UAC；exe 和安裝檔的 CompanyName、版權都是 WOOW TECH CO., LTD.；開始功能表捷徑、系統匣（`[tray] created: true`）、通知元件（`presenter supported: true`）、`woowtech-smart:` 協定（第一次啟動後登錄）都在；主視窗和內建 daemon 約 8 秒內起來。Server 上靜默安裝加靜默解除安裝成功（解除安裝程式沒壞）。官方的打包後啟動測試（`PASEO_DESKTOP_SMOKE=1`）在原生 x64 Windows 上三次都通過。**抓到並修好**：「應用程式與功能」的說明、關於、更新連結原本是 `https://paseo.sh`（`b9e6a880f`，現在是 `https://aiot.woowtech.io/`）。
+  - 備用埠（G12）：另一支程式佔住 6770 時，App 選了 16770 並寫 log，**daemon 卻仍去搶 6770 而死掉**（managed 啟動刪掉 `PASEO_LISTEN`，見第 31 節的更正）。修好（`298746ef7`）後兩台都確認：daemon 在 16770 起來、`daemon status` 顯示 `listen: 127.0.0.1:16770`（`configuredListen` 仍是 6770）、CLI 跟得過去。Windows 的保留埠（`netsh int ipv4 add excludedportrange`）在這種管理員 session 擋不住綁定，所以 EACCES 那條路沒有實機證據。
+  - agent 偵測（G14、G29、WT-1、WT-3）：Claude 的原生安裝程式裝到 `%USERPROFILE%\.local\bin\claude.exe`，**不會**加進 PATH（它自己說），daemon 靠備援位置找到（診斷：Resolved path `…\.local\bin\claude.exe`、Version `2.1.318 (Claude Code)`、Status Ready、Auth 要登入）。codex、copilot、opencode 用 npm 裝到 `%APPDATA%\npm`（Node 安裝程式會加進使用者 PATH），**App 開著之後才裝、才加 PATH**：daemon 重讀登錄 PATH（log `[woowtech] PATH refreshed from registry { added: [...\npm] }`），診斷找到 `…\npm\codex.CMD`（`codex-cli 0.166.0`，Ready）、`copilot.CMD`（1.0.105，Authentication required）、`opencode.CMD`（1.19.5，Ready）；新開的終端機（預設 PowerShell）`where.exe` 也找得到。裝在不在 PATH 的資料夾的 pi 找不到（對照組）。`omp` 的 npm 套件需要 Bun 才能跑。**Copilot、OpenCode、Pi、omp 沒有需要加的 Windows 備援位置**（只有 Claude 的原生安裝程式不加 PATH）。注意 `woowtech-smart provider ls` 讀的是快取的快照，裝完工具後仍可能顯示 unavailable，要看即時結果用 `provider diagnostic <名稱>`（設定頁的重新整理對應 `refresh_providers_snapshot`，CLI 沒有）。
+  - 中文帳號（WI-7）：建一個名稱 5 個中文字的本機使用者，用排程工作以他的身分跑（`Start-Process -Credential` 不會載入該使用者的環境，不能用）：USERPROFILE 是 `C:\Users\測試使用者`，安裝、`woowtech-smart --version`（主控台字碼頁 437、950 都行）、daemon 啟動／狀態／停止都正常，daemon 的家在 `C:\Users\測試使用者\.woowtech-smart`。
+  - 路徑含中文、空格、`&`、`%`（WT-4）：`terminal create --cwd "…\專案 & test %x%"`，從 PowerShell 和從 cmd.exe（批次檔最後一行，不加 `call`——`call` 會把 `%x%` 再展開一次）啟動 CLI 都成功，中文帳號下也成功，終端機裡的提示字元和 `echo` 正常。截取畫面時寬字元後面會多一個空格（`專 案`），這是終端機畫面的格式，不是路徑壞了。
+  - Windows 上的單元測試：`daemon-manager.test.ts`、`woowtech-listen-fallback.test.ts` 在原生 x64 Windows 上 15／15 過。
+  - 沒涵蓋：Smart App Control 和 SmartScreen 的畫面、真人點通知後前景視窗落在哪（WD-14）、手機推播、設定頁的「安裝 CLI」按鈕、簽章版、Windows 11 實機（雲端機器是 VM，ARM64 靠轉譯跑 x64）、繁中的 Windows（兩台的系統語言都是 en-US，繁中主控台字碼頁 950 只用 `chcp 950` 模擬過）。
+
 - 0.9.0 實機：桌面瀏覽器（2026-11-02）。owner：「1/2/3都去做，並且2/3都想辦法自己去操作」。這台 Apple 晶片的 Mac 從公開的發佈頁下載 arm64 dmg（sha256 跟建置的相同），裝進 /Applications：codesign、stapler、`syspolicy_check distribution` 都過，打開後 daemon 0.9.0 在 6770，新安裝的設定只放行 `https://smart.woowtech.io`、relay 開、Hub 沒設、`app.baseUrl` 是網頁版；桌面版內建的 `woowtech-smart daemon pair` 給新格式連結。
   - Chrome 156（每次全新的設定檔，CDP 操作頁面，Chrome 自己的權限詢問用 accessibility 對那一個 pid 讀和按）：第一次打開沒有詢問、沒有本機請求；按「連到這台電腦」後 0.7 秒跳出「smart.woowtech.io 要求存取這部裝置上的其他應用程式和服務」（封鎖／允許）；3.9 秒按允許，`ws://localhost:6770/ws` 立刻連上並存成主機；按封鎖則顯示「這台電腦上找不到 daemon」、沒有本機連線，再按不會再問。確認畫面：0.3 秒的真實點擊被忽略；切到另一個分頁再回來，0.1 秒內「連線」又是 disabled、點了沒用，1.4 秒後才能按，經中繼配對成功。`hosted-web-smoke.mjs` 用桌面版的連結和 `--direct 127.0.0.1:6770` S1–S10 全過。
   - Safari 26.4（safaridriver，自動化視窗）：從網頁版連 `ws://localhost:6770` 和 `http://localhost:6770` 都被擋（混合內容）；「連到這台電腦」顯示「這台電腦上找不到 daemon」；貼上配對連結，確認畫面 0.25 秒的點擊被忽略，之後經中繼配對成功（桌面版的 daemon 收到 relay 的連線）。
@@ -2726,7 +2760,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 隱私權政策加入網頁版（2026-10-30，Odoo `blog.post` 391；web-spec.md 6.8；文字在 plans 的 `privacy-391-web-draft.md`）：owner 看過要貼的文字後說「幫我貼」；照建議發佈 P1–P8（P3 的前提在下一條確認過），日期 2026-10-30。
   - 做法：Odoo 後台的文章表單沒有內文欄位，所以在 owner 已登入的瀏覽器分頁裡用 JSON-RPC（`/web/dataset/call_kw`）讀寫 `blog.post.content`。寫入前先讀：網站語言是 zh_TW（預設）和 en_US，兩個語言的內文相同（13,154 字），跟 10/27 的備份逐位元組相同；全文另存在 plans 的 `privacy-publish-20261030/`。寫入時先再確認一次 `write_date` 和內文的 SHA-256 都沒變，再依序寫 en_US、zh_TW。讀回時兩個語言都跟發佈檔逐字相同；發佈檔是 `make-privacy-html.py 2026-10-30 recommended keep` 產生的，SHA-256 `3a39d969…`。
   - 公開頁面（中文和 `/en/`）：抓下內容欄位、還原 Cloudflare 的信箱混淆後，跟發佈檔逐字相同。`smart.woowtech.io` 出現 6 次，待填記號 0，「跨來源請求／cross-origin request」2 次；生效日期與頁尾日期都是 2026-10-30；`cf-cache-status: DYNAMIC`。
-  - 沒改：文章的小標題和 SEO 描述（`website_meta_description`）還是「手機與桌面 App」，等 owner 決定；舊頁 `/woowtech-smart/privacy(-en)`（O7）沒動。
+  - 當時沒改：文章的小標題和 SEO 描述（`website_meta_description`）還是「手機與桌面 App」、舊頁 `/woowtech-smart/privacy(-en)`（O7）沒動。2026-11-05 owner 說「要去優化」，兩項都做了，見下面「接下來」的第 7 條。
   - 回復：把 `privacy-publish-20261030/content-before-*.html` 寫回兩個語言。
 
 - 回報 Worker 重新部署，放行網頁版（2026-10-30，Worker `smart-reports-proxy`，來源 `3d288ed63`；做法照 `woowtech/ai-content-report-cloudrun/README.md` 的「只更新 Worker」；web-spec.md 6.7）：owner 在對話裡明確說「同意部署可以」。
@@ -3178,7 +3212,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
   4. 已完成：2026-10-29 11:34 掛上 `smart.woowtech.io`（owner 明確說可以），11:37 Active，11:39 建標記檔 `domain-attached`（第 27 節），11:52 啟用 pages.dev 的 Bulk Redirect（`~/.local/share/woowtech-smart/plans/web-server-20261026/pages-dev-redirect.md`），Workers Routes 和 audit log 看過；細節在驗證紀錄第一條。不要把網域拿掉：daemon 的 `config.json` 信任這個網址。
   5. 正式站的部署後檢查（第 27 節）：線上內容（`verify-live.mjs`、標頭、入口 JS、`challenge-platform` 0 次）和 smoke S1–S10（含不設 `PASEO_CORS_ORIGINS`、只靠預設白名單的一輪）已在 2026-10-29 通過。回報 Worker 的 V1–V5、V8 已在 2026-10-30 通過（步驟 6）；實機驗收還沒做，沒做完不能做第 8 步。
   6. 已完成：2026-10-30 回報 Worker 重新部署（版本 `3632b58e`，放行網頁版），V1–V5、V8 全過，細節在驗證紀錄第一條（`woowtech/ai-content-report-cloudrun/README.md` 的「只更新 Worker」）。
-  7. 已完成：2026-10-30 隱私權政策加入網頁版（P1–P8，含 P3），中英文兩個語言都寫入，細節在驗證紀錄第一條。還沒決定：文章的小標題和 SEO 描述要不要加上網頁版；舊頁 `/woowtech-smart/privacy(-en)` 要轉址到 391 還是更新（O7）。
+  7. 已完成：2026-10-30 隱私權政策加入網頁版（P1–P8，含 P3），中英文兩個語言都寫入，細節在驗證紀錄第一條。2026-11-05（owner：「要去優化」，用 woowtech Odoo MCP 改，改之前的值和還原方式在 `~/.local/share/woowtech-smart/plans/web-server-20261026/privacy-optimize-20261105/`）：文章 391 的小標題和 SEO 描述改成「手機 App、桌面 App 和網頁版」（繁中、英文兩個語言都寫）；舊頁 `/woowtech-smart/privacy`、`/woowtech-smart/privacy-en`（`website.page` 62、63，2026-10-01 建，早於 10 月 8 日的文章，商店填的是文章網址）下架，並加四條 301（`website.rewrite` 155–158：兩個網址各含 `/en/` 前綴的一條）轉到文章。Odoo 的頁面比轉址優先，所以一定要先下架頁面轉址才會生效。中文和英文瀏覽器、四個舊網址都驗過會轉到文章（最後 200）。支援頁 `/woowtech-smart/support(-en)`（64、65）沒動。
   8. 【owner】發佈帶新預設的 daemon、CLI 和桌面版（D2、D3；版本號、版本說明、簽章和公證，O8）。在這之前發佈的話，相機掃新的 QR Code 會打開一個還不存在的網站。版本說明要寫：Hub 連線預設關閉、已接上 Hub 的人升級後要自己打開（第 28 節有中英文的句子）；關掉網頁直連的 `'[]'` 之後要再 `daemon restart`（第 19 節）。2026-10-30：版本 0.9.0 已合進 main，網頁版已用同一個 commit 重新部署（驗證紀錄第一條）；桌面版等 Developer ID 憑證。
 - 網頁版的待決事項：O1（CSP，已選對等版）、O2（按了才連）、O3（金鑰改變擋下）、O6（預覽不加 Access；pages.dev 轉址 2026-10-29 已啟用）、B8（確認畫面文字，2026-10-27 owner 同意）、O10 的 D5（桌面版的回報標 desktop，保留）、O12（登入一次就一直有效）已決定。還沒決定：O7、O8、O9（要不要在版本說明附上既有 home 開直連的指令）、O10 的 C6（選做：expo-camera 的網頁 stub，這一輪沒做）、O11（要不要在 GitHub 上跑一次完整 CI）。O4 只有在 `verify-live.mjs` 看到 `challenge-platform` 時才要決定，2026-10-29 沒有出現。
   - C6 沒做的原因：照規格把 resolver 加進 `plugins/woowtech-metro-resolver.js`，`woowtech/push.test.mjs` 用來換掉那個模組的替身只有 `withNativeRnFirebaseModules`，那一項會壞。要做的話，連那個守門一起改，或把 resolver 放在另一個檔。沒做的影響：網頁版進到 `/pair-scan` 時，expo-camera 會建立 worker 去 jsdelivr 載 jsQR，被 CSP 擋下（console 有一筆違規，畫面本來就顯示不支援）；基準檔要列那個網址。
@@ -3192,7 +3226,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 每次發版都要從同一個 commit 重新部署網頁版（第 27 節）。
 - 發佈：公開的 `WOOWTECH/woowtech-smart-releases` 已在 2026-10-16 發佈 v0.8.1（arm64 和 x64 的 DMG）。每個版本都要有 Developer ID 簽章與公證：沒有簽章，macOS 的自動更新無法運作。
   發佈 repo 要放 `CHANGELOG.md`，App 的更新紀錄才讀得到。
-- 桌面版打包進去的 `package.json` 仍是上游的 `author`、`homepage`、`repository`，由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步。macOS 版的版權和「關於」視窗已改用 WOOW TECH（第 6 節）；Windows 執行檔的公司名稱、安裝程式的網址和 Linux 套件的網址還讀這些值，發佈 Windows、Linux 版之前要決定怎麼標示（可以用 `electron-builder.yml` 的 `extraMetadata` 只改打包進去的值）。
+- 桌面版打包進去的 `package.json` 仍是上游的 `author`、`homepage`、`repository`，由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步。macOS 版的版權和「關於」視窗已改用 WOOW TECH（第 6 節）；Windows 執行檔的公司名稱和發行者、安裝程式的說明／關於／更新連結、Linux 套件的 Homepage，打包時由 `electron-builder.yml` 的 `extraMetadata` 蓋成品牌的值（`author`、`description`、`homepage`，第 31 節）。`repository` 只有在沒設 `publish` 時 electron-builder 才拿來猜發佈位置，這裡有明確設定，不會讀它。
 - 桌面版的「關於」視窗和麥克風權限提示（第 6 節）要在打包、簽章後的 App 上看：選單「關於 woowtech smart」顯示 `© 2026 WOOW TECH CO., LTD.` 和 `https://aiot.woowtech.io/`，Finder「取得資訊」的版權也是這一行；系統語言設成繁中、簡中、英文各一次，第一次按聽寫時的提示是對應的句子（重問一次：`tccutil reset Microphone io.woowtech.smart.desktop`）。提示的標題是系統的句子加上 App 名稱 woowtech smart，中文說明裡寫的是「渥屋智能」，看過再決定要不要一致。
 - 品牌識別：CLI（第 12、13 節）和 daemon 自己的訊息（第 17 節）都改完了。刻意保留上游名稱的列在第 17 節；企業版裝回本地語音時，語音模式給 agent 的指示（`voice-config.ts`）要一起改。
 - CLI 改名合回 main 之後：

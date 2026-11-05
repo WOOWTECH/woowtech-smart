@@ -1401,8 +1401,9 @@ const PAIRING_CONFIRMATION_ENGLISH = {
   savedServerIdLabel: "Saved host ID",
   reportedServerIdLabel: "Host ID now",
   thisComputer: "Connect to this computer",
+  thisComputerWaiting: "Choose Allow in your browser's prompt…",
   thisComputerFailedTitle: "No daemon found on this computer",
-  thisComputerFailed: `Start the {productName} desktop app or its daemon (localhost:${DEFAULT_DAEMON_PORT}), then try again. If your browser asks to access apps and services on this device, choose Allow.`,
+  thisComputerFailed: `Start the {productName} desktop app or its daemon (localhost:${DEFAULT_DAEMON_PORT}), then try again. If your browser asks to access apps and services on this device, choose Allow. If you chose Allow just now, press the button again.`,
 };
 
 const PAIRING_CONFIRMATION_ZH_TW: typeof PAIRING_CONFIRMATION_ENGLISH = {
@@ -1438,8 +1439,9 @@ const PAIRING_CONFIRMATION_ZH_TW: typeof PAIRING_CONFIRMATION_ENGLISH = {
   savedServerIdLabel: "已存的主機 ID",
   reportedServerIdLabel: "現在的主機 ID",
   thisComputer: "連到這台電腦",
+  thisComputerWaiting: "請在瀏覽器的詢問視窗按「允許」…",
   thisComputerFailedTitle: "這台電腦上找不到 daemon",
-  thisComputerFailed: `請先打開 {productNameZh} 桌面版或啟動 daemon（localhost:${DEFAULT_DAEMON_PORT}），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。`,
+  thisComputerFailed: `請先打開 {productNameZh} 桌面版或啟動 daemon（localhost:${DEFAULT_DAEMON_PORT}），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。剛按下「允許」的話，請再按一次「連到這台電腦」。`,
 };
 
 // The pairing confirmation, apart from woowtechCopyFor so it stays within the complexity limit.

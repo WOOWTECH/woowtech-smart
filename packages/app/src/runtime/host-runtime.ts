@@ -1774,6 +1774,9 @@ export class HostRuntimeStore {
     connection: HostConnection;
     label?: string;
     timeoutMs?: number;
+    // woowtech smart: how long the user's own press waits for the connection, such as for the
+    // browser's prompt. Unlike timeoutMs, it is not a background probe.
+    connectTimeoutMs?: number;
   }): Promise<{ profile: HostProfile; serverId: string; hostname: string | null }> {
     if (input.connection.type === "relay") {
       throw new Error("Cannot probe a relay connection without a server id.");
@@ -1792,6 +1795,9 @@ export class HostRuntimeStore {
       host: probeHost,
       connection: input.connection,
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+      ...(input.timeoutMs === undefined && input.connectTimeoutMs !== undefined
+        ? { timeoutMs: input.connectTimeoutMs }
+        : {}),
     });
     // woowtech smart: a probe cannot prove who answered (runtime/woowtech-host-confirmations.ts).
     await confirmProbedHost({
@@ -1815,11 +1821,13 @@ export class HostRuntimeStore {
     useTls?: boolean;
     password?: string;
     label?: string;
+    connectTimeoutMs?: number;
   }): Promise<{ profile: HostProfile; serverId: string; hostname: string | null }> {
     const endpoint = normalizeHostPort(input.endpoint);
     const password = input.password?.trim();
     return this.probeAndUpsertConnection({
       label: input.label,
+      ...(input.connectTimeoutMs !== undefined ? { connectTimeoutMs: input.connectTimeoutMs } : {}),
       connection: {
         id: `direct:${endpoint}`,
         type: "directTcp",
@@ -2669,6 +2677,7 @@ export interface HostMutations {
     useTls?: boolean;
     password?: string;
     label?: string;
+    connectTimeoutMs?: number;
   }) => Promise<{ profile: HostProfile; serverId: string; hostname: string | null }>;
   probeAndUpsertRemoteSshConnection: (input: {
     host: string;

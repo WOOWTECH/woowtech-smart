@@ -98,6 +98,7 @@ function storeWith(options: {
   storage.values.set(REGISTRY_KEY, JSON.stringify(options.savedHosts));
   if (options.endBootAfterLoad) storage.values.set("@paseo:e2e", "1");
   const probedEndpoints: string[] = [];
+  const probedTimeouts: Array<number | undefined> = [];
   const probeClients: ProbeClient[] = [];
   const deps: HostRuntimeControllerDeps = {
     createClient: () => {
@@ -105,11 +106,12 @@ function storeWith(options: {
       clients.push(client);
       return client;
     },
-    connectToDaemon: async ({ host, connection }) => {
+    connectToDaemon: async ({ host, connection, timeoutMs }) => {
       if (host.serverId !== "" || connection.type !== "directTcp") {
         throw new Error("offline");
       }
       probedEndpoints.push(connection.endpoint);
+      probedTimeouts.push(timeoutMs);
       const serverId = daemons[connection.endpoint];
       if (serverId === undefined) throw new Error("nothing listens there");
       const client = silentClient();
@@ -126,6 +128,7 @@ function storeWith(options: {
   return {
     store,
     probedEndpoints,
+    probedTimeouts,
     probeClients,
     registry: () =>
       JSON.stringify(store.getHosts().map((host) => [host.serverId, host.connections])),
@@ -182,6 +185,31 @@ describe("a direct connection that reports a saved host's id", () => {
     await expect(again).rejects.toBeInstanceOf(HostConfirmationDeclinedError);
     expect(f.probeClients[1]?.closes).toBe(1);
     expect({ registry: f.registry(), saved: f.saved() }).toEqual(before);
+  });
+
+  it("waits as long as the caller asks for the connection, and still asks every time", async () => {
+    const f = storeWith({ savedHosts: [SAVED_RELAY_HOST], endBootAfterLoad: true });
+    await f.store.boot();
+
+    // "Connect to this computer" waits longer than a direct connection usually does, because the
+    // browser's own prompt holds the connection until the user answers it. That wait is not a
+    // background probe (timeoutMs is), so a no is not remembered.
+    for (const round of [0, 1]) {
+      const probing = f.store.probeAndUpsertDirectConnection({
+        endpoint: "lan:6770",
+        connectTimeoutMs: 30_000,
+      });
+      await vi.waitFor(() =>
+        expect(hostConfirmations.getPending()).toMatchObject({
+          kind: "directConnectionToSavedHost",
+          serverId: "srv_A",
+        }),
+      );
+      hostConfirmations.answer(hostConfirmations.getPending()?.id ?? -1, false);
+      await expect(probing).rejects.toBeInstanceOf(HostConfirmationDeclinedError);
+      expect(f.probedTimeouts).toHaveLength(round + 1);
+    }
+    expect(f.probedTimeouts).toEqual([30_000, 30_000]);
   });
 
   it("joins the saved host once the user says yes", async () => {

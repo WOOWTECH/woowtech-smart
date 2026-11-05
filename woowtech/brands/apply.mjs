@@ -125,6 +125,8 @@ export function brandElectronBuilderConfig(text, brand) {
   setScalar(doc, ["extraMetadata", "author", "name"], company.copyright.replace(/^© \d{4} /, ""));
   setScalar(doc, ["extraMetadata", "author", "email"], brand.links.supportEmail);
   setScalar(doc, ["extraMetadata", "description"], `${name} desktop app`);
+  // The help, about and update links of Windows' uninstall entry, and the Linux packages' Homepage.
+  setScalar(doc, ["extraMetadata", "homepage"], `https://${brand.links.websiteHost}/`);
   setScalar(doc, ["protocols", 0, "name"], `${name} agent link`);
   setScalar(doc, ["protocols", 0, "schemes", 0], scheme);
   setScalar(doc, ["publish", "owner"], releasesOwner);

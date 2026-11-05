@@ -12,7 +12,9 @@ copyright: "© 2026 WOOW TECH CO., LTD."
 # package.json's desktopName is Paseo's desktop entry; Linux names ours after executableName.
 # electron-builder also takes the exe's and the installer's CompanyName, and the publisher in
 # Windows' Apps & features, from author.name, and the installer's FileDescription from
-# description. In package.json both are still upstream's.
+# description. In package.json both are still upstream's. The same goes for homepage: the
+# installer writes it as the help, about and update links of its Apps & features entry, and the
+# Linux packages use it as their Homepage.
 extraMetadata:
   name: io.woowtech.smart.desktop
   desktopName: woowtech smart.desktop
@@ -20,6 +22,7 @@ extraMetadata:
     name: "WOOW TECH CO., LTD."
     email: woowtech@designsmart.com.tw
   description: woowtech smart desktop app
+  homepage: https://aiot.woowtech.io/
 # woowtech smart: the legacy winCodeSign archive holds macOS symlinks. Unpacking it needs the
 # "create symbolic links" privilege, which a normal Windows account does not have, and the build
 # stops with exit status 2. This toolset is plain zip files (README §31).
@@ -160,4 +163,6 @@ win:
 nsis:
   oneClick: false
   perMachine: false
-  allowToChangeInstallationDirectory: true
+  # woowtech smart: no folder page. One install folder under the user's profile (README §31, owner
+  # decision of 2026-11-05); a silent install can still take /D=<folder>.
+  allowToChangeInstallationDirectory: false

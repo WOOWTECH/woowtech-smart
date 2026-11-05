@@ -92,6 +92,24 @@ test("Windows names the brand's company, not upstream's author, as the publisher
   assert.equal(extraMetadata.description, `${brand.name} desktop app`);
 });
 
+test("Windows' Apps & features links point at the brand's website, not upstream's", () => {
+  const brand = appliedBrand();
+  const { extraMetadata } = YAML.parse(source("packages/desktop/electron-builder.yml"));
+  // electron-builder writes package.json's homepage into the uninstall entry (the help, about and
+  // update links in Apps & features) and into the Linux packages' Homepage. In package.json it is
+  // still https://paseo.sh.
+  assert.equal(extraMetadata.homepage, `https://${brand.links.websiteHost}/`);
+});
+
+test("the Windows installer has no folder page: it installs where the update will look (2026-11-05)", () => {
+  const { nsis } = YAML.parse(source("packages/desktop/electron-builder.yml"));
+  // Owner decision of 2026-11-05 (README §31): one install folder under the user's profile. A folder the
+  // user picks multiplies what has to work: a protected folder fails for a per-user install without UAC, and
+  // Chinese, spaces, & and % in a path each need care. IT can still pass /D=<folder> to a silent install.
+  assert.equal(nsis.allowToChangeInstallationDirectory, false);
+  assert.equal(nsis.perMachine, false);
+});
+
 test("the Windows build does not need the symlink privilege", () => {
   // Without this electron-builder unpacks the legacy winCodeSign archive, which holds symlinks,
   // and a normal Windows account fails with exit status 2 (README §31).
@@ -242,6 +260,12 @@ test("only the release job signs Windows builds, every PE file, SHA-256 only (D8
   assert.match(hook, /"--alg",\s*"SHA-256",[\s\S]*"--tsmode",\s*"RFC3161",/);
   // electron-builder would call an export named "sign" instead of the default one.
   assert.doesNotMatch(hook, /exports\.sign\b/);
+
+  // The signature check lets through both names Microsoft signs its own files with in an Electron
+  // app: conpty.dll and OpenConsole.exe are "Microsoft Corporation", d3dcompiler_47.dll and
+  // dxil.dll are "Microsoft Windows" (found by the signing rehearsal of 2026-11-06).
+  const signatures = source("packages/desktop/scripts/woowtech-windows-signatures.ps1");
+  assert.match(signatures, /\$signers = @\('Microsoft Corporation', 'Microsoft Windows'\)/);
 
   const release = source(".github/workflows/desktop-release.yml");
   const windowsJob = release.slice(

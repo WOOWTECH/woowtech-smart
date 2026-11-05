@@ -40,6 +40,7 @@ import {
   WOOWTECH_DAEMON_DEFAULT_PORT,
   allocateTcpPort,
   chooseDesktopDaemonListen,
+  desktopDaemonLaunch,
   probeTcpPort,
   readConfiguredListen,
 } from "./woowtech-listen-fallback.js";
@@ -342,12 +343,12 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
       home,
       timeoutMs: 30_000,
       ...invocation,
-      env: {
-        ...invocation.env,
-        PASEO_CLI: getBundledCliShimPath(),
-        ...(listenOverride ? { PASEO_LISTEN: listenOverride } : {}),
-      },
-      mode: "managed",
+      // woowtech smart (G12): the fallback address has to survive the managed launch.
+      ...desktopDaemonLaunch({
+        env: { ...invocation.env, PASEO_CLI: getBundledCliShimPath() },
+        home,
+        listenOverride,
+      }),
       desktopManaged: true,
       onAcquired: (instance) => {
         ownedLaunch = { home, instance };

@@ -34,7 +34,10 @@ if ($rows.Count -eq 0) {
 }
 $rows | Sort-Object File | Format-Table -AutoSize | Out-String -Width 400 | Write-Output
 if ($RequireSigned) {
-  $signers = @('Microsoft Corporation')
+  # Microsoft signs the files it ships with two names: conpty.dll and OpenConsole.exe are "Microsoft
+  # Corporation", Electron's d3dcompiler_47.dll and dxil.dll are "Microsoft Windows". A rehearsal on a
+  # GitHub-hosted Windows machine (2026-11-06) failed on the second name.
+  $signers = @('Microsoft Corporation', 'Microsoft Windows')
   if ($Publisher) { $signers += $Publisher }
   $failed = @($rows | Where-Object {
       $_.Status -ne 'Valid' -or -not $_.Timestamped -or ($Publisher -and $signers -notcontains $_.Signer)

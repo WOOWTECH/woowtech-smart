@@ -99,7 +99,11 @@ test("the Windows app moves its daemon off a reserved default port (G12)", () =>
   assert.match(fallback, /WOOWTECH_DAEMON_DEFAULT_PORT = DEFAULT_DAEMON_PORT;/);
   const manager = read("packages/desktop/src/daemon/daemon-manager.ts");
   assert.match(manager, /const listenOverride = await desktopDaemonListenOverride\(home\);/);
-  assert.match(manager, /\.\.\.\(listenOverride \? \{ PASEO_LISTEN: listenOverride \} : \{\}\)/);
+  // The address has to survive the managed launch, which deletes every daemon setting variable
+  // (daemon-manager.test.ts computes the environment the daemon is really spawned with).
+  assert.match(manager, /\.\.\.desktopDaemonLaunch\(\{[\s\S]*?\blistenOverride,\s*\}\)/);
+  assert.match(fallback, /mode: "deployment"/);
+  assert.match(fallback, /PASEO_LISTEN: input\.listenOverride/);
   const start = read("packages/app/src/runtime/daemon-start-service.ts");
   assert.match(start, /if \(moved && localDaemonAddressMoved\(existing, moved\)\)/);
   const supervisor = read("packages/server/scripts/supervisor.ts");

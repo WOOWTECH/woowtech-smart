@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 import { useTranslation } from "react-i18next";
 import { Monitor } from "lucide-react-native";
@@ -17,6 +17,13 @@ import type { HostProfile } from "@/types/host-connection";
 const THIS_COMPUTER_ENDPOINT = `localhost:${DEFAULT_DAEMON_PORT}`;
 // Long enough to read both sentences; the toast holds while the pointer is over it.
 const FAILURE_TOAST_MS = 10_000;
+// The browser's local network prompt holds the connection until the user answers it, and reading
+// it takes longer than the 6 s a direct connection otherwise gets (Firefox 159 showed "No daemon
+// found" to a user who was still reading). A daemon that is not running refuses at once, so the
+// longer wait only matters while a prompt is open.
+const CONNECT_WAIT_MS = 30_000;
+// After this long without an answer, the button says what the browser is waiting for.
+const PROMPT_HINT_AFTER_MS = 3_000;
 
 export interface ThisComputerWelcomeAction {
   key: "this-computer";
@@ -41,8 +48,18 @@ export function useThisComputerWelcomeAction(
   const { probeAndUpsertDirectConnection } = useHostMutations();
   const [offered] = useState(shouldOfferThisComputerAction);
   const [connecting, setConnecting] = useState(false);
+  const [promptHint, setPromptHint] = useState(false);
   // Two presses before the next render would both see connecting === false.
   const connectingRef = useRef(false);
+
+  useEffect(() => {
+    if (!connecting) {
+      setPromptHint(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setPromptHint(true), PROMPT_HINT_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [connecting]);
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;
@@ -51,6 +68,7 @@ export function useThisComputerWelcomeAction(
     try {
       const { profile, serverId } = await probeAndUpsertDirectConnection({
         endpoint: THIS_COMPUTER_ENDPOINT,
+        connectTimeoutMs: CONNECT_WAIT_MS,
       });
       onSaved({ profile, serverId });
     } catch (error) {
@@ -70,9 +88,12 @@ export function useThisComputerWelcomeAction(
     void connect();
   }, [connect]);
 
-  const label = connecting
-    ? t("common.connectionStatus.connecting")
-    : t("woowtech.pairingConfirmation.thisComputer");
+  let label = t("woowtech.pairingConfirmation.thisComputer");
+  if (connecting) {
+    label = promptHint
+      ? t("woowtech.pairingConfirmation.thisComputerWaiting")
+      : t("common.connectionStatus.connecting");
+  }
 
   return useMemo<ThisComputerWelcomeAction | null>(() => {
     if (!offered) return null;
