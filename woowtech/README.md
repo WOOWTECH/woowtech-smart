@@ -2184,6 +2184,7 @@ daemon 的埠被保留或占用（G12）：
 - `.gitattributes` 讓文字檔一律 LF：Windows 上的 Git 預設 `core.autocrlf=true` 會換成 CRLF，讀原始碼的守門測試就會失敗。
 - `install.test.ts`（CLI 安裝）不在 Windows 上跑：要建立連結的權限，而且 `os.homedir()` 不看 `HOME`，會寫進真的家目錄。Windows 的 CLI 寫法有 `woowtech-windows-cli-shim` 的單元測試。
 - 8 GB 記憶體的電腦：Metro 預設開 11 個 worker 會把記憶體用完，匯出網頁時加 `--max-workers 2`，並設 `NODE_OPTIONS=--max-old-space-size=2048`。
+- 網址：安裝程式把 `package.json` 的 `homepage` 寫成「應用程式與功能」那一筆的說明連結、關於連結和更新資訊連結（登錄 `URLInfoAbout`、`HelpLink`、`URLUpdateInfo`），Linux 套件拿它當 Homepage；上游的值是 `https://paseo.sh`。2026-11-05 在 `extraMetadata.homepage` 補上品牌的網站（`links.websiteHost`，渥屋是 `https://aiot.woowtech.io/`，跟 macOS「關於」視窗同一個），守門 `woowtech/windows-desktop.test.mjs`。
 
 通知橫幅檢查（第 16 節）：
 
@@ -3192,7 +3193,7 @@ ln -sf ~/projects/woowtech-smart/woowtech/scripts/mac/*.sh ~/.local/share/woowte
 - 每次發版都要從同一個 commit 重新部署網頁版（第 27 節）。
 - 發佈：公開的 `WOOWTECH/woowtech-smart-releases` 已在 2026-10-16 發佈 v0.8.1（arm64 和 x64 的 DMG）。每個版本都要有 Developer ID 簽章與公證：沒有簽章，macOS 的自動更新無法運作。
   發佈 repo 要放 `CHANGELOG.md`，App 的更新紀錄才讀得到。
-- 桌面版打包進去的 `package.json` 仍是上游的 `author`、`homepage`、`repository`，由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步。macOS 版的版權和「關於」視窗已改用 WOOW TECH（第 6 節）；Windows 執行檔的公司名稱、安裝程式的網址和 Linux 套件的網址還讀這些值，發佈 Windows、Linux 版之前要決定怎麼標示（可以用 `electron-builder.yml` 的 `extraMetadata` 只改打包進去的值）。
+- 桌面版打包進去的 `package.json` 仍是上游的 `author`、`homepage`、`repository`，由 `scripts/sync-workspace-versions.mjs` 從根目錄的 `package.json` 同步。macOS 版的版權和「關於」視窗已改用 WOOW TECH（第 6 節）；Windows 執行檔的公司名稱和發行者、安裝程式的說明／關於／更新連結、Linux 套件的 Homepage，打包時由 `electron-builder.yml` 的 `extraMetadata` 蓋成品牌的值（`author`、`description`、`homepage`，第 31 節）。`repository` 只有在沒設 `publish` 時 electron-builder 才拿來猜發佈位置，這裡有明確設定，不會讀它。
 - 桌面版的「關於」視窗和麥克風權限提示（第 6 節）要在打包、簽章後的 App 上看：選單「關於 woowtech smart」顯示 `© 2026 WOOW TECH CO., LTD.` 和 `https://aiot.woowtech.io/`，Finder「取得資訊」的版權也是這一行；系統語言設成繁中、簡中、英文各一次，第一次按聽寫時的提示是對應的句子（重問一次：`tccutil reset Microphone io.woowtech.smart.desktop`）。提示的標題是系統的句子加上 App 名稱 woowtech smart，中文說明裡寫的是「渥屋智能」，看過再決定要不要一致。
 - 品牌識別：CLI（第 12、13 節）和 daemon 自己的訊息（第 17 節）都改完了。刻意保留上游名稱的列在第 17 節；企業版裝回本地語音時，語音模式給 agent 的指示（`voice-config.ts`）要一起改。
 - CLI 改名合回 main 之後：

@@ -92,6 +92,15 @@ test("Windows names the brand's company, not upstream's author, as the publisher
   assert.equal(extraMetadata.description, `${brand.name} desktop app`);
 });
 
+test("Windows' Apps & features links point at the brand's website, not upstream's", () => {
+  const brand = appliedBrand();
+  const { extraMetadata } = YAML.parse(source("packages/desktop/electron-builder.yml"));
+  // electron-builder writes package.json's homepage into the uninstall entry (the help, about and
+  // update links in Apps & features) and into the Linux packages' Homepage. In package.json it is
+  // still https://paseo.sh.
+  assert.equal(extraMetadata.homepage, `https://${brand.links.websiteHost}/`);
+});
+
 test("the Windows build does not need the symlink privilege", () => {
   // Without this electron-builder unpacks the legacy winCodeSign archive, which holds symlinks,
   // and a normal Windows account fails with exit status 2 (README §31).
