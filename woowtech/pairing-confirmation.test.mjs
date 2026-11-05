@@ -226,8 +226,11 @@ function thisComputerEndpoint(runtime, action) {
   if (!bootEndpoint || bootEndpoint !== buttonEndpoint) {
     problems.push(`the button probes ${buttonEndpoint}, the boot probe ${bootEndpoint}`);
   }
+  // Other options may follow the endpoint, such as the longer wait for the browser's prompt.
   if (
-    !/probeAndUpsertDirectConnection\(\{\s*endpoint: THIS_COMPUTER_ENDPOINT,?\s*\}\)/.test(action)
+    !/probeAndUpsertDirectConnection\(\{\s*endpoint: THIS_COMPUTER_ENDPOINT,(?:[^{}]*)\}\)/.test(
+      action,
+    )
   ) {
     problems.push("the button does not probe THIS_COMPUTER_ENDPOINT");
   }
