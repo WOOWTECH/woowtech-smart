@@ -269,6 +269,12 @@ function resolveTimeout(connection: HostConnection, options?: ProbeOptions): num
   return 6_000;
 }
 
+// woowtech smart: DaemonClient gives up on its own after DEFAULT_CONNECT_TIMEOUT_MS (15 s,
+// packages/client/src/daemon-client.ts) however long the probe waits. A probe that waits longer,
+// such as "Connect to this computer" while the browser's prompt is open (30 s), raises the client's
+// limit with it. Probes that wait 15 s or less keep the client's default.
+const CLIENT_DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
+
 export function connectToDaemon(
   connection: HostConnection,
   options?: ProbeOptions,
@@ -283,6 +289,13 @@ export async function connectToDaemon(
   options?: ProbeOptions,
   deps: DaemonConnectionDependencies<DaemonProbeClient> = defaultDaemonConnectionDependencies,
 ): Promise<{ client: DaemonProbeClient; serverId: string; hostname: string | null }> {
+  const timeoutMs = resolveTimeout(connection, options);
   const config = await buildClientConfig(connection, options?.serverId, options, deps);
-  return connectAndProbe(config, resolveTimeout(connection, options), deps);
+  return connectAndProbe(
+    timeoutMs > CLIENT_DEFAULT_CONNECT_TIMEOUT_MS
+      ? { ...config, connectTimeoutMs: timeoutMs }
+      : config,
+    timeoutMs,
+    deps,
+  );
 }

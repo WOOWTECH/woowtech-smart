@@ -128,6 +128,28 @@ describe("test-daemon-connection connectToDaemon", () => {
     expect(probe.createdConfigs()[0]?.transportFactory).toBeUndefined();
   });
 
+  // woowtech smart: a caller that waits longer than 15 s (the browser's prompt holds "Connect to this
+  // computer" until it is answered) has to raise the client's own connect timeout too, or the client
+  // gives up at its default 15 s however long the probe waits. Found in a real browser on 2026-11-06.
+  it("lets the client wait as long as the probe does", async () => {
+    const { connectToDaemon } = await import("./test-daemon-connection");
+    const direct = {
+      id: "direct:localhost:6770",
+      type: "directTcp",
+      endpoint: "localhost:6770",
+    } as const;
+
+    await connectToDaemon(direct, { timeoutMs: 30_000 }, probe.deps);
+    await connectToDaemon(direct, undefined, probe.deps);
+    await connectToDaemon(direct, { timeoutMs: 2_500 }, probe.deps);
+
+    const [longWait, defaults, background] = probe.createdConfigs();
+    expect(longWait?.connectTimeoutMs).toBe(30_000);
+    // The probes that wait less than the client's own 15 s are left as they were.
+    expect(defaults?.connectTimeoutMs).toBeUndefined();
+    expect(background?.connectTimeoutMs).toBeUndefined();
+  });
+
   it("encodes the local socket target into the client config", async () => {
     const { connectToDaemon } = await import("./test-daemon-connection");
     const result = await connectToDaemon(
