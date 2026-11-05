@@ -2175,6 +2175,8 @@ daemon 的埠被保留或占用（G12）：
 
 - Windows 可能把預設埠 6770 劃進 Hyper-V 或 WSL 的保留範圍（`netsh interface ipv4 show excludedportrange protocol=tcp`），或被別的程式占用，內建 daemon 就啟動不了（上游 #1552、#3333，都還沒修）。
 - Windows 版啟動內建 daemon 前，先試著綁定 127.0.0.1:6770。遇到 EACCES 或 EADDRINUSE 時，依序試 16770、26770、36770、46770，都不行就用系統分配的埠，以 `PASEO_LISTEN` 傳給 daemon，並寫進 main.log（`default listen address unavailable, using a fallback`）。App 和 CLI 都從 daemon 的執行紀錄（`paseo.pid`）讀位址，會跟著換。政策在 `daemon/woowtech-listen-fallback.ts`。
+  - **2026-11-05 雲端 Windows 11 實測抓到一個洞，已修**：另一支程式佔住 6770 時，main.log 寫了「using a fallback … 127.0.0.1:16770」，daemon 卻照舊去搶 6770 然後 `listen EADDRINUSE`、「Worker exited before successful readiness」。原因是 App 用 managed 模式啟動 daemon，managed 模式會把所有 daemon 設定環境變數（含 `PASEO_LISTEN`）刪掉，只讀 config.json（`daemon-instance.ts` 的 `daemonLaunchEnvironment`；上游同時拿掉了 `--listen` 啟動旗標）。單元測試只測了「選哪個位址」，沒測「位址到不到 daemon」。現在這次啟動改用 deployment 模式（它保留環境變數），環境先照 managed 的規則刪一遍設定變數、再把 `PASEO_LISTEN` 放回去（`desktopDaemonLaunch`），守門在 `daemon-manager.test.ts`（用真的 `daemonLaunchEnvironment` 算出 spawn 時的環境）。沒有備用埠時行為不變（照舊 managed）。
+  - Windows 的保留埠（`netsh int ipv4 add excludedportrange`）在雲端機器（管理員 session）擋不住綁定，所以只能驗到「埠被別的程式佔住」這條路（EADDRINUSE），EACCES 那條沒有實機證據。
 - 使用者自己設的位址不換：`PASEO_LISTEN`，或 config.json 裡不是預設值的 `daemon.listen`。新 home 的 config.json 本來就寫著 `127.0.0.1:6770`，所以這個值算預設。從終端機用 CLI 啟動的 daemon 不在這個範圍。
 - 保留範圍可能在重開機後改變，所以備用埠不寫回設定。存著 localhost 連線的主機遇到 daemon 換埠時，App 把新位址加進這台主機（`runtime/woowtech-local-daemon-address.ts`），主機會探測每個位址；只靠 relay 的主機照上游，不加 localhost。
 - worker 啟動後連續當掉時，supervisor 改成等 1、2、4 秒……最多 30 秒再重開；跑滿 60 秒就重新計算，第一次當掉仍然馬上重開（`utils/woowtech-crash-backoff.ts`）。所有平台都適用，只影響連續當掉的情況。

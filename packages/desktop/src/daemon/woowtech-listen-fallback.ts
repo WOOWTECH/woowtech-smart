@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
+import { daemonLaunchEnvironment } from "@getpaseo/server/daemon-control";
 
 /** packages/server/src/server/config.ts DEFAULT_PORT (a guard keeps them equal). */
 export const WOOWTECH_DAEMON_DEFAULT_PORT = DEFAULT_DAEMON_PORT;
@@ -99,4 +100,34 @@ export function allocateTcpPort(host: string): Promise<number | null> {
       server.close(() => resolve(port));
     });
   });
+}
+
+/**
+ * The mode and environment for starting the built-in daemon. A managed launch deletes every daemon setting
+ * variable, PASEO_LISTEN included, and the daemon then reads config.json, which says 6770: the fallback the
+ * app chose never reached it (2026-11-05, Windows 11, another program holding 6770: the app logged "using a
+ * fallback 127.0.0.1:16770" and the daemon died with "listen EADDRINUSE 127.0.0.1:6770"). When the app chose
+ * another address, the settings are dropped here the same way and the address is put back; "deployment" is the
+ * mode that keeps the environment it is given. Otherwise nothing changes.
+ */
+export function desktopDaemonLaunch(input: {
+  env: NodeJS.ProcessEnv;
+  home: string;
+  listenOverride: string | null;
+}): { mode: "managed" | "deployment"; env: NodeJS.ProcessEnv } {
+  if (!input.listenOverride) {
+    return { mode: "managed", env: input.env };
+  }
+  return {
+    mode: "deployment",
+    env: {
+      ...daemonLaunchEnvironment({
+        env: input.env,
+        home: input.home,
+        mode: "managed",
+        desktopManaged: true,
+      }),
+      PASEO_LISTEN: input.listenOverride,
+    },
+  };
 }

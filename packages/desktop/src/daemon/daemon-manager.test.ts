@@ -3,10 +3,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { daemonLaunchEnvironment } from "@getpaseo/server/daemon-control";
+
 import { DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
 import { createDaemonCommandHandlers } from "./daemon-manager";
 
 const mocks = vi.hoisted(() => ({
+  startDaemonInstance: vi.fn(),
+  chooseListen: vi.fn(),
   paseoHome: "",
   settings: {
     releaseChannel: "stable",
@@ -55,6 +59,13 @@ vi.mock("@getpaseo/server/daemon-control", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   resolvePaseoHome: vi.fn(() => mocks.paseoHome),
   spawnProcess: mocks.spawnProcess,
+  startDaemonInstance: mocks.startDaemonInstance,
+}));
+
+// woowtech smart: what the Windows check of the default port decides (README §31, G12).
+vi.mock("./woowtech-listen-fallback.js", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  chooseDesktopDaemonListen: (input: unknown) => mocks.chooseListen(input),
 }));
 
 vi.mock("../settings/desktop-settings-electron.js", () => ({
@@ -91,6 +102,9 @@ describe("daemon-manager commands", () => {
     mocks.createNodeEntrypointInvocation.mockReset();
     mocks.createNodeEntrypointInvocation.mockReturnValue({ command: "node", args: [], env: {} });
     mocks.spawnProcess.mockReset();
+    mocks.startDaemonInstance.mockReset();
+    mocks.chooseListen.mockReset();
+    mocks.chooseListen.mockResolvedValue({ kind: "keep", reason: "not-windows" });
     mocks.logInfo.mockReset();
     mocks.logError.mockReset();
     mocks.getElectronLogFile.mockReset();
@@ -144,6 +158,67 @@ describe("daemon-manager commands", () => {
 
     expect(status).toMatchObject({ serverId: "", status: "stopped", pid: null });
     expect(mocks.runExternalCliJsonCommand).not.toHaveBeenCalled();
+  });
+
+  // woowtech smart (G12): the app picks another address when Windows reserved 6770 or a program holds it.
+  // The daemon only sees that choice if it is still in the environment it is spawned with: a managed launch
+  // deletes every daemon setting variable (PASEO_LISTEN included) and the daemon then reads config.json, which
+  // says 6770. Found on 2026-11-05 on Windows 11 with another program holding 6770: the log said "using a
+  // fallback 127.0.0.1:16770" and the daemon died with "listen EADDRINUSE 127.0.0.1:6770".
+  describe("starting the daemon when the default port is not free", () => {
+    function spawnedWith(): NodeJS.ProcessEnv {
+      const input = mocks.startDaemonInstance.mock.calls[0]?.[0];
+      expect(input).toBeDefined();
+      // What startDaemonInstance really passes to spawn().
+      return daemonLaunchEnvironment(input);
+    }
+
+    beforeEach(() => {
+      mkdirSync(mocks.paseoHome);
+      mocks.createNodeEntrypointInvocation.mockReturnValue({
+        command: "node",
+        args: [],
+        env: { PASEO_RELAY_ENABLED: "true", PASEO_PASSWORD: "from-the-shell", PATH: "kept" },
+      });
+      mocks.startDaemonInstance.mockResolvedValue({ instance: { pid: 1 }, spawned: true });
+    });
+
+    it("spawns the daemon with the fallback address the check chose", async () => {
+      mocks.chooseListen.mockResolvedValue({
+        kind: "fallback",
+        listen: "127.0.0.1:16770",
+        code: "EADDRINUSE",
+      });
+
+      await createDaemonCommandHandlers().start_desktop_daemon();
+
+      expect(spawnedWith().PASEO_LISTEN).toBe("127.0.0.1:16770");
+    });
+
+    it("still drops the settings the app inherited from the user's shell", async () => {
+      mocks.chooseListen.mockResolvedValue({
+        kind: "fallback",
+        listen: "127.0.0.1:16770",
+        code: "EADDRINUSE",
+      });
+
+      await createDaemonCommandHandlers().start_desktop_daemon();
+
+      const env = spawnedWith();
+      expect(env.PASEO_RELAY_ENABLED).toBeUndefined();
+      expect(env.PASEO_PASSWORD).toBeUndefined();
+      expect(env.PATH).toBe("kept");
+      expect(env.PASEO_HOME).toBe(mocks.paseoHome);
+      expect(env.PASEO_DESKTOP_MANAGED).toBe("1");
+    });
+
+    it("leaves the address to config.json when the default port is free", async () => {
+      await createDaemonCommandHandlers().start_desktop_daemon();
+
+      const env = spawnedWith();
+      expect(env.PASEO_LISTEN).toBeUndefined();
+      expect(env.PASEO_RELAY_ENABLED).toBeUndefined();
+    });
   });
 
   it("reports an errored daemon when the local daemon state cannot be read", async () => {
