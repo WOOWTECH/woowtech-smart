@@ -150,6 +150,13 @@ jobs:
           npm pack --dry-run --ignore-scripts --workspace=@getpaseo/client
           npm pack --dry-run --ignore-scripts --workspace=@getpaseo/server
 
+      # woowtech smart: the brand guards again with Apporo smart applied, the way its release tree
+      # builds (woowtech/README.md section 30). The fork guards above run on woowtech and cannot see
+      # a woowtech name written into shared code; this step fails on it. Applying a brand rewrites
+      # the checkout, so it stays the last step (scripts/ci-workflow.test.mjs).
+      - name: Check the brand guards with Apporo smart applied
+        run: node woowtech/tools/apply-brand.mjs apporo && WOOWTECH_BRAND=apporo node --test --test-concurrency=1 woowtech/brand-layer.test.mjs
+
   server-tests-ubuntu:
     name: server-tests (ubuntu-latest)
     needs: changes
