@@ -6,9 +6,13 @@ const path = require("node:path");
 const { setTimeout: delay } = require("node:timers/promises");
 const { chromium } = require("playwright");
 const { extractFile } = require("@electron/asar");
+const { appliedBrand } = require("../../../woowtech/brands/index.cjs");
 
-// electron-builder.yml names the app and its executable after the brand (woowtech/brands/apply.mjs).
-const EXECUTABLE_NAME = require("../../../woowtech/brands/index.cjs").appliedBrand().name;
+// electron-builder.yml names the app and its executable after the brand (woowtech/brands/apply.mjs),
+// and the app's CLI and renderer scheme follow it as well.
+const EXECUTABLE_NAME = appliedBrand().name;
+const CLI_COMMAND = appliedBrand().cliCommand;
+const APP_SCHEME = appliedBrand().scheme;
 const SMOKE_TIMEOUT_MS = 60_000;
 const EXIT_TIMEOUT_MS = 10_000;
 const TERMINAL_CAPTURE_ATTEMPTS = 20;
@@ -55,14 +59,14 @@ function getExecutablePath(appPath) {
 
 function getCliShimPath(appPath) {
   if (process.platform === "darwin") {
-    return path.join(appPath, "Contents", "Resources", "bin", "woowtech-smart");
+    return path.join(appPath, "Contents", "Resources", "bin", CLI_COMMAND);
   }
 
   if (process.platform === "win32") {
-    return path.join(appPath, "resources", "bin", "woowtech-smart.cmd");
+    return path.join(appPath, "resources", "bin", `${CLI_COMMAND}.cmd`);
   }
 
-  return path.join(appPath, "resources", "bin", "woowtech-smart");
+  return path.join(appPath, "resources", "bin", CLI_COMMAND);
 }
 
 function getMacMainExecutablePath(appPath) {
@@ -438,13 +442,13 @@ async function waitForPackagedAppPage(browser, deadline) {
     const page = browser
       .contexts()
       .flatMap((context) => context.pages())
-      .find((candidate) => candidate.url().startsWith("woowtech-smart://app/"));
+      .find((candidate) => candidate.url().startsWith(`${APP_SCHEME}://app/`));
     if (page) {
       return page;
     }
     await delay(250);
   }
-  throw new Error("Timed out waiting for the packaged woowtech-smart://app/ renderer");
+  throw new Error(`Timed out waiting for the packaged ${APP_SCHEME}://app/ renderer`);
 }
 
 async function assertPackagedRendererLoaded(page, deadline) {
@@ -962,7 +966,9 @@ if (require.main === module) {
   const appIndex = process.argv.indexOf("--app");
   const appPath = appIndex >= 0 ? process.argv[appIndex + 1] : null;
   if (!appPath) {
-    process.stderr.write("Usage: node smoke-packaged-desktop-app.js --app <woowtech smart.app>\n");
+    process.stderr.write(
+      `Usage: node smoke-packaged-desktop-app.js --app <${EXECUTABLE_NAME}.app>\n`,
+    );
     process.exit(2);
   }
 
