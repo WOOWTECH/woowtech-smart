@@ -261,6 +261,12 @@ test("only the release job signs Windows builds, every PE file, SHA-256 only (D8
   // electron-builder would call an export named "sign" instead of the default one.
   assert.doesNotMatch(hook, /exports\.sign\b/);
 
+  // The signature check lets through both names Microsoft signs its own files with in an Electron
+  // app: conpty.dll and OpenConsole.exe are "Microsoft Corporation", d3dcompiler_47.dll and
+  // dxil.dll are "Microsoft Windows" (found by the signing rehearsal of 2026-11-06).
+  const signatures = source("packages/desktop/scripts/woowtech-windows-signatures.ps1");
+  assert.match(signatures, /\$signers = @\('Microsoft Corporation', 'Microsoft Windows'\)/);
+
   const release = source(".github/workflows/desktop-release.yml");
   const windowsJob = release.slice(
     release.indexOf("\n  publish-windows:"),
