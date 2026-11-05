@@ -2221,7 +2221,7 @@ daemon 的埠被保留或占用（G12）：
 - 每次更新和重新安裝，新的安裝程式都會帶 `--updated` 執行舊版的解除安裝程式。清理全部包在 `${ifNot} ${isUpdated}` 裡，所以更新時什麼都不刪。這段程式會留在已安裝的版本裡，直到那一版更新，所以只做盡力而為：不中止、不跳對話框。
 - electron-builder 自動帶入 `build/installer.nsh`，用 `makensis -WX` 編譯兩次（解除安裝程式、安裝程式），任何警告都會讓建置失敗，所以裡面不宣告變數、不寫函式。不要改成完整的 `nsis.script`：那樣 electron-builder 就不簽解除安裝程式。根目錄的 `.gitignore` 忽略 `build/`，這個檔案（跟 entitlements 一樣）是用 `git add -f` 加進來的。
 - 在 Mac 上建 Windows 安裝檔可以確認 NSIS 編譯得過，但產出的解除安裝程式是壞的（electron-builder #10258），不能拿去測或發佈。10/3 在 Mac 上用 `--win nsis --x64 -c.win.signAndEditExecutable=false` 編過一次：兩次編譯都過；electron-builder 的 makensis 3.04 比對巨集名稱不分大小寫，範本檢查的 `customInstallmode` 也認得我們的 `customInstallMode`。
-- 安裝資料夾目前仍可以選（D19 待決定）。
+- 安裝資料夾（2026-11-05 owner 決定：固定）：安裝程式沒有「選擇安裝位置」那一頁（`nsis.allowToChangeInstallationDirectory: false`），一律裝在 `%LOCALAPPDATA%\Programs\woowtech smart`。理由：只裝給目前使用者、不跳 UAC，選到要系統管理員權限的資料夾會寫不進去；路徑有中文、空格、`&`、`%` 的組合要各自測；更新永遠更新同一個位置。預設位置在中文帳號下已在雲端 Windows 11 驗過（見驗證紀錄第一條），自訂路徑沒測過所以不開放。公司 IT 做靜默安裝應該仍可以用 `Setup.exe /S /D=<資料夾>`（NSIS 內建參數，`/D=` 要放最後、路徑不加引號；還沒在我們的安裝檔上實測，下一次雲端測試要補）。守門 `woowtech/windows-desktop.test.mjs`。
 
 程式碼簽章（D8，2026-10-04 付款）：
 

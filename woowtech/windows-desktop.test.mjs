@@ -101,6 +101,15 @@ test("Windows' Apps & features links point at the brand's website, not upstream'
   assert.equal(extraMetadata.homepage, `https://${brand.links.websiteHost}/`);
 });
 
+test("the Windows installer has no folder page: it installs where the update will look (2026-11-05)", () => {
+  const { nsis } = YAML.parse(source("packages/desktop/electron-builder.yml"));
+  // Owner decision of 2026-11-05 (README §31): one install folder under the user's profile. A folder the
+  // user picks multiplies what has to work: a protected folder fails for a per-user install without UAC, and
+  // Chinese, spaces, & and % in a path each need care. IT can still pass /D=<folder> to a silent install.
+  assert.equal(nsis.allowToChangeInstallationDirectory, false);
+  assert.equal(nsis.perMachine, false);
+});
+
 test("the Windows build does not need the symlink privilege", () => {
   // Without this electron-builder unpacks the legacy winCodeSign archive, which holds symlinks,
   // and a normal Windows account fails with exit status 2 (README §31).

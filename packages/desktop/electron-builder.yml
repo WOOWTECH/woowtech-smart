@@ -163,4 +163,6 @@ win:
 nsis:
   oneClick: false
   perMachine: false
-  allowToChangeInstallationDirectory: true
+  # woowtech smart: no folder page. One install folder under the user's profile (README §31, owner
+  # decision of 2026-11-05); a silent install can still take /D=<folder>.
+  allowToChangeInstallationDirectory: false
