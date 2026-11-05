@@ -73,6 +73,19 @@ async function press(view: ReturnType<typeof welcome>["view"]): Promise<void> {
   });
 }
 
+async function advance(ms: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+/** Answers a probe that was left open, as the daemon does once the browser lets the connection through. */
+async function answerProbe(finish: (value: unknown) => void): Promise<void> {
+  await act(async () => {
+    finish({ profile: PROFILE, serverId: "srv_local", hostname: "mbp" });
+  });
+}
+
 beforeEach(() => {
   env.offer = true;
   env.probes = [];
@@ -102,7 +115,9 @@ describe("Connect to this computer", () => {
     });
     await press(view);
 
-    expect(env.probes).toEqual([{ endpoint: "localhost:6770" }]);
+    // The browser's prompt holds the connection until it is answered, so the wait is 30 s, not the
+    // 6 s a direct connection gets (a daemon that is not running still fails at once).
+    expect(env.probes).toEqual([{ endpoint: "localhost:6770", connectTimeoutMs: 30_000 }]);
     expect(saved).toEqual([{ profile: PROFILE, serverId: "srv_local" }]);
     expect(toast.shown).toEqual([]);
   });
@@ -131,10 +146,47 @@ describe("Connect to this computer", () => {
     expect(toast.shown).toEqual([
       {
         content:
-          "No daemon found on this computer\nStart the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow.",
+          "No daemon found on this computer\nStart the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow. If you chose Allow just now, press the button again.",
         options: { variant: "error", durationMs: 10_000, testID: "welcome-this-computer-failed" },
       },
     ]);
+  });
+
+  describe("while the browser asks for permission", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("tells the user what the browser is waiting for once the wait gets long", async () => {
+      let finish: (value: unknown) => void = () => undefined;
+      env.probe = () => new Promise((resolve) => (finish = resolve));
+      const { view } = welcome();
+
+      await press(view);
+      expect(view.result.current?.label).toBe("Connecting");
+      await advance(2_900);
+      expect(view.result.current?.label).toBe("Connecting");
+      await advance(200);
+      expect(view.result.current?.label).toBe("Choose Allow in your browser's prompt…");
+
+      await answerProbe(finish);
+      expect(view.result.current?.label).toBe("Connect to this computer");
+      // Nothing is left to fire once the connection is done.
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("says so in Traditional Chinese", async () => {
+      await i18n.changeLanguage("zh-TW");
+      env.probe = () => new Promise(() => undefined);
+      const { view } = welcome();
+
+      await press(view);
+      await advance(3_100);
+      expect(view.result.current?.label).toBe("請在瀏覽器的詢問視窗按「允許」…");
+    });
   });
 
   it("shows that it is connecting and ignores more presses until it is done", async () => {

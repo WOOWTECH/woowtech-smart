@@ -638,12 +638,15 @@ daemon 把 agent 技能裝進 `~/.agents/skills`、`~/.claude/skills`、`~/.code
   - `thisComputer`（歡迎頁「連到這台電腦」按鈕的標籤（testID `welcome-this-computer`））
     - 繁中：連到這台電腦
     - English: Connect to this computer
+  - `thisComputerWaiting`（連線超過 3 秒時，按鈕的標籤）
+    - 繁中：請在瀏覽器的詢問視窗按「允許」…
+    - English: Choose Allow in your browser's prompt…
   - `thisComputerFailedTitle`（找不到 daemon 時 toast 的第一行）
     - 繁中：這台電腦上找不到 daemon
     - English: No daemon found on this computer
   - `thisComputerFailed`（找不到 daemon 時 toast 的第二行）
-    - 繁中：請先打開渥屋智能桌面版或啟動 daemon（localhost:6770），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。
-    - English: Start the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow.
+    - 繁中：請先打開渥屋智能桌面版或啟動 daemon（localhost:6770），再試一次。瀏覽器詢問是否允許存取這部裝置上的應用程式和服務時，請按「允許」。剛按下「允許」的話，請再按一次「連到這台電腦」。
+    - English: Start the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow. If you chose Allow just now, press the button again.
 - `screens/settings/**` 寫死的英文已經全部盤點過，使用者看得到的 14 處都改用 `t()`。刻意沒改的：
   - `daemon-lifecycle.ts` 的技術性錯誤細節，顯示在已經翻譯的失敗訊息裡。
   - `plugins-page.tsx` 裡執行不到的離線錯誤。
@@ -1260,7 +1263,7 @@ owner 2026-10-26 決定照上游的做法（D2）：配對連結和 QR Code 打�
 
 開機探測（O2）：
 
-- 公開的 https 網域（smart.woowtech.io、pages.dev、自架的）不在開機時探測 `localhost:6770`。桌面瀏覽器的歡迎頁多一顆「連到這台電腦」（`hosts/woowtech-this-computer-action.ts`，testID `welcome-this-computer`），按了才探測（呼叫 `probeAndUpsertDirectConnection`，端點跟開機探測的 `LOCALHOST_FALLBACK_ENDPOINT` 相同；連線中顯示「正在連線」且不重複送，被拒絕不提示，其他錯誤用 toast 顯示兩句說明）；手機瀏覽器（`userAgentData.mobile`、UA 含 Android、iPhone、iPad、iPod，或 MacIntel 而且 `maxTouchPoints` 大於 1）不出這顆。原生 iOS、Android 的正式版也不探測，開發版照舊（iOS 模擬器和 Mac 共用 localhost）。
+- 公開的 https 網域（smart.woowtech.io、pages.dev、自架的）不在開機時探測 `localhost:6770`。桌面瀏覽器的歡迎頁多一顆「連到這台電腦」（`hosts/woowtech-this-computer-action.ts`，testID `welcome-this-computer`），按了才探測（呼叫 `probeAndUpsertDirectConnection`，端點跟開機探測的 `LOCALHOST_FALLBACK_ENDPOINT` 相同；連線中顯示「正在連線」且不重複送，被拒絕不提示，其他錯誤用 toast 顯示兩句說明）。瀏覽器的本機網路詢問會把連線擋住，直到使用者回答，而讀完詢問要的時間常常超過直連預設的 6 秒（2026-11-02 Firefox 159 實測：詢問還沒讀完，畫面就先說「找不到 daemon」，按了允許還要再按一次）。所以這顆按鈕等 30 秒（`connectTimeoutMs`；daemon 沒開時連線會立刻被拒，不會多等），連線超過 3 秒按鈕改顯示「請在瀏覽器的詢問視窗按『允許』…」，失敗 toast 多一句「剛按下『允許』的話，請再按一次」。`connectTimeoutMs` 跟給背景探測用的 `timeoutMs` 分開，所以不會被當成背景探測：使用者按的每一次都照樣會被問（`runtime/woowtech-probe-guard.test.ts`）；手機瀏覽器（`userAgentData.mobile`、UA 含 Android、iPhone、iPad、iPod，或 MacIntel 而且 `maxTouchPoints` 大於 1）不出這顆。原生 iOS、Android 的正式版也不探測，開發版照舊（iOS 模擬器和 Mac 共用 localhost）。
 - dev server、http 的頁面（例如 daemon 自帶的網頁介面）、loopback 的頁面和沒有 `window` 的測試環境照上游探測。判斷看「https 而且不是 loopback」，不比對網址常數，pages.dev 和自架的網址也算公開。
 - 政策在 `runtime/woowtech-localhost-probe-policy.ts`（`decideLocalhostProbe`）。`host-runtime.ts` 的 `runBoot` 在 initial connection hint 之後多一行 `if (!shouldAutoProbeLocalhost()) return;`，`EXPO_PUBLIC_LOCAL_DAEMON` 設定的位址和預設的 localhost 探測都在它後面，所以兩者都受政策管。`deploy-web.sh` 另外不准公開建置帶 `EXPO_PUBLIC_LOCAL_DAEMON`（第 27 節）。
 - 原生正式版沒有 `window.location`（React Native 設了 `window`，但 `app.config.js` 的 `router: {}` 沒有 origin，`@expo/metro-runtime` 就不裝 `location`）。政策的 `currentLocation()` 用 `window.location ?? null`，探測 hook 只在瀏覽器讀頁面的主機名稱，出任何例外都先關掉探測的 client 再丟出。
@@ -1354,7 +1357,7 @@ Hub 關係預設關閉（A-HUB，owner 2026-10-27 已知悉；細節、限制和
 - protocol：`connection-offer.ts`（+1／−1，一行註解）。新檔 `brand-web-app.ts`；`brand-pairing.ts`（fork 的檔）。
 - server：`persisted-config.ts`（+11／−2：CORS 預設換成網頁版並加 import；`daemon.hub.enabled` 的 schema）、`config.ts`（+2／−1，只改註解）、`session/daemon/diagnostics.ts`（+1，遮罩）、`session/daemon/daemon-session.ts`（+3／−1，A-HUB 的 `hub_disabled` 碼）、`hub/relationship-controller.ts`（+9／−2，A-HUB）。`bootstrap.ts`（熱檔）的固定 CORS 清單不放網頁版，沒有改。
 - CLI：`onboard.ts`（+5／−3：加 import 和「Web app」一行，後面的編號順延）。
-- App：`_layout.tsx`（熱檔，+3／−1：import、一行 JSX、一行註解）、`runtime/host-runtime.ts`（熱檔，+12 行，全是新增、沒有改到上游的行：2 行 import、`runBoot` 的條件 2 行、`probeAndUpsertConnection` 的 hook 8 行）、`components/pair-link-modal.tsx`（+3）、`app/pair-scan.tsx`（+5／−1；掃描器的 catch 拿掉 `lastScannedRef.current = null`，連線失敗後同一個 QR Code 不會每一格畫面都重問）、`components/welcome-screen.tsx`（+5／−1，「連到這台電腦」）、`components/add-host-modal.tsx`、`add-remote-ssh-host-modal.tsx`（各 +3）、`desktop/components/pair-device-section.tsx`（+2）、`diagnostics/app-diagnostic-report.ts`（+1，遮罩）、`package.json`（`deploy:web` 一行，第 27 節）。
+- App：`_layout.tsx`（熱檔，+3／−1：import、一行 JSX、一行註解）、`runtime/host-runtime.ts`（熱檔，+21 行，全是新增、沒有改到上游的行：2 行 import、`runBoot` 的條件 2 行、`probeAndUpsertConnection` 的 hook 8 行；2026-11-05 再加 9 行：`connectTimeoutMs` 貫穿 `probeAndUpsertDirectConnection` 的型別和實作、`probeAndUpsertConnection`）、`components/pair-link-modal.tsx`（+3）、`app/pair-scan.tsx`（+5／−1；掃描器的 catch 拿掉 `lastScannedRef.current = null`，連線失敗後同一個 QR Code 不會每一格畫面都重問）、`components/welcome-screen.tsx`（+5／−1，「連到這台電腦」）、`components/add-host-modal.tsx`、`add-remote-ssh-host-modal.tsx`（各 +3）、`desktop/components/pair-device-section.tsx`（+2）、`diagnostics/app-diagnostic-report.ts`（+1，遮罩）、`package.json`（`deploy:web` 一行，第 27 節）。
 
 連線後補主機名稱：
 
@@ -2181,10 +2184,10 @@ daemon 的埠被保留或占用（G12）：
 - `toolsets.winCodeSign: "1.1.0"`：舊的 winCodeSign 壓縮檔裡有 macOS 符號連結，一般 Windows 帳號沒有「建立符號連結」的權限，解壓失敗、建置停在 exit status 2。這個工具組是純 zip，不用開發人員模式。
 - 只出 x64（D11）：`win.target` 的架構清單比命令列的 `--x64` 優先。清單裡有第二個架構時，electron-builder 會多建一個 259 MB 的合併安裝檔，`latest.yml` 也會指向它。
 - 發行者：electron-builder 從 `author.name` 取 exe 和安裝檔的 CompanyName，以及「應用程式與功能」的發行者，從 `description` 取安裝檔的 FileDescription，`package.json` 裡都還是上游的，所以寫在 `extraMetadata`。值由 `woowtech/brands/apply.mjs` 從品牌的版權人和客服信箱帶入。
+- 網址：安裝程式把 `package.json` 的 `homepage` 寫成「應用程式與功能」那一筆的說明連結、關於連結和更新資訊連結（登錄 `URLInfoAbout`、`HelpLink`、`URLUpdateInfo`），Linux 套件拿它當 Homepage；上游的值是 `https://paseo.sh`。2026-11-05 在 `extraMetadata.homepage` 補上品牌的網站（`links.websiteHost`，渥屋是 `https://aiot.woowtech.io/`，跟 macOS「關於」視窗同一個），守門 `woowtech/windows-desktop.test.mjs`。
 - `.gitattributes` 讓文字檔一律 LF：Windows 上的 Git 預設 `core.autocrlf=true` 會換成 CRLF，讀原始碼的守門測試就會失敗。
 - `install.test.ts`（CLI 安裝）不在 Windows 上跑：要建立連結的權限，而且 `os.homedir()` 不看 `HOME`，會寫進真的家目錄。Windows 的 CLI 寫法有 `woowtech-windows-cli-shim` 的單元測試。
 - 8 GB 記憶體的電腦：Metro 預設開 11 個 worker 會把記憶體用完，匯出網頁時加 `--max-workers 2`，並設 `NODE_OPTIONS=--max-old-space-size=2048`。
-- 網址：安裝程式把 `package.json` 的 `homepage` 寫成「應用程式與功能」那一筆的說明連結、關於連結和更新資訊連結（登錄 `URLInfoAbout`、`HelpLink`、`URLUpdateInfo`），Linux 套件拿它當 Homepage；上游的值是 `https://paseo.sh`。2026-11-05 在 `extraMetadata.homepage` 補上品牌的網站（`links.websiteHost`，渥屋是 `https://aiot.woowtech.io/`，跟 macOS「關於」視窗同一個），守門 `woowtech/windows-desktop.test.mjs`。
 
 通知橫幅檢查（第 16 節）：
 
