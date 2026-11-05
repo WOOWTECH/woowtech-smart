@@ -189,12 +189,11 @@ test("a real Windows uninstall removes the app's registrations and keeps user da
   // ${APP_ID} names Windows' notification settings key, which belongs to the AUMID.
   assert.equal(builder.match(/^appId: (\S+)$/m)[1], appliedBrand().desktop.appId);
   assert.match(ids, /WOOWTECH_DESKTOP_APP_ID = DESKTOP_APP_ID;/);
-  // Install CLI writes the trampoline whose second line the uninstaller checks (G16).
+  // Install CLI writes the trampoline whose second line the uninstaller checks (G16). The marker
+  // names the brand's CLI command, so another brand's release tree ships its own name.
   const shim = source("packages/desktop/src/integrations/cli-install/woowtech-windows-cli-shim.ts");
-  assert.equal(
-    shim.match(/export const WINDOWS_CLI_MARKER = "([^"]+)";/)?.[1],
-    define("WOOWTECH_CLI_MARKER"),
-  );
+  assert.match(shim, /export const WINDOWS_CLI_MARKER = `rem \$\{CLI_COMMAND\} CLI trampoline`;/);
+  assert.equal(define("WOOWTECH_CLI_MARKER"), `rem ${appliedBrand().cliCommand} CLI trampoline`);
   assert.match(shim, /return \[\s*"@echo off",\s*MARKER_LINE,/);
   const install = source("packages/desktop/src/integrations/cli-install/install.ts");
   assert.match(

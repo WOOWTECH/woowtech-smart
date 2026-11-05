@@ -330,3 +330,21 @@ test("typecheck runs the woowtech fork guards after building the server stack", 
   // No condition or continue-on-error: a failing guard fails the job.
   assert.deepEqual(guards[0].keys, ["name", "run"]);
 });
+
+// woowtech smart: the brand guards again with Apporo smart applied (woowtech/README.md section 30).
+// The repository builds woowtech, so the step above cannot see a woowtech name written into shared
+// code; only this one fails on it before it reaches Apporo's release tree.
+const APPORO_GUARD_COMMAND =
+  "node woowtech/tools/apply-brand.mjs apporo && " +
+  "WOOWTECH_BRAND=apporo node --test --test-concurrency=1 woowtech/brand-layer.test.mjs";
+
+test("typecheck ends with the brand guards run with Apporo smart applied", () => {
+  const typecheck = jobBlocks(readFileSync(ciWorkflowPath, "utf8")).get("typecheck") ?? [];
+  const steps = jobSteps(typecheck);
+  const guards = steps.filter(({ run }) => run === APPORO_GUARD_COMMAND);
+
+  assert.equal(guards.length, 1, `typecheck has no step that runs: ${APPORO_GUARD_COMMAND}`);
+  // Applying a brand rewrites the checkout, so every other step must run before it.
+  assert.equal(steps.at(-1), guards[0], "the Apporo guard step must be the last in typecheck");
+  assert.deepEqual(guards[0].keys, ["name", "run"]);
+});

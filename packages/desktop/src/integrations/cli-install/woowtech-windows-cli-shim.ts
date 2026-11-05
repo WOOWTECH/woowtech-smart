@@ -8,9 +8,13 @@
 // for that one line. Fork changes to #4696: the marker line build/installer.nsh looks for,
 // setlocal, a quoted path in the message (a ")" in it would end the block), and a jump to the
 // bundled CLI without CALL, which would expand % and carets in the arguments a second time.
+// The names come from the brand this tree builds, so another brand's release tree writes its
+// own; build/installer.nsh holds woowtech's marker, the one brand built for Windows so far.
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
-export const WINDOWS_CLI_MARKER = "rem woowtech-smart CLI trampoline";
-const MARKER_LINE = `${WINDOWS_CLI_MARKER}: written by woowtech smart, removed by its uninstaller`;
+export const WINDOWS_CLI_MARKER = `rem ${CLI_COMMAND} CLI trampoline`;
+const MARKER_LINE = `${WINDOWS_CLI_MARKER}: written by ${PRODUCT_NAME}, removed by its uninstaller`;
 
 // Longest first, so the most specific root wins: %LOCALAPPDATA% and %APPDATA% sit under
 // %USERPROFILE%.
@@ -84,7 +88,7 @@ export function renderWindowsCliTrampoline(input: WindowsTrampolineInput): strin
           'set "WOOWTECH_CODEPAGE="',
         ]),
     'if not exist "%BUNDLED_CLI%" (',
-    '  echo woowtech smart CLI not found at "%BUNDLED_CLI%". Is woowtech smart installed? 1>&2',
+    `  echo ${PRODUCT_NAME} CLI not found at "%BUNDLED_CLI%". Is ${PRODUCT_NAME} installed? 1>&2`,
     "  exit /b 1",
     ")",
     '"%BUNDLED_CLI%" %*',

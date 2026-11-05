@@ -197,3 +197,23 @@ test("nothing that ships names another brand", () => {
     assert.deepEqual(hits, [], `${applied.id}'s shipped sources name ${id}`);
   }
 });
+
+// electron-builder runs these while it packages the app, and the release checks run the packaged
+// smoke test, so another brand's release build runs them too.
+const PACKAGING_SCRIPTS = [
+  "packages/desktop/scripts/after-pack.js",
+  "packages/desktop/scripts/after-sign.js",
+  "packages/desktop/e2e/packaged-app-smoke.js",
+];
+
+test("the packaging scripts name no other brand", () => {
+  for (const [id, marks] of Object.entries(BRAND_MARKS)) {
+    if (id === applied.id) continue;
+    const hits = findInShippedSources(marks, {
+      dirs: [],
+      files: PACKAGING_SCRIPTS,
+      skipComments: true,
+    });
+    assert.deepEqual(hits, [], `${applied.id}'s packaging scripts name ${id}`);
+  }
+});
