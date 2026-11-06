@@ -2269,6 +2269,7 @@ Electron 與 electron-builder（G7、G8）：
   - 在那台建 Apporo：`release/apporo-0.10.0`、Node 22、Expo 加 `--max-workers 2`（那台 8 GB，可用記憶體不到 1 GB）。
   - 兩個 App 下面這些都各自分開：安裝資料夾、解除安裝項目、捷徑、AUMID、協定（`woowtech-smart`／`apporosmart`）、通知啟動器的 CLSID（`{202C5D44-…}`／`{88869780-…}`）、daemon（6770／6772，都只聽 127.0.0.1）、資料夾（`.woowtech-smart`／`.apporo-smart`）。兩邊的 log 都沒出現對方的名字，Apporo 的 daemon 連的是 `relay.apporo.ai`。
   - Apporo 跳出「工作完成了」的通知，點下去打開的是 Apporo，woowtech 的 log 一行都沒多。點完 Apporo 的視窗在最上層，但鍵盤焦點留在 ShellExperienceHost。這次的點擊是模擬的，跟 11/04 的 woowtech 和記事本一樣，所以仍算 WD-14。
+  - 移除：woowtech 開著時先靜默移除 Apporo，Apporo 的協定、CLSID、通知設定、更新快取（連那份安裝檔）、解除安裝項目、開始功能表和桌面捷徑都清掉，`%APPDATA%\Apporo smart` 和 `.apporo-smart` 留著；woowtech 的程序（PID 都沒變）、6770、協定、CLSID、安裝資料夾、解除安裝項目、捷徑都跟移除前一樣。再移除 woowtech，也一樣清乾淨。移除後跟安裝前的快照比，三百多項只差 woowtech 自己資料夾裡多的兩個檔（它開著時寫的 log 和狀態）。
 - 實機還沒做：Windows 11 上的 Smart App Control 和 SmartScreen 畫面（雲端機器的 Smart App Control 是關的）、真人點通知（WD-14）、手機推播（WP、D6、D12）、「安裝 CLI」（設定頁的按鈕，會改使用者 PATH）；真的簽章要等憑證核發後在發行流程上跑；macOS 的冷啟動點通知要簽章的打包版和真人點擊。2026-11-05 在 GitHub 雲端的 Windows 11 ARM64 和 Server 2025 補測了 Windows 11 的安裝／啟動、備用埠、中文帳號（WI-7）、WT-1、WT-3、WT-4、WT-6，見驗證紀錄第一條。
 - 待 owner 決定（2026-11-06）：沒配對手機、人又離開超過 3 分鐘時，agent 做完桌面一則通知都沒有，控制中心也不會留。這是上游的設計，兩個品牌都一樣。可以改成「沒有手機可推播時，改跳桌面通知」，要改的是 `server/agent-attention-policy.ts`。
 - 章節撞號：main 的第 25 節是「上架候選全面驗收」，Windows 原本也編 25，第 30 節是品牌層 ⇒ Windows 改成第 31 節，指向它的引用一併改掉。
