@@ -13,7 +13,9 @@ import test from "node:test";
 import {
   BRANDED_FILES,
   ELECTRON_BUILDER_CONFIG,
+  INSTALLER_SCRIPT,
   brandElectronBuilderConfig,
+  brandInstallerScript,
 } from "./brands/apply.mjs";
 import { appliedBrandId, brandIds, loadBrand, renderBrandValues } from "./brands/index.cjs";
 import { findInShippedSources } from "./shipped-sources.mjs";
@@ -48,6 +50,8 @@ function coexistenceValues(brand) {
     mobileAppIdDebug: brand.mobileAppIdDebug,
     mobileSecretsDir: brand.mobileSecretsDir,
     desktopAppId: brand.desktop.appId,
+    windowsToastActivatorClsid: brand.desktop.windowsToastActivatorClsid,
+    windowsDevToastActivatorClsid: brand.desktop.windowsDevToastActivatorClsid,
     artifactPrefix: brand.desktop.artifactPrefix,
     releasesRepo: brand.links.releasesRepo,
     relayHost: brand.services.relayHost,
@@ -99,6 +103,14 @@ test("brand values have the shapes the code relies on", () => {
       assert.match(id, /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$/, `${brand.id}: ${id}`);
     }
     assert.ok(brand.mobileAppIdDebug.startsWith(`${brand.mobileAppId}.`), `${brand.id}: debug id`);
+    // The COM classes Windows starts when a notification is clicked, the installed app's and the
+    // unpackaged runs' (packages/desktop/src/features/woowtech-app-user-model-id.ts).
+    const { windowsToastActivatorClsid: clsid, windowsDevToastActivatorClsid: devClsid } =
+      brand.desktop;
+    for (const id of [clsid, devClsid]) {
+      assert.match(id, /^\{[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}\}$/, `${brand.id}: ${id}`);
+    }
+    assert.notEqual(clsid, devClsid, `${brand.id}: the unpackaged runs' CLSID`);
     // iOS cuts longer home-screen names (woowtech/names.test.mjs checks the built ones).
     assert.ok(brand.name.length <= 15 && brand.nameZh.length <= 15, `${brand.id}: name length`);
     assert.match(brand.desktop.artifactPrefix, /^[a-z][a-z0-9-]*$/, `${brand.id}: artifactPrefix`);
@@ -168,6 +180,9 @@ test("the branded files and electron-builder.yml carry the applied brand's value
   // apply.mjs sets holds the brand's value already.
   const config = read(ELECTRON_BUILDER_CONFIG);
   assert.equal(brandElectronBuilderConfig(config, applied), config);
+  // The same for the defines of the Windows installer's include.
+  const installer = read(INSTALLER_SCRIPT);
+  assert.equal(brandInstallerScript(installer, applied), installer);
 });
 
 /** Words and values that name each brand, which must not reach another brand's build. */
@@ -198,11 +213,14 @@ test("nothing that ships names another brand", () => {
   }
 });
 
-// electron-builder runs these while it packages the app, and the release checks run the packaged
-// smoke test, so another brand's release build runs them too.
+// electron-builder runs these while it packages the app (the Windows sign hook, the installer's
+// include among them), and the release checks run the packaged smoke test, so another brand's
+// release build runs them too. installer.nsh's comments start with ";", which the search reads.
 const PACKAGING_SCRIPTS = [
   "packages/desktop/scripts/after-pack.js",
   "packages/desktop/scripts/after-sign.js",
+  "packages/desktop/scripts/woowtech-sign-windows.js",
+  "packages/desktop/build/installer.nsh",
   "packages/desktop/e2e/packaged-app-smoke.js",
 ];
 

@@ -1,7 +1,8 @@
 // What woowtech/tools/apply-brand.mjs changes besides packages/protocol/src/brand-values.ts:
 // the files that tools outside TypeScript read as they are, so they can't import the brand.
-// electron-builder reads electron-builder.yml (and so do CI, nix and the guards); the shell and
-// cmd CLI shims, the Mac's Chinese permission strings and the web shell ship as files. The
+// electron-builder reads electron-builder.yml (and so do CI, nix and the guards), NSIS compiles
+// the Windows installer's include; the shell and cmd CLI shims, the Mac's Chinese permission
+// strings and the web shell ship as files. The
 // repository keeps them with woowtech's values, and woowtech/brand-layer.test.mjs checks that
 // applying woowtech to them changes nothing, so every brand value in them is listed here.
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -26,6 +27,9 @@ export const BRANDED_FILES = [
 ];
 
 export const ELECTRON_BUILDER_CONFIG = "packages/desktop/electron-builder.yml";
+
+/** The include electron-builder compiles into the Windows installer and uninstaller. */
+export const INSTALLER_SCRIPT = "packages/desktop/build/installer.nsh";
 
 /**
  * The icons woowtech/tools/generate-icons.mjs makes. The repository holds woowtech's in place;
@@ -150,6 +154,30 @@ export function brandElectronBuilderConfig(text, brand) {
   return doc.toString({ lineWidth: 0, flowCollectionPadding: false });
 }
 
+/** installer.nsh's defines and the values they hold for `brand`. */
+function installerDefines(brand) {
+  const { scheme, cliCommand, desktop } = brand;
+  return {
+    WOOWTECH_SCHEME: scheme,
+    WOOWTECH_TOAST_CLSID: desktop.windowsToastActivatorClsid,
+    // electron-updater names its cache after extraMetadata.name, the desktop app id, lower-cased.
+    WOOWTECH_UPDATER_CACHE: `${desktop.appId.toLowerCase()}-updater`,
+    WOOWTECH_CLI_COMMAND: cliCommand,
+    WOOWTECH_CLI_MARKER: `rem ${cliCommand} CLI trampoline`,
+  };
+}
+
+/** installer.nsh's text with `brand`'s values in its defines. */
+export function brandInstallerScript(text, brand) {
+  return Object.entries(installerDefines(brand)).reduce((current, [name, value]) => {
+    const line = new RegExp(`^!define ${name} "[^"]*"$`, "m");
+    if (!line.test(current)) {
+      throw new Error(`${INSTALLER_SCRIPT} has no !define ${name}; update brandInstallerScript`);
+    }
+    return current.replace(line, () => `!define ${name} "${value}"`);
+  }, text);
+}
+
 /** Writes `to`'s values into every branded file of the checkout at `repoRoot`, which has `from`'s. */
 export function applyBrandToFiles(repoRoot, from, to) {
   const written = [];
@@ -169,5 +197,8 @@ export function applyBrandToFiles(repoRoot, from, to) {
   const config = path.join(repoRoot, ELECTRON_BUILDER_CONFIG);
   writeFileSync(config, brandElectronBuilderConfig(readFileSync(config, "utf8"), to));
   written.push(ELECTRON_BUILDER_CONFIG);
+  const installer = path.join(repoRoot, INSTALLER_SCRIPT);
+  writeFileSync(installer, brandInstallerScript(readFileSync(installer, "utf8"), to));
+  written.push(INSTALLER_SCRIPT);
   return written;
 }

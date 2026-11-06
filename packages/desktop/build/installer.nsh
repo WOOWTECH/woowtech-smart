@@ -1,19 +1,22 @@
-; woowtech smart: Windows installer customizations (woowtech/README.md section 31, plan G6, D14, D15).
+; The desktop app's Windows installer customizations (woowtech/README.md section 31, plan G6, D14, D15).
 ; electron-builder includes build/installer.nsh by itself and compiles it twice, into the
 ; uninstaller and into the installer, with makensis -WX, so any warning fails the build. Hence no
 ; Var and no Function here, and registers are saved with Push/Pop (${isUpdated} itself uses $R9).
 ; Keep this an include: a full nsis.script stops electron-builder from signing the uninstaller.
 ; NSIS installers cannot be built on the Mac (electron-builder #10258); the Windows build compiles it.
 
+; The defines hold the brand's values. The repository keeps woowtech's; woowtech/tools/apply-brand.mjs
+; writes another brand's into them (brandInstallerScript in woowtech/brands/apply.mjs, guard).
 ; = the scheme under protocols in electron-builder.yml (guard).
 !define WOOWTECH_SCHEME "woowtech-smart"
-; = WOOWTECH_TOAST_ACTIVATOR_CLSID in src/features/woowtech-app-user-model-id.ts (guard). The dev
-; build's CLSID is never touched.
+; = the brand's toast activator CLSID, which src/features/woowtech-app-user-model-id.ts registers
+; (guard). The dev build's CLSID is never touched.
 !define WOOWTECH_TOAST_CLSID "{202C5D44-4389-4CA6-BC75-2E1C50DCCFA0}"
 ; = electron-updater's cache folder: extraMetadata.name in lower case, plus "-updater" (guard).
 !define WOOWTECH_UPDATER_CACHE "io.woowtech.smart.desktop-updater"
-; = how the second line of the trampoline that Install CLI writes starts
-; (src/integrations/cli-install/install.ts, guard).
+; = the brand's CLI command, the name of the trampoline that Install CLI writes (guard).
+!define WOOWTECH_CLI_COMMAND "woowtech-smart"
+; = how the second line of that trampoline starts (src/integrations/cli-install/install.ts, guard).
 !define WOOWTECH_CLI_MARKER "rem woowtech-smart CLI trampoline"
 
 ; D14: Electron registers the toast activator, the Start menu link and the agent-link scheme for
@@ -24,8 +27,8 @@
 !macroend
 
 ; D15: a real uninstall removes what Windows keeps pointing at the app, and keeps user data like
-; moving the Mac app to the Trash: %APPDATA%\woowtech smart and %USERPROFILE%\.woowtech-smart
-; (agents, pairing keys, worktrees with uncommitted work) stay. The template runs this before it
+; moving the Mac app to the Trash: the app's folder in %APPDATA% and the brand's home folder in
+; %USERPROFILE% (agents, pairing keys, worktrees with uncommitted work) stay. The template runs this before it
 ; removes $INSTDIR, the Start menu link (Electron's link is the same file) and the uninstall entry.
 ; Every update and reinstall also runs the OLD uninstaller, with --updated; nothing here runs then,
 ; so updates keep every registration. Installed copies keep this macro until they update, so it
@@ -37,7 +40,8 @@
     Push $2
     Push $3
 
-    ; woowtech-smart: links, if they still open this copy. The app writes "<exe>" "%1" at startup.
+    ; Agent links (the brand's scheme), if they still open this copy. The app writes "<exe>" "%1"
+    ; at startup.
     ReadRegStr $0 HKCU "Software\Classes\${WOOWTECH_SCHEME}\shell\open\command" ""
     ${if} $0 == '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
       DeleteRegKey HKCU "Software\Classes\${WOOWTECH_SCHEME}"
@@ -56,7 +60,7 @@
 
     ; The CLI trampoline from Settings > Install CLI, if it is ours. The .local\bin folder and the
     ; user PATH stay: Claude Code installs claude.exe there.
-    StrCpy $0 "$PROFILE\.local\bin\woowtech-smart.cmd"
+    StrCpy $0 "$PROFILE\.local\bin\${WOOWTECH_CLI_COMMAND}.cmd"
     ClearErrors
     FileOpen $1 $0 r
     ${ifNot} ${Errors}
