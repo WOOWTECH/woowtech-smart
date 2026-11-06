@@ -1,11 +1,11 @@
 ---
-name: woowtech-smart-advisor
+name: apporo-smart-advisor
 description: Spin up a single agent as an advisor — second opinion on the current task. Use when the user says "advisor", "second opinion", "what does X think", or wants an outside take without delegating the work itself.
 user-invocable: true
 argument-hint: "[--profile <name>] <question or topic>"
 ---
 
-# woowtech smart Advisor
+# Apporo smart Advisor
 
 Single agent. Reads the situation you're in. Gives a judgment. You decide what to do — the advisor doesn't drive the work.
 
@@ -13,7 +13,7 @@ Single agent. Reads the situation you're in. Gives a judgment. You decide what t
 
 ## Prerequisites
 
-Read the **woowtech-smart** skill. Call `list_profiles` before choosing the advisor. Do not create the advisor until you have read the configured profiles and their `notes`.
+Read the **apporo-smart** skill. Call `list_profiles` before choosing the advisor. Do not create the advisor until you have read the configured profiles and their `notes`.
 
 ## Picking the advisor
 
@@ -21,7 +21,7 @@ Read the **woowtech-smart** skill. Call `list_profiles` before choosing the advi
 2. **Otherwise** choose the profile whose `notes` best fit the question. Match the actual work: design and approach, audit and review, or research and root-cause analysis.
 3. **Contrast helps.** When several profiles fit, prefer a different provider family from your own so the second opinion is genuinely fresh.
 
-Materialize the selected profile into `create_agent` as described by the **woowtech-smart** skill. If no profile fits, use woowtech smart's provider discovery fallback.
+Materialize the selected profile into `create_agent` as described by the **apporo-smart** skill. If no profile fits, use Apporo smart's provider discovery fallback.
 
 ## The briefing
 
@@ -42,9 +42,9 @@ This is analysis only. Do NOT edit, create, or delete any files. Do NOT write co
 
 If `$ARGUMENTS` contains another skill reference — `/unslop`, `/unslop-risk`, `$unslop`, etc. — the user is asking the advisor to run that skill against the current task. Examples:
 
-- `/woowtech-smart-advisor /unslop` → advisor runs `/unslop` on the current diff.
-- `/woowtech-smart-advisor /unslop-risk` → advisor does an unslop-risk review.
-- `/woowtech-smart-advisor $diagnose this build failure` → advisor invokes `/diagnose`.
+- `/apporo-smart-advisor /unslop` → advisor runs `/unslop` on the current diff.
+- `/apporo-smart-advisor /unslop-risk` → advisor does an unslop-risk review.
+- `/apporo-smart-advisor $diagnose this build failure` → advisor invokes `/diagnose`.
 
 Parse the forwarded skill name out of `$ARGUMENTS` (`/<name>` or `$<name>`). In the briefing, tell the advisor explicitly:
 
@@ -56,7 +56,7 @@ Pass through any remaining arguments after the skill name as the skill's own inp
 
 ## Launch and synthesize
 
-Create the advisor agent via woowtech smart with a `[Advisor] <topic>` title and the briefing as the initial prompt. Wait for it to finish. Read its response. Synthesize for the user — the advisor's verdict + your recommendation.
+Create the advisor agent via Apporo smart with a `[Advisor] <topic>` title and the briefing as the initial prompt. Wait for it to finish. Read its response. Synthesize for the user — the advisor's verdict + your recommendation.
 
 ## Persistent advisor
 

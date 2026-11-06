@@ -1,9 +1,9 @@
 ---
-name: woowtech-smart-plugin
-description: Build and manage trusted local woowtech smart plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a woowtech smart plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a native surface, sidebar item, or workspace panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use woowtech smart from plugin code; or add plugin RPCs.
+name: apporo-smart-plugin
+description: Build and manage trusted local Apporo smart plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a Apporo smart plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a native surface, sidebar item, or workspace panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Apporo smart from plugin code; or add plugin RPCs.
 ---
 
-# woowtech smart plugins
+# Apporo smart plugins
 
 Build or manage the requested plugin directly. Use the current public docs to catch contract changes, but keep working from this skill if the network is unavailable.
 
@@ -18,7 +18,7 @@ Fetch [https://paseo.sh/llms.txt](https://paseo.sh/llms.txt) first. Select and f
 
 Use the deployed docs when they disagree with this skill. Do not send the user away to read them instead of completing the work.
 
-In the woowtech smart repository, use `public-docs/plugins/v0.8/reference.md` for the checkout's API, including
+In the Apporo smart repository, use `public-docs/plugins/v0.8/reference.md` for the checkout's API, including
 unreleased changes. Use `docs/plugins.md` for maintainer guidance. Complete contracts belong in the
 public docs; this skill indexes the references and examples.
 
@@ -37,10 +37,10 @@ Pick the contribution that matches the request. Each row names the registration,
 | Timeline row              | `paseo.agents.ref(id).timeline.append(...)`      | Push a plugin-owned row into an agent timeline from a server handler and update it later                      | reference.md → Append a timeline row from the daemon                                               |
 | Attachment source         | `client.addAttachmentSource` + `server.handle`   | Let the user attach a searchable external resource, such as an issue, to a prompt                             | reference.md → Add a composer attachment source; `plugin-examples/linear`                          |
 | Theme                     | `addTheme`                                       | A light or dark palette under Settings → Appearance                                                           | reference.md → Contribute a theme; `plugin-examples/catppuccin`                                    |
-| Plugin RPC                | `defineRpc` + `server.handle` + `useRpc`         | Daemon-side work that is not a normal woowtech smart operation: vendor APIs, credentials, local files         | reference.md → Add plugin-specific backend behavior                                                |
+| Plugin RPC                | `defineRpc` + `server.handle` + `useRpc`         | Daemon-side work that is not a normal Apporo smart operation: vendor APIs, credentials, local files           | reference.md → Add plugin-specific backend behavior                                                |
 | Lifecycle events          | `server.on`                                      | Observe agent/workspace lifecycle, inspect ended turns, and answer permission requests                        | [Lifecycle hooks](https://paseo.sh/docs/plugins/v0.8/reference.md#lifecycle-hooks)                 |
 | Creation and launch hooks | `server.before`                                  | Change agent config, provider options, MCP servers, environment, or workspace isolation before the operation  | [Before hooks](https://paseo.sh/docs/plugins/v0.8/reference.md#before-hooks)                       |
-| Paseo SDK                 | `usePaseo()` / handler `{ paseo }`               | Normal woowtech smart operations: workspaces, agents, providers, config                                       | reference.md → Use the Paseo SDK                                                                   |
+| Paseo SDK                 | `usePaseo()` / handler `{ paseo }`               | Normal Apporo smart operations: workspaces, agents, providers, config                                         | reference.md → Use the Paseo SDK                                                                   |
 
 | Lifecycle task                                                      | Example                                                                                                |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -52,10 +52,10 @@ Pick the contribution that matches the request. Each row names the registration,
 
 Use an absolute path on the daemon machine. `init` writes files but does not install packages.
 
-The CLI command is `woowtech-smart`. If it is not on `PATH`, run `"$PASEO_CLI"` instead when that variable is set; the desktop app sets it to its bundled CLI for the daemon and the agents it starts.
+The CLI command is `apporo-smart`. If it is not on `PATH`, run `"$PASEO_CLI"` instead when that variable is set; the desktop app sets it to its bundled CLI for the daemon and the agents it starts.
 
 ```bash
-woowtech-smart plugin init /absolute/path/to/my-plugin
+apporo-smart plugin init /absolute/path/to/my-plugin
 cd /absolute/path/to/my-plugin
 npm install
 ```
@@ -74,7 +74,7 @@ my-plugin/
   shared/greeting.ts
 ```
 
-The manifest supplies the default install ID and supported woowtech smart versions:
+The manifest supplies the default install ID and supported Apporo smart versions:
 
 ```json
 { "id": "my-plugin", "requirements": { "paseo": ">=0.8.0" } }
@@ -82,7 +82,7 @@ The manifest supplies the default install ID and supported woowtech smart versio
 
 Keep `requirements.paseo` correct whenever creating or editing a plugin. `init` uses `>=` followed
 by the CLI version. Raise the minimum when adopting newer APIs; add an upper bound when a later
-woowtech smart release is incompatible. Use npm semver ranges and explicitly include beta versions when
+Apporo smart release is incompatible. Use npm semver ranges and explicitly include beta versions when
 targeting betas. Missing requirements mean `<0.8.0`; complete the 0.8 entry migration before adding
 `>=0.8.0`. Verify compatibility with both the daemon and the app running client contributions.
 See [requirements](https://paseo.sh/docs/plugins/v0.8/reference#requirements).
@@ -126,14 +126,14 @@ export default function contribute(server: PluginServerContext) {
 ```
 
 Cleanup can be async. Use it for timers, watchers, sockets, subscriptions, and other resources
-created by plugin code. Every client `add*` method returns an idempotent remover. woowtech smart calls the
+created by plugin code. Every client `add*` method returns an idempotent remover. Apporo smart calls the
 entry cleanup first, removes registrations that remain, rejects pending RPCs, closes the plugin
 session, and stops the subprocess when the plugin stops.
 
 ## Add a workspace panel
 
 Workspace panels live beside agents, terminals, files, and diffs. Plugins run on desktop and
-mobile, and woowtech smart has multiple themes. Every `Text` must take its color from `theme.colors`.
+mobile, and Apporo smart has multiple themes. Every `Text` must take its color from `theme.colors`.
 Use `layout.compact` for padding and stacking. Unstyled text is black and fails in dark themes.
 
 ```tsx
@@ -244,13 +244,13 @@ export default function contribute(client: PluginClientContext) {
 }
 ```
 
-Icons are Lucide icon names. `theme` is a typed `PluginTheme` on every surface and panel. Primary text uses `theme.colors.foreground`; labels use `theme.colors.foregroundMuted`; the root view uses `theme.colors.surface0`. `layout.compact` is true on mobile and narrow windows. woowtech smart owns the route, header, host picker, close action, error boundary, and per-installation query client.
+Icons are Lucide icon names. `theme` is a typed `PluginTheme` on every surface and panel. Primary text uses `theme.colors.foreground`; labels use `theme.colors.foregroundMuted`; the root view uses `theme.colors.surface0`. `layout.compact` is true on mobile and narrow windows. Apporo smart owns the route, header, host picker, close action, error boundary, and per-installation query client.
 
 Before writing imports, classify each module as shared, client, or server. Follow the
 [SDK import boundaries](https://paseo.sh/docs/plugins/v0.8/reference.md#runtime-modules), including
 transitive and type dependencies. The root is shared-only; hooks and client contexts belong to
 `@getpaseo/plugin/client`, server contexts to `/server`, and host UI to `/client/react-native` or `/client/ui`.
-Install dependencies locally for typechecking; woowtech smart supplies host runtime modules. JSX uses the
+Install dependencies locally for typechecking; Apporo smart supplies host runtime modules. JSX uses the
 automatic runtime. Do not import `/client/host` from plugin code.
 
 ## Works on mobile
@@ -275,9 +275,9 @@ A hit outside `client/web.ts` is a bug.
 
 ## Choose the correct API
 
-Use the existing Paseo SDK for normal woowtech smart operations. Use plugin RPC only for plugin-specific backend behavior.
+Use the existing Paseo SDK for normal Apporo smart operations. Use plugin RPC only for plugin-specific backend behavior.
 
-### Call woowtech smart from a surface
+### Call Apporo smart from a surface
 
 `usePaseo()` borrows the selected host's current connection. Never create another client inside a surface.
 
@@ -308,7 +308,7 @@ function PullRequestAction() {
 }
 ```
 
-The API covers workspaces, agents, providers, and daemon config. It omits connection lifecycle because woowtech smart owns the connection. Consult the current [SDK reference](https://paseo.sh/docs/sdk/reference.md) for method details.
+The API covers workspaces, agents, providers, and daemon config. It omits connection lifecycle because Apporo smart owns the connection. Consult the current [SDK reference](https://paseo.sh/docs/sdk/reference.md) for method details.
 
 ### Add daemon-side behavior
 
@@ -368,14 +368,14 @@ Use TanStack Query for async request state, caching, and mutations.
 ### Debug daemon-side behavior
 
 Backend contributions can use normal Node logging. `console.log()` writes to the plugin's stdout;
-`console.error()` writes to stderr. woowtech smart captures both streams without interfering with plugin IPC.
+`console.error()` writes to stderr. Apporo smart captures both streams without interfering with plugin IPC.
 
 Inspect recent output after install, reload, an RPC failure, or a subprocess crash:
 
 ```bash
-woowtech-smart plugin logs my-plugin
-woowtech-smart plugin logs my-plugin --json
-woowtech-smart plugin logs my-plugin --host <url>
+apporo-smart plugin logs my-plugin
+apporo-smart plugin logs my-plugin --json
+apporo-smart plugin logs my-plugin --host <url>
 ```
 
 The same tail is available from **Settings → Plugins → Logs**. It includes initialization, handler,
@@ -443,7 +443,7 @@ export default function contribute(client: PluginClientContext) {
 }
 ```
 
-Return complete text snapshots. woowtech smart owns the composer menu, picker, pills, drafts, and submission. Credentials and vendor calls stay in the daemon handler.
+Return complete text snapshots. Apporo smart owns the composer menu, picker, pills, drafts, and submission. Credentials and vendor calls stay in the daemon handler.
 
 ## Add a client slash command
 
@@ -462,7 +462,7 @@ client.addSlashCommand({
 });
 ```
 
-The callback receives the same context as the matching Command Center item plus `args`. woowtech smart owns the autocomplete row, input clearing, and the error toast; put pending UI in a pill or panel. Precedence is built-in client commands, then plugin commands, then provider commands; a lower-precedence collision is dropped. Commands do not run while the composer has attachments. Server-side slash commands do not exist.
+The callback receives the same context as the matching Command Center item plus `args`. Apporo smart owns the autocomplete row, input clearing, and the error toast; put pending UI in a pill or panel. Precedence is built-in client commands, then plugin commands, then provider commands; a lower-precedence collision is dropped. Commands do not run while the composer has attachments. Server-side slash commands do not exist.
 
 ## Add a composer pill
 
@@ -496,7 +496,7 @@ export function contributeClient(client: PluginClientContext) {
 }
 ```
 
-Call `contributeClient(client)` from `index.client.tsx`, or move its body into that entry. The component owns its icon and text; woowtech smart owns the pressable, chrome, pending state, error reporting, and placement. Removal functions are idempotent, and woowtech smart removes every pill when the plugin, client entrypoint, or host connection is torn down.
+Call `contributeClient(client)` from `index.client.tsx`, or move its body into that entry. The component owns its icon and text; Apporo smart owns the pressable, chrome, pending state, error reporting, and placement. Removal functions are idempotent, and Apporo smart removes every pill when the plugin, client entrypoint, or host connection is torn down.
 
 ## Transform and render timeline items
 
@@ -543,7 +543,7 @@ The daemon stamps `pluginId` from the plugin session, so only plugin code can ca
 
 ## Contribute a theme
 
-`addTheme` takes a small light or dark palette; woowtech smart expands it into the full token set. Every color is a hex string.
+`addTheme` takes a small light or dark palette; Apporo smart expands it into the full token set. Every color is a hex string.
 
 ```ts
 client.addTheme({
@@ -567,30 +567,30 @@ It appears under Settings → Appearance. A client that predates `addTheme` cann
 
 ## Hosts and trust
 
-Plugins are installed per daemon and are trusted, unsandboxed code. Backend code can access files, processes, credentials, and network services on the daemon machine. Client contributions run inside the woowtech smart app. Do not install a plugin the user has not authorized or source code you have not inspected.
+Plugins are installed per daemon and are trusted, unsandboxed code. Backend code can access files, processes, credentials, and network services on the daemon machine. Client contributions run inside the Apporo smart app. Do not install a plugin the user has not authorized or source code you have not inspected.
 
 ### Check the global switch before installing
 
-Identify the target daemon and inspect its root `pluginsEnabled` value in `config.json`. For the local daemon, `woowtech-smart daemon status --json` reports its `home`; the file is `<home>/config.json`. Treat a missing field as `false`. Do not infer the global value from a plugin's `disabled` status, because an individual plugin can also be disabled.
+Identify the target daemon and inspect its root `pluginsEnabled` value in `config.json`. For the local daemon, `apporo-smart daemon status --json` reports its `home`; the file is `<home>/config.json`. Treat a missing field as `false`. Do not infer the global value from a plugin's `disabled` status, because an individual plugin can also be disabled.
 
 If `pluginsEnabled` is already `true`, continue without asking the user to enable it.
 
 If it is false or absent, stop and ask the user for explicit permission before editing or enabling anything. Include this warning in the request:
 
-> Plugins are trusted, unsandboxed code. Backend plugin code can access your daemon machine, including files, processes, credentials, and network services. Client plugin code runs inside the woowtech smart app. May I enable plugins on this daemon?
+> Plugins are trusted, unsandboxed code. Backend plugin code can access your daemon machine, including files, processes, credentials, and network services. Client plugin code runs inside the Apporo smart app. May I enable plugins on this daemon?
 
 Do not continue unless the user agrees. After permission:
 
 1. Preserve the rest of `config.json` and set the root `pluginsEnabled` field to `true`.
-2. Run `woowtech-smart reload --json` against that daemon.
+2. Run `apporo-smart reload --json` against that daemon.
 3. Require `pluginsEnabled` in `appliedPaths`, or accept an empty `appliedPaths` only after re-reading the file and confirming the live plugin catalog is enabled.
-4. Run `woowtech-smart plugin ls` and verify the intended plugin reaches `running` after installation.
+4. Run `apporo-smart plugin ls` and verify the intended plugin reaches `running` after installation.
 
-If the user asks to disable the global switch, set `pluginsEnabled` to `false`, run `woowtech-smart reload --json`, and verify configured plugins report `disabled`.
+If the user asks to disable the global switch, set `pluginsEnabled` to `false`, run `apporo-smart reload --json`, and verify configured plugins report `disabled`.
 
-Do not edit a local config when the target is a remote daemon. Perform the edit on the daemon machine, or ask the user to use **Settings → Plugins → Enable plugins**. `woowtech-smart reload --host <url>` reloads the remote daemon's own file but does not edit it.
+Do not edit a local config when the target is a remote daemon. Perform the edit on the daemon machine, or ask the user to use **Settings → Plugins → Enable plugins**. `apporo-smart reload --host <url>` reloads the remote daemon's own file but does not edit it.
 
-When the same sidebar contribution exists on several connected hosts, woowtech smart shows it once with a host picker. The selected host owns the bundle, SDK calls, RPCs, and query cache. An offline selected host does not fall through to another host. Attachment sources stay scoped to the composer's host.
+When the same sidebar contribution exists on several connected hosts, Apporo smart shows it once with a host picker. The selected host owns the bundle, SDK calls, RPCs, and query cache. An offline selected host does not fall through to another host. Attachment sources stay scoped to the composer's host.
 
 ## Typecheck and manage
 
@@ -598,21 +598,21 @@ Always typecheck before install or reload:
 
 ```bash
 npm run typecheck
-woowtech-smart plugin install /absolute/path/to/plugin
-woowtech-smart plugin install /absolute/path/to/plugin --id another-runtime-id
-woowtech-smart plugin add owner/repository              # Git source; append :path for a monorepo subdirectory
-woowtech-smart plugin add owner/repository --ref main   # branches track, tags and commits pin
-woowtech-smart plugin status
-woowtech-smart plugin update my-plugin
-woowtech-smart plugin ls
-woowtech-smart plugin reload my-plugin
-woowtech-smart plugin logs my-plugin
-woowtech-smart plugin disable my-plugin
-woowtech-smart plugin enable my-plugin
-woowtech-smart plugin remove my-plugin
+apporo-smart plugin install /absolute/path/to/plugin
+apporo-smart plugin install /absolute/path/to/plugin --id another-runtime-id
+apporo-smart plugin add owner/repository              # Git source; append :path for a monorepo subdirectory
+apporo-smart plugin add owner/repository --ref main   # branches track, tags and commits pin
+apporo-smart plugin status
+apporo-smart plugin update my-plugin
+apporo-smart plugin ls
+apporo-smart plugin reload my-plugin
+apporo-smart plugin logs my-plugin
+apporo-smart plugin disable my-plugin
+apporo-smart plugin enable my-plugin
+apporo-smart plugin remove my-plugin
 ```
 
-Use `--host <url>` when managing a daemon other than the CLI default. A Git source that must install or generate something declares `build` in `paseo-plugin.json` as a list of argv arrays; woowtech smart runs them without a shell on install and update and keeps the old version if one fails. Plugin source edits require `woowtech-smart plugin reload`; config changes to the global switch require `woowtech-smart reload`. A failed plugin reload stays failed; inspect `woowtech-smart plugin ls` for the load error and `woowtech-smart plugin logs <id>` for subprocess output, fix the source, typecheck, and reload again. `remove` deletes configuration, never the source directory.
+Use `--host <url>` when managing a daemon other than the CLI default. A Git source that must install or generate something declares `build` in `paseo-plugin.json` as a list of argv arrays; Apporo smart runs them without a shell on install and update and keeps the old version if one fails. Plugin source edits require `apporo-smart plugin reload`; config changes to the global switch require `apporo-smart reload`. A failed plugin reload stays failed; inspect `apporo-smart plugin ls` for the load error and `apporo-smart plugin logs <id>` for subprocess output, fix the source, typecheck, and reload again. `remove` deletes configuration, never the source directory.
 
 Do not restart the daemon to load source changes. Restarting it can kill the agent performing the work.
 
@@ -624,7 +624,7 @@ After a change:
 
 1. Run `npm run typecheck`.
 2. Install or reload the exact runtime ID.
-3. Run `woowtech-smart plugin ls` and require `running` with no error.
+3. Run `apporo-smart plugin ls` and require `running` with no error.
 4. Confirm the contribution on the intended host. Open the Command Center with **⌘K** (macOS) or **Ctrl+K** (Windows/Linux). Type `/` in the composer for slash commands. For timeline work, run an agent turn that produces the source item and watch it while it streams, not only after it completes. For UI work, check a wide desktop window and a compact/mobile client, and switch theme to confirm text still uses `foreground` / `foregroundMuted`.
 5. Exercise the changed action or RPC, including its error state.
 
@@ -632,9 +632,9 @@ Common failures:
 
 - Missing sidebar item: wrong host, plugin not `running`, invalid Lucide icon, or sidebar item points to a missing surface.
 - Unavailable client module: client bundles can use only the host-provided modules listed above.
-- RPC rejection: input or output failed its Zod schema, or the handler threw. Inspect `woowtech-smart plugin logs <id>` for handler output.
-- Plugin exits or reload fails: inspect `woowtech-smart plugin ls` for status and `woowtech-smart plugin logs <id>` for initialization, cleanup, or crash output.
-- Stale UI: source was edited without `woowtech-smart plugin reload <id>`.
+- RPC rejection: input or output failed its Zod schema, or the handler threw. Inspect `apporo-smart plugin logs <id>` for handler output.
+- Plugin exits or reload fails: inspect `apporo-smart plugin ls` for status and `apporo-smart plugin logs <id>` for initialization, cleanup, or crash output.
+- Stale UI: source was edited without `apporo-smart plugin reload <id>`.
 - Timeline item shows "Plugin timeline item unavailable": no renderer registered for that `kind` and `version`, the renderer schema rejected `data`, or the plugin is not running on that host.
 - Transformer has no effect: `query.itemType` does not match the source type, the transform returned `undefined`, or it threw and was skipped; check the app console for `[Plugins] Timeline transformer failed`.
 - Slash command not offered: name collides with a built-in or another plugin, the context is `agent` on a draft, or the composer has attachments.

@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "woowtech smart",
-  "short_name": "woowtech smart",
+  "name": "Apporo smart",
+  "short_name": "Apporo smart",
   "description": "Monitor and control local AI coding agents from anywhere.",
   "start_url": "/",
   "scope": "/",

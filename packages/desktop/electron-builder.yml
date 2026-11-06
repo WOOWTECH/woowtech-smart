@@ -1,12 +1,12 @@
 npmRebuild: false
-appId: io.woowtech.smart.desktop
-productName: woowtech smart
-executableName: woowtech smart
+appId: com.apporo.smart.desktop
+productName: Apporo smart
+executableName: Apporo smart
 # woowtech smart: the Mac app's NSHumanReadableCopyright (Finder's Get Info, the About window)
 # and the Windows executable's copyright. Unset, electron-builder writes "Copyright © <year>
 # <package.json author>", which is upstream's author. Keep it equal to WOOWTECH_COPYRIGHT in
 # src/features/woowtech-about-panel.ts (woowtech/desktop-about.test.mjs checks both).
-copyright: "© 2026 WOOW TECH CO., LTD."
+copyright: "© 2026 APPORO UNION INC."
 # woowtech smart: electron-builder names electron-updater's download cache after the
 # package name, and @getpaseo/desktop gives the official Paseo's @getpaseodesktop-updater.
 # package.json's desktopName is Paseo's desktop entry; Linux names ours after executableName.
@@ -16,22 +16,22 @@ copyright: "© 2026 WOOW TECH CO., LTD."
 # installer writes it as the help, about and update links of its Apps & features entry, and the
 # Linux packages use it as their Homepage.
 extraMetadata:
-  name: io.woowtech.smart.desktop
-  desktopName: woowtech smart.desktop
+  name: com.apporo.smart.desktop
+  desktopName: Apporo smart.desktop
   author:
-    name: "WOOW TECH CO., LTD."
-    email: woowtech@designsmart.com.tw
-  description: woowtech smart desktop app
-  homepage: https://aiot.woowtech.io/
+    name: "APPORO UNION INC."
+    email: info@apporo.ai
+  description: Apporo smart desktop app
+  homepage: https://www.apporo.ai/
 # woowtech smart: the legacy winCodeSign archive holds macOS symlinks. Unpacking it needs the
 # "create symbolic links" privilege, which a normal Windows account does not have, and the build
 # stops with exit status 2. This toolset is plain zip files (README §31).
 toolsets:
   winCodeSign: "1.1.0"
 protocols:
-  - name: woowtech smart agent link
+  - name: Apporo smart agent link
     schemes:
-      - woowtech-smart
+      - apporosmart
 afterPack: ./scripts/after-pack.js
 afterSign: ./scripts/after-sign.js
 # woowtech smart: scripts/after-pack.js flips the Electron fuses (scripts/woowtech-fuses.js).
@@ -65,9 +65,9 @@ extraResources:
 publish:
   provider: github
   owner: WOOWTECH
-  repo: woowtech-smart-releases
+  repo: apporo-smart-releases
 mac:
-  artifactName: "woowtech-smart-${version}-${arch}.${ext}"
+  artifactName: "apporo-smart-${version}-${arch}.${ext}"
   minimumSystemVersion: "13.0.0"
   category: public.app-category.developer-tools
   icon: assets/icon.icns
@@ -79,12 +79,12 @@ mac:
   # (dictation), naming the app instead of Electron's "This app needs access to the
   # microphone". The Chinese ones are the InfoPlist.strings copied below.
   extendInfo:
-    NSMicrophoneUsageDescription: "Allow woowtech smart to use the microphone so you can dictate messages to your agents."
+    NSMicrophoneUsageDescription: "Allow Apporo smart to use the microphone so you can dictate messages to your agents."
   extraResources:
     - from: bin/paseo
       to: bin/paseo
     - from: bin/paseo
-      to: bin/woowtech-smart
+      to: bin/apporo-smart
     - from: assets/icon.png
       to: icon.png
     # woowtech smart: Traditional and Simplified Chinese permission prompts, into the
@@ -99,14 +99,14 @@ mac:
 linux:
   category: Development
   icon: assets
-  artifactName: "woowtech-smart-${version}-${arch}.${ext}"
-  maintainer: "WoowTech <woowtech@designsmart.com.tw>"
-  vendor: "WoowTech"
+  artifactName: "apporo-smart-${version}-${arch}.${ext}"
+  maintainer: "APPORO UNION INC. <info@apporo.ai>"
+  vendor: "APPORO UNION INC."
   extraResources:
     - from: bin/paseo
       to: bin/paseo
     - from: bin/paseo
-      to: bin/woowtech-smart
+      to: bin/apporo-smart
     # woowtech smart: notification banner and window icon (README §16 桌面通知).
     - from: assets/icon.png
       to: icon.png
@@ -121,15 +121,15 @@ rpm:
   afterInstall: scripts/linux-sandbox/after-install.tpl
 appImage:
   # A nonempty argument list replaces builder's hardcoded --no-sandbox default.
-  executableArgs: ["--class=woowtech smart"]
+  executableArgs: ["--class=Apporo smart"]
   # Keep the AppImage filename stable across versions (no ${version}) so
   # electron-updater overwrites the file in place instead of renaming it to a new
   # versioned path. A rename orphans the old binary, breaks desktop shortcuts, and
   # dangles the ~/.local/bin/woowtech-smart CLI symlink, which points at $APPIMAGE. The
   # version stays discoverable via the release tag and the in-app version.
-  artifactName: "woowtech-smart-${arch}.${ext}"
+  artifactName: "apporo-smart-${arch}.${ext}"
 win:
-  artifactName: "woowtech-smart-Setup-${version}-${arch}.${ext}"
+  artifactName: "apporo-smart-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
   # woowtech smart: the hook signs only in the release job (WOOWTECH_SIGN=1), SHA-256 only; other
   # builds stay unsigned (README §31, plan D8). The release job passes publisherName: an unsigned
@@ -144,7 +144,7 @@ win:
     - from: bin/paseo.cmd
       to: bin/paseo.cmd
     - from: bin/paseo.cmd
-      to: bin/woowtech-smart.cmd
+      to: bin/apporo-smart.cmd
     # woowtech smart: notification toast icon (README §16 桌面通知).
     - from: assets/icon.png
       to: icon.png
