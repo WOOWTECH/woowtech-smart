@@ -2207,6 +2207,10 @@ daemon 的埠被保留或占用（G12）：
 
   electron-builder 把欄位寫進打包後的 package.json。打包版讀到它，啟動 daemon 和 CLI 時用開發模式，在 daemon 裡只會多出 mock provider（`features/woowtech-test-build.ts`、`daemon/node-entrypoint-launcher.ts`）。正式建置沒有這個欄位，環境變數也打不開。main.log 的 `[desktop] app startup` 會記 `testBuild`。Windows 的系統匣提示寫「woowtech smart（測試版）」（英文系統是 `(test build)`），裝好後也分得出來。
 
+- 測通知（2026-11-06 Apporo 實機學到的）：
+  - 用 10 秒的假 agent：`<CLI 指令>.cmd run --provider mock --model ten-second-stream "say hello"`。不指定模型時，mock 用的是給負載測試的 `five-minute-stream`（`mock-load-test-agent.ts`），要 5 分鐘才回來。
+  - 桌面通知只在使用者 3 分鐘內動過鍵盤或滑鼠時才跳（`server/agent-attention-policy.ts` 的 `PRESENCE_THRESHOLD_MS`，桌面版用系統的閒置時間回報）。沒人在場就只推播到手機；沒配對手機就什麼都沒有，控制中心也不會留下。所以測試時要有人在電腦前，或在 agent 跑完前把滑鼠移動 1 像素。
+  - `[desktop] app startup` 那筆 log 跨好幾行，`testBuild` 在後面幾行。點通知時 Windows 會先開第二個程序，它把連結交給開著的那一個就結束，所以 log 會多一筆 `app startup`，這是正常的。
 - 守門：`.github/workflows/` 裡不能出現 `woowtechTestBuild`。
 
 安裝與解除安裝（G6、D14、D15）：
@@ -2223,6 +2227,10 @@ daemon 的埠被保留或占用（G12）：
 - electron-builder 自動帶入 `build/installer.nsh`，用 `makensis -WX` 編譯兩次（解除安裝程式、安裝程式），任何警告都會讓建置失敗，所以裡面不宣告變數、不寫函式。不要改成完整的 `nsis.script`：那樣 electron-builder 就不簽解除安裝程式。根目錄的 `.gitignore` 忽略 `build/`，這個檔案（跟 entitlements 一樣）是用 `git add -f` 加進來的。
 - 在 Mac 上建 Windows 安裝檔可以確認 NSIS 編譯得過，但產出的解除安裝程式是壞的（electron-builder #10258），不能拿去測或發佈。10/3 在 Mac 上用 `--win nsis --x64 -c.win.signAndEditExecutable=false` 編過一次：兩次編譯都過；electron-builder 的 makensis 3.04 比對巨集名稱不分大小寫，範本檢查的 `customInstallmode` 也認得我們的 `customInstallMode`。
 - 安裝資料夾（2026-11-05 owner 決定：固定）：安裝程式沒有「選擇安裝位置」那一頁（`nsis.allowToChangeInstallationDirectory: false`），一律裝在 `%LOCALAPPDATA%\Programs\woowtech smart`。理由：只裝給目前使用者、不跳 UAC，選到要系統管理員權限的資料夾會寫不進去；路徑有中文、空格、`&`、`%` 的組合要各自測；更新永遠更新同一個位置。預設位置在中文帳號下已在雲端 Windows 11 驗過（見驗證紀錄第一條），自訂路徑沒測過所以不開放。公司 IT 做靜默安裝應該仍可以用 `Setup.exe /S /D=<資料夾>`（NSIS 內建參數，`/D=` 要放最後、路徑不加引號；還沒在我們的安裝檔上實測，下一次雲端測試要補）。守門 `woowtech/windows-desktop.test.mjs`。
+- 另外三件事（2026-11-06 Apporo 實機看到的，woowtech 也一樣，都是 electron-builder 的做法）：
+  - 解除安裝項目（`HKCU\…\Uninstall\<GUID>`）沒有 `InstallLocation`：安裝位置只寫在 `HKCU\Software\<GUID>`（範本 `include/installer.nsh`）。
+  - 安裝程式會把自己複製一份到更新快取（`%LOCALAPPDATA%\<appId>-updater\installer.exe`，約 130 MB），electron-updater 拿它當差量更新的基準。解除安裝時，`installer.nsh` 連同整個快取資料夾一起刪。
+  - 預設會建開始功能表和桌面兩個捷徑。
 
 程式碼簽章（D8，2026-10-04 付款）：
 
@@ -2248,7 +2256,7 @@ Electron 與 electron-builder（G7、G8）：
 另一個品牌的 Windows 版（2026-11-06，owner 要 Apporo smart 也出 Windows 版）：
 
 - 跟 Mac 版一樣，從套用了品牌的發版樹建：在 Mac 上跑 `node woowtech/tools/apply-brand.mjs apporo`。除了第 30 節列的檔案，它也改 `build/installer.nsh` 檔頭的 `!define`：scheme、通知啟動器的 CLSID、更新快取資料夾、CLI 指令和它的標記（`woowtech/brands/apply.mjs` 的 `brandInstallerScript`）。簽章 hook 從 `woowtech/brands/index.cjs` 讀名稱和網站，所以簽章寫的是 Apporo smart 和 `https://www.apporo.ai`。
-- 品牌不在 runner 上套用：`apply-brand.mjs` 用 `spawnSync` 直接叫 `node_modules/.bin/oxfmt` 和 `tsx`（Unix 的 shell 腳本），Windows 上要經過 `.cmd` 和 shell 才叫得起來，沒在 Windows 上試過。做法是把套用好的樹 commit 到一條發版分支（例如 `release/apporo-0.10.0`），再手動執行發行流程：`tag=v<版本>`、`platform=windows`、`checkout_ref=<那條分支>`、`publish=false`。
+- 品牌不在 runner 上套用：`apply-brand.mjs` 用 `spawnSync` 直接叫 `node_modules/.bin/oxfmt` 和 `tsx`（Unix 的 shell 腳本），Windows 上要經過 `.cmd` 和 shell 才叫得起來：2026-11-06 在 Windows 10 上實測，`spawnSync('node_modules/.bin/oxfmt')` 回 `ENOENT`。做法是把套用好的樹 commit 到一條發版分支（例如 `release/apporo-0.10.0`），再手動執行發行流程：`tag=v<版本>`、`platform=windows`、`checkout_ref=<那條分支>`、`publish=false`。
 - 建完的檢查照樹裡品牌的名稱找東西：安裝檔 `<artifactPrefix>-Setup-*-x64.exe`、安裝資料夾 `%LOCALAPPDATA%\Programs\<名稱>`、解除安裝程式。另一個品牌的樹就算 `publish=true`，也不會上傳到這個 repo 的 release；安裝檔、`.blockmap`、`latest.yml` 從 workflow 的 artifact 拿，傳到那個品牌自己的發佈 repo。守門 `woowtech/windows-desktop.test.mjs`。
 - 簽章：同一張 SSL.com 憑證、同樣的 secrets 和 `WIN_PUBLISHER_DN`。安裝時看到的發行者是 WOOW TECH CO., LTD.，跟 Apporo 的 Mac 版用 WOOW TECH 的 Developer ID 簽一樣。
 - 兩個品牌能裝在同一台 PC：appId（AppUserModelID、NSIS 的解除安裝登錄機碼）、scheme、CLI 指令、daemon 資料夾和 port、更新快取都不同。通知啟動器的 CLSID 原本是寫死的同一個，兩個品牌都裝時，點通知會打開最後登記的那個 App。2026-11-06 改成品牌設定的 `desktop.windowsToastActivatorClsid`，未打包執行用 `windowsDevToastActivatorClsid`。woowtech 的值沒變（`{202C5D44-…}`、`{F6B7577F-…}`），Apporo 的是新產生的。守門：`brand-layer.test.mjs` 檢查每個品牌的 CLSID 格式對、彼此不同；`windows-desktop.test.mjs` 檢查 App 和 `installer.nsh` 都用品牌的 CLSID。
@@ -2257,7 +2265,12 @@ Electron 與 electron-builder（G7、G8）：
 
 - 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`、`terminal/woowtech-default-shell`；desktop 的 `cli-install/woowtech-windows-cli-shim`、`cli-install/woowtech-windows-user-path`、`scripts/woowtech-sign-windows`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機（2026-11-04，一台 Windows 10 22H2 x64，未簽章的測試版，只測 x64）：建置、安裝（沒有 UAC、沒有「所有使用者」那頁）、SmartScreen 畫面（不明的發行者）、內建 daemon、系統匣、通知橫幅和控制中心、關窗常駐、更新、解除安裝都走過。通知的點擊是用程式注入的，路徑正確，但前景落在哪裡沒有定論（連記事本也一樣），要真人點一次（WD-14）。fuse 也實測過：改動 `app.asar` 表頭後，App 以 `Integrity check failed` 拒絕啟動。
+- 實機（2026-11-06，同一台 Windows 10 22H2 x64；Apporo smart 0.10.0 未簽章測試版和 woowtech smart 0.9.0 裝在一起）：
+  - 在那台建 Apporo：`release/apporo-0.10.0`、Node 22、Expo 加 `--max-workers 2`（那台 8 GB，可用記憶體不到 1 GB）。
+  - 兩個 App 下面這些都各自分開：安裝資料夾、解除安裝項目、捷徑、AUMID、協定（`woowtech-smart`／`apporosmart`）、通知啟動器的 CLSID（`{202C5D44-…}`／`{88869780-…}`）、daemon（6770／6772，都只聽 127.0.0.1）、資料夾（`.woowtech-smart`／`.apporo-smart`）。兩邊的 log 都沒出現對方的名字，Apporo 的 daemon 連的是 `relay.apporo.ai`。
+  - Apporo 跳出「工作完成了」的通知，點下去打開的是 Apporo，woowtech 的 log 一行都沒多。點完 Apporo 的視窗在最上層，但鍵盤焦點留在 ShellExperienceHost。這次的點擊是模擬的，跟 11/04 的 woowtech 和記事本一樣，所以仍算 WD-14。
 - 實機還沒做：Windows 11 上的 Smart App Control 和 SmartScreen 畫面（雲端機器的 Smart App Control 是關的）、真人點通知（WD-14）、手機推播（WP、D6、D12）、「安裝 CLI」（設定頁的按鈕，會改使用者 PATH）；真的簽章要等憑證核發後在發行流程上跑；macOS 的冷啟動點通知要簽章的打包版和真人點擊。2026-11-05 在 GitHub 雲端的 Windows 11 ARM64 和 Server 2025 補測了 Windows 11 的安裝／啟動、備用埠、中文帳號（WI-7）、WT-1、WT-3、WT-4、WT-6，見驗證紀錄第一條。
+- 待 owner 決定（2026-11-06）：沒配對手機、人又離開超過 3 分鐘時，agent 做完桌面一則通知都沒有，控制中心也不會留。這是上游的設計，兩個品牌都一樣。可以改成「沒有手機可推播時，改跳桌面通知」，要改的是 `server/agent-attention-policy.ts`。
 - 章節撞號：main 的第 25 節是「上架候選全面驗收」，Windows 原本也編 25，第 30 節是品牌層 ⇒ Windows 改成第 31 節，指向它的引用一併改掉。
 - 品牌層：Windows 的程式碼用品牌的名字。2026-11-06 起 `build/installer.nsh`、`scripts/woowtech-sign-windows.js` 和發行流程的安裝檢查也照品牌走，見上面「另一個品牌的 Windows 版」。Apporo 的 Windows 版還沒在 runner 上建過，要等簽章的 secrets 設好。
 
