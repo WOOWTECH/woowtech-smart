@@ -49,7 +49,7 @@ test("a second launch on Windows brings back the window and never logs a pairing
   assert.match(handler, /receiveAgentTarget\(agentTarget, "second-instance"\)/);
 });
 
-test("the packaged Windows app registers woowtech-smart: before notifications are posted", () => {
+test("the packaged Windows app registers its agent-link scheme before notifications are posted", () => {
   const main = source("packages/desktop/src/main.ts");
   const registration = main.indexOf("agentLinkProtocolRegistered = registerAgentLinkProtocol({");
   assert.ok(registration > main.indexOf("await app.whenReady()"));
@@ -68,7 +68,12 @@ test("the packaged Windows app registers woowtech-smart: before notifications ar
     /if \(process.platform === "win32"\) \{\s*log.info\("\[notification\] presenter", \{ supported: Notification.isSupported\(\) \}\);/,
   );
   const builder = source("packages/desktop/electron-builder.yml");
-  assert.match(builder, /protocols:\s*\n\s*- name: [^\n]+\n\s*schemes:\s*\n\s*- woowtech-smart/);
+  // The brand's scheme: woowtech-smart: in this repository, apporosmart: in Apporo smart's tree.
+  const { scheme } = appliedBrand();
+  assert.match(
+    builder,
+    new RegExp(String.raw`protocols:\s*\n\s*- name: [^\n]+\n\s*schemes:\s*\n\s*- ${scheme}\n`),
+  );
   // Electron's own Start Menu link and the NSIS one must be the same file (README §31).
   assert.doesNotMatch(builder, /shortcutName:/);
   assert.match(builder, /- from: assets\/icon.ico\s*\n\s*to: icon.ico/);
