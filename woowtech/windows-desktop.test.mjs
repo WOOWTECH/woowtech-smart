@@ -172,15 +172,14 @@ test("a real Windows uninstall removes the app's registrations and keeps user da
     .filter((line) => !line.trim().startsWith(";"))
     .join("\n");
   const define = (name) => nsh.match(new RegExp(`^!define ${name} "([^"]+)"$`, "m"))?.[1];
+  // Each brand has its own toast activators, so with two brands on one PC a notification starts
+  // the app it came from. The app and the installer take them from the brand.
+  const { desktop, cliCommand, homeDir } = appliedBrand();
   const ids = source("packages/desktop/src/features/woowtech-app-user-model-id.ts");
-  assert.equal(
-    define("WOOWTECH_TOAST_CLSID"),
-    ids.match(/WOOWTECH_TOAST_ACTIVATOR_CLSID = "([^"]+)"/)[1],
-  );
-  assert.doesNotMatch(
-    nsh,
-    new RegExp(ids.match(/WOOWTECH_DEV_TOAST_ACTIVATOR_CLSID = "\{([^}]+)\}"/)[1]),
-  );
+  assert.match(ids, /WOOWTECH_TOAST_ACTIVATOR_CLSID = WINDOWS_TOAST_ACTIVATOR_CLSID;/);
+  assert.match(ids, /WOOWTECH_DEV_TOAST_ACTIVATOR_CLSID = WINDOWS_DEV_TOAST_ACTIVATOR_CLSID;/);
+  assert.equal(define("WOOWTECH_TOAST_CLSID"), desktop.windowsToastActivatorClsid);
+  assert.ok(!nsh.includes(desktop.windowsDevToastActivatorClsid), "the dev runs' CLSID stays");
   const builder = source("packages/desktop/electron-builder.yml");
   assert.equal(define("WOOWTECH_SCHEME"), builder.match(/schemes:\s*\n\s*- (\S+)/)[1]);
   // electron-updater names its cache after the sanitized package name, lower-cased.
@@ -193,7 +192,8 @@ test("a real Windows uninstall removes the app's registrations and keeps user da
   // names the brand's CLI command, so another brand's release tree ships its own name.
   const shim = source("packages/desktop/src/integrations/cli-install/woowtech-windows-cli-shim.ts");
   assert.match(shim, /export const WINDOWS_CLI_MARKER = `rem \$\{CLI_COMMAND\} CLI trampoline`;/);
-  assert.equal(define("WOOWTECH_CLI_MARKER"), `rem ${appliedBrand().cliCommand} CLI trampoline`);
+  assert.equal(define("WOOWTECH_CLI_MARKER"), `rem ${cliCommand} CLI trampoline`);
+  assert.equal(define("WOOWTECH_CLI_COMMAND"), cliCommand);
   assert.match(shim, /return \[\s*"@echo off",\s*MARKER_LINE,/);
   const install = source("packages/desktop/src/integrations/cli-install/install.ts");
   assert.match(
@@ -208,8 +208,11 @@ test("a real Windows uninstall removes the app's registrations and keeps user da
   assert.match(uninstall, /\$\{endIf\}\n$/);
   assert.match(uninstall, /== '"\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}" "%1"'/);
   assert.match(uninstall, /== "\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}"/);
+  assert.match(uninstall, /StrCpy \$0 "\$PROFILE\\\.local\\bin\\\$\{WOOWTECH_CLI_COMMAND\}\.cmd"/);
   // User data stays, like moving the Mac app to the Trash (D15).
-  assert.doesNotMatch(uninstall, /\$APPDATA|\.woowtech-smart|\.local\\bin"/);
+  assert.doesNotMatch(uninstall, /\$APPDATA|\.local\\bin"/);
+  const home = homeDir.replace(/^~\//, "");
+  assert.ok(!uninstall.includes(home), `the uninstaller keeps %USERPROFILE%\\${home}`);
   // A failing old uninstaller aborts the update; -WX fails on a Var or Function one pass leaves unused.
   assert.doesNotMatch(code, /^\s*(Abort|Quit|MessageBox|Var|Function)\b/m);
   // Per-user only (D14).
@@ -259,6 +262,11 @@ test("only the release job signs Windows builds, every PE file, SHA-256 only (D8
   assert.match(hook, /"--alg",\s*"SHA-256",[\s\S]*"--tsmode",\s*"RFC3161",/);
   // electron-builder would call an export named "sign" instead of the default one.
   assert.doesNotMatch(hook, /exports\.sign\b/);
+  // The signature names the applied brand's app and website.
+  assert.match(
+    hook,
+    /"--name",\s*brand\.name,\s*"--url",\s*`https:\/\/\$\{brand\.links\.websiteHost\}`,/,
+  );
 
   // The signature check lets through both names Microsoft signs its own files with in an Electron
   // app: conpty.dll and OpenConsole.exe are "Microsoft Corporation", d3dcompiler_47.dll and
@@ -285,6 +293,23 @@ test("only the release job signs Windows builds, every PE file, SHA-256 only (D8
   // Built files, then the installed app with its uninstaller, must all be signed.
   assert.match(windowsJob, /& \$check -Path \$release -RequireSigned -Publisher \$publisher/);
   assert.match(windowsJob, /& \$check -Path \$dir -RequireSigned -Publisher \$publisher/);
+});
+
+test("the Windows release job checks the brand it built by that brand's names", () => {
+  // Another brand's Windows app is built from a release tree with that brand applied, given as
+  // checkout_ref (woowtech/README.md §31). The job finds its installer and installed app by the
+  // tree's names, and leaves its files to that brand's own releases repository.
+  const release = YAML.parse(source(".github/workflows/desktop-release.yml"));
+  const steps = release.jobs["publish-windows"].steps;
+  const step = (name) => steps.find((candidate) => candidate.name === name);
+  const check = step("Check signatures, install and uninstall");
+  assert.match(check.run, /require\('\.\/woowtech\/brands\/index\.cjs'\)\.appliedBrand\(\)/);
+  assert.doesNotMatch(check.run, /woowtech smart|woowtech-smart/);
+  const upload = step("Upload desktop artifacts to release");
+  assert.match(
+    upload.run,
+    /brand="\$\(node -p "require\('\.\/woowtech\/brands\/index\.cjs'\)\.appliedBrandId\(\)"\)"\nif \[\[ "\$brand" != "woowtech" \]\]; then[\s\S]*?exit 1\nfi/,
+  );
 });
 
 test("Windows installs an update only from a silent restart, never at quit (G37, D20)", () => {

@@ -1998,7 +1998,7 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
   - 名稱、中文名、桌面版中文名
   - 手機 App ID、Firebase 檔所在的資料夾
   - scheme、CLI 指令、daemon 資料夾和 port
-  - 桌面版 appId、安裝檔前綴
+  - 桌面版 appId、Windows 通知啟動器的 CLSID（打包版和未打包執行各一個）、安裝檔前綴
   - 版權和營運者
   - 網站、隱私權政策、客服信箱、發佈 repo
   - relay、推播中繼、AI 回報的網址
@@ -2012,7 +2012,7 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
 - **JS 設定檔怎麼讀**：`app.config.js`、iOS Firebase 外掛、桌面版打包腳本和守門經由 `woowtech/brands/index.cjs` 讀 JSON。它先從 `brand-values.ts` 認出目前套用哪個品牌，所以整個建置只有一個開關，App 和 daemon 不會是不同品牌。
 - **換品牌**：在發版樹跑 `node woowtech/tools/apply-brand.mjs apporo`，不要在要提交的 checkout 跑。它做三件事：
   - 重新產生 `brand-values.ts`。
-  - 把品牌寫進讀不了常數的檔：`electron-builder.yml`（照欄位改，註解留著）、`bin/paseo`、`bin/paseo.cmd`、Mac 的中文麥克風說明、網頁殼的 `index.html` 和 `manifest.json`。清單在 `woowtech/brands/apply.mjs`。
+  - 把品牌寫進讀不了常數的檔：`electron-builder.yml`（照欄位改，註解留著）、`bin/paseo`、`bin/paseo.cmd`、Mac 的中文麥克風說明、網頁殼的 `index.html` 和 `manifest.json`、Windows 安裝程式的 `build/installer.nsh`（只改檔頭的 `!define`）。清單在 `woowtech/brands/apply.mjs`。
   - 回到渥屋：`git checkout .`。
 - **中文名**：Apporo smart 沒有中文名，中文介面也寫「Apporo smart」。`packages/app/src/i18n/product-name.ts` 處理名字兩旁的空格：
   - 名字兩旁的空格，只有兩邊都是中文字時才拿掉。渥屋智能照舊緊貼中文；Apporo smart 跟中文之間留空格。
@@ -2026,6 +2026,7 @@ owner 2026-10-15 決定做 Apporo 品牌版，程式照 Apporo platform 的做�
     - 靜態檔帶著目前品牌的值。
     - repo 是 woowtech。
     - 出貨的原始碼裡沒有另一個品牌的字樣，Apporo 版裡不能有 woowtech、渥屋、woowtech.io、#6183fc，渥屋版裡不能有 Apporo。
+    - 打包時會跑的檔案也一樣：after-pack、after-sign、Windows 簽章 hook、`installer.nsh`、打開 App 的冒煙測試。CI 的 typecheck 最後一步套用 Apporo 跑這個檔（2026-11-06 起）。
   - 其他守門的期望值都改成讀目前套用的品牌。
   - Apporo 的發版樹套用之後，用 `WOOWTECH_BRAND=apporo` 跑全部守門。
 - **改品牌的值**：改 JSON，跑 `node woowtech/tools/apply-brand.mjs woowtech` 重產 `brand-values.ts`，再跑守門。
@@ -2244,13 +2245,21 @@ Electron 與 electron-builder（G7、G8）：
 - 新版的相依套件不再提升到根目錄，`app-builder-lib` 留在 `packages/desktop/node_modules`，守門 `claude-sdk.test.mjs` 改從 desktop 解析。
 - lockfile 只收這次升級的變動。這台的 npm 10.9.9 重新整理 lockfile 時會順手刪掉 35 個選用的 peer（`@react-native/metro-config` 一系），跟升級無關，沒有收進來。
 
+另一個品牌的 Windows 版（2026-11-06，owner 要 Apporo smart 也出 Windows 版）：
+
+- 跟 Mac 版一樣，從套用了品牌的發版樹建：在 Mac 上跑 `node woowtech/tools/apply-brand.mjs apporo`。除了第 30 節列的檔案，它也改 `build/installer.nsh` 檔頭的 `!define`：scheme、通知啟動器的 CLSID、更新快取資料夾、CLI 指令和它的標記（`woowtech/brands/apply.mjs` 的 `brandInstallerScript`）。簽章 hook 從 `woowtech/brands/index.cjs` 讀名稱和網站，所以簽章寫的是 Apporo smart 和 `https://www.apporo.ai`。
+- 品牌不在 runner 上套用：`apply-brand.mjs` 用 `spawnSync` 直接叫 `node_modules/.bin/oxfmt` 和 `tsx`（Unix 的 shell 腳本），Windows 上要經過 `.cmd` 和 shell 才叫得起來，沒在 Windows 上試過。做法是把套用好的樹 commit 到一條發版分支（例如 `release/apporo-0.10.0`），再手動執行發行流程：`tag=v<版本>`、`platform=windows`、`checkout_ref=<那條分支>`、`publish=false`。
+- 建完的檢查照樹裡品牌的名稱找東西：安裝檔 `<artifactPrefix>-Setup-*-x64.exe`、安裝資料夾 `%LOCALAPPDATA%\Programs\<名稱>`、解除安裝程式。另一個品牌的樹就算 `publish=true`，也不會上傳到這個 repo 的 release；安裝檔、`.blockmap`、`latest.yml` 從 workflow 的 artifact 拿，傳到那個品牌自己的發佈 repo。守門 `woowtech/windows-desktop.test.mjs`。
+- 簽章：同一張 SSL.com 憑證、同樣的 secrets 和 `WIN_PUBLISHER_DN`。安裝時看到的發行者是 WOOW TECH CO., LTD.，跟 Apporo 的 Mac 版用 WOOW TECH 的 Developer ID 簽一樣。
+- 兩個品牌能裝在同一台 PC：appId（AppUserModelID、NSIS 的解除安裝登錄機碼）、scheme、CLI 指令、daemon 資料夾和 port、更新快取都不同。通知啟動器的 CLSID 原本是寫死的同一個，兩個品牌都裝時，點通知會打開最後登記的那個 App。2026-11-06 改成品牌設定的 `desktop.windowsToastActivatorClsid`，未打包執行用 `windowsDevToastActivatorClsid`。woowtech 的值沒變（`{202C5D44-…}`、`{F6B7577F-…}`），Apporo 的是新產生的。守門：`brand-layer.test.mjs` 檢查每個品牌的 CLSID 格式對、彼此不同；`windows-desktop.test.mjs` 檢查 App 和 `installer.nsh` 都用品牌的 CLSID。
+
 驗證：
 
 - 單元測試：desktop 的 `woowtech-launch-links`、`woowtech-windows-toast`、`woowtech-windows-shell`、`woowtech-app-user-model-id`、`woowtech-notification-delivery`、`window/desktop-window-owner`；desktop 的 `daemon/woowtech-listen-fallback`、`features/woowtech-test-build`、`daemon/node-entrypoint-launcher`；server 的 `utils/woowtech-process-tree-kill`、`utils/woowtech-hidden-fork`、`utils/woowtech-crash-backoff`、`utils/woowtech-windows-path-search`、`utils/woowtech-cmd-escape`、`utils/woowtech-npm-cmd-shim`、`utils/woowtech-windows-spawn`、`utils/woowtech-windows-registry-path`、`executable-resolution/woowtech-winget-names`、`executable-resolution/woowtech-windows-probe`、`executable-resolution/woowtech-claude-fallback`、`terminal/woowtech-default-shell`；desktop 的 `cli-install/woowtech-windows-cli-shim`、`cli-install/woowtech-windows-user-path`、`scripts/woowtech-sign-windows`；App 的 `runtime/woowtech-local-daemon-address` 和 `runtime/daemon-start-service`。守門：`woowtech/windows-desktop.test.mjs`、`woowtech/windows-daemon.test.mjs`。
 - 實機（2026-11-04，一台 Windows 10 22H2 x64，未簽章的測試版，只測 x64）：建置、安裝（沒有 UAC、沒有「所有使用者」那頁）、SmartScreen 畫面（不明的發行者）、內建 daemon、系統匣、通知橫幅和控制中心、關窗常駐、更新、解除安裝都走過。通知的點擊是用程式注入的，路徑正確，但前景落在哪裡沒有定論（連記事本也一樣），要真人點一次（WD-14）。fuse 也實測過：改動 `app.asar` 表頭後，App 以 `Integrity check failed` 拒絕啟動。
 - 實機還沒做：Windows 11 上的 Smart App Control 和 SmartScreen 畫面（雲端機器的 Smart App Control 是關的）、真人點通知（WD-14）、手機推播（WP、D6、D12）、「安裝 CLI」（設定頁的按鈕，會改使用者 PATH）；真的簽章要等憑證核發後在發行流程上跑；macOS 的冷啟動點通知要簽章的打包版和真人點擊。2026-11-05 在 GitHub 雲端的 Windows 11 ARM64 和 Server 2025 補測了 Windows 11 的安裝／啟動、備用埠、中文帳號（WI-7）、WT-1、WT-3、WT-4、WT-6，見驗證紀錄第一條。
 - 章節撞號：main 的第 25 節是「上架候選全面驗收」，Windows 原本也編 25，第 30 節是品牌層 ⇒ Windows 改成第 31 節，指向它的引用一併改掉。
-- 品牌層：Windows 的程式碼用品牌的名字，但 `build/installer.nsh` 和 `scripts/woowtech-sign-windows.js` 還寫著 woowtech 的值。Apporo 的 Windows 版要先把這兩個檔案接上 `woowtech/brands`。
+- 品牌層：Windows 的程式碼用品牌的名字。2026-11-06 起 `build/installer.nsh`、`scripts/woowtech-sign-windows.js` 和發行流程的安裝檢查也照品牌走，見上面「另一個品牌的 Windows 版」。Apporo 的 Windows 版還沒在 runner 上建過，要等簽章的 secrets 設好。
 
 ## 上游同步紀錄（2026-09-27 起，挑選式）
 

@@ -13,6 +13,8 @@
   "defaultPort": 6772,
   "desktop": {
     "appId": "com.apporo.smart.desktop",
+    "windowsToastActivatorClsid": "{88869780-E173-4B34-83FE-B6388E13DED1}",
+    "windowsDevToastActivatorClsid": "{1ED4A85C-7F1C-4F64-9826-A723B6A9326F}",
     "artifactPrefix": "apporo-smart",
     "linuxMaintainer": "APPORO UNION INC. <info@apporo.ai>",
     "linuxVendor": "APPORO UNION INC."

@@ -421,6 +421,8 @@ jobs:
           npm run build:desktop "${build_args[@]}"
 
       # The uninstaller is only inside the installer, so its signature is checked after installing.
+      # The installer and the installed app go by the names of the brand the tree has applied:
+      # another brand's release tree comes in as checkout_ref (woowtech/README.md §31).
       - name: Check signatures, install and uninstall
         shell: pwsh
         env:
@@ -428,17 +430,19 @@ jobs:
         run: |
           if ($env:WIN_PUBLISHER_DN -notmatch 'CN=(?:"([^"]+)"|([^,]+))') { throw 'WIN_PUBLISHER_DN has no CN' }
           $publisher = if ($Matches[1]) { $Matches[1] } else { $Matches[2].Trim() }
+          $brand = node -e "process.stdout.write(JSON.stringify(require('./woowtech/brands/index.cjs').appliedBrand()))" | ConvertFrom-Json
+          $name = $brand.name
           $check = Join-Path $env:DESKTOP_PACKAGE_PATH 'scripts/woowtech-windows-signatures.ps1'
           $release = Join-Path $env:DESKTOP_PACKAGE_PATH 'release'
           & $check -Path $release -RequireSigned -Publisher $publisher
-          $setup = Get-ChildItem -LiteralPath $release -Filter 'woowtech-smart-Setup-*-x64.exe' | Select-Object -First 1
+          $setup = Get-ChildItem -LiteralPath $release -Filter "$($brand.desktop.artifactPrefix)-Setup-*-x64.exe" | Select-Object -First 1
           if (-not $setup) { throw "No x64 installer in $release" }
           Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
-          $dir = Join-Path $env:LOCALAPPDATA 'Programs\woowtech smart'
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\$name"
           & $check -Path $dir -RequireSigned -Publisher $publisher
           # _?= keeps the uninstaller where it is, so -Wait waits for it; it must come last.
-          Start-Process -FilePath (Join-Path $dir 'Uninstall woowtech smart.exe') -ArgumentList "/currentuser /S _?=$dir" -Wait
-          if (Test-Path -LiteralPath (Join-Path $dir 'woowtech smart.exe')) { throw 'Uninstalling left the app behind' }
+          Start-Process -FilePath (Join-Path $dir "Uninstall $name.exe") -ArgumentList "/currentuser /S _?=$dir" -Wait
+          if (Test-Path -LiteralPath (Join-Path $dir "$name.exe")) { throw 'Uninstalling left the app behind' }
 
       - name: Upload packaged smoke diagnostics
         if: failure()
@@ -456,6 +460,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # woowtech smart: another brand's installers belong to its own releases repository.
+          brand="$(node -p "require('./woowtech/brands/index.cjs').appliedBrandId()")"
+          if [[ "$brand" != "woowtech" ]]; then
+            echo "::error::This tree builds $brand; run it with publish=false and upload its files to its releases repository"
+            exit 1
+          fi
           release_dir="${DESKTOP_PACKAGE_PATH}/release"
           files=()
           while IFS= read -r -d '' f; do

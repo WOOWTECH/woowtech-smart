@@ -10,6 +10,10 @@
 const { execFile } = require("node:child_process");
 const { closeSync, openSync, readSync } = require("node:fs");
 
+// The brand this tree builds (woowtech/tools/apply-brand.mjs): the signature names its app and
+// website, so another brand's release tree signs with its own.
+const { appliedBrand } = require("../../../woowtech/brands/index.cjs");
+
 const REQUIRED_ENV = [
   "JSIGN_JAR",
   "ESIGNER_STOREPASS",
@@ -52,7 +56,7 @@ function peSignatureSize(file) {
   }
 }
 
-function jsignArguments({ jar, credentialId, file }) {
+function jsignArguments({ jar, credentialId, file, brand = appliedBrand() }) {
   return [
     "-jar",
     jar,
@@ -73,9 +77,9 @@ function jsignArguments({ jar, credentialId, file }) {
     "--tsmode",
     "RFC3161",
     "--name",
-    "woowtech smart",
+    brand.name,
     "--url",
-    "https://aiot.woowtech.io",
+    `https://${brand.links.websiteHost}`,
     file,
   ];
 }

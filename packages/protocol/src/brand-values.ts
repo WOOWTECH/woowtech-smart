@@ -18,6 +18,8 @@ export const BRAND = {
   defaultPort: 6770,
   desktop: {
     appId: "io.woowtech.smart.desktop",
+    windowsToastActivatorClsid: "{202C5D44-4389-4CA6-BC75-2E1C50DCCFA0}",
+    windowsDevToastActivatorClsid: "{F6B7577F-236A-4BA0-8712-3C3D33795471}",
     artifactPrefix: "woowtech-smart",
     linuxMaintainer: "WoowTech <woowtech@designsmart.com.tw>",
     linuxVendor: "WoowTech",

@@ -2,17 +2,22 @@
 // Menu shortcut, which electron-builder's NSIS installer registers with `appId`. Electron
 // does not set it, so the app must. Both come from the brand's desktop app id (a guard
 // checks they agree).
-import { DESKTOP_APP_ID } from "@getpaseo/protocol/brand-desktop";
+import {
+  DESKTOP_APP_ID,
+  WINDOWS_DEV_TOAST_ACTIVATOR_CLSID,
+  WINDOWS_TOAST_ACTIVATOR_CLSID,
+} from "@getpaseo/protocol/brand-desktop";
 
 export const WOOWTECH_DESKTOP_APP_ID = DESKTOP_APP_ID;
 
 // Electron (40.5+) writes the toast activator CLSID into the Start Menu shortcut and
 // HKCU\Software\Classes\CLSID on the first notification, and picks a new random one every run
 // unless told otherwise. Unpackaged runs use their own id and CLSID so a dev Electron never
-// takes over the installed app's registration.
-export const WOOWTECH_TOAST_ACTIVATOR_CLSID = "{202C5D44-4389-4CA6-BC75-2E1C50DCCFA0}";
+// takes over the installed app's registration. Both CLSIDs are the brand's own, so another
+// brand's app on the same PC keeps its notifications.
+export const WOOWTECH_TOAST_ACTIVATOR_CLSID = WINDOWS_TOAST_ACTIVATOR_CLSID;
 export const WOOWTECH_DEV_APP_ID = `${WOOWTECH_DESKTOP_APP_ID}.dev`;
-export const WOOWTECH_DEV_TOAST_ACTIVATOR_CLSID = "{F6B7577F-236A-4BA0-8712-3C3D33795471}";
+export const WOOWTECH_DEV_TOAST_ACTIVATOR_CLSID = WINDOWS_DEV_TOAST_ACTIVATOR_CLSID;
 
 export function applyWindowsAppUserModelId(input: {
   platform: NodeJS.Platform;
