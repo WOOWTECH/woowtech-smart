@@ -1,5 +1,6 @@
 #!/usr/bin/env npx tsx
 
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import assert from "node:assert";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -57,16 +58,16 @@ try {
     "onboard output should include CLI quick reference",
   );
   assert(
-    onboard.stdout.includes("woowtech-smart --help"),
+    onboard.stdout.includes(`${CLI_COMMAND} --help`),
     "onboard output should include --help shortcut",
   );
-  assert(onboard.stdout.includes("woowtech-smart ls"), "onboard output should include ls shortcut");
+  assert(onboard.stdout.includes(`${CLI_COMMAND} ls`), "onboard output should include ls shortcut");
   assert(
-    onboard.stdout.includes(`woowtech-smart run --home ${JSON.stringify(paseoHome)} "your prompt"`),
+    onboard.stdout.includes(`${CLI_COMMAND} run --home ${JSON.stringify(paseoHome)} "your prompt"`),
     "onboard output should include a run shortcut for the selected home",
   );
   assert(
-    onboard.stdout.includes("woowtech-smart status"),
+    onboard.stdout.includes(`${CLI_COMMAND} status`),
     "onboard output should include status shortcut",
   );
   assert(
