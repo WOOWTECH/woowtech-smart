@@ -8,16 +8,16 @@
 ; The defines hold the brand's values. The repository keeps woowtech's; woowtech/tools/apply-brand.mjs
 ; writes another brand's into them (brandInstallerScript in woowtech/brands/apply.mjs, guard).
 ; = the scheme under protocols in electron-builder.yml (guard).
-!define WOOWTECH_SCHEME "woowtech-smart"
+!define WOOWTECH_SCHEME "apporosmart"
 ; = the brand's toast activator CLSID, which src/features/woowtech-app-user-model-id.ts registers
 ; (guard). The dev build's CLSID is never touched.
-!define WOOWTECH_TOAST_CLSID "{202C5D44-4389-4CA6-BC75-2E1C50DCCFA0}"
+!define WOOWTECH_TOAST_CLSID "{88869780-E173-4B34-83FE-B6388E13DED1}"
 ; = electron-updater's cache folder: extraMetadata.name in lower case, plus "-updater" (guard).
-!define WOOWTECH_UPDATER_CACHE "io.woowtech.smart.desktop-updater"
+!define WOOWTECH_UPDATER_CACHE "com.apporo.smart.desktop-updater"
 ; = the brand's CLI command, the name of the trampoline that Install CLI writes (guard).
-!define WOOWTECH_CLI_COMMAND "woowtech-smart"
+!define WOOWTECH_CLI_COMMAND "apporo-smart"
 ; = how the second line of that trampoline starts (src/integrations/cli-install/install.ts, guard).
-!define WOOWTECH_CLI_MARKER "rem woowtech-smart CLI trampoline"
+!define WOOWTECH_CLI_MARKER "rem apporo-smart CLI trampoline"
 
 ; D14: Electron registers the toast activator, the Start menu link and the agent-link scheme for
 ; the current user only, so the app is always installed for the current user. No "Anyone who
