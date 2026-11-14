@@ -451,6 +451,25 @@ release date, and publishes the draft. Use `desktop-vX.Y.Z` when more than one
 platform failed. A `workflow_dispatch` rebuild with publishing enabled follows
 the same path against the existing draft.
 
+### Pi Agent Windows signing
+
+The `pi-agent` platform of `Desktop Release` signs a specified full commit from
+`WOOWTECH/Woow_native_os_pi_agent` using this repository's existing eSigner
+Secrets. Use `publish=false`, `pi_agent_sha=<40-character commit>` and
+`pi_agent_version=<VERSION>`. The required `tag` field is ignored in this mode.
+It creates a `pi-agent-windows-signed` Actions artifact, without a release.
+
+The Pi Agent checkout builds on a separate runner without signing credentials.
+Signing runs only the helpers owned by this repository and does not execute the
+installer. Pi Agent verifies the artifact and runs its dry run on its own runner.
+The signing helper and launcher in `scripts/pi-agent-signing/` are reviewed copies;
+changes to Pi Agent's launcher must be reviewed here as well before signing.
+
+Use Pi Agent's `scripts/request-windows-signing.py` to dispatch both workflows
+with a pinned signer commit. This uses the maintainer's existing GitHub CLI login;
+no cross-repository personal token or copied eSigner Secret is stored in Pi Agent.
+The helper restores the Desktop Release workflow's original enabled/disabled state.
+
 Prefer a tag push over `workflow_dispatch` when rebuilding desktop or APK
 release assets. Prefer Docker workflow dispatch when rebuilding only the Docker
 image.
