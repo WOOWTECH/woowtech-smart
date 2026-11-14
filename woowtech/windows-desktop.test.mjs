@@ -460,3 +460,58 @@ test("installed candidate verification only downloads pinned successful release 
     );
   }
 });
+
+test("existing Desktop Release dispatch runs only verification even with publish defaulting true", () => {
+  const workflow = YAML.parse(source(".github/workflows/desktop-release.yml"));
+  const reusable = YAML.parse(source(".github/workflows/windows-installed-verify.yml"));
+  assert.ok(workflow.on.workflow_dispatch.inputs.platform.options.includes("verify-windows"));
+  assert.deepEqual(workflow.on.workflow_dispatch.inputs.windows_candidate.options, [
+    "woowtech",
+    "apporo",
+  ]);
+  assert.equal(
+    workflow.jobs["verify-windows"].uses,
+    "./.github/workflows/windows-installed-verify.yml",
+  );
+  assert.equal(workflow.jobs["verify-windows"].with.candidate, "${{ inputs.windows_candidate }}");
+  assert.equal(reusable.on.workflow_call.inputs.candidate.type, "string");
+  assert.deepEqual(workflow.jobs["verify-windows"].permissions, {
+    contents: "read",
+    actions: "read",
+  });
+  assert.equal(workflow.jobs["verify-windows"].secrets, undefined);
+  for (const publish of ["true", "false"]) {
+    const inputs = { platform: "verify-windows", publish, windows_candidate: "woowtech" };
+    const github = {
+      event_name: "workflow_dispatch",
+      event: { inputs },
+      ref_name: "reviewed-branch",
+    };
+    const needs = Object.fromEntries(
+      Object.keys(workflow.jobs).map((id) => [id, { result: "skipped" }]),
+    );
+    const selected = Object.entries(workflow.jobs)
+      .filter(([, job]) => {
+        assert.ok(job.if, "Every release job must have an explicit condition");
+        const expression = job.if
+          .replace(/^\$\{\{\s*|\s*\}\}$/g, "")
+          .replace(/needs\.([a-z-]+)/g, 'needs["$1"]');
+        return new Function(
+          "github",
+          "inputs",
+          "needs",
+          "always",
+          "startsWith",
+          `return (${expression});`,
+        )(
+          github,
+          inputs,
+          needs,
+          () => true,
+          (value, prefix) => value.startsWith(prefix),
+        );
+      })
+      .map(([id]) => id);
+    assert.deepEqual(selected, ["verify-windows"], `publish=${publish}`);
+  }
+});

@@ -123,7 +123,7 @@ Smoke jobs upload renderer screenshots and desktop/daemon diagnostics, including
 Windows release checks also run that same smoke against the registry's `InstallLocation`
 after NSIS installation and same-version silent reinstall. Uninstall must remove the
 captured branded uninstall key in both registry views while preserving user-data sentinels.
-The `Verify installed Windows candidate` dispatch workflow reuses the reviewed Smart
+The `Desktop Release` dispatch entrypoint (`platform=verify-windows`) reuses the reviewed Smart
 `43601338055` or Apporo `43602289535` artifact without rebuilding or signing. Select
 `woowtech` or `apporo`; the allowlist pins the successful Desktop Release run, source,
 artifact ID and archive SHA-256. The verifier checks the installer signature, publisher
@@ -133,8 +133,14 @@ for the existing observer and brand definitions and installs only Playwright/asa
 dependencies; all executable app/CLI tools come from the installed payload.
 
 This closes the hosted installed-copy launch gap, not physical Windows validation,
-SmartScreen reputation or Smart App Control acceptance. Dispatch verification after its
-workflow has been registered on the default branch; use the reviewed verification ref.
+SmartScreen reputation or Smart App Control acceptance. Dispatch the existing `desktop-release.yml` workflow with the reviewed verification branch
+as `--ref`, `platform=verify-windows`, `windows_candidate=woowtech` (or `apporo`),
+`tag=v0.10.2-rc.1`, and `publish=false`. The tag is a required legacy input and is not
+used for verification. The local reusable workflow is loaded from that same branch;
+no default-branch merge or new workflow registration is needed. All build, signing,
+release creation and rollout jobs are excluded for this platform, even if publish is
+accidentally left at its default. If Desktop Release is disabled, the coordinator must
+temporarily enable it and restore its previous state after verification.
 
 To exercise the smoke locally on Linux:
 
