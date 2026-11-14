@@ -50,20 +50,26 @@ restore() {
 }
 trap restore EXIT
 
-app_cdhash() {  # <dmg> -> cdhash of the app inside; also checks it is accepted and stapled
+# check_app <dmg>: sets APP_CDHASH to the cdhash of the app inside and checks the app is intact, accepted and
+# stapled. Called directly, never in $(...): MNT must stay visible to the EXIT trap so a failure unmounts.
+APP_CDHASH=""
+check_app() {
+  APP_CDHASH=""
   MNT="$WORK/mnt"; mkdir -p "$MNT"
   hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$MNT" "$1" >/dev/null
   local app="$MNT/$APP.app" cd
   [ -d "$app" ] || die "no $APP.app in $1"
+  codesign --verify --deep --strict "$app" 2>/dev/null || die "codesign --verify --deep --strict fails for the app inside $1"
   cd=$(codesign -dvvv "$app" 2>&1 | sed -n 's/^CDHash=//p')
+  [[ "$cd" =~ ^[0-9a-f]{40}$ ]] || die "no valid CDHash for the app inside $1"
   spctl -a -t exec "$app" 2>/dev/null || die "the app inside $1 is not accepted by Gatekeeper"
   xcrun stapler validate "$app" >/dev/null 2>&1 || die "the app inside $1 has no stapled ticket"
   hdiutil detach "$MNT" -quiet; MNT=""
-  echo "$cd"
+  APP_CDHASH=$cd
 }
 
-BEFORE=$(app_cdhash "$IN")
-say "app cdhash in the input DMG: $BEFORE (accepted, stapled)"
+check_app "$IN"; BEFORE=$APP_CDHASH
+say "app cdhash in the input DMG: $BEFORE (verified --deep --strict, accepted, stapled)"
 mkdir -p "$(dirname "$OUT")"
 cp "$IN" "$OUT"
 
@@ -74,7 +80,7 @@ if [ -n "$KEYCHAIN" ]; then
   security list-keychains -d user -s "$KEYCHAIN" "${ORIG_LIST[@]}"
   KC_ARGS=(--keychain "$KEYCHAIN")
 fi
-codesign --sign "$IDENT" "${KC_ARGS[@]}" --timestamp "$OUT"
+codesign --sign "$IDENT" ${KC_ARGS[@]+"${KC_ARGS[@]}"} --timestamp "$OUT"
 say "signed $(basename "$OUT")"
 
 say "notarizing (this waits for Apple)"
@@ -93,8 +99,8 @@ spctl -a -t open --context context:primary-signature -vv "$OUT" 2>&1 | sed 's/^/
 spctl -a -t open --context context:primary-signature "$OUT" 2>/dev/null || die "spctl -t open rejects the signed DMG"
 xcrun stapler validate "$OUT" >/dev/null 2>&1 || die "no stapled ticket on the DMG"
 say "stapler validate: ok"
-AFTER=$(app_cdhash "$OUT")
+check_app "$OUT"; AFTER=$APP_CDHASH
 [ "$AFTER" = "$BEFORE" ] || die "the app's cdhash changed ($BEFORE -> $AFTER)"
-say "app inside unchanged (cdhash $AFTER, accepted, stapled)"
+say "app inside unchanged (cdhash $AFTER, verified --deep --strict, accepted, stapled)"
 shasum -a 256 "$OUT" | awk -v n="$(basename "$OUT")" '{print $1"  "n}' > "$OUT.sha256"
 say "OK $(basename "$OUT") $(stat -f%z "$OUT") bytes sha256 $(cut -c1-64 "$OUT.sha256") submission $ID"
