@@ -50,6 +50,9 @@ const ENABLED = ["ci.yml"];
 // It has no push, PR or standalone dispatch trigger.
 const CALL_ONLY = ["pi-agent-signing.yml"];
 
+// Reviewed artifact verification: manual or reusable, never push/PR triggered.
+const MANUAL_VERIFICATION = ["windows-installed-verify.yml"];
+
 // Disabled in GitHub: Actions → the workflow → ··· → Disable workflow.
 const DISABLED_IN_UI = {
   "android-apk-release.yml": "builds on upstream's EAS project and uploads to a GitHub release",
@@ -65,12 +68,12 @@ const DISABLED_IN_UI = {
   "release-notes-sync.yml": "creates and edits GitHub releases from upstream's CHANGELOG.md",
 };
 
-test("every workflow file is classified as CI, call-only or disabled", () => {
+test("every workflow file is classified as CI, call-only, manual verification or disabled", () => {
   // GitHub only reads .yml and .yaml files directly in .github/workflows.
   const files = readdirSync(workflowsDir)
     .filter((name) => /\.ya?ml$/.test(name))
     .sort();
-  const known = [...ENABLED, ...CALL_ONLY, ...Object.keys(DISABLED_IN_UI)];
+  const known = [...ENABLED, ...CALL_ONLY, ...MANUAL_VERIFICATION, ...Object.keys(DISABLED_IN_UI)];
   assert.deepEqual(
     {
       new: files.filter((name) => !known.includes(name)),
@@ -79,9 +82,21 @@ test("every workflow file is classified as CI, call-only or disabled", () => {
     { new: [], gone: [] },
     "GitHub runs a new workflow file as soon as it sees it, starting with the push " +
       "that adds it. Before pushing, follow woowtech/README.md section 18, then list the " +
-      "file in DISABLED_IN_UI with the reason, ENABLED for CI, or CALL_ONLY for a reviewed reusable workflow. Drop the " +
+      "file in DISABLED_IN_UI with the reason, ENABLED for CI, CALL_ONLY for a reviewed reusable workflow, or MANUAL_VERIFICATION for reviewed artifact checks. Drop the " +
       "names of deleted files.",
   );
+});
+
+test("manual artifact verification has only explicit triggers and read permissions", () => {
+  for (const name of MANUAL_VERIFICATION) {
+    const verifier = workflow(name);
+    assert.deepEqual(Object.keys(verifier.on).sort(), ["workflow_call", "workflow_dispatch"]);
+    assert.deepEqual(verifier.permissions, { contents: "read", actions: "read" });
+    assert.doesNotMatch(JSON.stringify(verifier), /secrets\./);
+    for (const job of Object.values(verifier.jobs)) {
+      assert.equal(job.permissions, undefined, "Jobs must inherit the read-only permissions");
+    }
+  }
 });
 
 test("Pi Agent signing only runs through the explicitly selected nonpublishing mode", () => {
