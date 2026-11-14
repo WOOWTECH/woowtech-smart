@@ -48,7 +48,7 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: |
           # Local observer resolution avoids passing NODE_PATH into the installed app.
-          npm install --prefix "$env:GITHUB_WORKSPACE/candidate-source/packages/desktop/e2e" --workspaces=false --ignore-scripts --no-package-lock --no-audit --no-fund 'playwright@1.58.2' '@electron/asar@3.4.1' 
+          npm install --prefix "$env:GITHUB_WORKSPACE/candidate-source/packages/desktop/e2e" --workspaces=false --ignore-scripts --no-package-lock --no-audit --no-fund 'playwright@1.58.2' '@electron/asar@3.4.1'
           if ($LASTEXITCODE -ne 0) { throw 'Smoke dependency installation failed' }
       - name: Verify installed launch, same-version reinstall and uninstall cleanup
         env:
