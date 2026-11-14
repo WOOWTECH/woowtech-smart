@@ -309,8 +309,10 @@ test("only the release job signs Windows builds, every PE file, SHA-256 only (D8
   );
   assert.match(windowsJob, /"-c\.win\.signtoolOptions\.publisherName=\$WIN_PUBLISHER_DN"/);
   // Built files, then the installed app with its uninstaller, must all be signed.
-  assert.match(windowsJob, /& \$check -Path \$release -RequireSigned -Publisher \$publisher/);
-  assert.match(windowsJob, /& \$check -Path \$dir -RequireSigned -Publisher \$publisher/);
+  assert.match(windowsJob, /woowtech-windows-installed-smoke\.ps1/);
+  const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
+  assert.match(lifecycle, /& \$check -Path \$release -RequireSigned -Publisher \$Publisher/);
+  assert.match(lifecycle, /& \$check -Path \$dir -RequireSigned -Publisher \$Publisher/);
 });
 
 test("the Windows release job checks the brand it built by that brand's names", () => {
@@ -321,8 +323,10 @@ test("the Windows release job checks the brand it built by that brand's names", 
   const steps = release.jobs["publish-windows"].steps;
   const step = (name) => steps.find((candidate) => candidate.name === name);
   const check = step("Check signatures, install and uninstall");
-  assert.match(check.run, /require\('\.\/woowtech\/brands\/index\.cjs'\)\.appliedBrand\(\)/);
-  assert.doesNotMatch(check.run, /woowtech smart|woowtech-smart/);
+  assert.match(check.run, /woowtech-windows-installed-smoke\.ps1/);
+  const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
+  assert.match(lifecycle, /require\(process\.argv\[1\]\)\.appliedBrand\(\)/);
+  assert.doesNotMatch(lifecycle, /woowtech smart|woowtech-smart/);
   const upload = step("Upload desktop artifacts to release");
   assert.match(
     upload.run,
@@ -402,4 +406,57 @@ test("brand application keeps one-click policy and candidate version while isola
   assert.notEqual(configs[0].productName, configs[1].productName);
   assert.notEqual(configs[0].publish.repo, configs[1].publish.repo);
   assert.notEqual(loadBrand("woowtech").homeDir, loadBrand("apporo").homeDir);
+});
+
+test("Windows lifecycle launches the registered installed copy before and after update and checks registry cleanup", () => {
+  const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
+  assert.match(lifecycle, /packaged-app-smoke\.js'\) --app \$location/);
+  assert.doesNotMatch(lifecycle, /win-unpacked/);
+  assert.match(lifecycle, /InstallLocation/);
+  const fresh = lifecycle.indexOf("$dir = Resolve-CandidateInstall 'fresh'");
+  const launch = lifecycle.indexOf("Test-InstalledLaunch $dir 'fresh'");
+  const update = lifecycle.indexOf("Install-Candidate '/S --updated'");
+  const updatedLaunch = lifecycle.indexOf("Test-InstalledLaunch $updatedDir 'updated'");
+  const uninstall = lifecycle.indexOf("$uninstall = Start-Process");
+  const cleanup = lifecycle.indexOf("$cleanup = @($registryPaths");
+  assert.ok(fresh > 0 && launch > fresh && update > launch && updatedLaunch > update);
+  assert.ok(uninstall > updatedLaunch && cleanup > uninstall);
+  assert.match(lifecycle, /uninstall-registry-cleanup\.json/);
+  assert.match(lifecycle, /Where-Object exists\)\.Count -ne 0/);
+  assert.match(lifecycle, /launch-target\.json/);
+  assert.match(lifecycle, /ProductVersion/);
+  assert.ok(
+    lifecycle.indexOf("Installer signature or publisher mismatch") <
+      lifecycle.indexOf("Install-Candidate '/S'"),
+  );
+});
+
+test("installed candidate verification only downloads pinned successful release artifacts and never signs", () => {
+  const workflow = YAML.parse(source(".github/workflows/windows-installed-verify.yml"));
+  assert.deepEqual(workflow.permissions, { contents: "read", actions: "read" });
+  assert.deepEqual(workflow.on.workflow_dispatch.inputs.candidate.options, ["woowtech", "apporo"]);
+  const text = JSON.stringify(workflow);
+  assert.doesNotMatch(text, /ESIGNER|WOOWTECH_SIGN|build:desktop|secrets\./);
+  assert.match(text, /steps\.candidate\.outputs\.source/);
+  const pins = JSON.parse(source("packages/desktop/scripts/windows-smoke-candidates.json"));
+  assert.equal(pins.woowtech.run, "43601338055");
+  assert.equal(pins.apporo.run, "43602289535");
+  for (const pin of Object.values(pins)) {
+    assert.match(pin.source, /^[a-f0-9]{40}$/);
+    assert.match(pin.digest, /^[a-f0-9]{64}$/);
+    assert.match(pin.artifact, /^\d+$/);
+  }
+  const download = source("packages/desktop/scripts/download-windows-smoke-candidate.ps1");
+  for (const gate of [
+    "$run.conclusion -ne 'success'",
+    "$run.head_sha -cne $pin.source",
+    "$artifact.expired",
+    "$artifact.digest -cne",
+    "Get-FileHash",
+  ]) {
+    assert.ok(
+      download.indexOf(gate) > 0 && download.indexOf(gate) < download.indexOf("Expand-Archive"),
+      gate,
+    );
+  }
 });

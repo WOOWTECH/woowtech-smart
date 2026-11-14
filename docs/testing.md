@@ -120,6 +120,22 @@ Never repair `chrome-sandbox` in the smoke harness. The old unpacked smoke set i
 
 Smoke jobs upload renderer screenshots and desktop/daemon diagnostics, including successful Linux sandbox evidence.
 
+Windows release checks also run that same smoke against the registry's `InstallLocation`
+after NSIS installation and same-version silent reinstall. Uninstall must remove the
+captured branded uninstall key in both registry views while preserving user-data sentinels.
+The `Verify installed Windows candidate` dispatch workflow reuses the reviewed Smart
+`43601338055` or Apporo `43602289535` artifact without rebuilding or signing. Select
+`woowtech` or `apporo`; the allowlist pins the successful Desktop Release run, source,
+artifact ID and archive SHA-256. The verifier checks the installer signature, publisher
+and product version before executing it, and uploads installed-path evidence, renderer
+screenshots, smoke logs and registry cleanup results. It checks out the candidate source
+for the existing observer and brand definitions and installs only Playwright/asar observer
+dependencies; all executable app/CLI tools come from the installed payload.
+
+This closes the hosted installed-copy launch gap, not physical Windows validation,
+SmartScreen reputation or Smart App Control acceptance. Dispatch verification after its
+workflow has been registered on the default branch; use the reviewed verification ref.
+
 To exercise the smoke locally on Linux:
 
 ```bash
