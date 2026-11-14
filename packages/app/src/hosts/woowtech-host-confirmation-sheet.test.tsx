@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+import { BRAND_RELAY } from "@getpaseo/protocol/brand-relay";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,7 +54,7 @@ vi.mock("@/components/adaptive-modal-sheet", async () => {
 
 const KEY = Buffer.alloc(32, 3).toString("base64");
 const OTHER_KEY = Buffer.alloc(32, 4).toString("base64");
-const PRODUCT_RELAY = "relay.woowtech.io:443";
+const PRODUCT_RELAY = BRAND_RELAY.endpoint;
 
 function offer(overrides: Partial<ConnectionOffer> = {}): ConnectionOffer {
   return {
@@ -200,7 +202,7 @@ describe("the host confirmation sheet", () => {
     );
 
     expect(text("host-confirmation-other-relay")).toContain(
-      "uses a relay other than woowtech smart's (relay.woowtech.io:443)",
+      `uses a relay other than ${PRODUCT_NAME}'s (${PRODUCT_RELAY})`,
     );
   });
 
@@ -296,7 +298,7 @@ describe("the host confirmation sheet", () => {
     // The same address in both rows would read as no change at all.
     expect(text("host-confirmation-saved-relay")).toBe(PRODUCT_RELAY);
     expect(text("host-confirmation-relay")).toBe(`${PRODUCT_RELAY} (no TLS)`);
-    expect(text("host-confirmation-other-relay")).toContain("a relay other than woowtech smart's");
+    expect(text("host-confirmation-other-relay")).toContain(`a relay other than ${PRODUCT_NAME}'s`);
   });
 
   it("shows which saved relay had TLS off, and the new relay in the same words", async () => {

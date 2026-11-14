@@ -1,3 +1,4 @@
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DaemonClient, type DaemonTransport } from "@getpaseo/client/internal/daemon-client";
 import {
@@ -354,6 +355,6 @@ describe("probing localhost at boot", () => {
 
     await f.store.boot();
 
-    expect(f.probedEndpoints).toEqual(["localhost:6770"]);
+    expect(f.probedEndpoints).toEqual([`localhost:${DEFAULT_DAEMON_PORT}`]);
   });
 });

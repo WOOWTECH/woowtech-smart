@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, test } from "vitest";
 import {
   formatHostRuntimeSection,
@@ -109,7 +110,7 @@ describe("app diagnostics report", () => {
         "\\\\.\\pipe\\paseo-secret",
         "password=tcp-password",
         "paseo://pairing-secret",
-        "woowtech-smart://h/agent-secret",
+        `${BRAND.scheme}://h/agent-secret`,
       ].join("\n"),
       [host],
     );

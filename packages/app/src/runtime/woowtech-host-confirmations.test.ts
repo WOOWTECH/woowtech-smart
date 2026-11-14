@@ -1,3 +1,4 @@
+import { BRAND_RELAY } from "@getpaseo/protocol/brand-relay";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionOffer } from "@getpaseo/protocol/connection-offer";
 import { defaultHostAppearance } from "@/hosts/appearance";
@@ -17,7 +18,7 @@ import { formatDaemonKeyFingerprint } from "./woowtech-offer-link";
 
 const KEY_A = Buffer.alloc(32, 1).toString("base64");
 const KEY_B = Buffer.alloc(32, 2).toString("base64");
-const PRODUCT_RELAY = "relay.woowtech.io:443";
+const PRODUCT_RELAY = BRAND_RELAY.endpoint;
 
 function offer(overrides: Partial<ConnectionOffer> = {}): ConnectionOffer {
   return {
@@ -188,7 +189,7 @@ describe("a pairing link", () => {
       [{ endpoint: PRODUCT_RELAY, useTls: true }, true],
       [{ endpoint: PRODUCT_RELAY }, true],
       [{ endpoint: PRODUCT_RELAY, useTls: false }, false],
-      [{ endpoint: "relay.woowtech.io:8443", useTls: true }, false],
+      [{ endpoint: `${BRAND_RELAY.host}:8443`, useTls: true }, false],
       [{ endpoint: "relay.example.test:443", useTls: true }, false],
     ];
     for (const [relayEndpoint, usesProductRelay] of cases) {
