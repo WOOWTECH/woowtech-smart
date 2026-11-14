@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+const { appliedBrand } = require("../../../woowtech/brands/index.cjs");
+const MOBILE_SECRETS_DIR: string = appliedBrand().mobileSecretsDir;
+
 const { iosGoogleServiceInfoPlist, reactNativeConfig } = require("./woowtech-ios-firebase");
 // The resolver `expo-modules-autolinking react-native-config` runs for each package: it merges
 // this app's react-native.config.js entry over the package's own config, one level deep.
@@ -36,8 +39,8 @@ const appDirs: string[] = [];
 function tempAppDir(secrets: string[] = []): string {
   const dir = mkdtempSync(path.join(tmpdir(), "woowtech-ios-firebase-"));
   appDirs.push(dir);
-  mkdirSync(path.join(dir, ".secrets"));
-  for (const name of secrets) writeFileSync(path.join(dir, ".secrets", name), "<plist/>");
+  mkdirSync(path.join(dir, MOBILE_SECRETS_DIR), { recursive: true });
+  for (const name of secrets) writeFileSync(path.join(dir, MOBILE_SECRETS_DIR, name), "<plist/>");
   return dir;
 }
 
@@ -50,7 +53,7 @@ describe("iosGoogleServiceInfoPlist", () => {
     const appDir = tempAppDir(["GoogleService-Info.prod.plist", "GoogleService-Info.debug.plist"]);
 
     expect(iosGoogleServiceInfoPlist({ env: {}, appDir })).toBe(
-      "./.secrets/GoogleService-Info.prod.plist",
+      `./${MOBILE_SECRETS_DIR}/GoogleService-Info.prod.plist`,
     );
   });
 
@@ -58,7 +61,7 @@ describe("iosGoogleServiceInfoPlist", () => {
     const appDir = tempAppDir(["GoogleService-Info.prod.plist", "GoogleService-Info.debug.plist"]);
 
     expect(iosGoogleServiceInfoPlist({ env: { APP_VARIANT: "development" }, appDir })).toBe(
-      "./.secrets/GoogleService-Info.debug.plist",
+      `./${MOBILE_SECRETS_DIR}/GoogleService-Info.debug.plist`,
     );
   });
 

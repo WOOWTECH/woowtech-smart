@@ -1,5 +1,8 @@
+import { PRODUCT_NAME_ZH } from "@getpaseo/protocol/brand-name";
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "./i18next";
+
+const hasChineseName = /[㐀-鿿]/.test(PRODUCT_NAME_ZH);
 
 function flattenStrings(value: unknown, prefix = "", out = new Map<string, string>()) {
   if (typeof value === "string") {
@@ -63,9 +66,13 @@ describe("Traditional Chinese (zh-TW)", () => {
   });
 
   it("reads as Taiwanese Traditional Chinese with the product name", () => {
-    expect(inTraditional("onboarding.title")).toBe("歡迎使用渥屋智能");
+    expect(inTraditional("onboarding.title")).toBe(
+      hasChineseName ? `歡迎使用渥屋智能` : `歡迎使用 ${PRODUCT_NAME_ZH}`,
+    );
     expect(inTraditional("settings.host.daemon.update.desktopManagedHint")).toBe(
-      "此 Daemon 由渥屋智能桌面版管理。請在主機上更新渥屋智能桌面版。",
+      hasChineseName
+        ? `此 Daemon 由渥屋智能桌面版管理。請在主機上更新渥屋智能桌面版。`
+        : `此 Daemon 由 ${PRODUCT_NAME_ZH} 桌面版管理。請在主機上更新 ${PRODUCT_NAME_ZH} 桌面版。`,
     );
     expect(inTraditional("shell.commandCenter.placeholder")).toBe(
       "搜尋指令、檔案、工作區和 Agent...",
@@ -82,7 +89,9 @@ describe("Traditional Chinese (zh-TW)", () => {
     expect(inTraditional("openProject.tiles.setupProviders.title")).toBe("設定供應商");
     expect(inTraditional("settings.hostSections.workspaces")).toBe("工作區");
     expect(inTraditional("settings.hostSections.terminals")).toBe("終端機");
-    expect(inTraditional("pairing.direct.helper")).toBe("輸入渥屋智能伺服器的位址。");
+    expect(inTraditional("pairing.direct.helper")).toBe(
+      hasChineseName ? `輸入渥屋智能伺服器的位址。` : `輸入 ${PRODUCT_NAME_ZH} 伺服器的位址。`,
+    );
   });
 
   it("says a daemon the desktop attached to is 已連線, as every other connection is", () => {

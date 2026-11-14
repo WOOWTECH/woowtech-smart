@@ -1,6 +1,10 @@
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
+import { PRODUCT_NAME, PRODUCT_NAME_ZH } from "@getpaseo/protocol/brand-name";
 import { beforeAll, describe, expect, it } from "vitest";
 import { rebrandResources } from "./brand";
 import { i18n } from "./i18next";
+
+const hasChineseName = /[㐀-鿿]/.test(PRODUCT_NAME_ZH);
 
 function allStrings(value: unknown): string[] {
   if (typeof value === "string") {
@@ -19,40 +23,46 @@ describe("product name in translations", () => {
     }
   });
 
-  it("names woowtech smart in English", () => {
-    expect(i18n.t("onboarding.title", { lng: "en" })).toBe("Welcome to woowtech smart");
+  it("names the selected product in English", () => {
+    expect(i18n.t("onboarding.title", { lng: "en" })).toBe(`Welcome to ${PRODUCT_NAME}`);
     expect(i18n.t("settings.host.daemon.update.desktopManagedHint", { lng: "en" })).toBe(
-      "This daemon is managed by woowtech smart Desktop. Update woowtech smart Desktop on the host.",
+      `This daemon is managed by ${PRODUCT_NAME} Desktop. Update ${PRODUCT_NAME} Desktop on the host.`,
     );
   });
 
-  it("names 渥屋智能 in Chinese, joined to the Chinese around it", () => {
-    expect(i18n.t("onboarding.title", { lng: "zh-CN" })).toBe("欢迎使用渥屋智能");
+  it("spaces the selected product name correctly in Chinese", () => {
+    expect(i18n.t("onboarding.title", { lng: "zh-CN" })).toBe(
+      hasChineseName ? `欢迎使用渥屋智能` : `欢迎使用 ${PRODUCT_NAME_ZH}`,
+    );
     expect(i18n.t("settings.host.daemon.update.desktopManagedHint", { lng: "zh-CN" })).toBe(
-      "此 Daemon 由渥屋智能桌面版管理。请在 Host 上更新渥屋智能桌面版。",
+      hasChineseName
+        ? `此 Daemon 由渥屋智能桌面版管理。请在 Host 上更新渥屋智能桌面版。`
+        : `此 Daemon 由 ${PRODUCT_NAME_ZH} 桌面版管理。请在 Host 上更新 ${PRODUCT_NAME_ZH} 桌面版。`,
     );
     expect(i18n.t("desktop.integrations.cli.installFailed", { lng: "zh-CN" })).toBe(
-      "无法安装渥屋智能 CLI。",
+      hasChineseName ? `无法安装渥屋智能 CLI。` : `无法安装 ${PRODUCT_NAME_ZH} CLI。`,
     );
     expect(i18n.t("toolCallGroup.paseoCalls.other", { lng: "zh-CN", count: 2 })).toBe(
-      "调用了渥屋智能 2 次",
+      hasChineseName ? `调用了渥屋智能 2 次` : `调用了 ${PRODUCT_NAME_ZH} 2 次`,
     );
   });
 
   it("keeps technical names that only look like the product name", () => {
     expect(i18n.t("settings.project.scripts.serviceHint", { lng: "en" })).toBe(
-      "woowtech smart supervises the process and assigns a port via $PASEO_PORT",
+      `${PRODUCT_NAME} supervises the process and assigns a port via $PASEO_PORT`,
     );
   });
 
   it("leaves no translation naming Paseo, including strings upstream adds later", () => {
     // The notices page credits the project woowtech smart is derived from, as the Apache License
     // 2.0 (section 4) asks: a title and one sentence, in English and in Traditional Chinese.
-    const credit =
-      /^Paseo — Apache|derived from Paseo\. This section reproduces Paseo's copyright|^渥屋智能改作自 Paseo。本節重製 Paseo 的著作權聲明/;
+    const credit = /^Paseo — Apache|derived from Paseo\. This section reproduces Paseo's copyright/;
+    const chineseCredit = hasChineseName
+      ? "渥屋智能改作自 Paseo。本節重製 Paseo 的著作權聲明"
+      : `${PRODUCT_NAME_ZH} 改作自 Paseo。本節重製 Paseo 的著作權聲明`;
     for (const language of Object.keys(i18n.store.data)) {
       const naming = allStrings(i18n.getResourceBundle(language, "translation")).filter(
-        (text) => text.includes("Paseo") && !credit.test(text),
+        (text) => text.includes("Paseo") && !credit.test(text) && !text.startsWith(chineseCredit),
       );
       expect({ language, naming }).toEqual({ language, naming: [] });
     }
@@ -71,18 +81,18 @@ describe("CLI commands in translations", () => {
     }
   });
 
-  it("show the woowtech-smart command in every language", () => {
+  it("show the selected CLI command in every language", () => {
     expect(i18n.t("desktop.daemon.fullStatus.hint", { lng: "en" })).toBe(
-      "Runs `woowtech-smart daemon status` and shows the output",
+      `Runs \`${CLI_COMMAND} daemon status\` and shows the output`,
     );
     expect(i18n.t("desktop.daemon.fullStatus.hint", { lng: "zh-TW" })).toBe(
-      "執行 `woowtech-smart daemon status` 並顯示輸出",
+      `執行 \`${CLI_COMMAND} daemon status\` 並顯示輸出`,
     );
     expect(i18n.t("desktop.daemon.fullStatus.hint", { lng: "ja" })).toBe(
-      "`woowtech-smart daemon status`を実行して出力を表示します",
+      `\`${CLI_COMMAND} daemon status\`を実行して出力を表示します`,
     );
     expect(i18n.t("desktop.daemon.fullStatus.hint", { lng: "ar" })).toBe(
-      "يقوم بتشغيل`woowtech-smart daemon status`ويظهر الإخراج",
+      `يقوم بتشغيل\`${CLI_COMMAND} daemon status\`ويظهر الإخراج`,
     );
   });
 

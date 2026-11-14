@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { Children, isValidElement } from "react";
 import { describe, expect, it } from "vitest";
 import { brandLogoColor } from "@/styles/brand";
@@ -11,12 +12,13 @@ function strokeFills(fill: string): (string | undefined)[] {
 }
 
 describe("PaseoLogo", () => {
-  it("draws every stroke of the WOOW symbol in the brand blue on light and dark themes", () => {
+  it("draws every stroke of the selected brand mark in its light and dark colors", () => {
     for (const scheme of ["light", "dark"] as const) {
-      expect(brandLogoColor(scheme)).toBe("#6183fc");
+      const expectedColor = scheme === "dark" ? BRAND.logo.colorOnDark : BRAND.logo.color;
+      expect(brandLogoColor(scheme)).toBe(expectedColor);
       const fills = strokeFills(brandLogoColor(scheme));
-      expect(fills).toHaveLength(10);
-      expect(new Set(fills)).toEqual(new Set(["#6183fc"]));
+      expect(fills).toHaveLength(BRAND.logo.paths.length);
+      expect(new Set(fills)).toEqual(new Set([expectedColor]));
     }
   });
 
@@ -32,7 +34,7 @@ describe("PaseoLogo", () => {
     );
     const mask = woowSymbolMaskSvg(96);
 
-    expect(mask).toContain("width='96' height='96' viewBox='0 0 105.2 83.4'");
+    expect(mask).toContain(`width='96' height='96' viewBox='${BRAND.logo.viewBox}'`);
     expect([...mask.matchAll(/ d='([^']+)'/g)].map((match) => match[1])).toEqual(strokes);
   });
 });
