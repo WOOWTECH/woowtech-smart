@@ -1,0 +1,70 @@
+name: Verify installed Windows candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: "Reviewed existing signed candidate (no build or signing)"
+        required: true
+        type: choice
+        options:
+          - woowtech
+          - apporo
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: verifier
+          persist-credentials: false
+      - name: Download and verify pinned candidate provenance
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          & ./verifier/packages/desktop/scripts/download-windows-smoke-candidate.ps1 `
+            -Candidate $env:CANDIDATE -Destination "$env:RUNNER_TEMP/candidate"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.candidate.outputs.source }}
+          path: candidate-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install smoke observer dependencies only
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          # Local observer resolution avoids passing NODE_PATH into the installed app.
+          npm install --prefix "$env:GITHUB_WORKSPACE/candidate-source/packages/desktop/e2e" --workspaces=false --ignore-scripts --no-package-lock --no-audit --no-fund 'playwright@1.58.2' '@electron/asar@3.4.1' 
+          if ($LASTEXITCODE -ne 0) { throw 'Smoke dependency installation failed' }
+      - name: Verify installed launch, same-version reinstall and uninstall cleanup
+        env:
+          CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          & ./verifier/packages/desktop/scripts/woowtech-windows-installed-smoke.ps1 `
+            -ReleaseDir "$env:RUNNER_TEMP/candidate/release" -Version $env:CANDIDATE_VERSION `
+            -Publisher 'WOOW TECH CO., LTD.' -SourceRoot "$env:GITHUB_WORKSPACE/candidate-source" `
+            -DiagnosticsDir "$env:RUNNER_TEMP/installed-smoke"
+      - name: Upload installed-copy evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installed-${{ inputs.candidate }}
+          path: |
+            ${{ runner.temp }}/installed-smoke
+            ${{ runner.temp }}/candidate/provenance.json
+          if-no-files-found: warn
+          retention-days: 7
