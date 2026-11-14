@@ -338,8 +338,15 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
-          # woowtech smart: the deb is named after extraMetadata.name in electron-builder.yml.
-          sudo dpkg --remove io.woowtech.smart.desktop
+          debs=(packages/desktop/release/*.deb)
+          if (( ${#debs[@]} != 1 )) || [[ ! -f "${debs[0]}" ]]; then
+            echo "Expected exactly one built deb package"
+            exit 1
+          fi
+          deb="${debs[0]}"
+          desktop_deb="$(dpkg-deb -f "$deb" Package)"
+          test -n "$desktop_deb"
+          sudo dpkg --remove "$desktop_deb"
           # Ubuntu supplies the runtime libraries under Debian package names.
           # RPM still performs the real payload installation and postinstall.
           sudo rpm --install --nodeps packages/desktop/release/*.rpm

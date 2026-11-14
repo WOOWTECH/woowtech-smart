@@ -14,33 +14,17 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { runInNewContext } from "node:vm";
 
 import YAML from "yaml";
 
-import { appliedBrandId, loadBrand } from "./brands/index.cjs";
+import { loadBrand } from "./brands/index.cjs";
 
 const workflowsDir = new URL("../.github/workflows/", import.meta.url);
 const desktopDir = new URL("../packages/desktop/", import.meta.url);
 
 function workflow(name) {
   return YAML.parse(readFileSync(new URL(name, workflowsDir), "utf8"));
-}
-
-/** The name of the deb package our desktop build makes, as electron-builder picks it. */
-async function debPackageName() {
-  const { AppInfo, Packager } = createRequire(new URL("package.json", desktopDir))(
-    "electron-builder",
-  );
-  const packager = new Packager({
-    projectDir: fileURLToPath(desktopDir),
-    config: "electron-builder.yml",
-  });
-  await packager.validateConfig();
-  const { deb, linux } = packager.config;
-  const name =
-    deb?.packageName ?? linux?.packageName ?? new AppInfo(packager, null).linuxPackageName;
-  // fpm lowercases deb package names.
-  return name.toLowerCase();
 }
 
 // The workflows GitHub runs for us.
@@ -446,17 +430,90 @@ test("CI's Ubuntu desktop job may run for an hour", () => {
   assert.equal(workflow("ci.yml").jobs["desktop-tests-ubuntu"]["timeout-minutes"], 60);
 });
 
-test("CI's RPM smoke first removes the deb package our desktop build installed", async () => {
+test("CI's RPM smoke first removes the deb package our desktop build installed", () => {
   // Upstream's deb is `paseo`. dpkg only warns about a package that is not installed,
-  // so a stale name leaves the deb's files in place to hide what the RPM misses. CI builds
-  // woowtech smart, whose deb is named after its desktop app id.
-  const removed = workflow("ci.yml").jobs["desktop-tests-ubuntu"].steps.flatMap(({ run }) =>
-    [...String(run ?? "").matchAll(/\bdpkg --remove (\S+)/g)].map(([, name]) => name),
+  // so a stale name leaves the deb's files in place to hide what the RPM misses.
+  // Read the actual built package's identity instead of predicting its name.
+  const removals = workflow("ci.yml").jobs["desktop-tests-ubuntu"].steps.filter(({ run }) =>
+    /\bdpkg --remove\b/.test(String(run ?? "")),
   );
-  const woowtechDeb = loadBrand("woowtech").desktop.appId.toLowerCase();
-  assert.deepEqual(removed, [woowtechDeb]);
-  if (appliedBrandId() === "woowtech") {
-    assert.equal(await debPackageName(), woowtechDeb);
+  assert.equal(removals.length, 1);
+  assert.ok(removals[0].run.includes('desktop_deb="$(dpkg-deb -f "$deb" Package)"'));
+  assert.ok(removals[0].run.includes("debs=(packages/desktop/release/*.deb)"));
+  assert.ok(removals[0].run.includes("${#debs[@]} != 1"));
+  assert.ok(removals[0].run.includes('deb="${debs[0]}"'));
+  assert.match(removals[0].run, /sudo dpkg --remove "\$desktop_deb"/);
+});
+
+test("Linux artifact smoke observes each brand's installed, AppImage and tar payloads", async () => {
+  const source = readFileSync(new URL("e2e/linux-artifact-smoke.js", desktopDir), "utf8");
+  for (const id of ["woowtech", "apporo"]) {
+    const brand = loadBrand(id);
+    const launches = [];
+    const inspected = [];
+    let failure;
+    const require = createRequire(import.meta.url);
+    await runInNewContext(source, {
+      require(name) {
+        if (name === "node:fs")
+          return {
+            mkdtempSync: () => "/tmp/linux-smoke-fixture",
+            readdirSync: () => ["candidate.AppImage", "candidate.tar.gz"],
+            statSync(file) {
+              inspected.push(file);
+              return { uid: 0, mode: 0o4755 };
+            },
+            readFileSync(file) {
+              inspected.push(file);
+              return `Exec="${brand.name}"`;
+            },
+            existsSync(file) {
+              inspected.push(file);
+              return true;
+            },
+            chmodSync() {},
+            mkdirSync() {},
+            rmSync() {},
+          };
+        if (name === "node:child_process") return { execFileSync() {} };
+        if (name === "./packaged-app-smoke.js")
+          return {
+            async smokePackagedDesktopApp(options) {
+              launches.push(options);
+            },
+          };
+        if (name === "../../../woowtech/brands/index.cjs") return { appliedBrand: () => brand };
+        return require(name);
+      },
+      process: {
+        getuid: () => 1000,
+        argv: ["node", "smoke", "/release", "disabled"],
+        env: { PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: "/evidence" },
+      },
+      console: {
+        error(error) {
+          failure = error;
+        },
+      },
+    });
+    assert.equal(failure, undefined);
+    assert.deepEqual(inspected, [
+      `/opt/${brand.name}/chrome-sandbox`,
+      `/tmp/linux-smoke-fixture/squashfs-root/${brand.name}.desktop`,
+      `/tmp/linux-smoke-fixture/tar/${brand.name}`,
+    ]);
+    assert.deepEqual(
+      launches.map(({ appPath }) => appPath),
+      [
+        `/opt/${brand.name}`,
+        "/tmp/linux-smoke-fixture/squashfs-root",
+        "/tmp/linux-smoke-fixture/tar",
+      ],
+    );
+    assert.deepEqual(
+      launches.map(({ expectedSandbox }) => expectedSandbox),
+      [true, false, false],
+    );
   }
 });
 
