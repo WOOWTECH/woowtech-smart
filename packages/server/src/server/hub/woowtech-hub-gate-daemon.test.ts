@@ -2,6 +2,7 @@
 // the switch refuses reaches the client with its own error code and a message that names the
 // command to run, and the daemon stores nothing. With config.json turning Hub connections on, the
 // status carries no refusal.
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -33,7 +34,7 @@ describe("over the daemon's RPC", () => {
         code: "hub_disabled",
         requestType: "hub.management.daemon.connect.request",
         message: expect.stringContaining(
-          "woowtech-smart daemon config set daemon.hub.enabled true",
+          `${BRAND.cliCommand} daemon config set daemon.hub.enabled true`,
         ),
       });
       await expect(client.updateHubPermissions({ grant: ["daemon.manage"] })).rejects.toMatchObject(

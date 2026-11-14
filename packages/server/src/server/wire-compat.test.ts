@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import {
   createMessageReceiptsStub,
   createTestCreationService,
@@ -619,8 +620,7 @@ test("setup progress is adapted per socket without changing the canonical snapsh
       payload: {
         ...message.payload,
         status: "failed",
-        error:
-          "Workspace setup is blocked pending approval of code from a fork pull request. Update woowtech smart to review and run setup.",
+        error: `Workspace setup is blocked pending approval of code from a fork pull request. Update ${BRAND.name} to review and run setup.`,
       },
     },
   ]);
@@ -633,7 +633,7 @@ test("setup progress is adapted per socket without changing the canonical snapsh
       payload: {
         ...message.payload,
         status: "failed",
-        error: expect.stringContaining("Update woowtech smart"),
+        error: expect.stringContaining(`Update ${BRAND.name}`),
         subscriptionId: expect.any(String),
       },
     },

@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, test } from "vitest";
 import {
   DaemonSelfUpdateInProgressError,
@@ -108,8 +109,7 @@ describe("DaemonSelfUpdater", () => {
 
     expect(result).toEqual({
       success: false,
-      error:
-        "This daemon is managed by woowtech smart Desktop. Update woowtech smart Desktop on the host.",
+      error: `This daemon is managed by ${BRAND.name} Desktop. Update ${BRAND.name} Desktop on the host.`,
       newVersion: null,
     });
     expect(phases).toEqual([]);
@@ -129,8 +129,7 @@ describe("DaemonSelfUpdater", () => {
 
     expect(result).toEqual({
       success: false,
-      error:
-        "woowtech smart does not update the daemon through npm. Update the woowtech smart desktop app on this host.",
+      error: `${BRAND.name} does not update the daemon through npm. Update the ${BRAND.name} desktop app on this host.`,
       newVersion: null,
     });
     expect(phases).not.toContain("installing");

@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { resolveDaemonVersion } from "./daemon-version.js";
 import os from "node:os";
 import http from "node:http";
@@ -94,7 +95,7 @@ describe("paseo daemon bootstrap", () => {
       return response.headers.get("access-control-allow-origin");
     }
     try {
-      expect(await allowedOriginFor("woowtech-smart://app")).toBe("woowtech-smart://app");
+      expect(await allowedOriginFor(`${BRAND.scheme}://app`)).toBe(`${BRAND.scheme}://app`);
       expect(await allowedOriginFor("paseo://app")).toBeNull();
     } finally {
       await daemonHandle.close();
