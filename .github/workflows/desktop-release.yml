@@ -24,6 +24,13 @@ on:
           - macos
           - linux
           - windows
+          - pi-agent
+      pi_agent_sha:
+        description: "Full Pi Agent commit SHA to sign (platform pi-agent only)."
+        type: string
+      pi_agent_version:
+        description: "Pi Agent version to stamp (platform pi-agent only)."
+        type: string
       checkout_ref:
         description: "Optional branch/ref to checkout while using tag for release metadata."
         required: false
@@ -55,6 +62,20 @@ env:
   DESKTOP_PACKAGE_PATH: "packages/desktop"
 
 jobs:
+  pi-agent-signing:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.platform == 'pi-agent' && inputs.publish == 'false' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/pi-agent-signing.yml
+    with:
+      source_sha: ${{ inputs.pi_agent_sha }}
+      version: ${{ inputs.pi_agent_version }}
+    secrets:
+      ESIGNER_STOREPASS: ${{ secrets.ESIGNER_STOREPASS }}
+      ESIGNER_CREDENTIAL_ID: ${{ secrets.ESIGNER_CREDENTIAL_ID }}
+      ESIGNER_TOTP_SECRET: ${{ secrets.ESIGNER_TOTP_SECRET }}
+
   create-release:
     if: ${{ (github.event_name == 'push' && !startsWith(github.ref_name, 'desktop-macos-v') && !startsWith(github.ref_name, 'desktop-linux-v') && !startsWith(github.ref_name, 'desktop-windows-v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'all' && github.event.inputs.publish != 'false') }}
     permissions:
@@ -496,7 +517,7 @@ jobs:
 
   finalize-rollout:
     needs: [publish-macos, publish-linux, publish-windows]
-    if: ${{ always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'false') }}
+    if: ${{ always() && github.event.inputs.platform != 'pi-agent' && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'false') }}
     permissions:
       contents: write
     runs-on: ubuntu-latest

@@ -46,6 +46,10 @@ async function debPackageName() {
 // The workflows GitHub runs for us.
 const ENABLED = ["ci.yml"];
 
+// Owner-authorized signing service, invoked only by the manual Desktop Release mode.
+// It has no push, PR or standalone dispatch trigger.
+const CALL_ONLY = ["pi-agent-signing.yml"];
+
 // Disabled in GitHub: Actions → the workflow → ··· → Disable workflow.
 const DISABLED_IN_UI = {
   "android-apk-release.yml": "builds on upstream's EAS project and uploads to a GitHub release",
@@ -61,12 +65,12 @@ const DISABLED_IN_UI = {
   "release-notes-sync.yml": "creates and edits GitHub releases from upstream's CHANGELOG.md",
 };
 
-test("every workflow file is either enabled or disabled in GitHub's UI", () => {
+test("every workflow file is classified as CI, call-only or disabled", () => {
   // GitHub only reads .yml and .yaml files directly in .github/workflows.
   const files = readdirSync(workflowsDir)
     .filter((name) => /\.ya?ml$/.test(name))
     .sort();
-  const known = [...ENABLED, ...Object.keys(DISABLED_IN_UI)];
+  const known = [...ENABLED, ...CALL_ONLY, ...Object.keys(DISABLED_IN_UI)];
   assert.deepEqual(
     {
       new: files.filter((name) => !known.includes(name)),
@@ -75,9 +79,26 @@ test("every workflow file is either enabled or disabled in GitHub's UI", () => {
     { new: [], gone: [] },
     "GitHub runs a new workflow file as soon as it sees it, starting with the push " +
       "that adds it. Before pushing, follow woowtech/README.md section 18, then list the " +
-      "file in DISABLED_IN_UI with the reason, or in ENABLED if CI needs it. Drop the " +
+      "file in DISABLED_IN_UI with the reason, ENABLED for CI, or CALL_ONLY for a reviewed reusable workflow. Drop the " +
       "names of deleted files.",
   );
+});
+
+test("Pi Agent signing only runs through the explicitly selected nonpublishing mode", () => {
+  for (const name of CALL_ONLY) {
+    assert.deepEqual(Object.keys(workflow(name).on), ["workflow_call"]);
+  }
+  const service = workflow("pi-agent-signing.yml");
+  assert.deepEqual(service.permissions, { contents: "read", actions: "read" });
+  const caller = workflow("desktop-release.yml").jobs["pi-agent-signing"];
+  assert.equal(caller.uses, "./.github/workflows/pi-agent-signing.yml");
+  for (const term of [
+    "github.event_name == 'workflow_dispatch'",
+    "inputs.platform == 'pi-agent'",
+    "inputs.publish == 'false'",
+  ]) {
+    assert.ok(requiredTerms(caller.if).includes(term));
+  }
 });
 
 test("CI runs on every push to main, on pull requests and on demand, as upstream does", () => {

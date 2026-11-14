@@ -1,0 +1,111 @@
+name: Pi Agent signing service
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+    secrets:
+      ESIGNER_STOREPASS:
+        required: true
+      ESIGNER_CREDENTIAL_ID:
+        required: true
+      ESIGNER_TOTP_SECRET:
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate immutable source and version
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]] || exit 1
+      - uses: actions/checkout@v4
+        with:
+          repository: WOOWTECH/Woow_native_os_pi_agent
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Build unsigned bundle without signing credentials
+        env:
+          VERSION: ${{ inputs.version }}
+        run: scripts/build-wsl-bundle.sh dist-wsl "$VERSION" --tag "v$VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pi-agent-unsigned
+          path: dist-wsl/*
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    needs: bundle
+    runs-on: windows-2025
+    timeout-minutes: 20
+    concurrency:
+      group: pi-agent-esigner
+      cancel-in-progress: false
+    steps:
+      # Only signer-owned code executes in the job with credentials. The Pi Agent
+      # checkout and its build script run in the separate, credential-free job.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/pi-agent-signing
+      - uses: actions/download-artifact@v4
+        with:
+          name: pi-agent-unsigned
+          path: dist-wsl
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Fetch pinned jsign
+        shell: pwsh
+        run: |
+          $jar = Join-Path $env:RUNNER_TEMP 'jsign-7.5.jar'
+          Invoke-WebRequest 'https://github.com/ebourg/jsign/releases/download/7.5/jsign-7.5.jar' -OutFile $jar
+          if ((Get-FileHash $jar -Algorithm SHA256).Hash -ne '602a51c3545a6dc4fb99bd2ea7152b26d1345916d0c93ddfbd5936cb735af91c') { throw 'Unexpected jsign hash' }
+          Add-Content $env:GITHUB_ENV "JSIGN_JAR=$jar"
+      - name: Sign the script and launcher without executing either
+        shell: powershell
+        env:
+          ESIGNER_STOREPASS: ${{ secrets.ESIGNER_STOREPASS }}
+          ESIGNER_CREDENTIAL_ID: ${{ secrets.ESIGNER_CREDENTIAL_ID }}
+          ESIGNER_TOTP_SECRET: ${{ secrets.ESIGNER_TOTP_SECRET }}
+        run: |
+          ./scripts/pi-agent-signing/sign-windows.ps1 -Path dist-wsl/install-wsl.ps1
+          ./scripts/pi-agent-signing/build-windows-launcher.ps1 -Installer dist-wsl/install-wsl.ps1 -Output dist-wsl/Install-Pi-Agent.exe
+          ./scripts/pi-agent-signing/sign-windows.ps1 -Path dist-wsl/Install-Pi-Agent.exe
+      - name: Record source and signed file hashes
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          $files = @{}
+          Get-ChildItem dist-wsl -File | ForEach-Object { $files[$_.Name] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+          @{
+            repository = 'WOOWTECH/Woow_native_os_pi_agent'
+            source_sha = $env:SOURCE_SHA
+            version = $env:VERSION
+            signer_sha = $env:GITHUB_SHA
+            run_id = $env:GITHUB_RUN_ID
+            files = $files
+          } | ConvertTo-Json -Depth 4 | Set-Content dist-wsl/signing-manifest.json -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pi-agent-windows-signed
+          path: dist-wsl/*
+          if-no-files-found: error
+          retention-days: 14
