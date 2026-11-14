@@ -1,3 +1,4 @@
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -62,6 +63,7 @@ function bindTestSessionHost(service: PluginService): PluginService {
               type: "status",
               payload: {
                 status: "server_info",
+                brand: BRAND_IDENTITY,
                 serverId: "plugin-service-test",
                 hostname: "plugin-service-test",
                 version: "0.4.0",

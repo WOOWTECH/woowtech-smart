@@ -1,4 +1,5 @@
-import { CLI_TOP_LEVEL_COMMANDS } from "@getpaseo/protocol/brand-cli";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
+import { CLI_COMMAND, CLI_TOP_LEVEL_COMMANDS } from "@getpaseo/protocol/brand-cli";
 import type { Command } from "commander";
 import { describe, expect, it } from "vitest";
 import { createCli } from "./cli.js";
@@ -29,22 +30,26 @@ function upstreamNamesInHelp(command: Command): string[] {
     .map((line) => `${commandLine(command)}: ${line.trim()}`);
 }
 
-describe("the CLI is woowtech-smart", () => {
-  it("names the program woowtech-smart in every usage line", () => {
+describe(`the CLI is ${CLI_COMMAND}`, () => {
+  it(`names the program ${CLI_COMMAND} in every usage line`, () => {
     const program = createCli();
 
-    expect(program.name()).toBe("woowtech-smart");
-    expect(program.helpInformation()).toMatch(/^Usage: woowtech-smart \[options\] \[command\]\n/);
-    expect(subcommand(subcommand(program, "agent"), "archive")?.helpInformation()).toMatch(
-      /^Usage: woowtech-smart agent archive /,
-    );
+    expect(program.name()).toBe(CLI_COMMAND);
+    expect(
+      program.helpInformation().startsWith(`Usage: ${CLI_COMMAND} [options] [command]\n`),
+    ).toBe(true);
+    expect(
+      subcommand(subcommand(program, "agent"), "archive")
+        ?.helpInformation()
+        .startsWith(`Usage: ${CLI_COMMAND} agent archive `),
+    ).toBe(true);
   });
 
-  it("names woowtech smart and its command in every help page, keeping Paseo Hub", () => {
+  it(`names ${PRODUCT_NAME} and its command in every help page, keeping Paseo Hub`, () => {
     const program = createCli();
     expect(withSubcommands(program).flatMap(upstreamNamesInHelp)).toEqual([]);
     expect(program.helpInformation()).toContain(
-      "woowtech smart CLI - control your AI coding agents from the command line",
+      `${PRODUCT_NAME} CLI - control your AI coding agents from the command line`,
     );
     expect(subcommand(program, "hub")?.helpInformation()).toContain("Manage Paseo Hub");
   });
@@ -59,7 +64,7 @@ describe("the CLI is woowtech-smart", () => {
   });
 });
 
-describe("errors name the woowtech-smart command", () => {
+describe(`errors name the ${CLI_COMMAND} command`, () => {
   const error = {
     code: "DAEMON_NOT_RUNNING",
     message: "Cannot connect to daemon. Start with: paseo daemon start",
@@ -68,7 +73,7 @@ describe("errors name the woowtech-smart command", () => {
 
   it("in the table output people read", () => {
     expect(renderError(error, { noColor: true })).toBe(
-      'Error: Cannot connect to daemon. Start with: woowtech-smart daemon start\nUse "woowtech-smart ls" to list available agents',
+      `Error: Cannot connect to daemon. Start with: ${CLI_COMMAND} daemon start\nUse "${CLI_COMMAND} ls" to list available agents`,
     );
   });
 
@@ -76,12 +81,12 @@ describe("errors name the woowtech-smart command", () => {
     expect(JSON.parse(renderError(error, { format: "json" }))).toEqual({
       error: {
         code: "DAEMON_NOT_RUNNING",
-        message: "Cannot connect to daemon. Start with: woowtech-smart daemon start",
-        details: 'Use "woowtech-smart ls" to list available agents',
+        message: `Cannot connect to daemon. Start with: ${CLI_COMMAND} daemon start`,
+        details: `Use "${CLI_COMMAND} ls" to list available agents`,
       },
     });
     expect(renderError(error, { format: "yaml" })).toContain(
-      "Start with: woowtech-smart daemon start",
+      `Start with: ${CLI_COMMAND} daemon start`,
     );
   });
 

@@ -1,3 +1,6 @@
+import { BRAND_WEB_APP } from "@getpaseo/protocol/brand-web-app";
+import { BRAND } from "@getpaseo/protocol/brand-values";
+import { BRAND_RELAY } from "@getpaseo/protocol/brand-relay";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -38,10 +41,8 @@ describe("the link daemon pair prints", () => {
   it("opens the web app for a new home", async () => {
     const offer = await resolveLocalPairingOffer({ paseoHome: path.join(root, "home") });
 
-    expect(linkBase(offer.url)).toBe("https://smart.woowtech.io/");
-    expect(parseConnectionOfferFromUrl(offer.url ?? "")?.relay.endpoint).toBe(
-      "relay.woowtech.io:443",
-    );
+    expect(linkBase(offer.url)).toBe(`${BRAND_WEB_APP.origin}/`);
+    expect(parseConnectionOfferFromUrl(offer.url ?? "")?.relay.endpoint).toBe(BRAND_RELAY.endpoint);
   });
 
   it("opens the web app for a home created with upstream's default", async () => {
@@ -49,17 +50,17 @@ describe("the link daemon pair prints", () => {
       paseoHome: await homeWithAppBaseUrl("https://app.paseo.sh"),
     });
 
-    expect(linkBase(offer.url)).toBe("https://smart.woowtech.io/");
+    expect(linkBase(offer.url)).toBe(`${BRAND_WEB_APP.origin}/`);
   });
 
   it("opens the web app for a home created by 0.8.1, which wrote the app's link scheme", async () => {
     const offer = await resolveLocalPairingOffer({
-      paseoHome: await homeWithAppBaseUrl("woowtech-smart:///"),
+      paseoHome: await homeWithAppBaseUrl(`${BRAND.scheme}:///`),
     });
 
-    expect(linkBase(offer.url)).toBe("https://smart.woowtech.io/");
+    expect(linkBase(offer.url)).toBe(`${BRAND_WEB_APP.origin}/`);
     expect(parseConnectionOfferFromUrl(offer.url ?? "")?.relay).toEqual({
-      endpoint: "relay.woowtech.io:443",
+      endpoint: BRAND_RELAY.endpoint,
       useTls: true,
     });
   });

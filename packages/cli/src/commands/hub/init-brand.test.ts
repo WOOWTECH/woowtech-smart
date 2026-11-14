@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHubCommand } from "./index.js";
 
@@ -11,7 +12,7 @@ describe("hub init", () => {
     process.exitCode = savedExitCode;
   });
 
-  it("names the woowtech-smart command when it stops", async () => {
+  it(`names the ${CLI_COMMAND} command when it stops`, async () => {
     let printed = "";
     vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
       printed += String(chunk);
@@ -22,7 +23,7 @@ describe("hub init", () => {
       from: "user",
     });
 
-    expect(printed).toContain("woowtech-smart hub init requires a TTY.");
+    expect(printed).toContain(`${CLI_COMMAND} hub init requires a TTY.`);
     expect(printed).not.toContain("paseo hub init");
   });
 });
