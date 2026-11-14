@@ -24,6 +24,9 @@ class RecordingPushNotificationSender implements PushNotificationSender {
  * 1. If a present client is focused on the agent → no notification
  * 2. Otherwise, notify the most recently active present client
  * 3. If no client is present → send push for non-error attention
+ *    (woowtech smart: only when a phone has registered for pushes; without one the computer
+ *    used last is notified instead, woowtech-attention-presence.ts. Every client below
+ *    registers the same phone's token, so these tests keep rule 3.)
  *
  * Heartbeat contains:
  * - deviceType: "web" | "mobile"
@@ -57,6 +60,7 @@ describe("client activity tracking", () => {
       messageQueueLimit: null,
     });
     await client.connect();
+    client.registerPushToken("wsp1:en:fcm-test-token:APA91bTestTokenForClientActivity");
     return client;
   }
 

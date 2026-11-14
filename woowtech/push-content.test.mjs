@@ -253,6 +253,9 @@ test("a terminal's push names why it asks for attention", async () => {
         sent.push(payload);
       },
     },
+    // A phone has a push token, so nobody present means a push (woowtech-attention-presence.ts).
+    pushNotifications: { hasActiveTokens: () => true },
+    woowtechPlanWithoutPhone: VoiceAssistantWebSocketServer.prototype.woowtechPlanWithoutPhone,
   };
   for (const reason of ["finished", "needs_input"]) {
     await VoiceAssistantWebSocketServer.prototype.broadcastTerminalAttention.call(daemon, {

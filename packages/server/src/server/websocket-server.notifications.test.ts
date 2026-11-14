@@ -15,6 +15,7 @@ import { asInternals, createStub } from "./test-utils/class-mocks.js";
 import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
 import {
   createPushNotifications,
+  type PushNotifications,
   type PushNotificationSender,
   type PushPayload,
 } from "./push/index.js";
@@ -216,6 +217,13 @@ function connectClient(
     externalDisconnectCleanupTimeout: null,
   });
   return ws;
+}
+
+// woowtech smart: whether a phone has a push token, as push/index.ts's hasActiveTokens() answers.
+function setPhoneHasPushToken(server: VoiceAssistantWebSocketServer, hasToken: boolean) {
+  asInternals<{ pushNotifications: Pick<PushNotifications, "hasActiveTokens"> }>(
+    server,
+  ).pushNotifications = { hasActiveTokens: () => hasToken };
 }
 
 function readAttentionRequiredMessage(ws: ReturnType<typeof createOpenSocket>) {
@@ -425,6 +433,103 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
     expect(pushNotifications.sent).toEqual([]);
+  });
+
+  // woowtech smart (README section 16, owner 2026-11-14): with nobody present and no phone to
+  // push to, the computer used last shows the notice (woowtech-attention-presence.ts).
+  describe("with nobody present", () => {
+    const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+    const computerAway = (minutes: number) => ({
+      deviceType: "web" as const,
+      appVisible: false,
+      focusedAgentId: null,
+      lastActivityAt: minutesAgo(minutes),
+    });
+
+    it("asks the computer used last when no phone has a push token", async () => {
+      const { server, pushNotifications } = createServer();
+      setPhoneHasPushToken(server, false);
+      const earlierWs = connectClient(server, computerAway(30));
+      const laterWs = connectClient(server, computerAway(5));
+
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-X",
+        provider: "claude",
+        reason: "finished",
+      });
+
+      expect(readAttentionRequiredMessage(earlierWs).shouldNotify).toBe(false);
+      expect(readAttentionRequiredMessage(laterWs).shouldNotify).toBe(true);
+      expect(pushNotifications.sent).toEqual([]);
+    });
+
+    it("pushes as before when a phone has a push token", async () => {
+      const { server, pushNotifications } = createServer();
+      setPhoneHasPushToken(server, true);
+      const ws = connectClient(server, computerAway(5));
+
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-X",
+        provider: "claude",
+        reason: "finished",
+      });
+
+      expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
+      expect(pushNotifications.sent).toHaveLength(1);
+    });
+
+    it("shows an error on the computer when no phone has a push token", async () => {
+      const { server, pushNotifications } = createServer();
+      setPhoneHasPushToken(server, false);
+      const ws = connectClient(server, computerAway(10));
+
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-X",
+        provider: "claude",
+        reason: "error",
+      });
+
+      expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(true);
+      expect(pushNotifications.sent).toEqual([]);
+    });
+
+    it("leaves a backgrounded phone without a push token out", async () => {
+      const { server, pushNotifications } = createServer();
+      setPhoneHasPushToken(server, false);
+      const phoneWs = connectClient(server, {
+        deviceType: "mobile",
+        appVisible: false,
+        focusedAgentId: null,
+        lastActivityAt: minutesAgo(1),
+      });
+      const computerWs = connectClient(server, computerAway(40));
+
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-X",
+        provider: "claude",
+        reason: "finished",
+      });
+
+      expect(readAttentionRequiredMessage(phoneWs).shouldNotify).toBe(false);
+      expect(readAttentionRequiredMessage(computerWs).shouldNotify).toBe(true);
+      expect(pushNotifications.sent).toEqual([]);
+    });
+
+    it("still notifies nobody while the daemon is stopping", async () => {
+      const { server, pushNotifications } = createServer();
+      setPhoneHasPushToken(server, false);
+      const ws = connectClient(server, computerAway(10));
+      server.prepareForShutdown();
+
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-X",
+        provider: "claude",
+        reason: "finished",
+      });
+
+      expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
+      expect(pushNotifications.sent).toEqual([]);
+    });
   });
 
   // woowtech smart: the app registers its push token only with a daemon that pushes through
