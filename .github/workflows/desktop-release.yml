@@ -25,6 +25,14 @@ on:
           - linux
           - windows
           - pi-agent
+          - verify-windows
+      windows_candidate:
+        description: "Existing signed candidate to verify (platform verify-windows only)."
+        type: choice
+        default: woowtech
+        options:
+          - woowtech
+          - apporo
       pi_agent_sha:
         description: "Full Pi Agent commit SHA to sign (platform pi-agent only)."
         type: string
@@ -62,6 +70,15 @@ env:
   DESKTOP_PACKAGE_PATH: "packages/desktop"
 
 jobs:
+  verify-windows:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.platform == 'verify-windows' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/windows-installed-verify.yml
+    with:
+      candidate: ${{ inputs.windows_candidate }}
+
   pi-agent-signing:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.platform == 'pi-agent' && inputs.publish == 'false' }}
     permissions:
@@ -519,7 +536,7 @@ jobs:
 
   finalize-rollout:
     needs: [publish-macos, publish-linux, publish-windows]
-    if: ${{ always() && github.event.inputs.platform != 'pi-agent' && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'false') }}
+    if: ${{ always() && github.event.inputs.platform != 'verify-windows' && github.event.inputs.platform != 'pi-agent' && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'false') }}
     permissions:
       contents: write
     runs-on: ubuntu-latest
