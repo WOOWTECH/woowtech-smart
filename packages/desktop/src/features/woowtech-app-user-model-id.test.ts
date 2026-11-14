@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -42,7 +43,7 @@ describe("Windows AppUserModelID", () => {
     expect(applyWindowsAppUserModelId({ platform: "win32", isPackaged: false, ...r })).toBe(
       WOOWTECH_DEV_APP_ID,
     );
-    expect(r.ids).toEqual(["io.woowtech.smart.desktop.dev"]);
+    expect(r.ids).toEqual([`${BRAND.desktop.appId}.dev`]);
     expect(r.clsids).toEqual([WOOWTECH_DEV_TOAST_ACTIVATOR_CLSID]);
     expect(WOOWTECH_DEV_TOAST_ACTIVATOR_CLSID).not.toBe(WOOWTECH_TOAST_ACTIVATOR_CLSID);
   });

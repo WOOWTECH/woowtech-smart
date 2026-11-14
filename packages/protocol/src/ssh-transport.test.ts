@@ -1,3 +1,4 @@
+import { BRAND } from "./brand-values.js";
 import { describe, expect, it } from "vitest";
 import { buildSshTunnelArgs, parseSshTransportUri, validateSshHost } from "./ssh-transport.js";
 
@@ -6,7 +7,7 @@ describe("SSH transport", () => {
     expect(parseSshTransportUri("ssh://deploy@example.com:2222")).toEqual({
       host: "deploy@example.com",
       sshPort: 2222,
-      daemonPort: 6770,
+      daemonPort: BRAND.defaultPort,
     });
   });
 
@@ -21,7 +22,7 @@ describe("SSH transport", () => {
     expect(parseSshTransportUri("ssh://deploy@[2001:db8::1]:2222")).toEqual({
       host: "deploy@2001:db8::1",
       sshPort: 2222,
-      daemonPort: 6770,
+      daemonPort: BRAND.defaultPort,
     });
   });
 

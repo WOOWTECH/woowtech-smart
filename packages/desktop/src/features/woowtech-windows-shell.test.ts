@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, it } from "vitest";
 import {
   hasWindowsLaunchFlag,
@@ -21,11 +22,11 @@ describe("agent link protocol registration", () => {
         platform: "win32",
         isPackaged: true,
         isInstalledCopy: () => true,
-        scheme: "woowtech-smart",
+        scheme: BRAND.scheme,
         setAsDefaultProtocolClient: set,
       }),
     ).toBe(true);
-    expect(calls).toEqual(["woowtech-smart"]);
+    expect(calls).toEqual([BRAND.scheme]);
     for (const input of [
       { platform: "win32" as const, isPackaged: false },
       { platform: "darwin" as const, isPackaged: true },
@@ -35,12 +36,12 @@ describe("agent link protocol registration", () => {
         registerAgentLinkProtocol({
           ...input,
           isInstalledCopy: () => true,
-          scheme: "woowtech-smart",
+          scheme: BRAND.scheme,
           setAsDefaultProtocolClient: set,
         }),
       ).toBe(false);
     }
-    expect(calls).toEqual(["woowtech-smart"]);
+    expect(calls).toEqual([BRAND.scheme]);
   });
 
   it("reports a failed or throwing registration as not registered", () => {
@@ -48,7 +49,7 @@ describe("agent link protocol registration", () => {
       platform: "win32" as const,
       isPackaged: true,
       isInstalledCopy: () => true,
-      scheme: "woowtech-smart",
+      scheme: BRAND.scheme,
     };
     expect(registerAgentLinkProtocol({ ...base, setAsDefaultProtocolClient: () => false })).toBe(
       false,
@@ -72,7 +73,7 @@ describe("installed copies", () => {
         platform: "win32",
         isPackaged: true,
         isInstalledCopy: () => false,
-        scheme: "woowtech-smart",
+        scheme: BRAND.scheme,
         setAsDefaultProtocolClient: (scheme) => {
           calls.push(scheme);
           return true;
@@ -85,15 +86,15 @@ describe("installed copies", () => {
   it("looks for the NSIS uninstaller next to the executable", () => {
     expect(
       windowsUninstallerPath(
-        "C:\\Users\\a\\AppData\\Local\\Programs\\woowtech smart\\woowtech smart.exe",
+        `C:\\Users\\a\\AppData\\Local\\Programs\\${BRAND.name}\\${BRAND.name}.exe`,
       ),
-    ).toBe("C:\\Users\\a\\AppData\\Local\\Programs\\woowtech smart\\Uninstall woowtech smart.exe");
+    ).toBe(`C:\\Users\\a\\AppData\\Local\\Programs\\${BRAND.name}\\Uninstall ${BRAND.name}.exe`);
   });
 });
 
 describe("Windows launch flags", () => {
   it("treats an update relaunch and a COM toast activation as opening the app", () => {
-    expect(hasWindowsLaunchFlag(["C:\\app\\woowtech smart.exe", "--updated"])).toBe(true);
+    expect(hasWindowsLaunchFlag([`C:\\app\\${BRAND.name}.exe`, "--updated"])).toBe(true);
     // LocalServer32 is unquoted, so the folder name splits into extra arguments.
     expect(
       hasWindowsLaunchFlag([
@@ -115,9 +116,9 @@ describe("Windows launch flags", () => {
 describe("tray labels", () => {
   it("uses Traditional Chinese for Traditional Chinese systems", () => {
     for (const language of ["zh-Hant-TW", "zh-TW", "zh-HK", "zh-Hant"]) {
-      expect(trayLabels({ appName: "woowtech smart", preferredLanguages: [language] })).toEqual({
-        tooltip: "woowtech smart",
-        open: "開啟 woowtech smart",
+      expect(trayLabels({ appName: BRAND.name, preferredLanguages: [language] })).toEqual({
+        tooltip: BRAND.name,
+        open: `開啟 ${BRAND.name}`,
         quit: "結束",
       });
     }
@@ -125,9 +126,9 @@ describe("tray labels", () => {
 
   it("keeps English elsewhere, Simplified Chinese included", () => {
     for (const languages of [["en-US"], ["zh-Hans-CN"], ["zh-CN"], ["ja-JP", "zh-TW"], []]) {
-      expect(trayLabels({ appName: "woowtech smart", preferredLanguages: languages })).toEqual({
-        tooltip: "woowtech smart",
-        open: "Open woowtech smart",
+      expect(trayLabels({ appName: BRAND.name, preferredLanguages: languages })).toEqual({
+        tooltip: BRAND.name,
+        open: `Open ${BRAND.name}`,
         quit: "Quit",
       });
     }
@@ -135,23 +136,21 @@ describe("tray labels", () => {
 
   it("marks a test build in the tooltip", () => {
     expect(
-      trayLabels({ appName: "woowtech smart", preferredLanguages: ["zh-TW"], testBuild: true })
-        .tooltip,
-    ).toBe("woowtech smart（測試版）");
+      trayLabels({ appName: BRAND.name, preferredLanguages: ["zh-TW"], testBuild: true }).tooltip,
+    ).toBe(`${BRAND.name}（測試版）`);
     expect(
-      trayLabels({ appName: "woowtech smart", preferredLanguages: ["en-US"], testBuild: true })
-        .tooltip,
-    ).toBe("woowtech smart (test build)");
+      trayLabels({ appName: BRAND.name, preferredLanguages: ["en-US"], testBuild: true }).tooltip,
+    ).toBe(`${BRAND.name} (test build)`);
   });
 });
 
 describe("first-close hint", () => {
   it("says where the app went in the system's language", () => {
-    expect(trayHintText({ appName: "woowtech smart", preferredLanguages: ["zh-TW"] }).title).toBe(
-      "woowtech smart 仍在執行",
+    expect(trayHintText({ appName: BRAND.name, preferredLanguages: ["zh-TW"] }).title).toBe(
+      `${BRAND.name} 仍在執行`,
     );
-    const english = trayHintText({ appName: "woowtech smart", preferredLanguages: ["en-US"] });
-    expect(english.title).toBe("woowtech smart is still running");
+    const english = trayHintText({ appName: BRAND.name, preferredLanguages: ["en-US"] });
+    expect(english.title).toBe(`${BRAND.name} is still running`);
     expect(english.body).toContain("notification area");
   });
 });

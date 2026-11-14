@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -25,18 +26,18 @@ function createFakeMacBundle(options: { includeHelper: boolean }): {
   shimPath: string;
 } {
   const root = mkdtempSync(join(tmpdir(), "paseo-cli-shim-test-"));
-  const appPath = join(root, "woowtech smart.app");
+  const appPath = join(root, `${BRAND.name}.app`);
   const contentsPath = join(appPath, "Contents");
   const resourcesPath = join(contentsPath, "Resources");
   const shimPath = join(resourcesPath, "bin", "paseo");
-  const mainPath = join(contentsPath, "MacOS", "woowtech smart");
+  const mainPath = join(contentsPath, "MacOS", BRAND.name);
   const helperPath = join(
     contentsPath,
     "Frameworks",
-    "woowtech smart Helper.app",
+    `${BRAND.name} Helper.app`,
     "Contents",
     "MacOS",
-    "woowtech smart Helper",
+    `${BRAND.name} Helper`,
   );
 
   mkdirSync(dirname(shimPath), { recursive: true });
@@ -119,11 +120,11 @@ describe("desktop packaging", () => {
     expect(runtimeTrace).toContain('"packages/server/dist/server/skills/**"');
   });
 
-  it("registers woowtech smart agent links with the operating system", () => {
+  it(`registers ${BRAND.name} agent links with the operating system`, () => {
     const config = readFileSync(join(packageRoot, "electron-builder.yml"), "utf8");
 
-    expect(config).toContain("name: woowtech smart agent link");
-    expect(config).toContain("- woowtech-smart");
+    expect(config).toContain(`name: ${BRAND.name} agent link`);
+    expect(config).toContain(`- ${BRAND.scheme}`);
   });
 
   // electron-builder packs production dependencies declared in package.json into
@@ -170,7 +171,7 @@ describe("desktop packaging", () => {
       const result = spawnSync(bundle.shimPath, ["--version"], { encoding: "utf8" });
 
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("Bundled woowtech smart Helper executable not found");
+      expect(result.stderr).toContain(`Bundled ${BRAND.name} Helper executable not found`);
       expect(result.stdout).not.toContain("main-executable");
     } finally {
       rmSync(bundle.root, { recursive: true, force: true });

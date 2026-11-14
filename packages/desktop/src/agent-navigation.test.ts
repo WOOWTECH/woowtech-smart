@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, it } from "vitest";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
 
@@ -5,9 +6,9 @@ describe("desktop agent navigation", () => {
   it("finds an agent deep link among Electron launch arguments", () => {
     expect(
       parseAgentDeepLinkFromArgv([
-        "/Applications/woowtech smart.app/Contents/MacOS/woowtech smart",
+        `/Applications/${BRAND.name}.app/Contents/MacOS/${BRAND.name}`,
         "--no-sandbox",
-        "woowtech-smart://h/server-1/agent/agent-2",
+        `${BRAND.scheme}://h/server-1/agent/agent-2`,
       ]),
     ).toEqual({ serverId: "server-1", agentId: "agent-2" });
   });

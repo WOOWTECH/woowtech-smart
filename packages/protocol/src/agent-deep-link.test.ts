@@ -1,3 +1,4 @@
+import { BRAND } from "./brand-values.js";
 import { describe, expect, it } from "vitest";
 import {
   buildAgentDeepLink,
@@ -11,16 +12,16 @@ describe("agent deep links", () => {
 
     const link = buildAgentDeepLink(target);
 
-    expect(link).toBe("woowtech-smart://h/server%2Fmain/agent/agent%20123");
+    expect(link).toBe(`${BRAND.scheme}://h/server%2Fmain/agent/agent%20123`);
     expect(buildAgentDeepLinkRoute(target)).toBe("/h/server%2Fmain/agent/agent%20123");
     expect(parseAgentDeepLink(link)).toEqual(target);
   });
 
   it("rejects links outside the exact agent route", () => {
     expect(parseAgentDeepLink("https://h/server/agent/agent-1")).toBeNull();
-    expect(parseAgentDeepLink("woowtech-smart://app/h/server/agent/agent-1")).toBeNull();
-    expect(parseAgentDeepLink("woowtech-smart://h/server/agent/agent-1?message=hello")).toBeNull();
-    expect(parseAgentDeepLink("woowtech-smart://h/server/agent/agent-1/extra")).toBeNull();
+    expect(parseAgentDeepLink(`${BRAND.scheme}://app/h/server/agent/agent-1`)).toBeNull();
+    expect(parseAgentDeepLink(`${BRAND.scheme}://h/server/agent/agent-1?message=hello`)).toBeNull();
+    expect(parseAgentDeepLink(`${BRAND.scheme}://h/server/agent/agent-1/extra`)).toBeNull();
   });
 
   it("leaves upstream Paseo links to an upstream Paseo install", () => {
