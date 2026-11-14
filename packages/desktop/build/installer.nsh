@@ -19,6 +19,14 @@
 ; = how the second line of that trampoline starts (src/integrations/cli-install/install.ts, guard).
 !define WOOWTECH_CLI_MARKER "rem apporo-smart CLI trampoline"
 
+; One-click per-user otherwise changes APP_FILENAME to the package name. Keep the
+; branded folder used by assisted installs. The upstream setInstallModePerUser macro
+; still prefers an existing HKCU InstallLocation, and honors an explicit /D override.
+!macro customHeader
+  !undef APP_FILENAME
+  !define APP_FILENAME "${PRODUCT_FILENAME}"
+!macroend
+
 ; D14: Electron registers the toast activator, the Start menu link and the agent-link scheme for
 ; the current user only, so the app is always installed for the current user. No "Anyone who
 ; uses this computer" page and no UAC prompt, non-silent updates included.

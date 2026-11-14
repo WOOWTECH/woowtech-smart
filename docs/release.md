@@ -512,6 +512,14 @@ runs on other refs: workflow concurrency is per ref and cannot prevent TOTP reus
 Build Woowtech and Apporo in separate runs. Download their `desktop-windows`
 Actions artifacts; publishing is disabled throughout.
 
+One-click installs retain the branded product folder for fresh installs; the NSIS
+header overrides the package-name default without changing existing registry
+InstallLocation or explicit `/D` handling. CI reads the actual HKCU uninstall entry
+and its matching InstallLocation, requires the app and uninstaller to exist, and
+checks the per-user uninstall command before checking installed signatures. It
+also asserts the fresh branded directory and unchanged path after silent update.
+Registry diagnostics and candidate installers are retained even when checks fail.
+
 The existing Windows job checks signatures, silent install, silent reinstall with
 `--updated`, and uninstall, including preservation of sentinel files in both user
 data directories. Before shipping, test a double-click install from a standard
