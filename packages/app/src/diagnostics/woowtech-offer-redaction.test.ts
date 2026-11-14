@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, test } from "vitest";
 import { redactAppDiagnosticReport } from "./app-diagnostic-report";
 
@@ -41,8 +42,8 @@ describe("pairing links in an app diagnostics report", () => {
   });
 
   test("still hide the app links of older QR codes whole", () => {
-    expect(redactAppDiagnosticReport(`woowtech-smart:///#offer=${OFFER_PAYLOAD}`, [])).toBe(
-      "woowtech-smart://[redacted]",
+    expect(redactAppDiagnosticReport(`${BRAND.scheme}:///#offer=${OFFER_PAYLOAD}`, [])).toBe(
+      `${BRAND.scheme}://[redacted]`,
     );
   });
 });

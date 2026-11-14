@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { act, renderHook } from "@testing-library/react";
 import { Monitor } from "lucide-react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,8 +57,14 @@ const PROFILE: HostProfile = {
   label: "mbp",
   appearance: defaultHostAppearance(),
   lifecycle: {},
-  connections: [{ id: "direct:localhost:6770", type: "directTcp", endpoint: "localhost:6770" }],
-  preferredConnectionId: "direct:localhost:6770",
+  connections: [
+    {
+      id: `direct:localhost:${DEFAULT_DAEMON_PORT}`,
+      type: "directTcp",
+      endpoint: `localhost:${DEFAULT_DAEMON_PORT}`,
+    },
+  ],
+  preferredConnectionId: `direct:localhost:${DEFAULT_DAEMON_PORT}`,
   createdAt: "2026-10-27T00:00:00.000Z",
   updatedAt: "2026-10-27T00:00:00.000Z",
 };
@@ -117,7 +125,9 @@ describe("Connect to this computer", () => {
 
     // The browser's prompt holds the connection until it is answered, so the wait is 30 s, not the
     // 6 s a direct connection gets (a daemon that is not running still fails at once).
-    expect(env.probes).toEqual([{ endpoint: "localhost:6770", connectTimeoutMs: 30_000 }]);
+    expect(env.probes).toEqual([
+      { endpoint: `localhost:${DEFAULT_DAEMON_PORT}`, connectTimeoutMs: 30_000 },
+    ]);
     expect(saved).toEqual([{ profile: PROFILE, serverId: "srv_local" }]);
     expect(toast.shown).toEqual([]);
   });
@@ -145,8 +155,8 @@ describe("Connect to this computer", () => {
     expect(saved).toEqual([]);
     expect(toast.shown).toEqual([
       {
-        content:
-          "No daemon found on this computer\nStart the woowtech smart desktop app or its daemon (localhost:6770), then try again. If your browser asks to access apps and services on this device, choose Allow. If you chose Allow just now, press the button again.",
+        content: `No daemon found on this computer
+Start the ${PRODUCT_NAME} desktop app or its daemon (localhost:${DEFAULT_DAEMON_PORT}), then try again. If your browser asks to access apps and services on this device, choose Allow. If you chose Allow just now, press the button again.`,
         options: { variant: "error", durationMs: 10_000, testID: "welcome-this-computer-failed" },
       },
     ]);

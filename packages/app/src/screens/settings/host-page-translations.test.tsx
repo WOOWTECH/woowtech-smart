@@ -1,11 +1,14 @@
 /**
  * @vitest-environment jsdom
  */
+import { PRODUCT_NAME_ZH } from "@getpaseo/protocol/brand-name";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import React, { type ReactElement } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/i18n/i18next";
+
+const hasChineseName = /[㐀-鿿]/.test(PRODUCT_NAME_ZH);
 
 const host = vi.hoisted(() => ({
   profile: { serverId: "host-1", label: "Mac", connections: [] },
@@ -121,7 +124,13 @@ describe("host settings in Traditional Chinese", () => {
     renderPage(<pages.HostWorkspacesPage serverId="host-1" />);
 
     expect(screen.getByText("封存 PR 已合併的工作區")).toBeTruthy();
-    expect(screen.getByText("PR 合併後，自動封存沒有未提交變更的渥屋智能工作區")).toBeTruthy();
+    expect(
+      screen.getByText(
+        hasChineseName
+          ? `PR 合併後，自動封存沒有未提交變更的渥屋智能工作區`
+          : `PR 合併後，自動封存沒有未提交變更的 ${PRODUCT_NAME_ZH} 工作區`,
+      ),
+    ).toBeTruthy();
     expect(screen.getByLabelText("封存 PR 已合併的工作區")).toBeTruthy();
     expect(screen.queryByText(/archive/i)).toBeNull();
   });
@@ -132,7 +141,9 @@ describe("host settings in Traditional Chinese", () => {
     expect(screen.getByText("瀏覽器工具")).toBeTruthy();
     expect(
       screen.getByText(
-        "允許 Agent 存取並控制渥屋智能的瀏覽器分頁，包括已登入的瀏覽器狀態。只對你信任的 Agent 開啟。",
+        hasChineseName
+          ? `允許 Agent 存取並控制渥屋智能的瀏覽器分頁，包括已登入的瀏覽器狀態。只對你信任的 Agent 開啟。`
+          : `允許 Agent 存取並控制 ${PRODUCT_NAME_ZH} 的瀏覽器分頁，包括已登入的瀏覽器狀態。只對你信任的 Agent 開啟。`,
       ),
     ).toBeTruthy();
     expect(screen.getByLabelText("啟用瀏覽器工具")).toBeTruthy();
