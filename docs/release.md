@@ -303,7 +303,14 @@ node scripts/finalize-macos-release.mjs --verify packages/desktop/release-finali
 ```
 
 Use the actual channel manifest and `arm64` or `x64`. The output directory must not
-exist. The wrapper calls `packages/desktop/scripts/woowtech-notarize-dmg.sh` with
+exist. The source manifest may contain one architecture (two entries) or both
+architectures (four entries). All listed input files are checked against their
+SHA512 and size before signing; duplicate names, ambiguous or incomplete pairs,
+and unknown architecture suffixes fail. The output contains only the requested
+architecture's DMG and ZIP. If the source legacy path points to the other
+architecture, the wrapper selects the requested architecture's ZIP and updates
+legacy SHA512/size automatically. Never hand-edit input hashes to split a manifest.
+The wrapper calls `packages/desktop/scripts/woowtech-notarize-dmg.sh` with
 its original arguments; that helper owns signing, Apple acceptance, stapling and
 container/inner-app checks. It preserves the source DMG and works on a new copy.
 Keep the existing App notarization for ZIP distribution.
