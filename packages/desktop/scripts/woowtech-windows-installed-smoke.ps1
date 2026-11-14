@@ -62,16 +62,31 @@ function Resolve-CandidateInstall([string]$phase) {
   Write-Host "Verified $phase HKCU installation: $location"
   return $location
 }
+function Assert-InstalledExecutableMetadata($info, [string]$exe, [string]$phaseDir) {
+  # Electron/rcedit stores the exact semver in FileVersion; ProductVersion is
+  # the four-part numeric Windows version. NSIS setup uses a different schema.
+  $expectedProductVersion = (($Version -split '[-+]')[0]) + '.0'
+  $metadata = [pscustomobject]@{
+    executable=$exe; productName=$info.ProductName; productVersion=$info.ProductVersion
+    fileVersion=$info.FileVersion; expectedProductName=$name
+    expectedFileVersion=$Version; expectedProductVersion=$expectedProductVersion
+    sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+  }
+  $json = $metadata | ConvertTo-Json
+  # Persist actual values before asserting so a failed check remains diagnosable.
+  $json | Set-Content -LiteralPath (Join-Path $phaseDir 'launch-target.json')
+  Write-Host "Installed executable metadata: $json"
+  if ($info.FileVersion -cne $Version -or $info.ProductName -cne $name -or
+      $info.ProductVersion -cne $expectedProductVersion) {
+    throw "Installed executable product/version mismatch: $json"
+  }
+}
 function Test-InstalledLaunch([string]$location, [string]$phase) {
   $exe = Join-Path $location "$name.exe"
   $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
-  if (($info.ProductVersion -split '\+')[0] -ne $Version -or $info.ProductName -ne $name) {
-    throw 'Installed executable product/version mismatch'
-  }
   $phaseDir = Join-Path $DiagnosticsDir "installed-$phase"
   New-Item -ItemType Directory -Path $phaseDir -Force | Out-Null
-  [pscustomobject]@{ phase=$phase; executable=$exe; version=$info.ProductVersion; sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash } |
-    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $phaseDir 'launch-target.json')
+  Assert-InstalledExecutableMetadata $info $exe $phaseDir
   $previous = $env:PASEO_DESKTOP_SMOKE_ARTIFACT_DIR
   try {
     $env:PASEO_DESKTOP_SMOKE_ARTIFACT_DIR = $phaseDir
