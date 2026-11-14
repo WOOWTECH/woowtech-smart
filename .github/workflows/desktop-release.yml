@@ -187,6 +187,28 @@ jobs:
           fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
           NODE
 
+      - name: Prepare Mac notary API key
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          for (const name of ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER']) {
+            if (!process.env[name]) throw new Error(`Missing ${name} for Mac finalization`);
+          }
+          let key = process.env.APPLE_API_KEY;
+          if (key.includes('-----BEGIN PRIVATE KEY-----')) {
+            key = path.join(process.env.RUNNER_TEMP, 'desktop-notary-api-key.p8');
+            fs.writeFileSync(key, process.env.APPLE_API_KEY, { mode: 0o600, flag: 'wx' });
+          }
+          if (!fs.statSync(key).isFile()) throw new Error('APPLE_API_KEY must be PEM content or an existing key file');
+          fs.appendFileSync(process.env.GITHUB_ENV, `APPLE_API_KEY=${key}\n`);
+          NODE
+
       - name: Build desktop release
         shell: bash
         env:
@@ -197,6 +219,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           PASEO_DESKTOP_SMOKE: "1"
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
         run: |
@@ -205,6 +229,31 @@ jobs:
           build_args+=("-c.publish.releaseType=$RELEASE_TYPE")
           build_args+=("-c.publish.channel=$RELEASE_CHANNEL")
           npm run build:desktop "${build_args[@]}"
+
+      - name: Finalize and verify Mac distribution
+        id: mac-finalized
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          finalized="${DESKTOP_PACKAGE_PATH}/release-finalized"
+          node scripts/finalize-macos-release-cli.mjs "${DESKTOP_PACKAGE_PATH}/release" "$finalized" "${RELEASE_CHANNEL}-mac.yml" "${{ matrix.electron_arch }}"
+          node scripts/finalize-macos-release.mjs --verify "$finalized" > "$RUNNER_TEMP/mac-finalized-files.txt"
+          {
+            echo 'paths<<MAC_FINALIZED_FILES'
+            cat "$RUNNER_TEMP/mac-finalized-files.txt"
+            echo "$GITHUB_WORKSPACE/$finalized/finalized.json"
+            echo 'MAC_FINALIZED_FILES'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Remove temporary Mac API key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/desktop-notary-api-key.p8"
 
       - name: Upload packaged smoke diagnostics
         if: failure()
@@ -222,15 +271,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          release_dir="${DESKTOP_PACKAGE_PATH}/release"
+          node scripts/finalize-macos-release.mjs --verify "${DESKTOP_PACKAGE_PATH}/release-finalized" > "$RUNNER_TEMP/mac-finalized-files.txt"
           files=()
-          while IFS= read -r -d '' f; do
+          while IFS= read -r f; do
+            case "$f" in *.yml) continue ;; esac
             files+=("$f")
-          done < <(find "$release_dir" -maxdepth 1 -type f ! -name '*.yml' -print0 | sort -z)
-          if (( ${#files[@]} == 0 )); then
-            echo "::error::No release artifacts found in $release_dir"
-            exit 1
-          fi
+          done < "$RUNNER_TEMP/mac-finalized-files.txt"
           release_lookup="$(node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG")"
           gh release upload "$release_lookup" "${files[@]}" --clobber --repo "${{ github.repository }}"
 
@@ -239,7 +285,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-macos-${{ matrix.electron_arch }}
-          path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/*.dmg
+          path: ${{ steps.mac-finalized.outputs.paths }}
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload manifest artifact
@@ -247,7 +294,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-manifest-${{ matrix.electron_arch }}
-          path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/${{ env.RELEASE_CHANNEL }}-mac.yml
+          path: ${{ env.DESKTOP_PACKAGE_PATH }}/release-finalized/${{ env.RELEASE_CHANNEL }}-mac.yml
+          if-no-files-found: error
           retention-days: 1
 
   publish-linux:
