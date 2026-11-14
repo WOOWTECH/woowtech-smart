@@ -1,3 +1,4 @@
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DaemonClient,
@@ -102,6 +103,7 @@ class HostInfoTransport implements DaemonTransport {
           type: "status",
           payload: {
             status: "server_info",
+            brand: BRAND_IDENTITY,
             serverId,
             hostname,
             version: "0.8.0",

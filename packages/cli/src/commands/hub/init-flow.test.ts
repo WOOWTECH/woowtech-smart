@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { strict as assert } from "node:assert";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -48,8 +49,8 @@ describe("Hub guided setup continuation", () => {
     ]);
     assert.deepEqual(prompts.selections, []);
     assert.deepEqual(prompts.messages, [
-      "Daemon connected with no permissions.\n\nEnable Hub automations later:\n  woowtech-smart hub permissions grant hub.execute",
-      "Configure triggers in Hub: https://hub.test/triggers\nOr scaffold triggers as code: woowtech-smart hub init",
+      `Daemon connected with no permissions.\n\nEnable Hub automations later:\n  ${CLI_COMMAND} hub permissions grant hub.execute`,
+      `Configure triggers in Hub: https://hub.test/triggers\nOr scaffold triggers as code: ${CLI_COMMAND} hub init`,
     ]);
     assert.deepEqual(calls, [{ operation: "token", origin: "https://hub.test" }]);
     assert.equal(daemon.connections, 1);
@@ -69,8 +70,8 @@ describe("Hub guided setup continuation", () => {
       setupEnvironment(cwd, credentials, daemon, connectDeclined, []),
     );
     assert.deepEqual(connectDeclined.messages, [
-      "Skipped daemon connection. Connect later with: woowtech-smart hub connect https://hub.test",
-      "Configure triggers in Hub: https://hub.test/triggers\nOr scaffold triggers as code: woowtech-smart hub init",
+      `Skipped daemon connection. Connect later with: ${CLI_COMMAND} hub connect https://hub.test`,
+      `Configure triggers in Hub: https://hub.test/triggers\nOr scaffold triggers as code: ${CLI_COMMAND} hub init`,
     ]);
   });
 
@@ -90,7 +91,7 @@ describe("Hub guided setup continuation", () => {
     assert.deepEqual(prompts.confirmations, []);
     assert.deepEqual(prompts.messages, [
       "This daemon is already connected to https://hub.test. Permissions: None.",
-      "Configure triggers in Hub: https://hub.test/triggers\nOr scaffold triggers as code: woowtech-smart hub init",
+      `Configure triggers in Hub: https://hub.test/triggers\nOr scaffold triggers as code: ${CLI_COMMAND} hub init`,
     ]);
   });
 
@@ -126,8 +127,8 @@ describe("Hub guided setup continuation", () => {
     );
 
     assert.deepEqual(prompts.messages, [
-      "Skipped daemon connection. Connect later with: woowtech-smart hub connect https://hub.test",
-      "Configure triggers in Hub: https://hub.test/triggers\nOr scaffold triggers as code: woowtech-smart hub init",
+      `Skipped daemon connection. Connect later with: ${CLI_COMMAND} hub connect https://hub.test`,
+      `Configure triggers in Hub: https://hub.test/triggers\nOr scaffold triggers as code: ${CLI_COMMAND} hub init`,
     ]);
   });
 
@@ -271,7 +272,7 @@ describe("Hub guided setup continuation", () => {
     });
   });
 
-  it("names the woowtech-smart command for adding another Hub app connection", async () => {
+  it(`names the ${CLI_COMMAND} command for adding another Hub app connection`, async () => {
     const cwd = await temporaryDirectory();
     const credentials = new MemoryCredentials();
     credentials.save({ origin: "https://hub.test", credential: "secret" });
@@ -297,7 +298,7 @@ describe("Hub guided setup continuation", () => {
     );
 
     assert.deepEqual(prompts.messages, [
-      "Hub app connections ready for this trigger:\nSlack — Team A\nSlack — Team B\n\nOnly configured connections are shown. To add another, open Hub → Apps, then run `woowtech-smart hub init` again.",
+      `Hub app connections ready for this trigger:\nSlack — Team A\nSlack — Team B\n\nOnly configured connections are shown. To add another, open Hub → Apps, then run \`${CLI_COMMAND} hub init\` again.`,
     ]);
   });
 
