@@ -293,6 +293,47 @@ The desktop app requires macOS 13 or newer. Keep both release guards when the fl
 
 macOS 13 maps to Darwin 22. The two values use different version domains; do not copy the macOS version into the update manifest.
 
+### macOS DMG finalization
+
+Build with `--publish never`. Before uploading either brand's Mac artifacts, run:
+
+```bash
+node scripts/finalize-macos-release-cli.mjs packages/desktop/release packages/desktop/release-finalized latest-mac.yml arm64
+node scripts/finalize-macos-release.mjs --verify packages/desktop/release-finalized
+```
+
+Use the actual channel manifest and `arm64` or `x64`. The output directory must not
+exist. The wrapper calls `packages/desktop/scripts/woowtech-notarize-dmg.sh` with
+its original arguments; that helper owns signing, Apple acceptance, stapling and
+container/inner-app checks. It preserves the source DMG and works on a new copy.
+Keep the existing App notarization for ZIP distribution.
+
+Authentication uses the existing electron-builder API-key environment:
+`APPLE_API_KEY` (path to the `.p8` file), `APPLE_API_KEY_ID`, and
+`APPLE_API_ISSUER`. No keychain profile is required. The workflow accepts
+`APPLE_API_KEY` secret as PEM content or an existing runner file path and removes
+only the temporary key file it creates. Apple-ID-only authentication is insufficient
+for this helper; configure the API-key credentials before running the candidate.
+For signing, reuse `CSC_KEYCHAIN`/`CSC_NAME` on a managed Mac, or let the wrapper
+import `CSC_LINK` with `CSC_KEY_PASSWORD` into a temporary keychain. It restores
+the previous search list and removes the keychain it created. Never commit keys.
+
+Finalization updates the DMG SHA512/size and legacy manifest fields, regenerates
+sidecar blockmaps using the pinned electron-builder implementation, and copies
+ZIP bytes unchanged. `finalized.json` is written last and lists only the DMG,
+ZIP, their blockmaps and the channel manifest, with SHA256/SHA512/size for review.
+Upload only paths returned by `--verify`, which rechecks those bytes and manifest
+references. Helper logs and original artifacts are excluded. A failed run leaves
+no completion marker; retry into a new directory. Keep candidate dispatches at
+`publish=false`; this gate does not authorize public release.
+
+Linux validation uses the existing manifest test suite with a mocked Apple helper
+and real blockmap generation. Record the source commit separately from native
+candidate evidence: a previous DMG passing Apple checks does not prove a newer
+wrapper/workflow ran. On a Mac, test the complete wrapper for both brands and
+architectures, then download the finalized DMG with quarantine intact and verify
+Finder opening, installation and first launch before approving publication.
+
 ### macOS first launch installation
 
 For Smart and Apporo, test the signed DMG and ZIP on a physical Mac before publishing.
