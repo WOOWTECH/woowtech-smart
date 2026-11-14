@@ -1,6 +1,12 @@
 name: Verify installed Windows candidate
 
 on:
+  workflow_call:
+    inputs:
+      candidate:
+        description: "Reviewed existing signed candidate (woowtech or apporo)"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       candidate:
