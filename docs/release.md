@@ -451,6 +451,29 @@ release date, and publishes the draft. Use `desktop-vX.Y.Z` when more than one
 platform failed. A `workflow_dispatch` rebuild with publishing enabled follows
 the same path against the existing draft.
 
+### Windows installer candidates
+
+Use a feature branch for both the workflow `--ref` and `checkout_ref`, with
+`platform=windows`, `publish=false`, and `tag=v0.10.2-rc.1`. Here `tag` supplies
+version metadata only: do not create or push that tag. The Windows job accepts
+`vX.Y.Z-rc.N` only when publishing is disabled; the shared release version tool
+continues to reject RCs. The desktop package version and installer filename use
+the candidate version. Brand application preserves this version and keeps each
+brand's app ID, updater cache, data directories and release repository separate.
+
+Coordinate enabling a disabled Desktop Release workflow with its owner. Serialize
+Windows signing runs with other jobs using the same signing credential, including
+runs on other refs: workflow concurrency is per ref and cannot prevent TOTP reuse.
+Build Woowtech and Apporo in separate runs. Download their `desktop-windows`
+Actions artifacts; publishing is disabled throughout.
+
+The existing Windows job checks signatures, silent install, silent reinstall with
+`--updated`, and uninstall, including preservation of sentinel files in both user
+data directories. Before shipping, test a double-click install from a standard
+Windows user (no wizard or UAC; app opens), upgrade an existing 0.10.1 installation,
+and exercise an actual updater-driven restart. A same-version silent reinstall
+in CI does not replace these interactive and previous-version checks.
+
 ### Pi Agent Windows signing
 
 The `pi-agent` platform of `Desktop Release` signs a specified full commit from

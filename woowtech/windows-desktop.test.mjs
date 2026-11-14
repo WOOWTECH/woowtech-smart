@@ -3,12 +3,16 @@
 // guard (desktop-notification-launch.test.mjs). The policies have unit tests in
 // packages/desktop/src/features/woowtech-*.test.ts.
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { readFileSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import YAML from "yaml";
 
-import { appliedBrand } from "./brands/index.cjs";
+import { appliedBrand, loadBrand } from "./brands/index.cjs";
+import { brandElectronBuilderConfig } from "./brands/apply.mjs";
 
 function source(path) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -106,13 +110,16 @@ test("Windows' Apps & features links point at the brand's website, not upstream'
   assert.equal(extraMetadata.homepage, `https://${brand.links.websiteHost}/`);
 });
 
-test("the Windows installer has no folder page: it installs where the update will look (2026-11-05)", () => {
+test("double-click installs for the current user without a wizard and opens the app", () => {
   const { nsis } = YAML.parse(source("packages/desktop/electron-builder.yml"));
   // Owner decision of 2026-11-05 (README §31): one install folder under the user's profile. A folder the
   // user picks multiplies what has to work: a protected folder fails for a per-user install without UAC, and
   // Chinese, spaces, & and % in a path each need care. IT can still pass /D=<folder> to a silent install.
   assert.equal(nsis.allowToChangeInstallationDirectory, false);
   assert.equal(nsis.perMachine, false);
+  assert.equal(nsis.oneClick, true);
+  assert.equal(nsis.runAfterFinish, true);
+  assert.equal(nsis.deleteAppDataOnUninstall, false);
 });
 
 test("the Windows build does not need the symlink privilege", () => {
@@ -325,4 +332,68 @@ test("Windows installs an update only from a silent restart, never at quit (G37,
     /const \{ isSilent, isForceRunAfter \} = updateInstallMode\(\{\s*platform: process.platform,\s*\.\.\.requested,\s*\}\);/,
   );
   assert.match(updater, /autoUpdater.quitAndInstall\(isSilent, isForceRunAfter\);/);
+});
+
+// Run the actual workflow metadata command: RCs must never enter the publishing path.
+test("Windows candidate metadata accepts RC only with publishing disabled", () => {
+  const workflow = YAML.parse(source(".github/workflows/desktop-release.yml"));
+  const command = workflow.jobs["publish-windows"].steps.find(
+    (step) => step.name === "Resolve release metadata",
+  ).run;
+  const root = new URL("../", import.meta.url);
+  const dir = mkdtempSync(join(tmpdir(), "windows-candidate-"));
+  try {
+    for (const [tag, publish, status, version, channel] of [
+      ["v0.10.2-rc.1", "false", 0, "0.10.2-rc.1", "rc"],
+      ["v0.10.2-rc.1", "true", 1],
+      ["v0.10.2-rc.invalid", "false", 1],
+      ["v0.10.2-beta.1", "false", 0, "0.10.2-beta.1", "beta"],
+      ["v0.10.1", "false", 0, "0.10.1", "latest"],
+    ]) {
+      const output = join(dir, `${tag}-${publish}`);
+      const result = spawnSync("bash", ["-e", "-c", command], {
+        cwd: root,
+        env: { ...process.env, SOURCE_TAG: tag, SHOULD_PUBLISH: publish, GITHUB_ENV: output },
+        encoding: "utf8",
+      });
+      assert.equal(result.status, status, `${tag}/${publish}: ${result.stderr}`);
+      if (status === 0) {
+        const env = Object.fromEntries(
+          readFileSync(output, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => line.split("=")),
+        );
+        assert.equal(env.DESKTOP_VERSION, version);
+        assert.equal(env.RELEASE_CHANNEL, channel);
+        assert.equal(env.RELEASE_TYPE, channel === "latest" ? "release" : "prerelease");
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("brand application keeps one-click policy and candidate version while isolating Windows identity", () => {
+  const input = YAML.parse(source("packages/desktop/electron-builder.yml"));
+  input.extraMetadata.version = "0.10.2-rc.1";
+  const configs = ["woowtech", "apporo"].map((id) => {
+    const brand = loadBrand(id);
+    const config = YAML.parse(brandElectronBuilderConfig(YAML.stringify(input), brand));
+    assert.deepEqual(config.nsis, input.nsis);
+    assert.equal(config.extraMetadata.version, "0.10.2-rc.1");
+    assert.equal(config.appId, brand.desktop.appId);
+    assert.equal(config.extraMetadata.name, brand.desktop.appId);
+    assert.equal(config.productName, brand.name);
+    assert.equal(
+      config.win.artifactName,
+      `${brand.desktop.artifactPrefix}-Setup-\${version}-\${arch}.\${ext}`,
+    );
+    assert.equal(`${config.publish.owner}/${config.publish.repo}`, brand.links.releasesRepo);
+    return config;
+  });
+  assert.notEqual(configs[0].appId, configs[1].appId);
+  assert.notEqual(configs[0].productName, configs[1].productName);
+  assert.notEqual(configs[0].publish.repo, configs[1].publish.repo);
+  assert.notEqual(loadBrand("woowtech").homeDir, loadBrand("apporo").homeDir);
 });
