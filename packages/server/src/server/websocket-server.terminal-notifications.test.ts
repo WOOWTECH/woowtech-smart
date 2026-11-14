@@ -16,7 +16,7 @@ import type {
 import type { PersistedWorkspaceRecord, WorkspaceRegistry } from "./workspace-registry.js";
 import { asInternals, createStub } from "./test-utils/class-mocks.js";
 import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
-import type { PushNotificationSender, PushPayload } from "./push/index.js";
+import type { PushNotifications, PushNotificationSender, PushPayload } from "./push/index.js";
 import type { WorkspaceAutoName } from "./workspace-auto-name.js";
 import { relayReasonFor } from "@getpaseo/protocol/woowtech-push";
 
@@ -194,7 +194,17 @@ function createOpenSocket() {
   };
 }
 
-function connectClient(server: VoiceAssistantWebSocketServer, subscribed = true) {
+function connectClient(
+  server: VoiceAssistantWebSocketServer,
+  subscribed = true,
+  activity: {
+    deviceType: "web" | "mobile";
+    focusedAgentId: string | null;
+    focusedTerminalId: string | null;
+    lastActivityAt: Date;
+    appVisible: boolean;
+  } | null = null,
+) {
   const ws = createOpenSocket();
   const delivery = new SessionDelivery(() => {});
   delivery.attach(ws, false);
@@ -203,7 +213,7 @@ function connectClient(server: VoiceAssistantWebSocketServer, subscribed = true)
     session: {
       delivery,
       wantsSourceNotification: () => true,
-      getClientActivity: vi.fn(() => null),
+      getClientActivity: vi.fn(() => activity),
       subscribesToTerminalDirectory: vi.fn(async () => subscribed),
     },
     clientId: "client-test",
@@ -523,6 +533,54 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
     await flushAsync();
 
     expect(pushNotifications.sent).toEqual([]);
+  });
+
+  // woowtech smart (README section 16, owner 2026-11-14): with nobody present and no phone to
+  // push to, the computer used last shows the terminal's notice (woowtech-attention-presence.ts).
+  describe("with nobody present", () => {
+    async function finishTerminalWithComputerAway(phoneHasToken: boolean) {
+      const { manager, emit } = createTerminalManager();
+      const { server, pushNotifications } = createServer(
+        manager,
+        createWorkspaceRegistry([workspaceRecord()]),
+      );
+      asInternals<{ pushNotifications: Pick<PushNotifications, "hasActiveTokens"> }>(
+        server,
+      ).pushNotifications = { hasActiveTokens: () => phoneHasToken };
+      const ws = connectClient(server, true, {
+        deviceType: "web",
+        focusedAgentId: null,
+        focusedTerminalId: null,
+        lastActivityAt: new Date(Date.now() - 10 * 60_000),
+        appVisible: false,
+      });
+
+      emit(
+        transition({
+          previousState: "working",
+          previousChangedAt: 0,
+          state: "idle",
+          changedAt: 15000,
+        }),
+      );
+      await flushAsync();
+
+      return { shouldNotify: readTerminalAttentionMessage(ws).shouldNotify, pushNotifications };
+    }
+
+    it("asks the computer used last when no phone has a push token", async () => {
+      const { shouldNotify, pushNotifications } = await finishTerminalWithComputerAway(false);
+
+      expect(shouldNotify).toBe(true);
+      expect(pushNotifications.sent).toEqual([]);
+    });
+
+    it("pushes as before when a phone has a push token", async () => {
+      const { shouldNotify, pushNotifications } = await finishTerminalWithComputerAway(true);
+
+      expect(shouldNotify).toBe(false);
+      expect(pushNotifications.sent).toHaveLength(1);
+    });
   });
 
   // woowtech smart: the push relay picks its sentence from the reason (push/woowtech-relay.ts),

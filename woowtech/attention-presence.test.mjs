@@ -1,7 +1,8 @@
 // woowtech smart (README section 16): source wiring only; the behaviour is covered by
-// packages/server/src/server/woowtech-attention-presence.test.ts and the woowtech cases in
-// websocket-server.notifications.test.ts. Fails when an upstream merge puts the daemon's
-// presence mapping back to upstream.
+// packages/server/src/server/woowtech-attention-presence.test.ts, the woowtech cases in
+// websocket-server.notifications.test.ts and websocket-server.terminal-notifications.test.ts, and
+// woowtech-attention-without-phone-daemon.test.ts. Fails when an upstream merge puts the daemon's
+// presence rules back to upstream.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -56,8 +57,8 @@ test("attention raised while the daemon stops notifies nobody", () => {
     );
     assert.match(
       method(tree, name).body.getText(tree),
-      /const plan = woowtechNotificationPlanWhileStopping\(\s*computeNotificationPlan\(/,
-      `${name} must pass its plan through woowtechNotificationPlanWhileStopping`,
+      /const plan = woowtechNotificationPlanWhileStopping\(\s*this\.woowtechPlanWithoutPhone\(\s*computeNotificationPlan\(/,
+      `${name} must pass its plan through woowtechNotificationPlanWhileStopping last`,
     );
   }
 
@@ -69,4 +70,31 @@ test("attention raised while the daemon stops notifies nobody", () => {
   const close = bootstrap.indexOf("await closeAllAgents(logger, agentManager);");
   assert.ok(prepare !== -1 && close !== -1, "bootstrap stop() no longer has the expected steps");
   assert.ok(prepare < close, "bootstrap must stop the WebSocket server before closing agents");
+});
+
+// With nobody present and no phone to push to, the computer used last shows the notice (owner
+// 2026-11-14): both broadcasts hand upstream's plan, with the clients it was computed from, to
+// the rule, and the rule asks the push token store.
+test("with no phone to push to, the computer used last shows the notice", () => {
+  const tree = source(serverFile);
+  for (const name of ["broadcastAgentAttention", "broadcastTerminalAttention"]) {
+    const body = method(tree, name).body.getText(tree);
+    assert.match(
+      body,
+      /const allStates = notificationEntries\.map\(\(e\) => e\.state\);/,
+      `${name} must compute its plan from notificationEntries, in that order`,
+    );
+    assert.match(
+      body,
+      /this\.woowtechPlanWithoutPhone\(\s*computeNotificationPlan\(\{[\s\S]*?\}\),\s*notificationEntries,\s*nowMs,\s*\)/,
+      `${name} must pass its plan through woowtechPlanWithoutPhone`,
+    );
+  }
+  const helper = method(tree, "woowtechPlanWithoutPhone").body.getText(tree);
+  assert.match(helper, /return woowtechNotificationPlanWithoutPhone\(\{/);
+  assert.match(
+    helper,
+    /deviceType: this\.sessions\.get\(ws\)\?\.session\.getClientActivity\(ws\)\?\.deviceType \?\? null,/,
+  );
+  assert.match(helper, /hasPushTargets: \(\) => this\.pushNotifications\.hasActiveTokens\(\),/);
 });

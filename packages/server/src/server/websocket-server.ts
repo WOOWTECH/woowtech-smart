@@ -76,10 +76,12 @@ import {
   computeNotificationPlan,
   isPushEligibleAttentionReason,
   type ClientPresenceState,
+  type NotificationPlan,
 } from "./agent-attention-policy.js";
 import {
   woowtechClientPresenceState,
   woowtechNotificationPlanWhileStopping,
+  woowtechNotificationPlanWithoutPhone,
 } from "./woowtech-attention-presence.js";
 import { WoowtechAttentionFallback } from "./woowtech-attention-fallback.js";
 import {
@@ -2556,6 +2558,26 @@ export class VoiceAssistantWebSocketServer {
   }
 
   /**
+   * woowtech smart: with nobody present and no phone to push to, the computer used last shows
+   * the notice (woowtech-attention-presence.ts). `entries` are the ones the plan was computed from.
+   */
+  private woowtechPlanWithoutPhone(
+    plan: NotificationPlan,
+    entries: Array<{ ws: WebSocketLike; state: ClientPresenceState }>,
+    nowMs: number,
+  ): NotificationPlan {
+    return woowtechNotificationPlanWithoutPhone({
+      plan,
+      clients: entries.map(({ ws, state }) => ({
+        state,
+        deviceType: this.sessions.get(ws)?.session.getClientActivity(ws)?.deviceType ?? null,
+      })),
+      hasPushTargets: () => this.pushNotifications.hasActiveTokens(),
+      nowMs,
+    });
+  }
+
+  /**
    * woowtech smart: a computer's notice waits, then goes to the phone if nobody dealt with it
    * (woowtech-attention-escalation.ts). A phone's notice does not wait.
    */
@@ -2639,12 +2661,16 @@ export class VoiceAssistantWebSocketServer {
     });
 
     const plan = woowtechNotificationPlanWhileStopping(
-      computeNotificationPlan({
-        allStates,
-        focusTarget: { kind: "agent", id: params.agentId },
-        pushEligible: isPushEligibleAttentionReason(params.reason),
+      this.woowtechPlanWithoutPhone(
+        computeNotificationPlan({
+          allStates,
+          focusTarget: { kind: "agent", id: params.agentId },
+          pushEligible: isPushEligibleAttentionReason(params.reason),
+          nowMs,
+        }),
+        notificationEntries,
         nowMs,
-      }),
+      ),
       woowtechStopping,
     );
 
@@ -2760,12 +2786,16 @@ export class VoiceAssistantWebSocketServer {
     const workspaceId = params.workspaceId;
 
     const plan = woowtechNotificationPlanWhileStopping(
-      computeNotificationPlan({
-        allStates,
-        focusTarget: { kind: "terminal", id: params.terminalId },
-        pushEligible: true,
+      this.woowtechPlanWithoutPhone(
+        computeNotificationPlan({
+          allStates,
+          focusTarget: { kind: "terminal", id: params.terminalId },
+          pushEligible: true,
+          nowMs,
+        }),
+        notificationEntries,
         nowMs,
-      }),
+      ),
       woowtechStopping,
     );
 
