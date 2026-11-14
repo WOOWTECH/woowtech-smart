@@ -130,12 +130,15 @@ jobs:
       - name: Resolve applied desktop brand
         run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'WOOWTECH_BRAND=' + require('./woowtech/brands/index.cjs').appliedBrandId() + '\n')"
 
-      - name: Test Windows installer policy (18 cases)
+      - name: Test Windows installer policy (21 cases)
         run: node --test --test-concurrency=1 woowtech/windows-desktop.test.mjs
 
       - name: Test macOS installation policy (27 cases)
         working-directory: packages/desktop
         run: npx vitest run src/features/macos-install.test.ts --bail=1 --maxWorkers=1
+
+      - name: Test finalized desktop manifests
+        run: npx vitest run scripts/validate-desktop-manifests.test.mjs --bail=1 --maxWorkers=1
 
       - name: Build server stack
         run: npm run build:server
