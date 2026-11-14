@@ -293,6 +293,51 @@ The desktop app requires macOS 13 or newer. Keep both release guards when the fl
 
 macOS 13 maps to Darwin 22. The two values use different version domains; do not copy the macOS version into the update manifest.
 
+### macOS first launch installation
+
+For Smart and Apporo, test the signed DMG and ZIP on a physical Mac before publishing.
+The main-process prompt uses the system language (Traditional Chinese or English),
+so it can run before renderer settings and daemon startup. Branding comes from
+`APP_NAME`; cherry-pick the same change onto both release candidates without changing
+builder configuration or versions.
+
+The bundled Electron helpers run Chromium/CLI processes; they do not install the app.
+Installation uses Electron's `moveToApplicationsFolder`, which owns copying and
+relaunching. Keep DMG/ZIP and the existing updater. Never replace an existing copy
+through this prompt, including an older version: open that copy and use its updater.
+Electron 44.2.0's privileged installation bypasses its conflict callback, so the
+prompt requires a writable `/Applications` and checks both system and user Applications
+for an existing bundle before calling Electron. Restricted destinations require Finder
+installation. This is not an atomic installer: do not run another installer or change
+Applications permissions concurrently with installation.
+
+Physical-Mac acceptance for each brand (record macOS version, architecture and artifact SHA):
+
+1. With no installed copy, double-click the signed app inside the DMG. Accept the
+   Gatekeeper dialog, then the install prompt. Verify the running executable is under
+   `/Applications`, only one GUI/daemon starts, the signature still validates, and a
+   second launch does not prompt. Repeat with the ZIP extracted into Downloads.
+2. Decline the prompt or press Escape. Verify the app opens from its original location
+   and nothing is copied. Quit and reopen to confirm installation can be offered again.
+3. Put the same, newer, then older version in `/Applications` or `~/Applications`.
+   Try installation from Downloads, with the installed copy stopped and running.
+   Verify its bundle/hash and processes are preserved. A running copy may receive focus
+   through the existing single-instance path. Otherwise the prompt explains how to open
+   the installed copy and update it.
+4. Use a standard account without write access to `/Applications`. Verify Finder
+   instructions appear and no privileged overwrite is attempted. Simulate a copy failure
+   on a disposable test volume; verify visible recovery instructions and normal launch.
+5. Check English and Traditional Chinese, including the Apporo product name. Check a
+   development launch, CLI, deep link, and automation with `WOOWTECH_SKIP_MAC_INSTALL=1`:
+   none may install. Automation must set the opt-out when it uses a plain GUI launch.
+6. From an installed older signed version, exercise the existing ZIP automatic update
+   to the candidate. Confirm update/relaunch has no installation prompt and daemon
+   lifecycle remains correct. Also verify ordinary Quit still follows keep-running settings.
+
+Linux unit tests cover policy and filesystem guards, not Gatekeeper, App Translocation,
+Finder, signing, native copying or relaunch. Mac signing/build and these checks belong
+to the coordinating release run; they are required before public release.
+
 ### Limitations
 
 - **No pause / kill switch.** To stop new admissions, ship a superseding release. Clients revalidate on quit and will not install the superseded download, but a client that already completed installation cannot be recalled; ship a hotfix `+1` patch.

@@ -15,6 +15,7 @@ import {
   autoUpdater as electronAutoUpdater,
   BrowserWindow,
   ClipboardItem,
+  dialog,
   clipboard,
   Menu,
   ipcMain,
@@ -116,6 +117,7 @@ import {
   registerExternalQuitSignals,
   stopDesktopManagedDaemonOnQuitIfNeeded,
 } from "./daemon/quit-lifecycle.js";
+import { checkMacInstallDestination, offerMacInstall } from "./features/macos-install.js";
 import { runDesktopStartup } from "./desktop-startup.js";
 import { isWoowtechTestBuild } from "./daemon/runtime-paths.js";
 import { registerBrowserAutomationIpc } from "./features/browser-automation/ipc.js";
@@ -991,12 +993,34 @@ async function runCliPassthroughIfRequested(): Promise<boolean> {
   return true;
 }
 
+let guiServicesStarted = false;
+
 async function bootstrap(): Promise<void> {
   if (!setupSingleInstanceLock()) {
     return;
   }
 
   await app.whenReady();
+
+  if (
+    offerMacInstall({
+      platform: process.platform,
+      argv: process.argv,
+      env: process.env,
+      appName: APP_NAME,
+      hasPendingLaunch: () => Boolean(pendingOpenProjectPath || pendingAgentNavigation),
+      app,
+      dialog,
+      checkDestination: () =>
+        checkMacInstallDestination({
+          execPath: process.execPath,
+          home: app.getPath("home"),
+          applications: "/Applications",
+        }),
+      onError: (error) => log.error("[macos-install] installation failed", error),
+    })
+  )
+    return;
 
   agentLinkProtocolRegistered = registerAgentLinkProtocol({
     platform: process.platform,
@@ -1068,6 +1092,7 @@ async function bootstrap(): Promise<void> {
     log.info("[tray] created:", windowsTray !== null);
   }
   ensureNotificationCenterRegistration();
+  guiServicesStarted = true;
   registerDaemonManager();
   registerWindowManager({ mode: DESKTOP_WINDOW_CHROME_MODE });
   registerDialogHandlers();
@@ -1175,7 +1200,11 @@ electronAutoUpdater.on("before-quit-for-update", () => {
   log.info("[auto-updater] before-quit-for-update", { currentVersion: app.getVersion() });
   quitLifecycle.handleBeforeQuitForUpdate();
 });
-app.on("before-quit", quitLifecycle.handleBeforeQuit);
+app.on("before-quit", (event) => {
+  // Installation quits before this process owns a daemon or updater. Do not stop
+  // another desktop session's daemon or install a cached update during relocation.
+  if (guiServicesStarted) quitLifecycle.handleBeforeQuit(event);
+});
 registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
 
 app.on("window-all-closed", () => {
