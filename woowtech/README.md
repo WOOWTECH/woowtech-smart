@@ -1064,6 +1064,8 @@ node --test woowtech/*.test.mjs
 
 ### 18. GitHub Actions：只跑 Ubuntu 上的 CI 測試
 
+2026-11-14 owner 授權 Pi Agent 共用 eSigner 簽章：新增 `pi-agent-signing.yml`，只有 `workflow_call`，由 Desktop Release 的手動 `platform=pi-agent`、`publish=false` 呼叫。它不會因 push／PR 自動簽章，不發佈 release；使用方式見 `docs/release.md` 的 Pi Agent Windows signing。一般 CI 的 Ubuntu 限制照舊。
+
 - owner 的決定：只跑 CI 的測試，只用 Ubuntu；Windows 不在 v1；不部署、不發佈。Playwright 的瀏覽器測試只在有人手動觸發並勾選時跑（它有已知的失敗，K-54）。
 - 計費：owner 2026-10-08 把 repo 改成公開，標準 runner 不再計分鐘，Linux runner 也和上游一樣是 4 核心、16 GB。在那之前 repo 是私有的，GitHub Free 每月 2,000 分鐘、2 核心 7 GB 的 runner，CI 因此改成每週跑一次，10/8 當天額度用完、CI 跑不了；現在改回上游的 push main 就跑。下面為 2 核心 runner 加的設定（每個 app 測試一分鐘、Metro 4 GB）留著，在 4 核心上也沒壞處。
 - 上游的 11 個 workflow 只開 `ci.yml`。其他 10 個留在 repo 裡，合併上游時才不會衝突，在 GitHub 上停用：
