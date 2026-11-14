@@ -1,7 +1,9 @@
 // woowtech smart: fork-owned rules on top of agent-attention-policy.ts (woowtech/README.md
-// section 16: a backgrounded phone is absent, nothing notifies while the daemon stops, and with
-// no phone to push to the computer used last shows the notice).
+// section 16: a backgrounded phone is absent, nothing notifies while the daemon stops, with
+// no phone to push to the computer used last shows the notice, and an error pushes too).
+import type { AgentAttentionReason } from "@getpaseo/protocol/agent-attention-notification";
 import {
+  isPushEligibleAttentionReason,
   PRESENCE_THRESHOLD_MS,
   type ClientPresenceState,
   type NotificationPlan,
@@ -47,6 +49,17 @@ export function woowtechNotificationPlanWhileStopping(
     return plan;
   }
   return { inAppRecipientIndex: null, shouldPush: false };
+}
+
+/**
+ * Errors push too (owner 2026-11-14). Upstream pushes only a finished agent and a permission
+ * request, so with a phone and nobody present an agent that failed notified nobody, and the user
+ * could not come back to change the task or the conversation. An error now pushes like the other
+ * two: when nobody is present, and as the fallback and the wait before the phone gets a notice a
+ * computer was asked to show. The relay shows it as "needs your attention" (woowtech-push.ts).
+ */
+export function woowtechIsPushEligibleAttentionReason(reason: AgentAttentionReason): boolean {
+  return reason === "error" || isPushEligibleAttentionReason(reason);
 }
 
 /** A client the notice may go to, with the device type of its last heartbeat. */

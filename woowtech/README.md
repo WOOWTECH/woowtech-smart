@@ -739,14 +739,14 @@ token 字串：
 - `token`：FCM token。`locale`：`zh-TW` 或 `en`。
 - `reason`：
 
-  | 推播                     | `data.reason` | `reason`     |
-  | ------------------------ | ------------- | ------------ |
-  | agent 完成               | `finished`    | `finished`   |
-  | agent 要權限             | `permission`  | `permission` |
-  | agent 出錯（目前不推播） | `error`       | `attention`  |
-  | terminal 完成            | `finished`    | `finished`   |
-  | terminal 等輸入          | `needs_input` | `attention`  |
-  | 其他或沒有原因           | —             | `attention`  |
+  | 推播            | `data.reason` | `reason`     |
+  | --------------- | ------------- | ------------ |
+  | agent 完成      | `finished`    | `finished`   |
+  | agent 要權限    | `permission`  | `permission` |
+  | agent 出錯      | `error`       | `attention`  |
+  | terminal 完成   | `finished`    | `finished`   |
+  | terminal 等輸入 | `needs_input` | `attention`  |
+  | 其他或沒有原因  | —             | `attention`  |
 
 - `target`：一定送，可能是 `{}`，只放 daemon 產生格式的 ID：`serverId` 是 `srv_` 加 12 個字元、`workspaceId` 是 `wks_` 加 16 個十六進位數字、`agentId` 和 `terminalId` 是小寫 UUID，後兩者最多一個（都有時留 agent）。不合格的 ID 不送：2026-06-14 以前，上游把工作區的資料夾路徑當成工作區 ID，舊的 ID 不會重新產生；`PASEO_SERVER_ID` 也能設成任何文字。少了 ID，點通知就開得淺一點。格式分不出 ID 是誰取的：`PASEO_SERVER_ID`（上游說是給測試用，設過一次就寫進 `$PASEO_HOME/server-id`，之後不設也沿用）剛好是 `srv_` 加 12 個 URL 安全字元時，例如 `srv_alexs-laptop`，會跟產生的 ID 一樣送出。
 - 不會離開電腦的：推播的標題和內文（agent 回覆預覽、權限要求、terminal 名稱）、`data.cwd` 和其他路徑、專案和工作區名稱，以及不合格的 ID。
@@ -960,11 +960,16 @@ node --test woowtech/*.test.mjs
 - 沒有手機可推播時，改讓最近用過的電腦跳通知（owner 2026-11-14 同意：「去主力做這個」）：上游在沒人在場時只推播。沒有任何手機登記推播（`push/index.ts` 的 `hasActiveTokens()`，token 租約 48 小時）時，推播送不到人，電腦也不跳，人回來時 Mac 的通知中心、Windows 的通知中心什麼都沒留。2026-11-06 Apporo 的 Windows 實機就是這樣：使用者 28 分鐘沒動，agent 做完一則通知都沒有。
   - 現在 `woowtech-attention-presence.ts` 的 `woowtechNotificationPlanWithoutPhone()` 接在上游的計畫後面：沒人在場、又沒有手機有推播 token 時，從算計畫的那些用戶端裡挑最後一次操作最近的電腦（`deviceType: "web"`：桌面版、瀏覽器；同時間挑前面那個），當成它在場，請它顯示通知，不推播。
   - 不挑手機（手機只靠推播），也不挑沒送過 heartbeat 的用戶端。有人在場卻沒被上游選上，代表它正看著那個 agent 或 terminal，照上游誰都不通知。daemon 停止時照樣誰都不通知（停止的規則最後套）。
-  - `error` 也照這樣顯示：人在場時本來就會在電腦上顯示；有手機時，`error` 照上游不推。
+  - `error` 也照這樣顯示：人在場時本來就會在電腦上顯示；有手機時，`error` 推播（見下面「出錯也推播」）。
   - 這則通知一樣進下面的帳本：電腦回報顯示不出來時回 `no_device`；3 分鐘沒人理的補推，到期時有手機才推（這段時間有人登記手機就會推）。
   - 只改 daemon（`websocket-server.ts` 多一個 `woowtechPlanWithoutPhone()`，兩個 attention 廣播的計畫先經過它），舊版 App 也有效。
+- 出錯也推播（owner 2026-11-14：「這個去優化出錯也要推播來讓使用者在調整工作內容跟對話內容」）：上游只推「完成」和「要權限」（`agent-attention-policy.ts` 的 `isPushEligibleAttentionReason()` 把 `error` 排除），所以有手機、沒人在場時 agent 出錯誰都不通知，使用者不知道要回來改工作內容或對話。
+  - `woowtech-attention-presence.ts` 的 `woowtechIsPushEligibleAttentionReason()`：`error` 推，其他照上游。`websocket-server.ts` 的 agent 廣播兩處都改用它：算計畫的 `pushEligible`（沒人在場就推），和交給在場電腦時記進帳本（電腦回報顯示不出來就改推、3 分鐘沒人理就補推）。上游的函式不動。
+  - 手機上的句子是中繼的「需要你的注意」（`woowtech-push.ts` 把 `error` 對到 `attention`），Android 走「需要你處理」的通道，中繼不用改。terminal 沒有 `error`，不變。
+  - agent 標成「需要注意」之後，要有人打開它才會清掉，在那之前不會再通知（`agent-manager.ts` 的 `checkAndSetAttention()`），所以一直出錯的 agent 也只推一次；每支手機另有中繼的上限（每分鐘 10 則、每天 500 則）。
+  - 只改 daemon（`websocket-server.ts` 的 import 和兩處呼叫），舊版 App 也有效。
 - Mac 顯示不出通知時改推手機（提案 4，owner 2026-10-05 同意；2026-10-06 加上 B：沒人理就補推）：daemon 只交給一個在場的用戶端顯示，不推播；Mac 的通知被關掉、還沒按允許、或 5 秒沒結果時，什麼都不會出現。現在：
-  - daemon 交出通知時記下來（`woowtech-attention-fallback.ts`）：agent 用 agent ID 加這則訊息的 `timestamp`，terminal 用 terminal ID（同一個 terminal 只留最新的），也記下交給哪個 session。只記可以推播的（`error` 本來就不推），停止中本來就沒有對象。最多 64 則、60 秒。
+  - daemon 交出通知時記下來（`woowtech-attention-fallback.ts`）：agent 用 agent ID 加這則訊息的 `timestamp`，terminal 用 terminal ID（同一個 terminal 只留最新的），也記下交給哪個 session。只記可以推播的（2026-11-14 起 `error` 也推，見下面「出錯也推播」），停止中本來就沒有對象。最多 64 則、60 秒。
   - App 的 `sendOsNotification` 回報沒顯示（桌面版是 `failed` 或 5 秒 `unconfirmed`，丟出錯誤也算）時，`utils/woowtech-notification-fallback.ts` 送 `attention.notification.report_display_failure.request`。手機不送：手機本來就只靠推播。只送給 `server_info.features.woowtechAttentionFallback` 是 true 的 daemon，官方 Paseo 不會有。
   - daemon 只在回報的是當初那個 session、60 秒內、還沒處理過時推一次，回 `pushed`；否則回 `unknown` 或 `expired`。沒有任何手機登記推播（`push/index.ts` 的 `hasActiveTokens()`）時不推，回 `no_device`，側欄提示不提手機。舊 App 不回報，行為跟以前一樣。
   - 不靠偵測（owner 2026-10-06 決定 B）：10/6 在 macOS 26 實測，通知在系統設定被關掉或樣式是「無」時，Electron 的 `show` 事件照樣成功，系統只記 `Presenting … as none`，App 偵測不到，上面的回報不會觸發。所以交給電腦（`deviceType: "web"`：桌面版、瀏覽器）的通知另外等：`ATTENTION_ESCALATION_MS`（3 分鐘，環境變數 `WOOWTECH_ESCALATION_SECONDS` 可改，0 關掉）後再看一次，還沒人理就把原本略過的推播送給手機，一則只推一次（判斷在 `woowtech-attention-escalation.ts`，計時放在 `woowtech-attention-fallback.ts` 的帳本裡）。
@@ -982,12 +987,17 @@ node --test woowtech/*.test.mjs
 - 測試（改推手機和焦點）：server `woowtech-attention-fallback.test.ts`（記錄、只認原來的 session、只推一次、過期、terminal 只留最新、上限 64）和 `woowtech-attention-fallback-daemon.test.ts`（行程內真的 daemon：桌面版在場、收到 `shouldNotify`、別的用戶端回報是 `unknown`、自己回報後推一次、再報是 `unknown`）；protocol `woowtech-attention-fallback.test.ts`；App `utils/woowtech-notification-fallback.test.ts`（手機不報、已顯示不報、舊 daemon 不送、送不到不丟例外、提示只通知一次）；desktop `features/woowtech-notification-settings.test.ts`。守門 `woowtech/attention-fallback.test.mjs` 看所有接點和焦點規則。突變：拿掉 `remember` 時 daemon 測試紅（`unknown`），拿掉手機的排除時 App 測試紅。
 - 測試（在場和停止）：`woowtech-attention-presence.test.ts`（presence 對應和停止中的 plan）、`woowtech-shutdown-push.test.ts`（行程內的 daemon 真的停止：修之前推出 `['permission','finished']` 和 `['finished']`，修之後 0 則）、`websocket-server.notifications.test.ts` 和 `websocket-server.terminal-notifications.test.ts` 各加的案例。守門 `woowtech/attention-presence.test.mjs`：接點被改回上游時失敗。
 - 測試（沒有手機時改給電腦）：
-  - `woowtech-attention-presence.test.ts` 的 `woowtechNotificationPlanWithoutPhone` 9 個：挑最近用的電腦、有手機照推、有人被選上就不問手機、有人正在看照樣不通知、不挑手機和沒 heartbeat 的、背景手機比較近仍挑電腦、`error` 也顯示、同時間挑前面那台、沒有用戶端時不變。
-  - `websocket-server.notifications.test.ts` 的 `with nobody present` 5 個（沒手機給最近的電腦、有手機照推、`error`、背景手機不算、停止中照樣不通知），`websocket-server.terminal-notifications.test.ts` 的 `with nobody present` 2 個。
+  - `woowtech-attention-presence.test.ts` 的 `woowtechNotificationPlanWithoutPhone` 10 個：挑最近用的電腦、有手機照推、有人被選上就不問手機、有人正在看照樣不通知、不挑手機和沒 heartbeat 的、背景手機比較近仍挑電腦、`error` 也顯示、不推播的通知也一樣、同時間挑前面那台、沒有用戶端時不變。
+  - `websocket-server.notifications.test.ts` 的 `with nobody present` 6 個（沒手機給最近的電腦、有手機照推、有手機時 `error` 推播、沒手機時 `error` 給電腦、背景手機不算、停止中照樣不通知），`websocket-server.terminal-notifications.test.ts` 的 `with nobody present` 2 個。
   - `woowtech-attention-without-phone-daemon.test.ts`：行程內真的 daemon、`e2e-fast-stream` 的 mock agent，桌面版 10 分鐘沒動、沒有手機時收到 `shouldNotify`；登記手機後下一則改推播。
   - 上游的 `client-activity.e2e.test.ts`（要真的 Claude，不在 CI 跑）每個用戶端都登記同一支手機的 token，維持它的規則 3（沒人在場就推播）。
   - 守門 `woowtech/attention-presence.test.mjs` 加一個：兩個廣播都經過 `woowtechPlanWithoutPhone()`、計畫和它用同一串用戶端、問的是 `hasActiveTokens()`。
   - 紅綠：把規則拿掉時 9 個測試失敗；只拿掉「不挑手機」或「有人正在看」時各 1 個失敗；把 terminal 廣播的接點改回上游時守門 2 個失敗。
+- 測試（出錯也推播）：
+  - `woowtech-attention-presence.test.ts` 的 `woowtechIsPushEligibleAttentionReason` 3 個：三種原因都推、沒人在場時 `error` 推給手機、有人在場時 `error` 只給那台電腦、不推。
+  - `websocket-server.notifications.test.ts`：上游「`error` 不推」那個案例（只有沒送過 heartbeat 的用戶端）改成也推（加了 woowtech 註解）；加「有手機、沒人在場時 `error` 推播」和「在場電腦的 `error` 記進帳本」。
+  - 守門 `woowtech/attention-presence.test.mjs` 加一個：agent 廣播的兩處都用 fork 的函式，不再呼叫上游的；`woowtech/attention-fallback.test.mjs` 的帳本條件跟著改名。
+  - 紅綠：把兩處改回上游的規則時 3 個測試、2 個守門失敗；把規則本身改回上游時 5 個測試失敗。
 - 測試（沒人理就補推）：server `woowtech-attention-escalation.test.ts`（等待秒數、誰要等、什麼算有人理）、`woowtech-attention-fallback.test.ts` 的 `a computer's notice nobody deals with`（假計時器：到期才推、推一次、有人理不推、先回報不重複、過期回報不取消、沒手機不推、關掉等待、取代、上限 64、停止時取消）、`woowtech-attention-fallback-daemon.test.ts` 加 4 個（行程內真的 daemon，等待 1 秒：沒人理推一次、之後有輸入不推、看過 agent 不推、等待關掉不推）。守門 `woowtech/attention-fallback.test.mjs` 加一個。紅綠：把「有人理」的判斷拿掉，1 個帳本測試和 2 個 daemon 測試失敗。
 - 還要實機：手機切到背景後約 30 秒和 120 秒觸發，兩支手機都要收到推播；Android 的連線在背景保持多久、iOS 多久斷，還沒量過。Mac 簽章的打包版：橫幅、點通知、關窗後點、App 結束後點、視窗開著沒焦點、看著同一個 agent 都在 10/6 測過（ACCEPTANCE 第 4b 層）；系統關掉通知後 3 分鐘補推手機，要讓 Mac 的 App 連 daemon B（有 POCO 的推播）實測。點進桌面版內建瀏覽器的網頁（`<webview>`）時，`document.hasFocus()` 可能是 false，要確認這時不會被當成離開（terminal 通知照跳、提醒不清掉）。
 

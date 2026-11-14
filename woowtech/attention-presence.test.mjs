@@ -98,3 +98,17 @@ test("with no phone to push to, the computer used last shows the notice", () => 
   );
   assert.match(helper, /hasPushTargets: \(\) => this\.pushNotifications\.hasActiveTokens\(\),/);
 });
+
+// An error pushes too (owner 2026-11-14): an agent's plan and the notice a computer is asked to show
+// (its fallback and its wait for the phone) both use the fork's rule, never upstream's, which
+// leaves errors out.
+test("an agent's error pushes like a finished agent and a permission request", () => {
+  const tree = source(serverFile);
+  const body = method(tree, "broadcastAgentAttention").body.getText(tree);
+  assert.match(body, /pushEligible: woowtechIsPushEligibleAttentionReason\(params\.reason\),/);
+  assert.match(
+    body,
+    /if \(shouldNotify && connection && woowtechIsPushEligibleAttentionReason\(params\.reason\)\)/,
+  );
+  assert.doesNotMatch(body, /isPushEligibleAttentionReason\(/, "upstream's rule leaves errors out");
+});

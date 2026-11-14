@@ -79,7 +79,7 @@ test("the daemon remembers each notice it hands to a client instead of a push", 
   const agent = methodBody(serverFile, "broadcastAgentAttention");
   assert.match(
     agent,
-    /if \(shouldNotify && connection && isPushEligibleAttentionReason\(params\.reason\)\)/,
+    /if \(shouldNotify && connection && woowtechIsPushEligibleAttentionReason\(params\.reason\)\)/,
   );
   assert.match(agent, /this\.woowtechAttentionFallback\.remember\(\{\s*target: \{ kind: "agent"/);
   const terminal = methodBody(serverFile, "broadcastTerminalAttention");

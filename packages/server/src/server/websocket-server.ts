@@ -74,12 +74,12 @@ import type { SpeechReadinessSnapshot, SpeechService } from "./speech/speech-run
 import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
 import {
   computeNotificationPlan,
-  isPushEligibleAttentionReason,
   type ClientPresenceState,
   type NotificationPlan,
 } from "./agent-attention-policy.js";
 import {
   woowtechClientPresenceState,
+  woowtechIsPushEligibleAttentionReason,
   woowtechNotificationPlanWhileStopping,
   woowtechNotificationPlanWithoutPhone,
 } from "./woowtech-attention-presence.js";
@@ -2665,7 +2665,8 @@ export class VoiceAssistantWebSocketServer {
         computeNotificationPlan({
           allStates,
           focusTarget: { kind: "agent", id: params.agentId },
-          pushEligible: isPushEligibleAttentionReason(params.reason),
+          // woowtech smart: an error pushes too (woowtech-attention-presence.ts).
+          pushEligible: woowtechIsPushEligibleAttentionReason(params.reason),
           nowMs,
         }),
         notificationEntries,
@@ -2686,7 +2687,7 @@ export class VoiceAssistantWebSocketServer {
         notificationEntries[plan.inAppRecipientIndex]?.ws === ws;
       const timestamp = new Date().toISOString();
       const connection = this.sessions.get(ws);
-      if (shouldNotify && connection && isPushEligibleAttentionReason(params.reason)) {
+      if (shouldNotify && connection && woowtechIsPushEligibleAttentionReason(params.reason)) {
         // woowtech smart: the push to send if this client's system cannot show the notice.
         this.woowtechAttentionFallback.remember({
           target: { kind: "agent", agentId: params.agentId, timestamp },
