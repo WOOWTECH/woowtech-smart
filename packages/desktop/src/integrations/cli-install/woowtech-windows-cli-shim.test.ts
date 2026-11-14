@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,38 +15,37 @@ const env = {
   PROGRAMFILES: "C:\\Program Files",
   "PROGRAMFILES(X86)": "C:\\Program Files (x86)",
 };
-const INSTALLED =
-  "C:\\Users\\王小明\\AppData\\Local\\Programs\\woowtech smart\\resources\\bin\\woowtech-smart.cmd";
+const INSTALLED = `C:\\Users\\王小明\\AppData\\Local\\Programs\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd`;
 
 describe("windowsShimPathExpression", () => {
   it("expresses a per-user install through %LOCALAPPDATA%", () => {
     expect(windowsShimPathExpression({ shimPath: INSTALLED, env })).toBe(
-      "%LOCALAPPDATA%\\Programs\\woowtech smart\\resources\\bin\\woowtech-smart.cmd",
+      `%LOCALAPPDATA%\\Programs\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd`,
     );
   });
 
   it("prefers the most specific root and compares case-insensitively", () => {
     expect(
       windowsShimPathExpression({
-        shimPath: "c:\\users\\王小明\\appdata\\roaming\\x\\woowtech-smart.cmd",
+        shimPath: `c:\\users\\王小明\\appdata\\roaming\\x\\${BRAND.cliCommand}.cmd`,
         env,
       }),
-    ).toBe("%APPDATA%\\x\\woowtech-smart.cmd");
+    ).toBe(`%APPDATA%\\x\\${BRAND.cliCommand}.cmd`);
     expect(
-      windowsShimPathExpression({ shimPath: "C:\\Users\\王小明\\x\\woowtech-smart.cmd", env }),
-    ).toBe("%USERPROFILE%\\x\\woowtech-smart.cmd");
+      windowsShimPathExpression({ shimPath: `C:\\Users\\王小明\\x\\${BRAND.cliCommand}.cmd`, env }),
+    ).toBe(`%USERPROFILE%\\x\\${BRAND.cliCommand}.cmd`);
     expect(
       windowsShimPathExpression({
-        shimPath: "C:\\Program Files (x86)\\woowtech smart\\resources\\bin\\woowtech-smart.cmd",
+        shimPath: `C:\\Program Files (x86)\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd`,
         env,
       }),
-    ).toBe("%PROGRAMFILES(X86)%\\woowtech smart\\resources\\bin\\woowtech-smart.cmd");
+    ).toBe(`%PROGRAMFILES(X86)%\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd`);
   });
 
   it("leaves a path outside every root, or under a look-alike sibling, as it is", () => {
     for (const shimPath of [
-      "D:\\Tools\\woowtech smart\\resources\\bin\\woowtech-smart.cmd",
-      "C:\\Users\\王小明2\\x\\woowtech-smart.cmd",
+      `D:\\Tools\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd`,
+      `C:\\Users\\王小明2\\x\\${BRAND.cliCommand}.cmd`,
     ]) {
       expect(windowsShimPathExpression({ shimPath, env })).toBe(shimPath);
     }
@@ -60,11 +60,11 @@ describe("renderWindowsCliTrampoline", () => {
     expect(content.replace(/\r\n/g, "")).not.toContain("\n");
     expect(content.split("\r\n")).toEqual([
       "@echo off",
-      `${WINDOWS_CLI_MARKER}: written by woowtech smart, removed by its uninstaller`,
+      `${WINDOWS_CLI_MARKER}: written by ${BRAND.name}, removed by its uninstaller`,
       "setlocal",
-      'set "BUNDLED_CLI=%LOCALAPPDATA%\\Programs\\woowtech smart\\resources\\bin\\woowtech-smart.cmd"',
+      `set "BUNDLED_CLI=%LOCALAPPDATA%\\Programs\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd"`,
       'if not exist "%BUNDLED_CLI%" (',
-      '  echo woowtech smart CLI not found at "%BUNDLED_CLI%". Is woowtech smart installed? 1>&2',
+      `  echo ${BRAND.name} CLI not found at "%BUNDLED_CLI%". Is ${BRAND.name} installed? 1>&2`,
       "  exit /b 1",
       ")",
       '"%BUNDLED_CLI%" %*',
@@ -74,28 +74,28 @@ describe("renderWindowsCliTrampoline", () => {
 
   it("keeps an ASCII path outside every root free of the code-page switch", () => {
     const content = renderWindowsCliTrampoline({
-      shimPath: "D:\\Tools\\woowtech smart\\resources\\bin\\woowtech-smart.cmd",
+      shimPath: `D:\\Tools\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd`,
       env,
     });
     expect(content).not.toContain("chcp");
     expect(content).toContain(
-      'set "BUNDLED_CLI=D:\\Tools\\woowtech smart\\resources\\bin\\woowtech-smart.cmd"',
+      `set "BUNDLED_CLI=D:\\Tools\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd"`,
     );
   });
 
   it("reads a non-ASCII path outside every root as UTF-8, and only that line", () => {
     const content = renderWindowsCliTrampoline({
-      shimPath: "D:\\軟體\\woowtech smart\\resources\\bin\\woowtech-smart.cmd",
+      shimPath: `D:\\軟體\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd`,
       env,
     });
     const lines = content.split("\r\n");
     expect(lines.slice(0, 9)).toEqual([
       "@echo off",
-      `${WINDOWS_CLI_MARKER}: written by woowtech smart, removed by its uninstaller`,
+      `${WINDOWS_CLI_MARKER}: written by ${BRAND.name}, removed by its uninstaller`,
       "setlocal",
       `for /f "tokens=2 delims=:." %%c in ('chcp') do set "WOOWTECH_CODEPAGE=%%c"`,
       ">nul chcp 65001",
-      'set "BUNDLED_CLI=D:\\軟體\\woowtech smart\\resources\\bin\\woowtech-smart.cmd"',
+      `set "BUNDLED_CLI=D:\\軟體\\${BRAND.name}\\resources\\bin\\${BRAND.cliCommand}.cmd"`,
       ">nul chcp %WOOWTECH_CODEPAGE%",
       'set "WOOWTECH_CODEPAGE="',
       'if not exist "%BUNDLED_CLI%" (',

@@ -1,3 +1,4 @@
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { expect, test } from "vitest";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import { DaemonClient, type DaemonTransport } from "./daemon-client";
@@ -39,6 +40,7 @@ function connection(
               type: "status",
               payload: {
                 status: "server_info",
+                brand: BRAND_IDENTITY,
                 serverId: "test",
                 hostname: null,
                 version: null,

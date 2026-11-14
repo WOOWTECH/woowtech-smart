@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdtemp, open, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -87,7 +88,7 @@ describe("pid-lock ownership", () => {
       await expect(isLocked(paseoHome)).resolves.toMatchObject({ locked: true });
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: replacementOwnerPid }),
-      ).rejects.toThrow("Another woowtech smart daemon is already running");
+      ).rejects.toThrow(`Another ${BRAND.name} daemon is already running`);
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
@@ -119,7 +120,7 @@ describe("pid-lock ownership", () => {
 
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: replacementOwnerPid }),
-      ).rejects.toThrow("Another woowtech smart daemon is already running");
+      ).rejects.toThrow(`Another ${BRAND.name} daemon is already running`);
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
@@ -150,7 +151,7 @@ describe("pid-lock ownership", () => {
 
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: process.pid + 10_000 }),
-      ).rejects.toThrow("Another woowtech smart daemon is already running");
+      ).rejects.toThrow(`Another ${BRAND.name} daemon is already running`);
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
@@ -181,7 +182,7 @@ describe("pid-lock ownership", () => {
 
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: replacementOwnerPid }),
-      ).rejects.toThrow("Another woowtech smart daemon is already running");
+      ).rejects.toThrow(`Another ${BRAND.name} daemon is already running`);
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);
@@ -247,7 +248,7 @@ describe("pid-lock ownership", () => {
 
       await expect(
         acquirePidLock(paseoHome, null, { ownerPid: process.pid + 10_000 }),
-      ).rejects.toThrow("Another woowtech smart daemon is already running");
+      ).rejects.toThrow(`Another ${BRAND.name} daemon is already running`);
 
       const lock = await getPidLockInfo(paseoHome);
       expect(lock?.pid).toBe(process.pid);

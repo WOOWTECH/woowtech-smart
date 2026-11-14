@@ -25,6 +25,14 @@ on:
           - linux
           - windows
           - pi-agent
+          - verify-windows
+      windows_candidate:
+        description: "Existing signed candidate to verify (platform verify-windows only)."
+        type: choice
+        default: woowtech
+        options:
+          - woowtech
+          - apporo
       pi_agent_sha:
         description: "Full Pi Agent commit SHA to sign (platform pi-agent only)."
         type: string
@@ -62,6 +70,15 @@ env:
   DESKTOP_PACKAGE_PATH: "packages/desktop"
 
 jobs:
+  verify-windows:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.platform == 'verify-windows' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/windows-installed-verify.yml
+    with:
+      candidate: ${{ inputs.windows_candidate }}
+
   pi-agent-signing:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.platform == 'pi-agent' && inputs.publish == 'false' }}
     permissions:
@@ -170,6 +187,28 @@ jobs:
           fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
           NODE
 
+      - name: Prepare Mac notary API key
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          for (const name of ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER']) {
+            if (!process.env[name]) throw new Error(`Missing ${name} for Mac finalization`);
+          }
+          let key = process.env.APPLE_API_KEY;
+          if (key.includes('-----BEGIN PRIVATE KEY-----')) {
+            key = path.join(process.env.RUNNER_TEMP, 'desktop-notary-api-key.p8');
+            fs.writeFileSync(key, process.env.APPLE_API_KEY, { mode: 0o600, flag: 'wx' });
+          }
+          if (!fs.statSync(key).isFile()) throw new Error('APPLE_API_KEY must be PEM content or an existing key file');
+          fs.appendFileSync(process.env.GITHUB_ENV, `APPLE_API_KEY=${key}\n`);
+          NODE
+
       - name: Build desktop release
         shell: bash
         env:
@@ -180,6 +219,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           PASEO_DESKTOP_SMOKE: "1"
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
         run: |
@@ -188,6 +229,31 @@ jobs:
           build_args+=("-c.publish.releaseType=$RELEASE_TYPE")
           build_args+=("-c.publish.channel=$RELEASE_CHANNEL")
           npm run build:desktop "${build_args[@]}"
+
+      - name: Finalize and verify Mac distribution
+        id: mac-finalized
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          finalized="${DESKTOP_PACKAGE_PATH}/release-finalized"
+          node scripts/finalize-macos-release-cli.mjs "${DESKTOP_PACKAGE_PATH}/release" "$finalized" "${RELEASE_CHANNEL}-mac.yml" "${{ matrix.electron_arch }}"
+          node scripts/finalize-macos-release.mjs --verify "$finalized" > "$RUNNER_TEMP/mac-finalized-files.txt"
+          {
+            echo 'paths<<MAC_FINALIZED_FILES'
+            cat "$RUNNER_TEMP/mac-finalized-files.txt"
+            echo "$GITHUB_WORKSPACE/$finalized/finalized.json"
+            echo 'MAC_FINALIZED_FILES'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Remove temporary Mac API key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/desktop-notary-api-key.p8"
 
       - name: Upload packaged smoke diagnostics
         if: failure()
@@ -205,15 +271,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          release_dir="${DESKTOP_PACKAGE_PATH}/release"
+          node scripts/finalize-macos-release.mjs --verify "${DESKTOP_PACKAGE_PATH}/release-finalized" > "$RUNNER_TEMP/mac-finalized-files.txt"
           files=()
-          while IFS= read -r -d '' f; do
+          while IFS= read -r f; do
+            case "$f" in *.yml) continue ;; esac
             files+=("$f")
-          done < <(find "$release_dir" -maxdepth 1 -type f ! -name '*.yml' -print0 | sort -z)
-          if (( ${#files[@]} == 0 )); then
-            echo "::error::No release artifacts found in $release_dir"
-            exit 1
-          fi
+          done < "$RUNNER_TEMP/mac-finalized-files.txt"
           release_lookup="$(node scripts/github-release.mjs --repo "${{ github.repository }}" --tag "$RELEASE_TAG")"
           gh release upload "$release_lookup" "${files[@]}" --clobber --repo "${{ github.repository }}"
 
@@ -222,7 +285,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-macos-${{ matrix.electron_arch }}
-          path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/*.dmg
+          path: ${{ steps.mac-finalized.outputs.paths }}
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload manifest artifact
@@ -230,7 +294,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-manifest-${{ matrix.electron_arch }}
-          path: ${{ env.DESKTOP_PACKAGE_PATH }}/release/${{ env.RELEASE_CHANNEL }}-mac.yml
+          path: ${{ env.DESKTOP_PACKAGE_PATH }}/release-finalized/${{ env.RELEASE_CHANNEL }}-mac.yml
+          if-no-files-found: error
           retention-days: 1
 
   publish-linux:
@@ -358,7 +423,18 @@ jobs:
 
       - name: Resolve release metadata
         shell: bash
-        run: node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+        run: |
+          # RC installers are private Windows candidates, never release inputs.
+          if [[ "$SHOULD_PUBLISH" == "false" && "$SOURCE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+)$ ]]; then
+            {
+              echo "DESKTOP_VERSION=${BASH_REMATCH[1]}"
+              echo "RELEASE_TYPE=prerelease"
+              echo "RELEASE_CHANNEL=rc"
+              echo "IS_SMOKE_TAG=false"
+            } >> "$GITHUB_ENV"
+          else
+            node scripts/emit-release-env.mjs --source-tag "$SOURCE_TAG" >> "$GITHUB_ENV"
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -451,22 +527,13 @@ jobs:
         run: |
           if ($env:WIN_PUBLISHER_DN -notmatch 'CN=(?:"([^"]+)"|([^,]+))') { throw 'WIN_PUBLISHER_DN has no CN' }
           $publisher = if ($Matches[1]) { $Matches[1] } else { $Matches[2].Trim() }
-          $brand = node -e "process.stdout.write(JSON.stringify(require('./woowtech/brands/index.cjs').appliedBrand()))" | ConvertFrom-Json
-          $name = $brand.name
-          $check = Join-Path $env:DESKTOP_PACKAGE_PATH 'scripts/woowtech-windows-signatures.ps1'
-          $release = Join-Path $env:DESKTOP_PACKAGE_PATH 'release'
-          & $check -Path $release -RequireSigned -Publisher $publisher
-          $setup = Get-ChildItem -LiteralPath $release -Filter "$($brand.desktop.artifactPrefix)-Setup-*-x64.exe" | Select-Object -First 1
-          if (-not $setup) { throw "No x64 installer in $release" }
-          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
-          $dir = Join-Path $env:LOCALAPPDATA "Programs\$name"
-          & $check -Path $dir -RequireSigned -Publisher $publisher
-          # _?= keeps the uninstaller where it is, so -Wait waits for it; it must come last.
-          Start-Process -FilePath (Join-Path $dir "Uninstall $name.exe") -ArgumentList "/currentuser /S _?=$dir" -Wait
-          if (Test-Path -LiteralPath (Join-Path $dir "$name.exe")) { throw 'Uninstalling left the app behind' }
+          & ./packages/desktop/scripts/woowtech-windows-installed-smoke.ps1 `
+            -ReleaseDir (Join-Path $env:DESKTOP_PACKAGE_PATH 'release') `
+            -Version $env:DESKTOP_VERSION -Publisher $publisher -SourceRoot $PWD.Path `
+            -DiagnosticsDir (Join-Path $env:RUNNER_TEMP 'desktop-smoke')
 
       - name: Upload packaged smoke diagnostics
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: desktop-smoke-windows-x64
@@ -500,7 +567,7 @@ jobs:
           gh release upload "$release_lookup" "${files[@]}" --clobber --repo "${{ github.repository }}"
 
       - name: Upload desktop artifacts to workflow
-        if: env.SHOULD_PUBLISH != 'true'
+        if: always() && env.SHOULD_PUBLISH != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: desktop-windows
@@ -517,7 +584,7 @@ jobs:
 
   finalize-rollout:
     needs: [publish-macos, publish-linux, publish-windows]
-    if: ${{ always() && github.event.inputs.platform != 'pi-agent' && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'false') }}
+    if: ${{ always() && github.event.inputs.platform != 'verify-windows' && github.event.inputs.platform != 'pi-agent' && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'false') }}
     permissions:
       contents: write
     runs-on: ubuntu-latest

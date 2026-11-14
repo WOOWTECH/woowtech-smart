@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { expect, test } from "../../app/e2e/support/fixtures";
 import { gotoAppShell, openSettings } from "../../app/e2e/support/helpers/app";
 import { getServerId } from "../../app/e2e/support/helpers/server-id";
@@ -44,7 +45,7 @@ test.describe("Desktop updates", () => {
     const updateCard = page.getByTestId("host-page-update-card");
     await expect(updateCard).toBeVisible();
     await expect(updateCard).toContainText(
-      "This daemon is managed by woowtech smart Desktop. Update woowtech smart Desktop on the host.",
+      `This daemon is managed by ${PRODUCT_NAME} Desktop. Update ${PRODUCT_NAME} Desktop on the host.`,
     );
     await expect(page.getByTestId("host-page-update-button")).toBeDisabled();
   });

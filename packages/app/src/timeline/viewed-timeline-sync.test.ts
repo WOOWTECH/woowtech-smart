@@ -1,3 +1,4 @@
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { expect, test, vi } from "vitest";
 import { DaemonClient, type DaemonTransport } from "@getpaseo/client/internal/daemon-client";
 import type { SessionInboundMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
@@ -600,6 +601,7 @@ test("an eviction starts and acknowledges B before A returns its late subscripti
       type: "status",
       payload: {
         status: "server_info",
+        brand: BRAND_IDENTITY,
         serverId: "timeline-fixture",
         hostname: null,
         version: null,

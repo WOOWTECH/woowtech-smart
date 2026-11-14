@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { i18n as testI18n } from "@/i18n/i18next";
 import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -54,7 +55,7 @@ describe("the command line row in Settings > Integrations", () => {
 
       expect(screen.getByText("Command line")).toBeTruthy();
       expect(screen.getByText(installed ? "Installed" : "Install")).toBeTruthy();
-      expect(screen.getByText("woowtech-smart")).toBeTruthy();
+      expect(screen.getByText(CLI_COMMAND)).toBeTruthy();
       expect(screen.queryByText(/\bpaseo\b/)).toBeNull();
       cleanup();
     }

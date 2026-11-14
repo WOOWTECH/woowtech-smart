@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { describe, expect, it } from "vitest";
 import {
   DaemonConnectionRegistrationError,
@@ -13,8 +14,7 @@ describe("getDaemonManagementErrorPresentation", () => {
     );
 
     expect(presentation).toEqual({
-      message:
-        "Built-in daemon started, but woowtech smart could not save the localhost connection. Toggle daemon management off and on again, or add localhost manually.",
+      message: `Built-in daemon started, but ${PRODUCT_NAME} could not save the localhost connection. Toggle daemon management off and on again, or add localhost manually.`,
       refreshStatus: true,
     });
   });
@@ -23,8 +23,7 @@ describe("getDaemonManagementErrorPresentation", () => {
     const presentation = getDaemonManagementErrorPresentation(new Error("stop failed"), true);
 
     expect(presentation).toEqual({
-      message:
-        "Built-in daemon management was paused, but woowtech smart could not stop the daemon.",
+      message: `Built-in daemon management was paused, but ${PRODUCT_NAME} could not stop the daemon.`,
       refreshStatus: false,
     });
   });
@@ -36,8 +35,7 @@ describe("getDaemonManagementErrorPresentation", () => {
     );
 
     expect(presentation).toEqual({
-      message:
-        "Built-in daemon management was paused, but woowtech smart could not stop the daemon.",
+      message: `Built-in daemon management was paused, but ${PRODUCT_NAME} could not stop the daemon.`,
       refreshStatus: false,
     });
   });

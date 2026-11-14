@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -226,10 +227,8 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
       "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
     failed:
       "Check System Settings → Notifications. Unsigned test builds may be unable to display notifications.",
-    unconfirmedWindows:
-      "Check Settings › System › Notifications and make sure woowtech smart is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
-    failedWindows:
-      "Check Settings › System › Notifications and make sure woowtech smart is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.",
+    unconfirmedWindows: `Check Settings › System › Notifications and make sure ${PRODUCT_NAME} is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.`,
+    failedWindows: `Check Settings › System › Notifications and make sure ${PRODUCT_NAME} is on. Do Not Disturb hides banners. Smart App Control may block unsigned test builds.`,
   };
   expect(woowtechCopyFor("zh-TW").desktopNotifications).toEqual({
     supported: "系統支援通知，但尚未確認系統授權狀態。",
@@ -242,10 +241,8 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
     unconfirmedTitle: "無法確認通知是否顯示",
     unconfirmed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
     failed: "請到「系統設定 → 通知」檢查；未簽章的測試版可能無法顯示通知。",
-    unconfirmedWindows:
-      "請到「設定 › 系統 › 通知」確認 woowtech smart 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
-    failedWindows:
-      "請到「設定 › 系統 › 通知」確認 woowtech smart 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。",
+    unconfirmedWindows: `請到「設定 › 系統 › 通知」確認 ${PRODUCT_NAME} 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。`,
+    failedWindows: `請到「設定 › 系統 › 通知」確認 ${PRODUCT_NAME} 已開啟；開著「請勿打擾」時不會跳出橫幅。未簽章的測試版可能被 Smart App Control 擋下。`,
   });
   for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
     const copy = woowtechCopyFor(language).desktopNotifications;
@@ -256,19 +253,15 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
 
 it("explains inactive metadata preferences in zh-TW and English without changing old translations", () => {
   const english = {
-    projectInfo:
-      "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
-    description:
-      "woowtech smart currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
+    projectInfo: `${PRODUCT_NAME} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.`,
+    description: `${PRODUCT_NAME} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.`,
     automaticHint: "Automatic model selection is inactive while generation is disabled.",
     preferredHint: "Saved model preferences are inactive while generation is disabled.",
     fallbackHint: "This preference is retained; no model is called for metadata generation.",
   };
   const traditionalChinese = {
-    projectInfo:
-      "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。",
-    description:
-      "woowtech smart 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
+    projectInfo: `${PRODUCT_NAME} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。`,
+    description: `${PRODUCT_NAME} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。`,
     automaticHint: "自動產生已停用，目前不會自動選擇模型。",
     preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
     fallbackHint: "此偏好會保留；不會呼叫任何模型來產生後設資料。",

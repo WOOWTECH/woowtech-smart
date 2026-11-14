@@ -1,3 +1,4 @@
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { fork } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -127,6 +128,7 @@ function createTestRuntime(
                 type: "status",
                 payload: {
                   status: "server_info",
+                  brand: BRAND_IDENTITY,
                   serverId: "plugin-test",
                   hostname: "plugin-test",
                   version,
@@ -183,6 +185,7 @@ function createTrackedSessionHost() {
                 type: "status",
                 payload: {
                   status: "server_info",
+                  brand: BRAND_IDENTITY,
                   serverId: "tracked-plugin-test",
                   hostname: "tracked-plugin-test",
                   version: "0.4.0",

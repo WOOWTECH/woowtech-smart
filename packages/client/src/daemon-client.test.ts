@@ -101,7 +101,7 @@ function createMockTransport() {
     triggerOpen: (options?: {
       preserveSent?: boolean;
       features?: Record<string, boolean>;
-      brand?: { id: string; name: string };
+      brand?: { id: string; name: string } | null;
     }) => {
       onOpen();
       if (!options?.preserveSent) {
@@ -119,7 +119,7 @@ function createMockTransport() {
               hostname: null,
               version: null,
               features: options?.features ?? { ownedSubscriptions: true },
-              ...(options?.brand ? { brand: options.brand } : {}),
+              ...(options?.brand === null ? {} : { brand: options?.brand ?? BRAND_IDENTITY }),
             },
           },
         }),
@@ -630,6 +630,7 @@ class FakeDaemon {
           payload: {
             status: "server_info",
             serverId: "srv_heartbeat_test",
+            brand: BRAND_IDENTITY,
             hostname: null,
             version: null,
           },
@@ -936,22 +937,38 @@ test("stops at a daemon of another brand and says why", async () => {
   expect(client.lastError).toContain("This computer runs Another smart.");
 });
 
-test("uses a daemon of its own brand, and one from before daemons named their brand", async () => {
-  for (const brand of [BRAND_IDENTITY, undefined]) {
-    const mock = createMockTransport();
-    const client = new DaemonClient({
-      url: "ws://test",
-      clientId: "clsk_same_brand_test",
-      reconnect: { enabled: false },
-      transportFactory: () => mock.transport,
-    });
-    clients.push(client);
+test("uses a daemon of its own brand", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_same_brand_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
 
-    const connectPromise = client.connect();
-    mock.triggerOpen(brand ? { brand } : undefined);
-    await connectPromise;
-    expect(client.getConnectionState().status).toBe("connected");
-  }
+  const connectPromise = client.connect();
+  mock.triggerOpen({ brand: BRAND_IDENTITY });
+  await connectPromise;
+  expect(client.getConnectionState().status).toBe("connected");
+});
+
+test("treats a legacy unnamed daemon as Woowtech, never as Apporo", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_legacy_brand_test",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const result = client.connect().then(
+    () => "connected",
+    () => "rejected",
+  );
+  mock.triggerOpen({ brand: null });
+  expect(await result).toBe(BRAND_IDENTITY.id === "woowtech" ? "connected" : "rejected");
 });
 
 test("allows callers to disable default client capabilities", async () => {

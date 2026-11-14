@@ -1,11 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const RELEASES_REPO_CHANGELOG =
-  "https://raw.githubusercontent.com/WOOWTECH/woowtech-smart-releases/main/CHANGELOG.md";
+const RELEASES_REPO_CHANGELOG = BRAND_LINKS.changelogSource;
 
 // The hook keeps the last changelog in its module, so every test loads a fresh copy.
 let useChangelog: typeof import("./changelog-source").useChangelog;

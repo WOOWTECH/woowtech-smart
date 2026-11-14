@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, test } from "vitest";
 import { redactDiagnostic } from "./diagnostics.js";
 
@@ -11,15 +12,15 @@ const OFFER_PAYLOAD = Buffer.from(
     v: 2,
     serverId: "srv_offer_redaction",
     daemonPublicKeyB64: "b2ZmZXItcmVkYWN0aW9uLWtleQ",
-    relay: { endpoint: "relay.woowtech.io:443", useTls: true },
+    relay: { endpoint: `${BRAND.services.relayHost}:443`, useTls: true },
   }),
 ).toString("base64url");
-const WEB_LINK = `https://smart.woowtech.io/#offer=${OFFER_PAYLOAD}`;
+const WEB_LINK = `https://${BRAND.web.host}/#offer=${OFFER_PAYLOAD}`;
 
 describe("pairing links in the daemon's diagnostics", () => {
   test("hide the offer of a web app link and keep the rest of the line", () => {
     expect(redactDiagnostic(`Pairing link: ${WEB_LINK} (relay)`)).toBe(
-      "Pairing link: https://smart.woowtech.io/#offer=[redacted] (relay)",
+      `Pairing link: https://${BRAND.web.host}/#offer=[redacted] (relay)`,
     );
   });
 
@@ -34,15 +35,15 @@ describe("pairing links in the daemon's diagnostics", () => {
 
     expect(redacted).not.toContain(OFFER_PAYLOAD);
     expect(redacted.split("\n")).toEqual([
-      '{"url":"https://smart.woowtech.io/#offer=[redacted]"}',
-      "<a href='https://smart.woowtech.io/#offer=[redacted]'>pair</a>",
+      `{"url":"https://${BRAND.web.host}/#offer=[redacted]"}`,
+      `<a href='https://${BRAND.web.host}/#offer=[redacted]'>pair</a>`,
       "https://pair.example.test/#offer=[redacted]",
     ]);
   });
 
   test("still hide the app links of older QR codes whole", () => {
-    expect(redactDiagnostic(`woowtech-smart:///#offer=${OFFER_PAYLOAD}`)).toBe(
-      "woowtech-smart://[redacted]",
+    expect(redactDiagnostic(`${BRAND.scheme}:///#offer=${OFFER_PAYLOAD}`)).toBe(
+      `${BRAND.scheme}://[redacted]`,
     );
   });
 });

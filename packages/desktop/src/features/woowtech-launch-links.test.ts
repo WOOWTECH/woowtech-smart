@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, it } from "vitest";
 import {
   createDuplicateLaunchFilter,
@@ -7,44 +8,44 @@ import {
   redactLaunchArguments,
 } from "./woowtech-launch-links.js";
 
-const PAIRING_LINK = "woowtech-smart:///#offer=eyJzZXJ2ZXJJZCI6InNydiJ9";
+const PAIRING_LINK = `${BRAND.scheme}:///#offer=eyJzZXJ2ZXJJZCI6InNydiJ9`;
 
 describe("launch link redaction", () => {
   it("never keeps the pairing offer", () => {
-    expect(redactLaunchArgument(PAIRING_LINK)).toBe("woowtech-smart:///#<redacted>");
+    expect(redactLaunchArgument(PAIRING_LINK)).toBe(`${BRAND.scheme}:///#<redacted>`);
     expect(redactLaunchArgument("https://app.example/#offer=secret")).toBe(
       "https://app.example/#<redacted>",
     );
-    expect(redactLaunchArgument("WOOWTECH-SMART:///?x=1&offer=secret")).toBe(
-      "WOOWTECH-SMART:///?<redacted>",
+    expect(redactLaunchArgument(`${BRAND.scheme.toUpperCase()}:///?x=1&offer=secret`)).toBe(
+      `${BRAND.scheme.toUpperCase()}:///?<redacted>`,
     );
   });
 
   it("drops any query or fragment of an app link but keeps agent links readable", () => {
-    expect(redactLaunchArgument("woowtech-smart://h/srv/agent/agt")).toBe(
-      "woowtech-smart://h/srv/agent/agt",
+    expect(redactLaunchArgument(`${BRAND.scheme}://h/srv/agent/agt`)).toBe(
+      `${BRAND.scheme}://h/srv/agent/agt`,
     );
-    expect(redactLaunchArgument("woowtech-smart://h/srv/agent/agt?token=abc")).toBe(
-      "woowtech-smart://h/srv/agent/agt?<redacted>",
+    expect(redactLaunchArgument(`${BRAND.scheme}://h/srv/agent/agt?token=abc`)).toBe(
+      `${BRAND.scheme}://h/srv/agent/agt?<redacted>`,
     );
   });
 
   it("leaves executables, flags and paths alone", () => {
-    const argv = ["C:\\Programs\\woowtech smart\\woowtech smart.exe", "--flag", "D:\\repo"];
+    const argv = [`C:\\Programs\\${BRAND.name}\\${BRAND.name}.exe`, "--flag", "D:\\repo"];
     expect(redactLaunchArguments(argv)).toEqual(argv);
     expect(redactLaunchArguments([...argv, PAIRING_LINK])).toEqual([
       ...argv,
-      "woowtech-smart:///#<redacted>",
+      `${BRAND.scheme}:///#<redacted>`,
     ]);
   });
 });
 
 describe("app scheme detection", () => {
-  it("treats any woowtech-smart: argument as an app link", () => {
+  it(`treats any ${BRAND.scheme}: argument as an app link`, () => {
     expect(isAppSchemeLink(PAIRING_LINK)).toBe(true);
-    expect(isAppSchemeLink("  Woowtech-Smart://h/s/agent/a")).toBe(true);
+    expect(isAppSchemeLink(`  ${BRAND.scheme.toUpperCase()}://h/s/agent/a`)).toBe(true);
     expect(isAppSchemeLink("paseo://h/s/agent/a")).toBe(false);
-    expect(isAppSchemeLink("C:\\woowtech-smart")).toBe(false);
+    expect(isAppSchemeLink(`C:\\${BRAND.scheme}`)).toBe(false);
     expect(hasAppSchemeLink(["exe", "--x", PAIRING_LINK])).toBe(true);
     expect(hasAppSchemeLink(["exe", "D:\\repo"])).toBe(false);
   });

@@ -1,3 +1,4 @@
+import { BRAND_RELAY } from "@getpaseo/protocol/brand-relay";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -26,7 +27,7 @@ describe("daemon pair in a new home", () => {
 
     expect(offer.relayEnabled).toBe(true);
     expect(parseConnectionOfferFromUrl(offer.url ?? "")?.relay).toEqual({
-      endpoint: "relay.woowtech.io:443",
+      endpoint: BRAND_RELAY.endpoint,
       useTls: true,
     });
   });

@@ -1,3 +1,5 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DaemonClient,
@@ -102,6 +104,7 @@ class HostInfoTransport implements DaemonTransport {
           type: "status",
           payload: {
             status: "server_info",
+            brand: BRAND_IDENTITY,
             serverId,
             hostname,
             version: "0.8.0",
@@ -418,7 +421,7 @@ describe("woowtech host label at the real store/controller boundary", () => {
       daemonPublicKeyB64: "synthetic-key",
       relay: { endpoint: "other.invalid:443", useTls: true },
     };
-    const link = `woowtech-smart:///#offer=${Buffer.from(JSON.stringify(offer)).toString("base64url")}`;
+    const link = `${BRAND.scheme}:///#offer=${Buffer.from(JSON.stringify(offer)).toString("base64url")}`;
     const imports: string[] = [];
     const pairing = handlePairingLink(link, {
       hosts: f.store,

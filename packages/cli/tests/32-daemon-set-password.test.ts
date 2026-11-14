@@ -1,5 +1,6 @@
 #!/usr/bin/env npx tsx
 
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import assert from "node:assert";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -54,7 +55,7 @@ try {
     assert.strictEqual(result.configPath, join(paseoHome, "config.json"));
     assert.strictEqual(
       result.restartCommand,
-      `woowtech-smart daemon restart --home ${JSON.stringify(paseoHome)}`,
+      `${CLI_COMMAND} daemon restart --home ${JSON.stringify(paseoHome)}`,
     );
     assert.strictEqual(config.daemon.listen, "127.0.0.1:9999");
     assert.strictEqual(config.daemon.relay.enabled, false);

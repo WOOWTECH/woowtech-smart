@@ -1,3 +1,4 @@
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { runPairCommand } from "./pair.js";
 
 // These next steps are printed or returned as results instead of going through
 // the CLI's error output, so they spell out the woowtech-smart command.
-describe("daemon commands tell you what to run next with woowtech-smart", () => {
+describe(`daemon commands tell you what to run next with ${CLI_COMMAND}`, () => {
   const savedExitCode = process.exitCode;
   let home: string;
 
@@ -40,9 +41,9 @@ describe("daemon commands tell you what to run next with woowtech-smart", () => 
     await runPairCommand({ daemonTarget: { kind: "instance", home } });
 
     expect(stderr()).toContain(
-      `Offline pairing offer. Start with: woowtech-smart daemon start --home ${JSON.stringify(home)}`,
+      `Offline pairing offer. Start with: ${CLI_COMMAND} daemon start --home ${JSON.stringify(home)}`,
     );
-    expect(stderr()).toContain("Run woowtech-smart daemon pair --relay to enable it.");
+    expect(stderr()).toContain(`Run ${CLI_COMMAND} daemon pair --relay to enable it.`);
   });
 
   it("pair --json names the relay command agents should run", async () => {
@@ -52,7 +53,7 @@ describe("daemon commands tell you what to run next with woowtech-smart", () => 
 
     const relayDisabled = JSON.parse(stderr().trim().split("\n").at(-1) ?? "{}");
     expect(relayDisabled.action).toBe(
-      "Run woowtech-smart daemon pair --relay --json to enable it explicitly.",
+      `Run ${CLI_COMMAND} daemon pair --relay --json to enable it explicitly.`,
     );
   });
 });

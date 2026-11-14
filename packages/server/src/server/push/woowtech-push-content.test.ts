@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -74,7 +75,7 @@ describe("push notifications leave the machine without the user's text", () => {
 
     expect(delivered).toEqual([
       {
-        title: "woowtech smart",
+        title: `${BRAND.name}`,
         body: "Work finished — tap to see the result.",
         data: {
           serverId: SERVER_ID,
@@ -109,7 +110,7 @@ describe("push notifications leave the machine without the user's text", () => {
 
     expect(delivered).toEqual([
       {
-        title: "woowtech smart",
+        title: `${BRAND.name}`,
         body: "Permission needed — tap to review the request.",
         data: {
           serverId: SERVER_ID,
@@ -139,7 +140,7 @@ describe("push notifications leave the machine without the user's text", () => {
 
     expect(delivered).toEqual([
       {
-        title: "woowtech smart",
+        title: `${BRAND.name}`,
         body: "Needs your attention — tap to take a look.",
         data: {
           serverId: SERVER_ID,
@@ -168,7 +169,7 @@ describe("push notifications leave the machine without the user's text", () => {
 
     expect(delivered).toEqual([
       {
-        title: "woowtech smart",
+        title: `${BRAND.name}`,
         body: "Work finished — tap to see the result.",
         data: { agentId: AGENT_ID, reason: "finished" },
       },
@@ -181,7 +182,7 @@ describe("push notifications leave the machine without the user's text", () => {
     ["error", "需要你的注意，點一下查看。"],
     ["needs_input", "需要你的注意，點一下查看。"],
   ])(
-    "in Chinese a push reads 渥屋智能 and one Traditional Chinese sentence for %s",
+    `in Chinese a push reads ${BRAND.nameZh} and one Traditional Chinese sentence for %s`,
     async (reason, body) => {
       const { push, delivered } = pushNotificationsFor("zh-TW");
 
@@ -193,7 +194,7 @@ describe("push notifications leave the machine without the user's text", () => {
 
       expect(delivered).toEqual([
         {
-          title: "渥屋智能",
+          title: `${BRAND.nameZh}`,
           body,
           data: { serverId: SERVER_ID, workspaceId: WORKSPACE_ID, agentId: AGENT_ID, reason },
         },
@@ -212,7 +213,7 @@ describe("push notifications leave the machine without the user's text", () => {
 
     expect(delivered).toEqual([
       {
-        title: "woowtech smart",
+        title: `${BRAND.name}`,
         body: "Needs your attention — tap to take a look.",
         data: { serverId: SERVER_ID },
       },
@@ -238,8 +239,8 @@ function host(overrides: Partial<HostLocaleSources>): HostLocaleSources {
 
 describe("the push language follows the host's locale", () => {
   test.each([
-    ["zh_TW.UTF-8", "渥屋智能", "工作完成了，點一下查看結果。"],
-    ["en_US.UTF-8", "woowtech smart", "Work finished — tap to see the result."],
+    ["zh_TW.UTF-8", `${BRAND.nameZh}`, "工作完成了，點一下查看結果。"],
+    ["en_US.UTF-8", `${BRAND.name}`, "Work finished — tap to see the result."],
   ])(
     "the daemon's pushes on a host with LC_ALL=%s",
     async (locale, expectedTitle, expectedBody) => {

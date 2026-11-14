@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -45,8 +46,8 @@ describe("daemon relay config", () => {
     const home = await createPaseoHome({ version: 1 });
     const config = loadConfig(home, { env: {} });
 
-    expect(config.relayEndpoint).toBe("relay.woowtech.io:443");
-    expect(config.relayPublicEndpoint).toBe("relay.woowtech.io:443");
+    expect(config.relayEndpoint).toBe(`${BRAND.services.relayHost}:443`);
+    expect(config.relayPublicEndpoint).toBe(`${BRAND.services.relayHost}:443`);
     expect(config.relayUseTls).toBe(true);
     expect(config.relayPublicUseTls).toBe(true);
   });

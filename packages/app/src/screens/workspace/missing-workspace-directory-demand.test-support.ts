@@ -1,3 +1,4 @@
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { DaemonClient, type DaemonTransport } from "@getpaseo/client/internal/daemon-client";
 import {
   WSInboundMessageSchema,
@@ -121,6 +122,7 @@ class DirectoryTransport implements DaemonTransport {
       type: "status",
       payload: {
         status: "server_info",
+        brand: BRAND_IDENTITY,
         serverId,
         hostname: "Test host",
         version: "0.8.0",

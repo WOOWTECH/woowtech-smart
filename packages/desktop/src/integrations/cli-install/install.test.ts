@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { spawnSync } from "node:child_process";
 import {
   chmod,
@@ -32,7 +33,7 @@ import { getCliInstallStatus, installCli } from "./install";
 // HOME there, so installCli would write into the real home. Windows installs a trampoline instead
 // (woowtech-windows-cli-shim.test.ts).
 describe.skipIf(process.platform === "win32")(
-  "installing the woowtech smart CLI beside the official Paseo",
+  `installing the ${BRAND.name} CLI beside the official Paseo`,
   () => {
     const savedEnv = {
       HOME: process.env.HOME,
@@ -82,9 +83,9 @@ describe.skipIf(process.platform === "win32")(
       // Launched from an AppImage, the app links the CLI to the AppImage instead.
       delete process.env.APPIMAGE;
 
-      const ourApp = await installApp("woowtech smart", ["woowtech-smart", "paseo"]);
+      const ourApp = await installApp(BRAND.name, [BRAND.cliCommand, "paseo"]);
       electron.exePath = ourApp.exePath;
-      ourCli = path.join(ourApp.binDir, "woowtech-smart");
+      ourCli = path.join(ourApp.binDir, BRAND.cliCommand);
       officialPaseoCli = path.join((await installApp("Paseo", ["paseo"])).binDir, "paseo");
     });
 
@@ -96,33 +97,33 @@ describe.skipIf(process.platform === "win32")(
       await rm(root, { recursive: true, force: true });
     });
 
-    it("installs woowtech-smart and leaves the official Paseo's paseo command alone", async () => {
+    it(`installs ${BRAND.cliCommand} and leaves the official Paseo's paseo command alone`, async () => {
       await mkdir(localBin, { recursive: true });
       await symlink(officialPaseoCli, path.join(localBin, "paseo"));
 
       expect(await getCliInstallStatus()).toEqual({ installed: false });
       expect(await installCli()).toEqual({ installed: true });
 
-      expect(await readlink(path.join(localBin, "woowtech-smart"))).toBe(ourCli);
+      expect(await readlink(path.join(localBin, BRAND.cliCommand))).toBe(ourCli);
       expect(await readlink(path.join(localBin, "paseo"))).toBe(officialPaseoCli);
-      expect((await readdir(localBin)).sort()).toEqual(["paseo", "woowtech-smart"]);
+      expect((await readdir(localBin)).sort()).toEqual(["paseo", BRAND.cliCommand].sort());
     });
 
     it("does not create a paseo command", async () => {
       await installCli();
 
-      expect(await readdir(localBin)).toEqual(["woowtech-smart"]);
+      expect(await readdir(localBin)).toEqual([BRAND.cliCommand]);
     });
 
     it("counts only a link into this app as installed", async () => {
       await mkdir(localBin, { recursive: true });
-      await symlink(officialPaseoCli, path.join(localBin, "woowtech-smart"));
+      await symlink(officialPaseoCli, path.join(localBin, BRAND.cliCommand));
       expect(await getCliInstallStatus()).toEqual({ installed: false });
 
-      await rm(path.join(localBin, "woowtech-smart"));
+      await rm(path.join(localBin, BRAND.cliCommand));
       await symlink(
-        path.join(root, "moved.app", "woowtech-smart"),
-        path.join(localBin, "woowtech-smart"),
+        path.join(root, "moved.app", BRAND.cliCommand),
+        path.join(localBin, BRAND.cliCommand),
       );
       expect(await getCliInstallStatus()).toEqual({ installed: false });
 
@@ -130,15 +131,15 @@ describe.skipIf(process.platform === "win32")(
       expect(await getCliInstallStatus()).toEqual({ installed: true });
     });
 
-    it("labels the PATH line it adds to the shell profile as woowtech smart's", async () => {
+    it(`labels the PATH line it adds to the shell profile as ${BRAND.name}'s`, async () => {
       await installCli();
 
       expect(await readFile(path.join(home, ".zshrc"), "utf8")).toBe(
-        '\n# Added by woowtech smart\nexport PATH="$HOME/.local/bin:$PATH"\n',
+        `\n# Added by ${BRAND.name}\nexport PATH="$HOME/.local/bin:$PATH"\n`,
       );
     });
 
-    it("runs the bundled CLI through the app when woowtech-smart is typed", async () => {
+    it(`runs the bundled CLI through the app when ${BRAND.cliCommand} is typed`, async () => {
       if (process.platform === "win32") return;
       // The bundle carries upstream's bin/paseo shim under our name as well.
       const shim = fileURLToPath(new URL("../../../bin/paseo", import.meta.url));
@@ -150,10 +151,10 @@ describe.skipIf(process.platform === "win32")(
           ? path.join(
               path.dirname(path.dirname(path.dirname(ourCli))),
               "Frameworks",
-              "woowtech smart Helper.app",
+              `${BRAND.name} Helper.app`,
               "Contents",
               "MacOS",
-              "woowtech smart Helper",
+              `${BRAND.name} Helper`,
             )
           : electron.exePath;
       await mkdir(path.dirname(electronForCli), { recursive: true });
@@ -164,7 +165,7 @@ describe.skipIf(process.platform === "win32")(
       await chmod(electronForCli, 0o755);
 
       await installCli();
-      const result = spawnSync(path.join(localBin, "woowtech-smart"), ["--version"], {
+      const result = spawnSync(path.join(localBin, BRAND.cliCommand), ["--version"], {
         encoding: "utf8",
       });
 
