@@ -5,6 +5,7 @@ import {
   type WoowtechClientActivity,
   type WoowtechNoticeCandidate,
   woowtechClientPresenceState,
+  woowtechIsPushEligibleAttentionReason,
   woowtechNotificationPlanWhileStopping,
   woowtechNotificationPlanWithoutPhone,
 } from "./woowtech-attention-presence.js";
@@ -226,6 +227,14 @@ describe("woowtechNotificationPlanWithoutPhone (owner 2026-11-14)", () => {
   it("shows errors on the computer too, as it does for a present user", () => {
     expect(
       planWithoutPhone([activity({ deviceType: "web", lastActivityAt: away(10) })], {
+        pushEligible: woowtechIsPushEligibleAttentionReason("error"),
+      }),
+    ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+  });
+
+  it("asks the computer about a notice that would not push as well", () => {
+    expect(
+      planWithoutPhone([activity({ deviceType: "web", lastActivityAt: away(10) })], {
         pushEligible: false,
       }),
     ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
@@ -242,5 +251,45 @@ describe("woowtechNotificationPlanWithoutPhone (owner 2026-11-14)", () => {
 
   it("changes nothing with no client to ask", () => {
     expect(planWithoutPhone([])).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+  });
+});
+
+describe("woowtechIsPushEligibleAttentionReason (owner 2026-11-14)", () => {
+  it("pushes an error as well as a finished agent and a permission request", () => {
+    expect(woowtechIsPushEligibleAttentionReason("error")).toBe(true);
+    expect(woowtechIsPushEligibleAttentionReason("finished")).toBe(true);
+    expect(woowtechIsPushEligibleAttentionReason("permission")).toBe(true);
+  });
+
+  it("pushes an error to the phone when nobody is present", () => {
+    expect(
+      computeNotificationPlan({
+        allStates: [
+          woowtechClientPresenceState(
+            activity({
+              deviceType: "web",
+              appVisible: false,
+              lastActivityAt: new Date(nowMs - 600_000),
+            }),
+          ),
+        ],
+        focusTarget: { kind: "agent", id: "agent-1" },
+        pushEligible: woowtechIsPushEligibleAttentionReason("error"),
+        nowMs,
+      }),
+    ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
+  });
+
+  it("still shows an error only on the present computer, without a push", () => {
+    expect(
+      computeNotificationPlan({
+        allStates: [
+          woowtechClientPresenceState(activity({ deviceType: "web", appVisible: false })),
+        ],
+        focusTarget: { kind: "agent", id: "agent-1" },
+        pushEligible: woowtechIsPushEligibleAttentionReason("error"),
+        nowMs,
+      }),
+    ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
   });
 });

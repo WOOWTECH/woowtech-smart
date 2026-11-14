@@ -421,7 +421,10 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     expect(pushNotifications.sent).toHaveLength(1);
   });
 
-  it("does not push error attention when the only connected client has never sent a heartbeat", async () => {
+  // woowtech smart (README section 16, owner 2026-11-14): an error pushes too, so the user can come
+  // back and change the task or the conversation (woowtech-attention-presence.ts). Upstream did not
+  // push errors.
+  it("pushes error attention too when the only connected client has never sent a heartbeat", async () => {
     const { server, pushNotifications } = createServer();
     const ws = connectClient(server, null);
 
@@ -432,7 +435,40 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     });
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toHaveLength(1);
+    expect(pushNotifications.sent[0]?.data?.reason).toBe("error");
+  });
+
+  // woowtech smart: a present computer shows the error, and the daemon remembers it, so the phone
+  // gets it when the computer cannot show it or nobody deals with it (woowtech-attention-fallback.ts).
+  it("remembers an error a present computer is asked to show, for the phone", async () => {
+    const { server, pushNotifications } = createServer();
+    setPhoneHasPushToken(server, true);
+    const ws = connectClient(server, {
+      deviceType: "web",
+      appVisible: false,
+      focusedAgentId: null,
+      lastActivityAt: new Date(),
+    });
+    const remember = vi.spyOn(
+      asInternals<{ woowtechAttentionFallback: { remember(entry: unknown): void } }>(server)
+        .woowtechAttentionFallback,
+      "remember",
+    );
+
+    await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+      agentId: "agent-X",
+      provider: "claude",
+      reason: "error",
+    });
+
+    expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(true);
     expect(pushNotifications.sent).toEqual([]);
+    expect(remember).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: expect.objectContaining({ kind: "agent", agentId: "agent-X" }),
+      }),
+    );
   });
 
   // woowtech smart (README section 16, owner 2026-11-14): with nobody present and no phone to
@@ -476,6 +512,22 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
 
       expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
       expect(pushNotifications.sent).toHaveLength(1);
+    });
+
+    it("pushes an error when a phone has a push token", async () => {
+      const { server, pushNotifications } = createServer();
+      setPhoneHasPushToken(server, true);
+      const ws = connectClient(server, computerAway(10));
+
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-X",
+        provider: "claude",
+        reason: "error",
+      });
+
+      expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
+      expect(pushNotifications.sent).toHaveLength(1);
+      expect(pushNotifications.sent[0]?.data?.reason).toBe("error");
     });
 
     it("shows an error on the computer when no phone has a push token", async () => {
