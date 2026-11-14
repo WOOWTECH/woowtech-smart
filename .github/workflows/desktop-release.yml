@@ -473,8 +473,35 @@ jobs:
             $process = Start-Process -FilePath $setup.FullName -ArgumentList $arguments -Wait -PassThru
             if ($process.ExitCode -ne 0) { throw "Installer exited $($process.ExitCode)" }
           }
+          function Resolve-CandidateInstall([string]$phase) {
+            $uninstallRoot = 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall'
+            $entries = @(Get-ChildItem -LiteralPath $uninstallRoot -ErrorAction SilentlyContinue |
+              Get-ItemProperty | Where-Object { $_.DisplayName -eq "$name $env:DESKTOP_VERSION" })
+            $evidence = @($entries | ForEach-Object {
+              $location = Get-ItemPropertyValue -LiteralPath "Registry::HKEY_CURRENT_USER\Software\$($_.PSChildName)" -Name InstallLocation -ErrorAction SilentlyContinue
+              [pscustomobject]@{ Key = $_.PSChildName; DisplayName = $_.DisplayName; DisplayVersion = $_.DisplayVersion; InstallLocation = $location; UninstallString = $_.UninstallString }
+            })
+            $diagnostics = Join-Path $env:RUNNER_TEMP 'desktop-smoke'
+            New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
+            ConvertTo-Json -InputObject $evidence -Depth 3 | Set-Content -LiteralPath (Join-Path $diagnostics "installer-registry-$phase.json")
+            if ($evidence.Count -ne 1) { throw "Expected one HKCU uninstall entry for $name $env:DESKTOP_VERSION; found $($evidence.Count)" }
+            $entry = $evidence[0]
+            if ($entry.DisplayVersion -ne $env:DESKTOP_VERSION) { throw 'Registered version differs from candidate' }
+            if (Test-Path -LiteralPath "Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\$($entry.Key)") { throw 'Candidate registered a machine-wide installation' }
+            $location = $entry.InstallLocation
+            if (-not $location -or -not [IO.Path]::IsPathRooted($location)) { throw 'Missing absolute HKCU InstallLocation' }
+            foreach ($file in @("$name.exe", "Uninstall $name.exe")) {
+              if (-not (Test-Path -LiteralPath (Join-Path $location $file) -PathType Leaf)) { throw "Registered installation is missing $file at $location" }
+            }
+            $expectedUninstall = '"' + (Join-Path $location "Uninstall $name.exe") + '" /currentuser'
+            if ($entry.UninstallString -ne $expectedUninstall) { throw 'Uninstall registration does not match the per-user installed executable' }
+            Write-Host "Verified $phase HKCU installation: $location"
+            return $location
+          }
           Install-Candidate '/S'
-          $dir = Join-Path $env:LOCALAPPDATA "Programs\$name"
+          $dir = Resolve-CandidateInstall 'fresh'
+          $expectedFreshDir = Join-Path $env:LOCALAPPDATA "Programs\$name"
+          if ($dir -ne $expectedFreshDir) { throw "Fresh install used $dir instead of the branded folder $expectedFreshDir" }
           & $check -Path $dir -RequireSigned -Publisher $publisher
           # Reinstall via the updater's silent path. User data must survive both that and uninstall.
           $dataDirs = @(
@@ -495,6 +522,8 @@ jobs:
             }
           }
           Install-Candidate '/S --updated'
+          $updatedDir = Resolve-CandidateInstall 'updated'
+          if ($updatedDir -ne $dir) { throw 'Silent update changed InstallLocation' }
           Assert-UserData
           & $check -Path $dir -RequireSigned -Publisher $publisher
           # _?= keeps the uninstaller where it is, so -Wait waits for it; it must come last.
@@ -505,7 +534,7 @@ jobs:
           $sentinels | ForEach-Object { Remove-Item -LiteralPath $_ }
 
       - name: Upload packaged smoke diagnostics
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: desktop-smoke-windows-x64
@@ -539,7 +568,7 @@ jobs:
           gh release upload "$release_lookup" "${files[@]}" --clobber --repo "${{ github.repository }}"
 
       - name: Upload desktop artifacts to workflow
-        if: env.SHOULD_PUBLISH != 'true'
+        if: always() && env.SHOULD_PUBLISH != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: desktop-windows

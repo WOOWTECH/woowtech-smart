@@ -120,6 +120,12 @@ test("double-click installs for the current user without a wizard and opens the 
   assert.equal(nsis.oneClick, true);
   assert.equal(nsis.runAfterFinish, true);
   assert.equal(nsis.deleteAppDataOnUninstall, false);
+  // Switching to oneClick must not change the default folder to extraMetadata.name.
+  const installer = source("packages/desktop/build/installer.nsh");
+  assert.match(
+    installer,
+    /!macro customHeader\s+!undef APP_FILENAME\s+!define APP_FILENAME "\$\{PRODUCT_FILENAME\}"\s+!macroend/,
+  );
 });
 
 test("the Windows build does not need the symlink privilege", () => {
