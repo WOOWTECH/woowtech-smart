@@ -1,3 +1,4 @@
+import { DEFAULT_DAEMON_PORT } from "@getpaseo/protocol/brand-daemon";
 import { BRAND_RELAY } from "@getpaseo/protocol/brand-relay";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionOffer } from "@getpaseo/protocol/connection-offer";
@@ -428,7 +429,7 @@ describe("a probe or a direct connection", () => {
     const cases: Array<[HostConnection, string]> = [
       [direct("lan:6770"), "lan:6770"],
       [direct("mac.example.test:7443", true), "mac.example.test:7443 (TLS)"],
-      [SSH_HOST, "ssh mac.local → 6770"],
+      [SSH_HOST, `ssh mac.local → ${DEFAULT_DAEMON_PORT}`],
       [
         {
           id: "ssh:mac.local:2222:7000",
