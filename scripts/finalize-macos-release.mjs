@@ -68,17 +68,36 @@ export function notaryArgs({ input, output, app, identity, keychain }, env = pro
   ];
 }
 
+function validateArchitecturePairs(names) {
+  const pairs = new Map();
+  for (const name of names) {
+    const match = /-(arm64|x64)\.(dmg|zip)$/.exec(name);
+    if (!match) throw new Error(`Unsupported architecture/artifact: ${name}`);
+    const [, arch, ext] = match;
+    const extensions = pairs.get(arch) || new Set();
+    if (extensions.has(ext)) throw new Error(`Ambiguous ${arch} ${ext} artifacts`);
+    extensions.add(ext);
+    pairs.set(arch, extensions);
+  }
+  if ([...pairs.values()].some((extensions) => extensions.size !== 2))
+    throw new Error("Each manifest architecture requires exactly one DMG and one ZIP");
+}
+
 async function readBuilderManifest(source, manifestName, arch) {
   const manifest = load(fs.readFileSync(path.join(source, manifestName), "utf8"));
-  if (!manifest?.version || !Array.isArray(manifest.files) || manifest.files.length !== 2)
-    throw new Error("Expected exactly one DMG and one ZIP in manifest");
-  const names = manifest.files.map((entry) => basename(entry.url));
   if (
-    new Set(names).size !== 2 ||
-    !["dmg", "zip"].every(
-      (ext) => names.filter((name) => name.endsWith(`-${arch}.${ext}`)).length === 1,
-    )
+    !manifest?.version ||
+    !Array.isArray(manifest.files) ||
+    ![2, 4].includes(manifest.files.length)
   )
+    throw new Error("Expected a single-arch or dual-arch DMG/ZIP manifest");
+  const names = manifest.files.map((entry) => basename(entry.url));
+  if (new Set(names).size !== names.length) throw new Error("Duplicate manifest artifact names");
+  validateArchitecturePairs(names);
+  const selected = manifest.files.filter(
+    (entry) => entry.url.endsWith(`-${arch}.dmg`) || entry.url.endsWith(`-${arch}.zip`),
+  );
+  if (selected.length !== 2)
     throw new Error("Manifest artifacts do not match requested architecture / DMG and ZIP");
   if (!names.includes(manifest.path))
     throw new Error("Manifest legacy path must reference a listed artifact");
@@ -90,6 +109,16 @@ async function readBuilderManifest(source, manifestName, arch) {
   }
   const originalLegacy = manifest.files.find((entry) => entry.url === manifest.path);
   if (manifest.sha512 !== originalLegacy.sha512) throw new Error("Input legacy SHA512 mismatch");
+  if (Object.hasOwn(manifest, "size") && manifest.size !== originalLegacy.size)
+    throw new Error("Input legacy size mismatch");
+  // Validate every source artifact above, including the architecture not selected for this run.
+  manifest.files = selected;
+  if (!selected.some((entry) => entry.url === manifest.path)) {
+    const zip = selected.find((entry) => entry.url.endsWith(".zip"));
+    manifest.path = zip.url;
+    manifest.sha512 = zip.sha512;
+    if (Object.hasOwn(manifest, "size")) manifest.size = zip.size;
+  }
   return manifest;
 }
 

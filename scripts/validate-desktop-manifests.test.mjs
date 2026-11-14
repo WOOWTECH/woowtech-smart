@@ -312,3 +312,87 @@ test("rejects inconsistent manifest even when receipt matches its new bytes", as
     await assert.rejects(verifyFinalized(options.output), /Finalized manifest\/content mismatch/);
   });
 });
+
+function addIntelPair(options) {
+  const file = path.join(options.source, options.manifestName);
+  const manifest = load(readFileSync(file, "utf8"));
+  const intel = ["zip", "dmg"].map((ext) => {
+    const url = `smart-1.0.0-x64.${ext}`;
+    const bytes = Buffer.from(`Intel ${ext} fixture`);
+    writeFileSync(path.join(options.source, url), bytes);
+    return { url, size: bytes.length, sha512: sha512(bytes) };
+  });
+  // Match the remote four-entry manifest, whose legacy path points to Intel ZIP.
+  manifest.files = [intel[0], manifest.files[1], intel[1], manifest.files[0]];
+  Object.assign(manifest, { path: intel[0].url, sha512: intel[0].sha512, size: intel[0].size });
+  writeFileSync(file, dump(manifest));
+  return manifest;
+}
+
+for (const arch of ["arm64", "x64"]) {
+  test(`validates all four source artifacts and finalizes only ${arch} with matching legacy ZIP`, async () => {
+    await withMacRelease(async ({ options }) => {
+      const original = addIntelPair(options);
+      const before = readFileSync(path.join(options.source, options.manifestName));
+      options.arch = arch;
+      const paths = await finalizeMacRelease(options);
+      assert.equal(paths.length, 5);
+      const final = load(readFileSync(path.join(options.output, options.manifestName), "utf8"));
+      assert.equal(final.files.length, 2);
+      assert.ok(final.files.every((entry) => entry.url.includes(`-${arch}.`)));
+      const zip = final.files.find((entry) => entry.url.endsWith(".zip"));
+      assert.equal(final.path, zip.url);
+      assert.equal(final.sha512, zip.sha512);
+      assert.equal(final.size, zip.size);
+      for (const entry of original.files) {
+        assert.equal(sha512(readFileSync(path.join(options.source, entry.url))), entry.sha512);
+        if (!entry.url.includes(`-${arch}.`))
+          assert.equal(existsSync(path.join(options.output, entry.url)), false);
+      }
+      assert.deepEqual(readFileSync(path.join(options.source, options.manifestName)), before);
+      assert.deepEqual(await verifyFinalized(options.output), paths);
+    });
+  });
+}
+
+test("rejects corruption in the unselected architecture before calling the notary helper", async () => {
+  await withMacRelease(async ({ options }) => {
+    addIntelPair(options);
+    writeFileSync(path.join(options.source, "smart-1.0.0-x64.dmg"), "corrupt Intel payload");
+    let called = false;
+    options.finalizeDmg = async () => {
+      called = true;
+    };
+    await assert.rejects(
+      finalizeMacRelease(options),
+      /Input manifest mismatch: smart-1.0.0-x64.dmg/,
+    );
+    assert.equal(called, false);
+    assert.equal(existsSync(options.output), false);
+  });
+});
+
+for (const mutation of ["duplicate", "ambiguous", "missing-pair", "wrong-arch", "legacy-hash"]) {
+  test(`rejects unsafe multiarch manifest: ${mutation}`, async () => {
+    await withMacRelease(async ({ options }) => {
+      const manifest = addIntelPair(options);
+      const file = path.join(options.source, options.manifestName);
+      if (mutation === "duplicate") manifest.files[2] = { ...manifest.files[0] };
+      if (mutation === "ambiguous") manifest.files[2].url = "other-1.0.0-x64.zip";
+      if (mutation === "missing-pair") manifest.files = [manifest.files[0], manifest.files[1]];
+      if (mutation === "wrong-arch") manifest.files[2].url = "smart-1.0.0-universal.dmg";
+      if (mutation === "legacy-hash") manifest.sha512 = "wrong legacy hash";
+      writeFileSync(file, dump(manifest));
+      let called = false;
+      options.finalizeDmg = async () => {
+        called = true;
+      };
+      await assert.rejects(
+        finalizeMacRelease(options),
+        /Duplicate|Ambiguous|requires exactly|Unsupported architecture|Input legacy SHA512 mismatch/,
+      );
+      assert.equal(called, false);
+      assert.equal(existsSync(options.output), false);
+    });
+  });
+}
