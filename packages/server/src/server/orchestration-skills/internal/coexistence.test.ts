@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -26,12 +27,12 @@ const OFFICIAL_RETIRED_SKILLS = [
   "paseo-orchestrator",
 ];
 const OUR_SKILLS = [
-  "woowtech-smart",
-  "woowtech-smart-advisor",
-  "woowtech-smart-committee",
-  "woowtech-smart-handoff",
-  "woowtech-smart-help",
-  "woowtech-smart-plugin",
+  `${BRAND.cliCommand}`,
+  `${BRAND.cliCommand}-advisor`,
+  `${BRAND.cliCommand}-committee`,
+  `${BRAND.cliCommand}-handoff`,
+  `${BRAND.cliCommand}-help`,
+  `${BRAND.cliCommand}-plugin`,
 ];
 
 function skillRoots(targets: SkillTargets): string[] {
@@ -101,7 +102,7 @@ describe("orchestration skills beside the official Paseo's", () => {
   let officialBefore: Record<string, unknown>;
 
   beforeEach(async () => {
-    home = await mkdtemp(path.join(os.tmpdir(), "woowtech-smart-skills-coexistence-"));
+    home = await mkdtemp(path.join(os.tmpdir(), `${BRAND.cliCommand}-skills-coexistence-`));
     // The catalog the daemon really ships, installed into a temporary home.
     targets = resolveSkillTargets(home);
     controller = createSkillsController({
@@ -130,7 +131,7 @@ describe("orchestration skills beside the official Paseo's", () => {
 
   it("repairs woowtech smart's skills without touching the official ones", async () => {
     await controller.install();
-    const edited = path.join(targets.claudeDir, "woowtech-smart", "SKILL.md");
+    const edited = path.join(targets.claudeDir, `${BRAND.cliCommand}`, "SKILL.md");
 
     await writeFile(edited, "edited");
     expect((await controller.autoUpdate()).state).toBe("up-to-date");
@@ -157,7 +158,7 @@ describe("orchestration skills beside the official Paseo's", () => {
     const before = await readSkills(targets, official);
     await controller.install();
     // A name an older woowtech smart shipped.
-    await plantSkills(targets, ["woowtech-smart-chat"]);
+    await plantSkills(targets, [`${BRAND.cliCommand}-chat`]);
 
     const status = await controller.uninstall();
 
@@ -173,18 +174,18 @@ describe("orchestration skills beside the official Paseo's", () => {
     await plantSkills(targets, OFFICIAL_RETIRED_SKILLS);
     const before = await readSkills(targets, official);
     await controller.install();
-    const deselected = OUR_SKILLS.filter((name) => name !== "woowtech-smart");
+    const deselected = OUR_SKILLS.filter((name) => name !== `${BRAND.cliCommand}`);
 
-    const asked = await controller.save({ mode: "custom", skills: ["woowtech-smart"] });
+    const asked = await controller.save({ mode: "custom", skills: [`${BRAND.cliCommand}`] });
     const saved = await controller.save({
       mode: "custom",
-      skills: ["woowtech-smart"],
+      skills: [`${BRAND.cliCommand}`],
       confirmedRemovals: deselected,
     });
 
     expect(asked.confirmationRequired).toEqual({ removals: deselected });
     expect(saved.confirmationRequired).toBeNull();
-    expect(saved.installed).toEqual(["woowtech-smart"]);
+    expect(saved.installed).toEqual([`${BRAND.cliCommand}`]);
     expect(await readSkills(targets, official)).toEqual(before);
   });
 
@@ -195,13 +196,14 @@ describe("orchestration skills beside the official Paseo's", () => {
     const transaction = await beginSkillsTransaction(
       targets,
       { mode: "all" },
-      { mode: "custom", skills: ["woowtech-smart"] },
-      [{ kind: "delete", name: "woowtech-smart-advisor" }],
+      { mode: "custom", skills: [`${BRAND.cliCommand}`] },
+      [{ kind: "delete", name: `${BRAND.cliCommand}-advisor` }],
     );
     const staged = (await readdir(parent)).filter((entry) => entry.includes("-skills-"));
     await transaction.rollback();
 
-    expect(staged).toEqual([expect.stringMatching(/^\.woowtech-smart-skills-transaction-/)]);
+    expect(staged).toHaveLength(1);
+    expect(staged[0]?.startsWith(`.${BRAND.cliCommand}-skills-transaction-`)).toBe(true);
   });
 
   it("leaves the official Paseo's interrupted saves for the official Paseo", async () => {
@@ -233,7 +235,7 @@ describe("orchestration skills beside the official Paseo's", () => {
     await controller.install();
     await controller.save({
       mode: "custom",
-      skills: ["woowtech-smart"],
+      skills: [`${BRAND.cliCommand}`],
       confirmedRemovals: OUR_SKILLS,
     });
     await controller.uninstall();

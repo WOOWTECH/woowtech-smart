@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import {
   chmod,
   lstat,
@@ -184,9 +185,12 @@ async function backupArtifacts(targets: SkillTargets): Promise<string[][]> {
       return [
         ...parentEntries.filter(
           (entry) =>
-            entry !== path.basename(dir) && !entry.startsWith(".woowtech-smart-skills-recovered-"),
+            entry !== path.basename(dir) &&
+            !entry.startsWith(`.${BRAND.cliCommand}-skills-recovered-`),
         ),
-        ...rootEntries.filter((entry) => entry.startsWith(".woowtech-smart-skills-transaction-")),
+        ...rootEntries.filter((entry) =>
+          entry.startsWith(`.${BRAND.cliCommand}-skills-transaction-`),
+        ),
       ].sort();
     }),
   );
@@ -196,7 +200,7 @@ async function waitForTransactionDirectory(parent: string): Promise<void> {
   const events = watch(parent);
   try {
     for await (const event of events) {
-      if (event.filename?.startsWith(".woowtech-smart-skills-transaction-")) return;
+      if (event.filename?.startsWith(`.${BRAND.cliCommand}-skills-transaction-`)) return;
     }
   } finally {
     await events.return?.();
@@ -607,7 +611,7 @@ describe("skills controller", () => {
       { kind: "delete", name: "paseo-loop" },
     ]);
     const codexStage = (await readdir(harness.targets.codexDir)).find((entry) =>
-      entry.startsWith(".woowtech-smart-skills-transaction-"),
+      entry.startsWith(`.${BRAND.cliCommand}-skills-transaction-`),
     );
     expect(codexStage).toBeDefined();
     await rm(path.join(harness.targets.codexDir, codexStage!, "paseo-loop"), {
@@ -645,7 +649,7 @@ describe("skills controller", () => {
 
     expect(await readFile(live, "utf8")).toBe("external replacement");
     const recovered = (await readdir(harness.targets.codexDir)).find((entry) =>
-      entry.startsWith(".woowtech-smart-skills-recovered-"),
+      entry.startsWith(`.${BRAND.cliCommand}-skills-recovered-`),
     );
     expect(recovered).toBeDefined();
     expect(
@@ -682,7 +686,7 @@ describe("skills controller", () => {
     expect(await readFile(path.join(live, "SKILL.md"), "utf8")).toBe("external skill");
     expect(await readFile(path.join(live, "notes", "mine.md"), "utf8")).toBe("external notes");
     const recovered = (await readdir(harness.targets.codexDir)).find((entry) =>
-      entry.startsWith(".woowtech-smart-skills-recovered-paseo-loop-"),
+      entry.startsWith(`.${BRAND.cliCommand}-skills-recovered-paseo-loop-`),
     );
     expect(recovered).toBeDefined();
     expect(
@@ -720,7 +724,7 @@ describe("skills controller", () => {
     expect(await readFile(replacedAdd, "utf8")).toBe("external add replacement");
     const recoveryParent = path.dirname(harness.targets.agentsDir);
     const recovered = (await readdir(recoveryParent)).find((entry) =>
-      entry.startsWith(".woowtech-smart-skills-recovered-paseo-"),
+      entry.startsWith(`.${BRAND.cliCommand}-skills-recovered-paseo-`),
     );
     expect(recovered).toBeDefined();
     expect(await readFile(path.join(recoveryParent, recovered!, "notes", "mine.md"), "utf8")).toBe(
@@ -749,7 +753,7 @@ describe("skills controller", () => {
     ]);
     const transactionParent = path.dirname(harness.targets.agentsDir);
     const transactionName = (await readdir(transactionParent)).find((entry) =>
-      entry.startsWith(".woowtech-smart-skills-transaction-"),
+      entry.startsWith(`.${BRAND.cliCommand}-skills-transaction-`),
     );
     expect(transactionName).toBeDefined();
     const transactionDir = path.join(transactionParent, transactionName!);
@@ -763,7 +767,7 @@ describe("skills controller", () => {
     const backup = path.join(transactionDir, entry!.backupPath!);
     const recovered = path.join(
       transactionParent,
-      `.woowtech-smart-skills-recovered-paseo-${transactionName!.replace(".woowtech-smart-skills-transaction-", "")}`,
+      `.${BRAND.cliCommand}-skills-recovered-paseo-${transactionName!.replace(`.${BRAND.cliCommand}-skills-transaction-`, "")}`,
     );
     await rm(entry!.livePath, { recursive: true, force: true });
     await writeFile(entry!.livePath, "external replacement");
@@ -798,7 +802,7 @@ describe("skills controller", () => {
 
     expect(await readFile(path.join(live, "external.md"), "utf8")).toBe("external directory");
     const recovered = (await readdir(path.dirname(harness.targets.agentsDir))).find((entry) =>
-      entry.startsWith(".woowtech-smart-skills-recovered-paseo-"),
+      entry.startsWith(`.${BRAND.cliCommand}-skills-recovered-paseo-`),
     );
     expect(recovered).toBeDefined();
     expect(
@@ -1137,7 +1141,12 @@ describe("skills controller", () => {
 
   it("asks again when another directory appears before the retry", async () => {
     await harness.controller.install();
-    await writeUserFile(harness.targets, "woowtech-smart-chat", "SKILL.md", "retired but present");
+    await writeUserFile(
+      harness.targets,
+      `${BRAND.cliCommand}-chat`,
+      "SKILL.md",
+      "retired but present",
+    );
 
     const result = await harness.controller.save({
       mode: "custom",
@@ -1146,12 +1155,12 @@ describe("skills controller", () => {
     });
 
     expect(result.confirmationRequired).toEqual({
-      removals: ["paseo-advisor", "paseo-loop", "woowtech-smart-chat"],
+      removals: ["paseo-advisor", "paseo-loop", `${BRAND.cliCommand}-chat`].sort(),
     });
     expect(await installedEverywhere(harness.targets)).toEqual([
-      ["paseo", "paseo-advisor", "paseo-loop", "woowtech-smart-chat"],
-      ["paseo", "paseo-advisor", "paseo-loop", "woowtech-smart-chat"],
-      ["paseo", "paseo-advisor", "paseo-loop", "woowtech-smart-chat"],
+      ["paseo", "paseo-advisor", "paseo-loop", `${BRAND.cliCommand}-chat`].sort(),
+      ["paseo", "paseo-advisor", "paseo-loop", `${BRAND.cliCommand}-chat`].sort(),
+      ["paseo", "paseo-advisor", "paseo-loop", `${BRAND.cliCommand}-chat`].sort(),
     ]);
   });
 
@@ -1163,17 +1172,20 @@ describe("skills controller", () => {
     const transactionStarted = waitForTransactionDirectory(path.dirname(harness.targets.agentsDir));
     const save = harness.controller.save(selection);
     await transactionStarted;
-    await writeUserFile(harness.targets, "woowtech-smart-chat", "notes/mine.md", "hand written");
+    await writeUserFile(
+      harness.targets,
+      `${BRAND.cliCommand}-chat`,
+      "notes/mine.md",
+      "hand written",
+    );
 
     const result = await save;
 
-    expect(result.confirmationRequired).toEqual({ removals: ["woowtech-smart-chat"] });
+    expect(result.confirmationRequired).toEqual({ removals: [`${BRAND.cliCommand}-chat`] });
     expect(result.selection).toEqual(selection);
-    expect(await readUserFile(harness.targets, "woowtech-smart-chat", "notes/mine.md")).toEqual([
-      "hand written",
-      "hand written",
-      "hand written",
-    ]);
+    expect(
+      await readUserFile(harness.targets, `${BRAND.cliCommand}-chat`, "notes/mine.md"),
+    ).toEqual(["hand written", "hand written", "hand written"]);
   });
 
   it("saves without asking when nothing would be deleted", async () => {

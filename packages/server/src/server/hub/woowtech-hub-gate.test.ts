@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -203,7 +204,7 @@ describe("Hub connections in a new home", () => {
       message,
     });
     expect(message).toContain(
-      `woowtech-smart daemon config set daemon.hub.enabled true --home ${JSON.stringify(home)}`,
+      `${BRAND.cliCommand} daemon config set daemon.hub.enabled true --home ${JSON.stringify(home)}`,
     );
     expect(controller.status()).toEqual({
       state: "not_connected",
@@ -404,7 +405,7 @@ describe("the gate at startup", () => {
 });
 
 describe("the refusal's command", () => {
-  const COMMAND = "woowtech-smart daemon config set daemon.hub.enabled true";
+  const COMMAND = `${BRAND.cliCommand} daemon config set daemon.hub.enabled true`;
 
   test("needs no --home in the home the CLI uses by default", () => {
     expect(hubDisabledMessage(resolvePaseoHome({}))).toContain(`\`${COMMAND}\``);
@@ -412,7 +413,7 @@ describe("the refusal's command", () => {
 
   // The CLI edits the default home unless it is told which one, so a daemon in another home
   // would keep refusing after the user followed the command.
-  test.each(["/srv/woowtech-smart", "/srv/smart home", '/srv/say "hi"'])(
+  test.each([`/srv/${BRAND.cliCommand}`, "/srv/smart home", '/srv/say "hi"'])(
     "names the home %s with --home",
     (home) => {
       expect(hubDisabledMessage(home)).toContain(`\`${COMMAND} --home ${JSON.stringify(home)}\``);

@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -13,10 +14,10 @@ import { getOrCreateServerId } from "./server-id.js";
 // its own (owner decision D2, 2026-10-26). A link is the web app's root with the offer in
 // its fragment: the web app reads the offer there, and so do the app's scanner and its
 // "Paste pairing link" field.
-const WEB_APP_URL = "https://smart.woowtech.io";
+const WEB_APP_URL = `https://${BRAND.web.host}`;
 const WEB_LINK_BASE = `${WEB_APP_URL}/`;
 // The app's own link scheme, the default from 2026-09-25 to 2026-10-26 (0.8.1 included).
-const APP_SCHEME_ROOT_URL = "woowtech-smart:///";
+const APP_SCHEME_ROOT_URL = `${BRAND.scheme}:///`;
 
 const roots: string[] = [];
 
@@ -70,7 +71,7 @@ async function offerOf(home: string): Promise<unknown> {
     v: 2,
     serverId: getOrCreateServerId(home, { env: {} }),
     daemonPublicKeyB64: (await loadOrCreateDaemonKeyPair(home)).publicKeyB64,
-    relay: { endpoint: "relay.woowtech.io:443", useTls: true },
+    relay: { endpoint: `${BRAND.services.relayHost}:443`, useTls: true },
   };
 }
 
@@ -117,10 +118,10 @@ describe("app.baseUrl in an existing config.json", () => {
   // The daemon's own web UI, a site of the user's, an app link with a host, and anything
   // that is not exactly an earlier default, even on upstream's host.
   test.each([
-    "http://127.0.0.1:6770",
+    `http://127.0.0.1:${BRAND.defaultPort}`,
     "https://pair.example.test",
     "https://app.paseo.sh/pair",
-    "woowtech-smart://pair",
+    `${BRAND.scheme}://pair`,
   ])("a chosen value %s stays", async (chosen) => {
     const home = await homeWithConfig({ version: 1, app: { baseUrl: chosen } });
 
@@ -130,10 +131,10 @@ describe("app.baseUrl in an existing config.json", () => {
 
   // Only the exact strings an earlier release wrote count: no trimming, case folding or prefixes.
   test.each([
-    " woowtech-smart:///",
-    "woowtech-smart:/// ",
-    "WOOWTECH-SMART:///",
-    "woowtech-smart://",
+    ` ${BRAND.scheme}:///`,
+    `${BRAND.scheme}:/// `,
+    `${BRAND.scheme.toUpperCase()}:///`,
+    `${BRAND.scheme}://`,
     "https://app.paseo.sh//",
   ])("%j is not an earlier default and stays", async (chosen) => {
     const home = await homeWithConfig({ version: 1, app: { baseUrl: chosen } });

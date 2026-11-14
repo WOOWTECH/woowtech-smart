@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { describe, expect, test } from "vitest";
 import { resolvePaseoHome } from "./paseo-home.js";
 describe("resolvePaseoHome", () => {
   test("defaults to ~/.woowtech-smart, apart from an upstream Paseo install", () => {
-    expect(resolvePaseoHome({})).toBe(path.join(homedir(), ".woowtech-smart"));
+    expect(resolvePaseoHome({})).toBe(path.join(homedir(), BRAND.homeDir.slice(2)));
   });
 
   test("resolves PASEO_HOME without creating it", () => {

@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
@@ -24,7 +25,7 @@ describe("ACP client identity", () => {
     });
 
     expect(await client.clientInfoSeenByAgent()).toEqual({
-      name: "woowtech smart",
+      name: `${BRAND.name}`,
       version: "dev",
     });
   });
