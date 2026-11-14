@@ -1,3 +1,4 @@
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, expect, test, vi } from "vitest";
@@ -123,6 +124,7 @@ async function connectClient(
       type: "status",
       payload: {
         status: "server_info",
+        brand: BRAND_IDENTITY,
         serverId: "srv_sdk_test",
         hostname: null,
         version: null,
