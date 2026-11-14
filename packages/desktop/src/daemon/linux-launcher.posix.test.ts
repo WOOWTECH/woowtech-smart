@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -19,7 +20,7 @@ const it = test.runIf(process.platform === "linux");
 const require = createRequire(import.meta.url);
 const afterPack = require("../../scripts/after-pack.js").default;
 // electron-builder names the Linux executable after executableName in electron-builder.yml.
-const EXECUTABLE = "woowtech smart";
+const EXECUTABLE = BRAND.name;
 
 async function launch(
   options: {
