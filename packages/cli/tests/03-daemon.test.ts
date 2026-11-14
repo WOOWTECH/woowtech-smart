@@ -15,6 +15,8 @@
  * - daemon status probes the live relay state over local IPC
  */
 
+import { BRAND_RELAY } from "@getpaseo/protocol/brand-relay";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import assert from "node:assert";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -155,7 +157,7 @@ try {
     const offer = JSON.parse(
       Buffer.from(pairing.url.split("#offer=")[1], "base64url").toString("utf8"),
     );
-    assert.deepStrictEqual(offer.relay, { endpoint: "relay.woowtech.io:443", useTls: true });
+    assert.deepStrictEqual(offer.relay, { endpoint: BRAND_RELAY.endpoint, useTls: true });
     console.log("✓ daemon pair --json returns an offer for relay.woowtech.io\n");
   }
 
@@ -292,7 +294,7 @@ try {
       const nestedReload = await daemonCommand(["reload", "--host", listen, "--json"]);
       assert.strictEqual(nestedReload.exitCode, 0, nestedReload.stderr);
       assert.deepStrictEqual(JSON.parse(nestedReload.stdout), {
-        restartCommand: `woowtech-smart daemon restart --host ${JSON.stringify(listen)}`,
+        restartCommand: `${CLI_COMMAND} daemon restart --host ${JSON.stringify(listen)}`,
         appliedPaths: ["daemon.browserTools.enabled"],
         restartRequiredPaths: [],
         overrideControlledPaths: ["daemon.listen"],
@@ -305,7 +307,7 @@ try {
       });
       assert.strictEqual(aliasReload.exitCode, 0, aliasReload.stderr);
       assert.deepStrictEqual(JSON.parse(aliasReload.stdout), {
-        restartCommand: `woowtech-smart daemon restart --host ${JSON.stringify(listen)}`,
+        restartCommand: `${CLI_COMMAND} daemon restart --host ${JSON.stringify(listen)}`,
         appliedPaths: ["daemon.browserTools.enabled"],
         restartRequiredPaths: [],
         overrideControlledPaths: [],
@@ -314,7 +316,7 @@ try {
       const yamlReload = await daemonCommand(["reload", "--host", listen, "--format", "yaml"]);
       assert.strictEqual(yamlReload.exitCode, 0, yamlReload.stderr);
       assert.deepStrictEqual(YAML.parse(yamlReload.stdout), {
-        restartCommand: `woowtech-smart daemon restart --host ${JSON.stringify(listen)}`,
+        restartCommand: `${CLI_COMMAND} daemon restart --host ${JSON.stringify(listen)}`,
         appliedPaths: [],
         restartRequiredPaths: [],
         overrideControlledPaths: [],

@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { describe, expect, it } from "vitest";
 import {
   darkPureBlackTheme,
@@ -42,15 +43,15 @@ describe("Theme catalog", () => {
   });
 });
 
-describe("woowtech smart brand colors", () => {
-  it("highlights in the brand blue in the default light and dark themes", () => {
-    expect(lightTheme.colors.accent).toBe("#6183fc");
-    expect(lightTheme.colors.accentBright).toBe("#6183fc");
-    expect(darkTheme.colors.accent).toBe("#6183fc");
+describe("selected brand colors", () => {
+  it("highlights in the brand primary color in the default light and dark themes", () => {
+    expect(lightTheme.colors.accent).toBe(BRAND.colors.primary);
+    expect(lightTheme.colors.accentBright).toBe(BRAND.colors.primary);
+    expect(darkTheme.colors.accent).toBe(BRAND.colors.primary);
   });
 
-  it("keeps links readable on dark surfaces with a lighter blue", () => {
-    expect(darkTheme.colors.accentBright).toBe("#8fa6fd");
+  it("keeps links readable on dark surfaces with the dark accent color", () => {
+    expect(darkTheme.colors.accentBright).toBe(BRAND.colors.accentOnDark);
   });
 
   it("keeps the default dark surfaces neutral gray", () => {
@@ -67,9 +68,9 @@ describe("Pure black theme", () => {
     expect(darkPureBlackTheme.colors.terminal.background).toBe("#000000");
   });
 
-  it("uses the woowtech smart brand blue accent", () => {
-    expect(darkPureBlackTheme.colors.accent).toBe("#6183fc");
-    expect(darkPureBlackTheme.colors.accentBright).toBe("#8fa6fd");
+  it("uses the selected brand accents", () => {
+    expect(darkPureBlackTheme.colors.accent).toBe(BRAND.colors.primary);
+    expect(darkPureBlackTheme.colors.accentBright).toBe(BRAND.colors.accentOnDark);
   });
 
   it("derives sidebar interaction surfaces from the surface scale", () => {

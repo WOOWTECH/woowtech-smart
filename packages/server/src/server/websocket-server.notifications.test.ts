@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { SessionDelivery } from "./session/owned-subscriptions/index.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -665,7 +666,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       // srv-test is not an id the daemon generates, so it stays on the machine as well.
       expect(leftTheMachine).toEqual([
         {
-          title: "woowtech smart",
+          title: `${BRAND.name}`,
           body: "Work finished — tap to see the result.",
           data: { workspaceId, agentId, reason: "finished" },
         },

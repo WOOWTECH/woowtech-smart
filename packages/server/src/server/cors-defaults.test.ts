@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -16,9 +17,9 @@ import { createTestPaseoDaemon } from "./test-utils/paseo-daemon.js";
 // daemon). The value is written into config.json, so "[]" there turns it off. The desktop app
 // and the daemon's own web UI are let in by the daemon itself; dev setups add their origins in
 // config.json or PASEO_CORS_ORIGINS.
-const HOSTED_WEB_APP = "https://smart.woowtech.io";
+const HOSTED_WEB_APP = `https://${BRAND.web.host}`;
 const UPSTREAM_WEB_APP = "https://app.paseo.sh";
-const DESKTOP_APP = "woowtech-smart://app";
+const DESKTOP_APP = `${BRAND.scheme}://app`;
 const DEV_ORIGIN = "http://localhost:8081";
 
 const roots: string[] = [];
@@ -132,10 +133,10 @@ describe("the web origins a new home lets in", () => {
       for (const origin of [
         UPSTREAM_WEB_APP,
         `${HOSTED_WEB_APP}/`,
-        "http://smart.woowtech.io",
-        "https://smart.woowtech.io:8443",
-        "https://x.smart.woowtech.io",
-        "https://smart.woowtech.io.evil.test",
+        `http://${BRAND.web.host}`,
+        `https://${BRAND.web.host}:8443`,
+        `https://x.${BRAND.web.host}`,
+        `https://${BRAND.web.host}.evil.test`,
         "https://woowtech-smart-web.pages.dev",
       ]) {
         expect({ origin, ...(await accessFrom(daemon.port, origin)) }).toEqual({

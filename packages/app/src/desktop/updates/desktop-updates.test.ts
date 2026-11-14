@@ -1,3 +1,5 @@
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
+import { DESKTOP_ARTIFACT_PREFIX } from "@getpaseo/protocol/brand-desktop";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 async function loadModuleForPlatform(platform: "web" | "ios" | "android") {
@@ -115,7 +117,7 @@ describe("desktop-updates helpers", () => {
     const { buildMacAppleSiliconDownloadUrl } = await loadModuleForPlatform("web");
 
     expect(buildMacAppleSiliconDownloadUrl("v0.1.64")).toBe(
-      "https://github.com/WOOWTECH/woowtech-smart-releases/releases/download/v0.1.64/woowtech-smart-0.1.64-arm64.dmg",
+      `${BRAND_LINKS.releaseDownloads}/v0.1.64/${DESKTOP_ARTIFACT_PREFIX}-0.1.64-arm64.dmg`,
     );
     expect(buildMacAppleSiliconDownloadUrl(null)).toBeNull();
   });

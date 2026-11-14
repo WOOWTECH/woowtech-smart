@@ -293,6 +293,99 @@ The desktop app requires macOS 13 or newer. Keep both release guards when the fl
 
 macOS 13 maps to Darwin 22. The two values use different version domains; do not copy the macOS version into the update manifest.
 
+### macOS DMG finalization
+
+Build with `--publish never`. Before uploading either brand's Mac artifacts, run:
+
+```bash
+node scripts/finalize-macos-release-cli.mjs packages/desktop/release packages/desktop/release-finalized latest-mac.yml arm64
+node scripts/finalize-macos-release.mjs --verify packages/desktop/release-finalized
+```
+
+Use the actual channel manifest and `arm64` or `x64`. The output directory must not
+exist. The source manifest may contain one architecture (two entries) or both
+architectures (four entries). All listed input files are checked against their
+SHA512 and size before signing; duplicate names, ambiguous or incomplete pairs,
+and unknown architecture suffixes fail. The output contains only the requested
+architecture's DMG and ZIP. If the source legacy path points to the other
+architecture, the wrapper selects the requested architecture's ZIP and updates
+legacy SHA512/size automatically. Never hand-edit input hashes to split a manifest.
+The wrapper calls `packages/desktop/scripts/woowtech-notarize-dmg.sh` with
+its original arguments; that helper owns signing, Apple acceptance, stapling and
+container/inner-app checks. It preserves the source DMG and works on a new copy.
+Keep the existing App notarization for ZIP distribution.
+
+Authentication uses the existing electron-builder API-key environment:
+`APPLE_API_KEY` (path to the `.p8` file), `APPLE_API_KEY_ID`, and
+`APPLE_API_ISSUER`. No keychain profile is required. The workflow accepts
+`APPLE_API_KEY` secret as PEM content or an existing runner file path and removes
+only the temporary key file it creates. Apple-ID-only authentication is insufficient
+for this helper; configure the API-key credentials before running the candidate.
+For signing, reuse `CSC_KEYCHAIN`/`CSC_NAME` on a managed Mac, or let the wrapper
+import `CSC_LINK` with `CSC_KEY_PASSWORD` into a temporary keychain. It restores
+the previous search list and removes the keychain it created. Never commit keys.
+
+Finalization updates the DMG SHA512/size and legacy manifest fields, regenerates
+sidecar blockmaps using the pinned electron-builder implementation, and copies
+ZIP bytes unchanged. `finalized.json` is written last and lists only the DMG,
+ZIP, their blockmaps and the channel manifest, with SHA256/SHA512/size for review.
+Upload only paths returned by `--verify`, which rechecks those bytes and manifest
+references. Helper logs and original artifacts are excluded. A failed run leaves
+no completion marker; retry into a new directory. Keep candidate dispatches at
+`publish=false`; this gate does not authorize public release.
+
+Linux validation uses the existing manifest test suite with a mocked Apple helper
+and real blockmap generation. Record the source commit separately from native
+candidate evidence: a previous DMG passing Apple checks does not prove a newer
+wrapper/workflow ran. On a Mac, test the complete wrapper for both brands and
+architectures, then download the finalized DMG with quarantine intact and verify
+Finder opening, installation and first launch before approving publication.
+
+### macOS first launch installation
+
+For Smart and Apporo, test the signed DMG and ZIP on a physical Mac before publishing.
+The main-process prompt uses the system language (Traditional Chinese or English),
+so it can run before renderer settings and daemon startup. Branding comes from
+`APP_NAME`; cherry-pick the same change onto both release candidates without changing
+builder configuration or versions.
+
+The bundled Electron helpers run Chromium/CLI processes; they do not install the app.
+Installation uses Electron's `moveToApplicationsFolder`, which owns copying and
+relaunching. Keep DMG/ZIP and the existing updater. Never replace an existing copy
+through this prompt, including an older version: open that copy and use its updater.
+Electron 44.2.0's privileged installation bypasses its conflict callback, so the
+prompt requires a writable `/Applications` and checks both system and user Applications
+for an existing bundle before calling Electron. Restricted destinations require Finder
+installation. This is not an atomic installer: do not run another installer or change
+Applications permissions concurrently with installation.
+
+Physical-Mac acceptance for each brand (record macOS version, architecture and artifact SHA):
+
+1. With no installed copy, double-click the signed app inside the DMG. Accept the
+   Gatekeeper dialog, then the install prompt. Verify the running executable is under
+   `/Applications`, only one GUI/daemon starts, the signature still validates, and a
+   second launch does not prompt. Repeat with the ZIP extracted into Downloads.
+2. Decline the prompt or press Escape. Verify the app opens from its original location
+   and nothing is copied. Quit and reopen to confirm installation can be offered again.
+3. Put the same, newer, then older version in `/Applications` or `~/Applications`.
+   Try installation from Downloads, with the installed copy stopped and running.
+   Verify its bundle/hash and processes are preserved. A running copy may receive focus
+   through the existing single-instance path. Otherwise the prompt explains how to open
+   the installed copy and update it.
+4. Use a standard account without write access to `/Applications`. Verify Finder
+   instructions appear and no privileged overwrite is attempted. Simulate a copy failure
+   on a disposable test volume; verify visible recovery instructions and normal launch.
+5. Check English and Traditional Chinese, including the Apporo product name. Check a
+   development launch, CLI, deep link, and automation with `WOOWTECH_SKIP_MAC_INSTALL=1`:
+   none may install. Automation must set the opt-out when it uses a plain GUI launch.
+6. From an installed older signed version, exercise the existing ZIP automatic update
+   to the candidate. Confirm update/relaunch has no installation prompt and daemon
+   lifecycle remains correct. Also verify ordinary Quit still follows keep-running settings.
+
+Linux unit tests cover policy and filesystem guards, not Gatekeeper, App Translocation,
+Finder, signing, native copying or relaunch. Mac signing/build and these checks belong
+to the coordinating release run; they are required before public release.
+
 ### Limitations
 
 - **No pause / kill switch.** To stop new admissions, ship a superseding release. Clients revalidate on quit and will not install the superseded download, but a client that already completed installation cannot be recalled; ship a hotfix `+1` patch.
@@ -450,6 +543,37 @@ single-platform retry reuses those manifests, stamps the complete set with one
 release date, and publishes the draft. Use `desktop-vX.Y.Z` when more than one
 platform failed. A `workflow_dispatch` rebuild with publishing enabled follows
 the same path against the existing draft.
+
+### Windows installer candidates
+
+Use a feature branch for both the workflow `--ref` and `checkout_ref`, with
+`platform=windows`, `publish=false`, and `tag=v0.10.2-rc.1`. Here `tag` supplies
+version metadata only: do not create or push that tag. The Windows job accepts
+`vX.Y.Z-rc.N` only when publishing is disabled; the shared release version tool
+continues to reject RCs. The desktop package version and installer filename use
+the candidate version. Brand application preserves this version and keeps each
+brand's app ID, updater cache, data directories and release repository separate.
+
+Coordinate enabling a disabled Desktop Release workflow with its owner. Serialize
+Windows signing runs with other jobs using the same signing credential, including
+runs on other refs: workflow concurrency is per ref and cannot prevent TOTP reuse.
+Build Woowtech and Apporo in separate runs. Download their `desktop-windows`
+Actions artifacts; publishing is disabled throughout.
+
+One-click installs retain the branded product folder for fresh installs; the NSIS
+header overrides the package-name default without changing existing registry
+InstallLocation or explicit `/D` handling. CI reads the actual HKCU uninstall entry
+and its matching InstallLocation, requires the app and uninstaller to exist, and
+checks the per-user uninstall command before checking installed signatures. It
+also asserts the fresh branded directory and unchanged path after silent update.
+Registry diagnostics and candidate installers are retained even when checks fail.
+
+The existing Windows job checks signatures, silent install, silent reinstall with
+`--updated`, and uninstall, including preservation of sentinel files in both user
+data directories. Before shipping, test a double-click install from a standard
+Windows user (no wizard or UAC; app opens), upgrade an existing 0.10.1 installation,
+and exercise an actual updater-driven restart. A same-version silent reinstall
+in CI does not replace these interactive and previous-version checks.
 
 ### Pi Agent Windows signing
 

@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -10,9 +11,9 @@ function builderConfig(): string {
 describe("the About window", () => {
   it("names WOOW TECH and links the website, keeping the app's own name and version", () => {
     expect(woowtechAboutPanelOptions()).toEqual({
-      copyright: "© 2026 WOOW TECH CO., LTD.",
-      credits: "https://aiot.woowtech.io/",
-      website: "https://aiot.woowtech.io/",
+      copyright: BRAND.company.copyright,
+      credits: `https://${BRAND.links.websiteHost}/`,
+      website: `https://${BRAND.links.websiteHost}/`,
     });
   });
 

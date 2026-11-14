@@ -42,10 +42,8 @@ describe("the privacy policy row in Settings > About", () => {
 
     fireEvent.click(screen.getByText("隱私權政策"));
 
-    expect(openExternalUrl).toHaveBeenCalledWith(BRAND_LINKS.privacyPolicy);
-    expect(BRAND_LINKS.privacyPolicy).toMatch(
-      /^https:\/\/aiot\.woowtech\.io\/blog\/help-center-7\//,
-    );
+    expect(openExternalUrl).toHaveBeenCalledWith(BRAND_LINKS.privacyPolicyZh);
+    expect(new URL(BRAND_LINKS.privacyPolicyZh).protocol).toBe("https:");
   });
 
   it("reads in English when the app is in English", async () => {
@@ -53,5 +51,7 @@ describe("the privacy policy row in Settings > About", () => {
     render(<WoowtechPrivacyPolicyRow />);
     expect(screen.getByText("Privacy policy")).toBeTruthy();
     expect(screen.getByText("What data the app handles and where it goes")).toBeTruthy();
+    fireEvent.click(screen.getByText("Privacy policy"));
+    expect(openExternalUrl).toHaveBeenCalledWith(BRAND_LINKS.privacyPolicy);
   });
 });

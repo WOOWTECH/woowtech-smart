@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 // woowtech smart: tests for woowtech-notification-launch.ts (woowtech/README.md section 16, D2a).
 import { describe, expect, it } from "vitest";
 import {
@@ -22,7 +23,7 @@ describe("notification targets", () => {
     const target = { serverId: "srv one", agentId: "agt/1" };
     const id = agentNotificationId(target, "0f8fad5b-d9cb-469f-a165-70867728950e");
     expect(id).toBe(
-      "woowtech-agent:0f8fad5b-d9cb-469f-a165-70867728950e:woowtech-smart://h/srv%20one/agent/agt%2F1",
+      `woowtech-agent:0f8fad5b-d9cb-469f-a165-70867728950e:${BRAND.scheme}://h/srv%20one/agent/agt%2F1`,
     );
     expect(agentTargetFromNotificationId(id)).toEqual(target);
     expect(
@@ -35,6 +36,8 @@ describe("notification targets", () => {
     expect(agentTargetFromLaunchInfo(null)).toBeNull();
     expect(agentTargetFromLaunchInfo({ identifier: "5B6F1B0C-ELECTRON-RANDOM" })).toBeNull();
     expect(agentTargetFromNotificationId("woowtech-agent:no-separator")).toBeNull();
-    expect(agentTargetFromNotificationId("woowtech-agent:u:woowtech-smart:///#offer=x")).toBeNull();
+    expect(
+      agentTargetFromNotificationId(`woowtech-agent:u:${BRAND.scheme}:///#offer=x`),
+    ).toBeNull();
   });
 });

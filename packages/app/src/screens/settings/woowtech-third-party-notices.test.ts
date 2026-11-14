@@ -1,3 +1,4 @@
+import { PRODUCT_NAME, PRODUCT_NAME_ZH } from "@getpaseo/protocol/brand-name";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -14,6 +15,8 @@ import {
   type NoticeSection,
 } from "./woowtech-third-party-notices";
 import { PASEO_COPYRIGHT, PASEO_LICENSE_TEXT } from "./woowtech-paseo-license";
+
+const hasChineseName = /[㐀-鿿]/.test(PRODUCT_NAME_ZH);
 
 // woowtech smart's page of the third-party marks it shows (woowtech/README.md section 24). Which
 // marks ship is guarded by woowtech/third-party-notices.test.mjs; these tests pin what the page
@@ -75,15 +78,16 @@ describe("the trademarks and third-party notices page", () => {
     expect(english?.rows).toEqual([
       {
         key: "statement",
-        title:
-          "woowtech smart is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.",
+        title: `${PRODUCT_NAME} is not affiliated with, sponsored or endorsed by the companies or projects listed here. Their names and marks belong to their owners and appear only to identify the agents, services and file types they stand for.`,
         lines: [],
       },
     ]);
     const [chinese] = pageIn("zh-TW");
     expect(chinese).toMatchObject({ id: "trademarks", title: "商標" });
     expect(chinese?.rows[0]?.title).toBe(
-      "渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。",
+      hasChineseName
+        ? `渥屋智能與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。`
+        : `${PRODUCT_NAME_ZH} 與這裡列出的公司或專案沒有從屬關係，也沒有獲得它們的贊助或背書。這些名稱與標誌屬於各自的所有者，只用來標示它們代表的 Agent、服務與檔案類型。`,
     );
   });
 
@@ -181,7 +185,7 @@ describe("the trademarks and third-party notices page", () => {
       },
     });
     expect(fileTypeNotice("python").credit).toBe(
-      "“Python” and the Python logos are trademarks or registered trademarks of the Python Software Foundation, used by woowtech smart with permission from the Foundation.",
+      `“Python” and the Python logos are trademarks or registered trademarks of the Python Software Foundation, used by ${PRODUCT_NAME} with permission from the Foundation.`,
     );
     // One React logo draws both the .jsx and the .tsx icon.
     expect(fileTypeNotice("react_ts")).toBe(fileTypeNotice("react"));
@@ -281,7 +285,7 @@ describe("the trademarks and third-party notices page", () => {
       key: "changes",
       title: "Changes from the original logos",
       lines: [
-        "material-icon-theme redrew these logos as file icons, and woowtech smart tones down their colors. Icons adapted from a logo under a Creative Commons ShareAlike license are shared under that same license.",
+        `material-icon-theme redrew these logos as file icons, and ${PRODUCT_NAME} tones down their colors. Icons adapted from a logo under a Creative Commons ShareAlike license are shared under that same license.`,
       ],
     });
 
@@ -383,7 +387,9 @@ describe("the trademarks and third-party notices page", () => {
       key: "changes",
       title: "與原始標誌的差異",
       lines: [
-        "material-icon-theme 把這些標誌重新繪製成檔案圖示，渥屋智能再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。",
+        hasChineseName
+          ? `material-icon-theme 把這些標誌重新繪製成檔案圖示，渥屋智能再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。`
+          : `material-icon-theme 把這些標誌重新繪製成檔案圖示，${PRODUCT_NAME_ZH} 再調淡它們的顏色。改作自創用 CC「相同方式分享」授權標誌的圖示，以同一授權分享。`,
       ],
     });
     // What each section is for, in its header's info tooltip (docs/design.md section 7).
@@ -398,7 +404,12 @@ describe("the trademarks and third-party notices page", () => {
         "顯示在開啟 Git 平台的連結旁。GitHub 與 Codeberg 只用黑色或白色顯示，GitLab 顯示文字徽章。",
       ],
       ["fileTypes", "檔案總管裡，代表這些程式語言與格式的檔案圖示。"],
-      ["paseo", "渥屋智能改作自 Paseo。本節重製 Paseo 的著作權聲明與完整散布授權。"],
+      [
+        "paseo",
+        hasChineseName
+          ? `渥屋智能改作自 Paseo。本節重製 Paseo 的著作權聲明與完整散布授權。`
+          : `${PRODUCT_NAME_ZH} 改作自 Paseo。本節重製 Paseo 的著作權聲明與完整散布授權。`,
+      ],
       ["mit", "MIT 授權適用於下列每項作品，著作權聲明列在各項作品下。"],
     ]);
     expect(pageIn("en").map((section) => [section.id, section.info])).toEqual([
@@ -417,7 +428,7 @@ describe("the trademarks and third-party notices page", () => {
       ],
       [
         "paseo",
-        "woowtech smart is derived from Paseo. This section reproduces Paseo's copyright and complete distribution license.",
+        `${PRODUCT_NAME} is derived from Paseo. This section reproduces Paseo's copyright and complete distribution license.`,
       ],
       [
         "mit",

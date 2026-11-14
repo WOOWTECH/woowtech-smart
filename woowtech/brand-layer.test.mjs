@@ -173,7 +173,11 @@ test("the branded files and electron-builder.yml carry the applied brand's value
     const text = read(file.path);
     for (const key of file.values) {
       const value = key.split(".").reduce((node, part) => node[part], applied);
-      assert.ok(text.includes(value), `${file.path} lacks ${key} "${value}"`);
+      // CSS hex colors are case-insensitive; oxfmt lowercases them in HTML.
+      const containsValue = key.startsWith("colors.")
+        ? text.toLowerCase().includes(value.toLowerCase())
+        : text.includes(value);
+      assert.ok(containsValue, `${file.path} lacks ${key} "${value}"`);
     }
   }
   // Writing the applied brand into electron-builder.yml again changes nothing, so every field

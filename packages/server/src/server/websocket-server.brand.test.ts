@@ -24,7 +24,7 @@ import type { WorkspaceAutoName } from "./workspace-auto-name.js";
 
 // woowtech smart: only same-brand pairing (packages/protocol/src/brand-match.ts). The daemon
 // names its brand in server_info and turns away the app of another brand, counting an app that
-// names no brand as woowtech smart's. These tests run as woowtech smart, the repository's brand.
+// names no brand as woowtech smart's. Run against the brand applied to this checkout.
 
 interface HelloOutcome {
   serverInfoBrand: unknown;
@@ -51,9 +51,15 @@ describe("only same-brand pairing", () => {
     });
   });
 
-  it("lets in an app that names no brand, from before the check", async () => {
+  it("treats a legacy app without a brand as Woowtech, rejecting it on Apporo", async () => {
     const outcome = await sayHello({ clientType: "browser" });
-    expect(outcome).toEqual({ serverInfoBrand: BRAND_IDENTITY, close: null });
+    expect(outcome).toEqual({
+      serverInfoBrand: BRAND_IDENTITY,
+      close:
+        BRAND_IDENTITY.id === "woowtech"
+          ? null
+          : { code: OTHER_BRAND_CLOSE_CODE, reason: OTHER_BRAND_CLIENT_REASON },
+    });
   });
 
   it("lets in a CLI of another brand, which sends no push token", async () => {

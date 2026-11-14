@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import path from "node:path";
@@ -19,7 +20,7 @@ describe("daemon instance messages name the woowtech-smart command", () => {
 
   it("tells you how to start a daemon that is not running", async () => {
     await expect(waitForDaemonReady(home, { timeoutMs: 0 })).rejects.toThrow(
-      `Start with: woowtech-smart daemon start --home ${JSON.stringify(home)}`,
+      `Start with: ${BRAND.cliCommand} daemon start --home ${JSON.stringify(home)}`,
     );
   });
 
@@ -38,10 +39,10 @@ describe("daemon instance messages name the woowtech-smart command", () => {
     const error = await waitForDaemonReady(home, { timeoutMs: 0 }).catch((reason) => reason);
 
     expect(error.message).toContain(
-      `Status: woowtech-smart daemon status --home ${JSON.stringify(home)}`,
+      `Status: ${BRAND.cliCommand} daemon status --home ${JSON.stringify(home)}`,
     );
     expect(error.message).toContain(
-      `Stop: woowtech-smart daemon stop --home ${JSON.stringify(home)}`,
+      `Stop: ${BRAND.cliCommand} daemon stop --home ${JSON.stringify(home)}`,
     );
   });
 });

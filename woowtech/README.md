@@ -2240,7 +2240,7 @@ daemon 的埠被保留或占用（G12）：
 
 安裝與解除安裝（G6、D14、D15）：
 
-- 安裝程式只裝給目前的使用者（`build/installer.nsh` 的 `customInstallMode`）。Electron 的通知啟動器、開始功能表捷徑和協定本來就只登記給目前的使用者。不再出現「所有使用者」那一頁，也不用系統管理員權限，非靜默的更新也一樣。
+- 雙擊安裝檔後直接安裝，完成即開啟 App（`oneClick: true`、`runAfterFinish: true`），沒有精靈的下一步或安裝位置選擇。`/S` 靜默安裝不主動開 App；更新器需要重啟時仍由 `--force-run` 控制。安裝程式只裝給目前的使用者（`build/installer.nsh` 的 `customInstallMode`）。Electron 的通知啟動器、開始功能表捷徑和協定本來就只登記給目前的使用者。不再出現「所有使用者」那一頁，也不用系統管理員權限，非靜默的更新也一樣。
 - 解除安裝時清掉 Windows 還指向 App 的東西：
   - `woowtech-smart:` 協定和通知啟動器的 CLSID，都只在還指向這一份時才刪。開發版的 CLSID 不碰。
   - Windows 對這個 App 的通知設定（`Notifications\Settings\io.woowtech.smart.desktop`）。

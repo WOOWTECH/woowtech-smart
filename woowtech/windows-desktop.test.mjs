@@ -3,12 +3,16 @@
 // guard (desktop-notification-launch.test.mjs). The policies have unit tests in
 // packages/desktop/src/features/woowtech-*.test.ts.
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { readFileSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import YAML from "yaml";
 
-import { appliedBrand } from "./brands/index.cjs";
+import { appliedBrand, loadBrand } from "./brands/index.cjs";
+import { brandElectronBuilderConfig } from "./brands/apply.mjs";
 
 function source(path) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -106,13 +110,22 @@ test("Windows' Apps & features links point at the brand's website, not upstream'
   assert.equal(extraMetadata.homepage, `https://${brand.links.websiteHost}/`);
 });
 
-test("the Windows installer has no folder page: it installs where the update will look (2026-11-05)", () => {
+test("double-click installs for the current user without a wizard and opens the app", () => {
   const { nsis } = YAML.parse(source("packages/desktop/electron-builder.yml"));
   // Owner decision of 2026-11-05 (README §31): one install folder under the user's profile. A folder the
   // user picks multiplies what has to work: a protected folder fails for a per-user install without UAC, and
   // Chinese, spaces, & and % in a path each need care. IT can still pass /D=<folder> to a silent install.
   assert.equal(nsis.allowToChangeInstallationDirectory, false);
   assert.equal(nsis.perMachine, false);
+  assert.equal(nsis.oneClick, true);
+  assert.equal(nsis.runAfterFinish, true);
+  assert.equal(nsis.deleteAppDataOnUninstall, false);
+  // Switching to oneClick must not change the default folder to extraMetadata.name.
+  const installer = source("packages/desktop/build/installer.nsh");
+  assert.match(
+    installer,
+    /!macro customHeader\s+!undef APP_FILENAME\s+!define APP_FILENAME "\$\{PRODUCT_FILENAME\}"\s+!macroend/,
+  );
 });
 
 test("the Windows build does not need the symlink privilege", () => {
@@ -296,8 +309,10 @@ test("only the release job signs Windows builds, every PE file, SHA-256 only (D8
   );
   assert.match(windowsJob, /"-c\.win\.signtoolOptions\.publisherName=\$WIN_PUBLISHER_DN"/);
   // Built files, then the installed app with its uninstaller, must all be signed.
-  assert.match(windowsJob, /& \$check -Path \$release -RequireSigned -Publisher \$publisher/);
-  assert.match(windowsJob, /& \$check -Path \$dir -RequireSigned -Publisher \$publisher/);
+  assert.match(windowsJob, /woowtech-windows-installed-smoke\.ps1/);
+  const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
+  assert.match(lifecycle, /& \$check -Path \$release -RequireSigned -Publisher \$Publisher/);
+  assert.match(lifecycle, /& \$check -Path \$dir -RequireSigned -Publisher \$Publisher/);
 });
 
 test("the Windows release job checks the brand it built by that brand's names", () => {
@@ -308,8 +323,10 @@ test("the Windows release job checks the brand it built by that brand's names", 
   const steps = release.jobs["publish-windows"].steps;
   const step = (name) => steps.find((candidate) => candidate.name === name);
   const check = step("Check signatures, install and uninstall");
-  assert.match(check.run, /require\('\.\/woowtech\/brands\/index\.cjs'\)\.appliedBrand\(\)/);
-  assert.doesNotMatch(check.run, /woowtech smart|woowtech-smart/);
+  assert.match(check.run, /woowtech-windows-installed-smoke\.ps1/);
+  const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
+  assert.match(lifecycle, /require\(process\.argv\[1\]\)\.appliedBrand\(\)/);
+  assert.doesNotMatch(lifecycle, /woowtech smart|woowtech-smart/);
   const upload = step("Upload desktop artifacts to release");
   assert.match(
     upload.run,
@@ -325,4 +342,176 @@ test("Windows installs an update only from a silent restart, never at quit (G37,
     /const \{ isSilent, isForceRunAfter \} = updateInstallMode\(\{\s*platform: process.platform,\s*\.\.\.requested,\s*\}\);/,
   );
   assert.match(updater, /autoUpdater.quitAndInstall\(isSilent, isForceRunAfter\);/);
+});
+
+// Run the actual workflow metadata command: RCs must never enter the publishing path.
+test("Windows candidate metadata accepts RC only with publishing disabled", () => {
+  const workflow = YAML.parse(source(".github/workflows/desktop-release.yml"));
+  const command = workflow.jobs["publish-windows"].steps.find(
+    (step) => step.name === "Resolve release metadata",
+  ).run;
+  const root = new URL("../", import.meta.url);
+  const dir = mkdtempSync(join(tmpdir(), "windows-candidate-"));
+  try {
+    for (const [tag, publish, status, version, channel] of [
+      ["v0.10.2-rc.1", "false", 0, "0.10.2-rc.1", "rc"],
+      ["v0.10.2-rc.1", "true", 1],
+      ["v0.10.2-rc.invalid", "false", 1],
+      ["v0.10.2-beta.1", "false", 0, "0.10.2-beta.1", "beta"],
+      ["v0.10.1", "false", 0, "0.10.1", "latest"],
+    ]) {
+      const output = join(dir, `${tag}-${publish}`);
+      const result = spawnSync("bash", ["-e", "-c", command], {
+        cwd: root,
+        env: { ...process.env, SOURCE_TAG: tag, SHOULD_PUBLISH: publish, GITHUB_ENV: output },
+        encoding: "utf8",
+      });
+      assert.equal(result.status, status, `${tag}/${publish}: ${result.stderr}`);
+      if (status === 0) {
+        const env = Object.fromEntries(
+          readFileSync(output, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => line.split("=")),
+        );
+        assert.equal(env.DESKTOP_VERSION, version);
+        assert.equal(env.RELEASE_CHANNEL, channel);
+        assert.equal(env.RELEASE_TYPE, channel === "latest" ? "release" : "prerelease");
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("brand application keeps one-click policy and candidate version while isolating Windows identity", () => {
+  const input = YAML.parse(source("packages/desktop/electron-builder.yml"));
+  input.extraMetadata.version = "0.10.2-rc.1";
+  const configs = ["woowtech", "apporo"].map((id) => {
+    const brand = loadBrand(id);
+    const config = YAML.parse(brandElectronBuilderConfig(YAML.stringify(input), brand));
+    assert.deepEqual(config.nsis, input.nsis);
+    assert.equal(config.extraMetadata.version, "0.10.2-rc.1");
+    assert.equal(config.appId, brand.desktop.appId);
+    assert.equal(config.extraMetadata.name, brand.desktop.appId);
+    assert.equal(config.productName, brand.name);
+    assert.equal(
+      config.win.artifactName,
+      `${brand.desktop.artifactPrefix}-Setup-\${version}-\${arch}.\${ext}`,
+    );
+    assert.equal(`${config.publish.owner}/${config.publish.repo}`, brand.links.releasesRepo);
+    return config;
+  });
+  assert.notEqual(configs[0].appId, configs[1].appId);
+  assert.notEqual(configs[0].productName, configs[1].productName);
+  assert.notEqual(configs[0].publish.repo, configs[1].publish.repo);
+  assert.notEqual(loadBrand("woowtech").homeDir, loadBrand("apporo").homeDir);
+});
+
+test("Windows lifecycle launches the registered installed copy before and after update and checks registry cleanup", () => {
+  const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
+  assert.match(lifecycle, /packaged-app-smoke\.js'\) --app \$location/);
+  assert.doesNotMatch(lifecycle, /win-unpacked/);
+  assert.match(lifecycle, /InstallLocation/);
+  const fresh = lifecycle.indexOf("$dir = Resolve-CandidateInstall 'fresh'");
+  const launch = lifecycle.indexOf("Test-InstalledLaunch $dir 'fresh'");
+  const update = lifecycle.indexOf("Install-Candidate '/S --updated'");
+  const updatedLaunch = lifecycle.indexOf("Test-InstalledLaunch $updatedDir 'updated'");
+  const uninstall = lifecycle.indexOf("$uninstall = Start-Process");
+  const cleanup = lifecycle.indexOf("$cleanup = @($registryPaths");
+  assert.ok(fresh > 0 && launch > fresh && update > launch && updatedLaunch > update);
+  assert.ok(uninstall > updatedLaunch && cleanup > uninstall);
+  assert.match(lifecycle, /uninstall-registry-cleanup\.json/);
+  assert.match(lifecycle, /Where-Object exists\)\.Count -ne 0/);
+  assert.match(lifecycle, /launch-target\.json/);
+  assert.match(lifecycle, /ProductVersion/);
+  assert.ok(
+    lifecycle.indexOf("Installer signature or publisher mismatch") <
+      lifecycle.indexOf("Install-Candidate '/S'"),
+  );
+});
+
+test("installed candidate verification only downloads pinned successful release artifacts and never signs", () => {
+  const workflow = YAML.parse(source(".github/workflows/windows-installed-verify.yml"));
+  assert.deepEqual(workflow.permissions, { contents: "read", actions: "read" });
+  assert.deepEqual(workflow.on.workflow_dispatch.inputs.candidate.options, ["woowtech", "apporo"]);
+  const text = JSON.stringify(workflow);
+  assert.doesNotMatch(text, /ESIGNER|WOOWTECH_SIGN|build:desktop|secrets\./);
+  assert.match(text, /steps\.candidate\.outputs\.source/);
+  const pins = JSON.parse(source("packages/desktop/scripts/windows-smoke-candidates.json"));
+  assert.equal(pins.woowtech.run, "43601338055");
+  assert.equal(pins.apporo.run, "43602289535");
+  for (const pin of Object.values(pins)) {
+    assert.match(pin.source, /^[a-f0-9]{40}$/);
+    assert.match(pin.digest, /^[a-f0-9]{64}$/);
+    assert.match(pin.artifact, /^\d+$/);
+  }
+  const download = source("packages/desktop/scripts/download-windows-smoke-candidate.ps1");
+  for (const gate of [
+    "$run.conclusion -ne 'success'",
+    "$run.head_sha -cne $pin.source",
+    "$artifact.expired",
+    "$artifact.digest -cne",
+    "Get-FileHash",
+  ]) {
+    assert.ok(
+      download.indexOf(gate) > 0 && download.indexOf(gate) < download.indexOf("Expand-Archive"),
+      gate,
+    );
+  }
+});
+
+test("existing Desktop Release dispatch runs only verification even with publish defaulting true", () => {
+  const workflow = YAML.parse(source(".github/workflows/desktop-release.yml"));
+  const reusable = YAML.parse(source(".github/workflows/windows-installed-verify.yml"));
+  assert.ok(workflow.on.workflow_dispatch.inputs.platform.options.includes("verify-windows"));
+  assert.deepEqual(workflow.on.workflow_dispatch.inputs.windows_candidate.options, [
+    "woowtech",
+    "apporo",
+  ]);
+  assert.equal(
+    workflow.jobs["verify-windows"].uses,
+    "./.github/workflows/windows-installed-verify.yml",
+  );
+  assert.equal(workflow.jobs["verify-windows"].with.candidate, "${{ inputs.windows_candidate }}");
+  assert.equal(reusable.on.workflow_call.inputs.candidate.type, "string");
+  assert.deepEqual(workflow.jobs["verify-windows"].permissions, {
+    contents: "read",
+    actions: "read",
+  });
+  assert.equal(workflow.jobs["verify-windows"].secrets, undefined);
+  for (const publish of ["true", "false"]) {
+    const inputs = { platform: "verify-windows", publish, windows_candidate: "woowtech" };
+    const github = {
+      event_name: "workflow_dispatch",
+      event: { inputs },
+      ref_name: "reviewed-branch",
+    };
+    const needs = Object.fromEntries(
+      Object.keys(workflow.jobs).map((id) => [id, { result: "skipped" }]),
+    );
+    const selected = Object.entries(workflow.jobs)
+      .filter(([, job]) => {
+        assert.ok(job.if, "Every release job must have an explicit condition");
+        const expression = job.if
+          .replace(/^\$\{\{\s*|\s*\}\}$/g, "")
+          .replace(/needs\.([a-z-]+)/g, 'needs["$1"]');
+        return new Function(
+          "github",
+          "inputs",
+          "needs",
+          "always",
+          "startsWith",
+          `return (${expression});`,
+        )(
+          github,
+          inputs,
+          needs,
+          () => true,
+          (value, prefix) => value.startsWith(prefix),
+        );
+      })
+      .map(([id]) => id);
+    assert.deepEqual(selected, ["verify-windows"], `publish=${publish}`);
+  }
 });

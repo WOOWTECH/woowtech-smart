@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -33,7 +34,7 @@ describe("server config", () => {
 
     const config = loadConfig(paseoHome, { env: {} });
 
-    expect(config.listen).toBe("127.0.0.1:6770");
+    expect(config.listen).toBe(`127.0.0.1:${BRAND.defaultPort}`);
   });
 
   test("loads the provider catalog refresh timeout", async () => {

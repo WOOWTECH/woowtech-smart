@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -421,7 +422,7 @@ describe("DaemonSession", () => {
     });
     writeFileSync(
       join(paseoHome, "daemon.log"),
-      "first line\nrelay.secret.test:443 token=super-secret paseo://pairing-secret woowtech-smart://h/agent-secret\n",
+      `first line\nrelay.secret.test:443 token=super-secret paseo://pairing-secret ${BRAND.scheme}://h/agent-secret\n`,
     );
 
     await subsystem.handleDiagnosticsRequest({ type: "diagnostics.request", requestId: "d-1" });

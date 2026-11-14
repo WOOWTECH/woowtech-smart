@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import { BRAND_IDENTITY } from "@getpaseo/protocol/brand-match";
 import appPackage from "../../../package.json";
 import { DaemonClient, type DaemonTransport } from "@getpaseo/client/internal/daemon-client";
 import React, { act, StrictMode } from "react";
@@ -233,6 +234,7 @@ it("releases a crashed renderer's observations and recovers a fresh scope in Str
             type: "status",
             payload: {
               status: "server_info",
+              brand: BRAND_IDENTITY,
               serverId: "host-1",
               hostname: null,
               version: null,

@@ -1,3 +1,4 @@
+import { BRAND } from "@getpaseo/protocol/brand-values";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -21,7 +22,7 @@ test("a pairing offer without a relay endpoint points at WoowTech's relay over T
 
   expect(pairing.relayEnabled).toBe(true);
   expect(parseConnectionOfferFromUrl(pairing.url ?? "")?.relay).toEqual({
-    endpoint: "relay.woowtech.io:443",
+    endpoint: `${BRAND.services.relayHost}:443`,
     useTls: true,
   });
 });
