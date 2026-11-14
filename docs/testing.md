@@ -127,7 +127,10 @@ The `Desktop Release` dispatch entrypoint (`platform=verify-windows`) reuses the
 `43601338055` or Apporo `43602289535` artifact without rebuilding or signing. Select
 `woowtech` or `apporo`; the allowlist pins the successful Desktop Release run, source,
 artifact ID and archive SHA-256. The verifier checks the installer signature, publisher
-and product version before executing it, and uploads installed-path evidence, renderer
+and product version before executing it. For the installed Electron executable, exact RC
+semver is checked in `FileVersion`, while `ProductVersion` must match the four-part
+numeric core (e.g. `0.10.2.0`); NSIS setup retains its separate version schema. Actual
+and expected metadata are logged and saved before assertion. Verification uploads installed-path evidence, renderer
 screenshots, smoke logs and registry cleanup results. It checks out the candidate source
 for the existing observer and brand definitions and installs only Playwright/asar observer
 dependencies; all executable app/CLI tools come from the installed payload.
