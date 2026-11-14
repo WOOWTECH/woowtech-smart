@@ -33,6 +33,8 @@ jobs:
         with:
           path: verifier
           persist-credentials: false
+      - name: Test installed executable metadata assertions
+        run: ./verifier/packages/desktop/scripts/woowtech-windows-installed-smoke.Tests.ps1
       - name: Download and verify pinned candidate provenance
         id: candidate
         env:
