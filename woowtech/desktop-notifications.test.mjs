@@ -97,7 +97,12 @@ test("agent notification caller localizes after existing suppression and dedupli
   assert.ok(dependencies, "observeEvents effect dependencies");
   assert.match(dependencies[1], /\bnotifyAgentAttention\b/);
   assert.doesNotMatch(dependencies[1], /\bt\b|notificationTranslationRef/);
-  assert.match(callback, /if \(params.reason === "error"\) \{\s*return;/);
+  // An error notifies like the other reasons (owner 2026-11-14); upstream returned before showing it.
+  assert.doesNotMatch(
+    callback,
+    /params\.reason === "error"/,
+    "a computer must show an agent's error",
+  );
   assert.match(callback, /if \(!isAwayFromAgent\) \{\s*return;/);
   assert.match(callback, /if \(lastNotified && lastNotified >= timestampMs\) \{\s*return;/);
   assert.match(callback, /attentionNotifiedRef.current.set\(params.agentId, timestampMs\)/);

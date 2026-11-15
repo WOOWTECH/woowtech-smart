@@ -28,7 +28,36 @@ describe("woowtech agent notification titles", () => {
     expect(localizeAgentNotification({ notification, reason: "error", t })).toEqual({
       ...notification,
       title: "需要你的注意",
+      body: "工作出錯停下了，點一下查看。",
     });
+  });
+
+  // woowtech smart (owner 2026-11-14): a computer now shows an agent's error, and the daemon always
+  // sends upstream's fixed English sentence as its body.
+  it("translates the body of an error, chosen by reason, and keeps upstream's English", () => {
+    const error = buildAgentAttentionNotificationPayload({
+      reason: "error",
+      serverId: "test-server",
+      workspaceId: "test-workspace",
+      agentId: "test-agent",
+    });
+    expect(error.body).toBe("Encountered an error.");
+    expect(
+      localizeAgentNotification({
+        notification: error,
+        reason: "error",
+        t: i18n.getFixedT("zh-TW"),
+      }),
+    ).toEqual({ ...error, title: "需要你的注意", body: "工作出錯停下了，點一下查看。" });
+    for (const language of ["en", "zh-CN", "ja"]) {
+      expect(
+        localizeAgentNotification({
+          notification: error,
+          reason: "error",
+          t: i18n.getFixedT(language),
+        }),
+      ).toEqual(error);
+    }
   });
 
   it("keeps old-daemon fallback and agent-authored fallback-looking bodies untouched", () => {

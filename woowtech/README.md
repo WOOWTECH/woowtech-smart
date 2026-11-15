@@ -960,14 +960,16 @@ node --test woowtech/*.test.mjs
 - 沒有手機可推播時，改讓最近用過的電腦跳通知（owner 2026-11-14 同意：「去主力做這個」）：上游在沒人在場時只推播。沒有任何手機登記推播（`push/index.ts` 的 `hasActiveTokens()`，token 租約 48 小時）時，推播送不到人，電腦也不跳，人回來時 Mac 的通知中心、Windows 的通知中心什麼都沒留。2026-11-06 Apporo 的 Windows 實機就是這樣：使用者 28 分鐘沒動，agent 做完一則通知都沒有。
   - 現在 `woowtech-attention-presence.ts` 的 `woowtechNotificationPlanWithoutPhone()` 接在上游的計畫後面：沒人在場、又沒有手機有推播 token 時，從算計畫的那些用戶端裡挑最後一次操作最近的電腦（`deviceType: "web"`：桌面版、瀏覽器；同時間挑前面那個），當成它在場，請它顯示通知，不推播。
   - 不挑手機（手機只靠推播），也不挑沒送過 heartbeat 的用戶端。有人在場卻沒被上游選上，代表它正看著那個 agent 或 terminal，照上游誰都不通知。daemon 停止時照樣誰都不通知（停止的規則最後套）。
-  - `error` 也照這樣顯示：人在場時本來就會在電腦上顯示；有手機時，`error` 推播（見下面「出錯也推播」）。
+  - `error` 也照這樣交給電腦。電腦在 2026-11-15 前不會顯示它：上游的 App 丟掉每一則 `error` 通知，見下面「出錯也推播」的 App 那段。有手機時，`error` 推播。
   - 這則通知一樣進下面的帳本：電腦回報顯示不出來時回 `no_device`；3 分鐘沒人理的補推，到期時有手機才推（這段時間有人登記手機就會推）。
   - 只改 daemon（`websocket-server.ts` 多一個 `woowtechPlanWithoutPhone()`，兩個 attention 廣播的計畫先經過它），舊版 App 也有效。
 - 出錯也推播（owner 2026-11-14：「這個去優化出錯也要推播來讓使用者在調整工作內容跟對話內容」）：上游只推「完成」和「要權限」（`agent-attention-policy.ts` 的 `isPushEligibleAttentionReason()` 把 `error` 排除），所以有手機、沒人在場時 agent 出錯誰都不通知，使用者不知道要回來改工作內容或對話。
   - `woowtech-attention-presence.ts` 的 `woowtechIsPushEligibleAttentionReason()`：`error` 推，其他照上游。`websocket-server.ts` 的 agent 廣播兩處都改用它：算計畫的 `pushEligible`（沒人在場就推），和交給在場電腦時記進帳本（電腦回報顯示不出來就改推、3 分鐘沒人理就補推）。上游的函式不動。
   - 手機上的句子是中繼的「需要你的注意」（`woowtech-push.ts` 把 `error` 對到 `attention`），Android 走「需要你處理」的通道，中繼不用改。terminal 沒有 `error`，不變。
   - agent 標成「需要注意」之後，要有人打開它才會清掉，在那之前不會再通知（`agent-manager.ts` 的 `checkAndSetAttention()`），所以一直出錯的 agent 也只推一次；每支手機另有中繼的上限（每分鐘 10 則、每天 500 則）。
-  - 只改 daemon（`websocket-server.ts` 的 import 和兩處呼叫），舊版 App 也有效。
+  - 推播的部分只改 daemon（`websocket-server.ts` 的 import 和兩處呼叫），舊版 App 也有效。
+  - 電腦上顯示（2026-11-15 在 elmomac 實測時發現）：上游 `session-context.tsx` 的 `notifyAgentAttention` 遇到 `error` 就 return，所以桌面版和網頁從來不顯示 agent 出錯的通知。daemon 交給在場電腦的 `error` 什麼都沒顯示，要等 3 分鐘沒人理才補推手機；沒有手機的人完全收不到。現在拿掉那行，`error` 跟另外兩種一樣顯示。標題照舊是「需要你的注意」；內文 daemon 一律送上游的英文 `Encountered an error.`，所以照原因換成「工作出錯停下了，點一下查看。」（`woowtech-agent-notification.ts`，英文和其他語言照上游）。手機照舊只靠推播（手機上 `sendOsNotification` 回 false）。這部分要新版桌面版和網頁版才有。
+  - 怎麼在真機讓 agent 出錯：用不存在的模型沒用（Claude 回一則說明模型有問題的訊息，turn 照樣算完成）。要讓 Claude 的行程在回覆途中結束：先請它寫一篇長文，再對這個 agent 的 Claude 行程送 SIGTERM，daemon 記 `Claude Code process exited with code 143`，agent 變成 error。
 - Mac 顯示不出通知時改推手機（提案 4，owner 2026-10-05 同意；2026-10-06 加上 B：沒人理就補推）：daemon 只交給一個在場的用戶端顯示，不推播；Mac 的通知被關掉、還沒按允許、或 5 秒沒結果時，什麼都不會出現。現在：
   - daemon 交出通知時記下來（`woowtech-attention-fallback.ts`）：agent 用 agent ID 加這則訊息的 `timestamp`，terminal 用 terminal ID（同一個 terminal 只留最新的），也記下交給哪個 session。只記可以推播的（2026-11-14 起 `error` 也推，見下面「出錯也推播」），停止中本來就沒有對象。最多 64 則、60 秒。
   - App 的 `sendOsNotification` 回報沒顯示（桌面版是 `failed` 或 5 秒 `unconfirmed`，丟出錯誤也算）時，`utils/woowtech-notification-fallback.ts` 送 `attention.notification.report_display_failure.request`。手機不送：手機本來就只靠推播。只送給 `server_info.features.woowtechAttentionFallback` 是 true 的 daemon，官方 Paseo 不會有。
@@ -998,6 +1000,7 @@ node --test woowtech/*.test.mjs
   - `websocket-server.notifications.test.ts`：上游「`error` 不推」那個案例（只有沒送過 heartbeat 的用戶端）改成也推（加了 woowtech 註解）；加「有手機、沒人在場時 `error` 推播」和「在場電腦的 `error` 記進帳本」。
   - 守門 `woowtech/attention-presence.test.mjs` 加一個：agent 廣播的兩處都用 fork 的函式，不再呼叫上游的；`woowtech/attention-fallback.test.mjs` 的帳本條件跟著改名。
   - 紅綠：把兩處改回上游的規則時 3 個測試、2 個守門失敗；把規則本身改回上游時 5 個測試失敗。
+  - 電腦上顯示（2026-11-15）：`utils/woowtech-agent-notification.test.ts` 的 error 案例改成內文也翻譯，加一個：error 的內文照原因翻成繁中、英文和其他語言保持上游原文。`i18n/woowtech-copy.test.ts` 把新的 `agentNotificationBodies.` 列進只翻繁中的區塊。守門 `woowtech/desktop-notifications.test.mjs` 原本鎖住上游那行 `return`，改成確認 `notifyAgentAttention` 不再略過 `error`。
 - 測試（沒人理就補推）：server `woowtech-attention-escalation.test.ts`（等待秒數、誰要等、什麼算有人理）、`woowtech-attention-fallback.test.ts` 的 `a computer's notice nobody deals with`（假計時器：到期才推、推一次、有人理不推、先回報不重複、過期回報不取消、沒手機不推、關掉等待、取代、上限 64、停止時取消）、`woowtech-attention-fallback-daemon.test.ts` 加 4 個（行程內真的 daemon，等待 1 秒：沒人理推一次、之後有輸入不推、看過 agent 不推、等待關掉不推）。守門 `woowtech/attention-fallback.test.mjs` 加一個。紅綠：把「有人理」的判斷拿掉，1 個帳本測試和 2 個 daemon 測試失敗。
 - 還要實機：手機切到背景後約 30 秒和 120 秒觸發，兩支手機都要收到推播；Android 的連線在背景保持多久、iOS 多久斷，還沒量過。Mac 簽章的打包版：橫幅、點通知、關窗後點、App 結束後點、視窗開著沒焦點、看著同一個 agent 都在 10/6 測過（ACCEPTANCE 第 4b 層）；系統關掉通知後 3 分鐘補推手機，要讓 Mac 的 App 連 daemon B（有 POCO 的推播）實測。點進桌面版內建瀏覽器的網頁（`<webview>`）時，`document.hasFocus()` 可能是 false，要確認這時不會被當成離開（terminal 通知照跳、提醒不清掉）。
 
