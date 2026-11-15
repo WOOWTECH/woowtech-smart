@@ -27,13 +27,14 @@ function inspectInstalledMarkers(installDir, evidencePath) {
   try {
     evidence.archiveSha256 = digest(fs.readFileSync(archive));
     for (const entry of asar.listPackage(archive)) {
-      const file = entry.replace(/^[/\\]+/, "").replaceAll("\\", "/");
+      const nativeFile = entry.replace(/^[/\\]+/, "");
+      const file = nativeFile.replaceAll("\\", "/");
       if (!file.startsWith("node_modules/@getpaseo/server/dist/") || !/\.(?:c?js|mjs)$/.test(file))
         continue;
-      const stat = asar.statFile(archive, file);
+      const stat = asar.statFile(archive, nativeFile);
       if (stat.link) continue;
       // extractFile follows the header's unpacked flag into app.asar.unpacked.
-      const bytes = asar.extractFile(archive, file);
+      const bytes = asar.extractFile(archive, nativeFile);
       evidence.scanned.server++;
       inspect(
         bytes,
