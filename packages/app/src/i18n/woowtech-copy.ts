@@ -783,6 +783,15 @@ const AGENT_NOTIFICATION_TITLES_ZH_TW: typeof AGENT_NOTIFICATION_TITLES_ENGLISH 
   attention: "需要你的注意",
 };
 
+// The body of an error notice: the daemon sends upstream's fixed English sentence for every error.
+const AGENT_NOTIFICATION_BODIES_ENGLISH = {
+  error: "Encountered an error.",
+};
+
+const AGENT_NOTIFICATION_BODIES_ZH_TW: typeof AGENT_NOTIFICATION_BODIES_ENGLISH = {
+  error: "工作出錯停下了，點一下查看。",
+};
+
 const METADATA_GENERATION_ENGLISH = {
   projectInfo:
     "{productName} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
@@ -1493,6 +1502,8 @@ export function woowtechCopyFor(language: string) {
       language === "zh-TW" ? DESKTOP_NOTIFICATIONS_ZH_TW : DESKTOP_NOTIFICATIONS_ENGLISH,
     agentNotificationTitles:
       language === "zh-TW" ? AGENT_NOTIFICATION_TITLES_ZH_TW : AGENT_NOTIFICATION_TITLES_ENGLISH,
+    agentNotificationBodies:
+      language === "zh-TW" ? AGENT_NOTIFICATION_BODIES_ZH_TW : AGENT_NOTIFICATION_BODIES_ENGLISH,
     notificationDisplay:
       language === "zh-TW" ? NOTIFICATION_DISPLAY_ZH_TW : NOTIFICATION_DISPLAY_ENGLISH,
     notificationBannerCheck:

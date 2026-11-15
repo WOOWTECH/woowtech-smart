@@ -12,6 +12,7 @@ const TRADITIONAL_CHINESE_ONLY_SURFACES = [
   "notificationBannerCheck.",
   "interfaceText.",
   "agentNotificationTitles.",
+  "agentNotificationBodies.",
   "metadataGeneration.",
   "confirmDialog.",
   "composer.",

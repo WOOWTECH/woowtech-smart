@@ -282,9 +282,8 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       const appState = appStateRef.current;
       const session = useSessionStore.getState().sessions[serverId];
       const attentionFocusedAgentId = session?.focusedAgentId ?? null;
-      if (params.reason === "error") {
-        return;
-      }
+      // woowtech smart: an error notifies like the other reasons (owner 2026-11-14, README
+      // section 16). Upstream returned here, so a computer never showed an agent's error.
       const isActivelyVisible = getIsAppActivelyVisible(appState);
       const isAwayFromAgent = !isActivelyVisible || attentionFocusedAgentId !== params.agentId;
       if (!isAwayFromAgent) {

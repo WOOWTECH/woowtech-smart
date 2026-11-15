@@ -14,5 +14,14 @@ export function localizeAgentNotification(
   input: LocalizedAgentNotificationInput,
 ): AgentAttentionNotificationPayload {
   const titleKey = input.reason === "error" ? "attention" : input.reason;
-  return { ...input.notification, title: input.t(`woowtech.agentNotificationTitles.${titleKey}`) };
+  const title = input.t(`woowtech.agentNotificationTitles.${titleKey}`);
+  // An error's body is always upstream's fixed sentence, never the agent's text (README section 16).
+  if (input.reason === "error") {
+    return {
+      ...input.notification,
+      title,
+      body: input.t("woowtech.agentNotificationBodies.error"),
+    };
+  }
+  return { ...input.notification, title };
 }
