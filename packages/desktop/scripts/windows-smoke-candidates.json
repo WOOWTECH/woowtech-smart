@@ -1,16 +1,16 @@
 {
   "woowtech": {
-    "run": "43601338055",
-    "source": "e95920d5951cadb93b53f40362a26ac4e2ef3483",
-    "artifact": "14116398581",
-    "digest": "f2409b4d9325153572108f55a088af7568a9c67e08f8cca394495ab5734c78b1",
-    "version": "0.10.2-rc.1"
+    "run": "43689595214",
+    "source": "4ea61ec9096ba070c8e18d0918962d518e4504e8",
+    "artifact": "14152342169",
+    "digest": "a2a8cb709b99608934476d6cfe09731c80601ad4ba8a0e38081b09f6d031190f",
+    "version": "0.10.2-rc.2"
   },
   "apporo": {
-    "run": "43602289535",
-    "source": "adc46ba2ab9bdc72b1dcfea94ac0131be587dd62",
-    "artifact": "14116963903",
-    "digest": "c65a7359716485835dd417dfbfe9e0082f31dc6634ba7d1a7c47554cb2415896",
-    "version": "0.10.2-rc.1"
+    "run": "43690795526",
+    "source": "5ec4a09f98b6fa47142f89b402ecd53baea89821",
+    "artifact": "14152657468",
+    "digest": "d15847ecc6e9c44e242f5129d12ba5eb70e86252a63f3ba78a8fd6519bc02401",
+    "version": "0.10.2-rc.2"
   }
 }

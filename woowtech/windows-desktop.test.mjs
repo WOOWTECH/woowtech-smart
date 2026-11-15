@@ -441,9 +441,10 @@ test("installed candidate verification only downloads pinned successful release 
   assert.doesNotMatch(text, /ESIGNER|WOOWTECH_SIGN|build:desktop|secrets\./);
   assert.match(text, /steps\.candidate\.outputs\.source/);
   const pins = JSON.parse(source("packages/desktop/scripts/windows-smoke-candidates.json"));
-  assert.equal(pins.woowtech.run, "43601338055");
-  assert.equal(pins.apporo.run, "43602289535");
+  assert.equal(pins.woowtech.run, "43689595214");
+  assert.equal(pins.apporo.run, "43690795526");
   for (const pin of Object.values(pins)) {
+    assert.equal(pin.version, "0.10.2-rc.2");
     assert.match(pin.source, /^[a-f0-9]{40}$/);
     assert.match(pin.digest, /^[a-f0-9]{64}$/);
     assert.match(pin.artifact, /^\d+$/);
