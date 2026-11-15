@@ -4,12 +4,14 @@
 // packages/desktop/src/features/woowtech-*.test.ts.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import YAML from "yaml";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 
 import { appliedBrand, loadBrand } from "./brands/index.cjs";
 import { brandElectronBuilderConfig } from "./brands/apply.mjs";
@@ -514,4 +516,83 @@ test("existing Desktop Release dispatch runs only verification even with publish
       .map(([id]) => id);
     assert.deepEqual(selected, ["verify-windows"], `publish=${publish}`);
   }
+});
+
+test("installed resource markers inspect packed and unpacked runtime files and retain failures", async () => {
+  const asar = require("@electron/asar");
+  const {
+    inspectInstalledMarkers,
+  } = require("../packages/desktop/scripts/woowtech-windows-installed-markers.cjs");
+  const server = "woowtechIsPushEligibleAttentionReason";
+  const renderer = "agentNotificationBodies";
+  const temp = mkdtempSync(join(tmpdir(), "windows-installed-markers-"));
+  try {
+    for (const unpacked of [false, true]) {
+      for (const missing of [null, server, renderer]) {
+        const dir = join(temp, `${unpacked}-${missing}`);
+        const input = join(dir, "input");
+        const compiled = join(input, "node_modules/@getpaseo/server/dist/server/server");
+        const resources = join(dir, "installed/resources");
+        const web = join(resources, "app-dist/_expo/static/js/web");
+        mkdirSync(compiled, { recursive: true });
+        mkdirSync(web, { recursive: true });
+        writeFileSync(
+          join(compiled, "woowtech-attention-presence.js"),
+          missing === server ? "old server" : `function ${server}() { return true; }`,
+        );
+        writeFileSync(
+          join(web, "entry.js"),
+          missing === renderer
+            ? "old renderer"
+            : `const copy = {${renderer}: {error: 'attention'}};`,
+        );
+        // Source maps and checkout files must not rescue an old runtime bundle.
+        writeFileSync(join(web, "entry.js.map"), server + renderer);
+        writeFileSync(join(dir, "checkout.ts"), server + renderer);
+        await asar.createPackageWithOptions(
+          input,
+          join(resources, "app.asar"),
+          unpacked ? { unpack: "**/*.js" } : {},
+        );
+        const output = join(dir, "evidence.json");
+        if (missing)
+          assert.throws(
+            () => inspectInstalledMarkers(join(dir, "installed"), output),
+            /marker missing/,
+          );
+        else inspectInstalledMarkers(join(dir, "installed"), output);
+        const evidence = JSON.parse(readFileSync(output, "utf8"));
+        assert.equal(evidence.passed, missing === null);
+        assert.equal(evidence.counts[server], missing === server ? 0 : 1);
+        assert.equal(evidence.counts[renderer], missing === renderer ? 0 : 1);
+        assert.match(evidence.archiveSha256, /^[a-f0-9]{64}$/);
+        if (missing !== server)
+          assert.equal(
+            evidence.matches.find((m) => m.marker === server).storage,
+            unpacked ? "unpacked" : "asar",
+          );
+        for (const match of evidence.matches) assert.match(match.sha256, /^[a-f0-9]{64}$/);
+        if (unpacked && !missing) {
+          // A packed header must not mask a missing unpacked payload.
+          rmSync(join(resources, "app.asar.unpacked"), { recursive: true });
+          assert.throws(() => inspectInstalledMarkers(join(dir, "installed"), output), /ENOENT/);
+          assert.equal(JSON.parse(readFileSync(output, "utf8")).passed, false);
+        }
+      }
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test("rc2 verifier checks actual installed resources in each launch phase and rejects rc1 pins", () => {
+  const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
+  assert.match(lifecycle, /woowtech-windows-installed-markers\.cjs'\) \$location/);
+  assert.match(lifecycle, /installed-resource-markers\.json/);
+  assert.match(lifecycle, /Test-InstalledLaunch \$dir 'fresh'/);
+  assert.match(lifecycle, /Test-InstalledLaunch \$updatedDir 'updated'/);
+  assert.match(
+    source("packages/desktop/scripts/download-windows-smoke-candidate.ps1"),
+    /\$pin.version -cne '0\.10\.2-rc\.2'/,
+  );
 });

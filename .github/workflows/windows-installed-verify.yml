@@ -55,13 +55,20 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: |
+          npm install --prefix "$env:GITHUB_WORKSPACE/verifier/packages/desktop/e2e" --workspaces=false --ignore-scripts --no-package-lock --no-audit --no-fund '@electron/asar@3.4.1'
+          if ($LASTEXITCODE -ne 0) { throw 'Marker dependency installation failed' }
           # Local observer resolution avoids passing NODE_PATH into the installed app.
           npm install --prefix "$env:GITHUB_WORKSPACE/candidate-source/packages/desktop/e2e" --workspaces=false --ignore-scripts --no-package-lock --no-audit --no-fund 'playwright@1.58.2' '@electron/asar@3.4.1'
           if ($LASTEXITCODE -ne 0) { throw 'Smoke dependency installation failed' }
       - name: Verify installed launch, same-version reinstall and uninstall cleanup
         env:
           CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
+          CANDIDATE_SOURCE: ${{ steps.candidate.outputs.source }}
+          VERIFIER_SHA: ${{ github.sha }}
         run: |
+          New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/installed-smoke" -Force | Out-Null
+          [pscustomobject]@{ verifier=$env:VERIFIER_SHA; source=$env:CANDIDATE_SOURCE; version=$env:CANDIDATE_VERSION; run=$env:GITHUB_RUN_ID; attempt=$env:GITHUB_RUN_ATTEMPT } |
+            ConvertTo-Json | Set-Content -LiteralPath "$env:RUNNER_TEMP/installed-smoke/verification-provenance.json"
           & ./verifier/packages/desktop/scripts/woowtech-windows-installed-smoke.ps1 `
             -ReleaseDir "$env:RUNNER_TEMP/candidate/release" -Version $env:CANDIDATE_VERSION `
             -Publisher 'WOOW TECH CO., LTD.' -SourceRoot "$env:GITHUB_WORKSPACE/candidate-source" `

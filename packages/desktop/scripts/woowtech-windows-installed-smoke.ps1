@@ -27,6 +27,12 @@ if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate -or
   throw 'Installer signature or publisher mismatch'
 }
 $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($setup.FullName)
+[pscustomobject]@{
+  installer=$setup.FullName; sha256=(Get-FileHash -LiteralPath $setup.FullName -Algorithm SHA256).Hash
+  productName=$info.ProductName; productVersion=$info.ProductVersion; expectedVersion=$Version
+  signatureStatus=[string]$signature.Status; publisher=$signature.SignerCertificate.GetNameInfo('SimpleName', $false)
+  timestampSubject=$signature.TimeStamperCertificate.Subject
+} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $DiagnosticsDir 'installer-identity.json')
 if (($info.ProductVersion -split '\+')[0] -ne $Version -or $info.ProductName -ne $name) {
   throw "Installer product/version mismatch: $($info.ProductName) $($info.ProductVersion)"
 }
@@ -87,6 +93,8 @@ function Test-InstalledLaunch([string]$location, [string]$phase) {
   $phaseDir = Join-Path $DiagnosticsDir "installed-$phase"
   New-Item -ItemType Directory -Path $phaseDir -Force | Out-Null
   Assert-InstalledExecutableMetadata $info $exe $phaseDir
+  & node (Join-Path $PSScriptRoot 'woowtech-windows-installed-markers.cjs') $location (Join-Path $phaseDir 'installed-resource-markers.json')
+  if ($LASTEXITCODE -ne 0) { throw "Installed $phase notification markers failed: $LASTEXITCODE" }
   $previous = $env:PASEO_DESKTOP_SMOKE_ARTIFACT_DIR
   try {
     $env:PASEO_DESKTOP_SMOKE_ARTIFACT_DIR = $phaseDir
