@@ -196,6 +196,17 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "notices", labelKey: "woowtech.thirdPartyNotices.title", icon: Scale },
 ];
 
+const ADDITIONAL_SETTINGS_SECTIONS: Partial<Record<SettingsSectionSlug, ComponentType>> = {
+  sidebar: SidebarNavSection,
+  chat: ChatSection,
+  terminal: TerminalSection,
+};
+
+function renderAdditionalSettingsSection(section: SettingsSectionSlug): ReactNode {
+  const Component = ADDITIONAL_SETTINGS_SECTIONS[section];
+  return Component ? <Component /> : renderWoowtechSettingsSection(section);
+}
+
 interface HostSectionItem {
   id: HostSectionSlug;
   labelKey: string;
@@ -1554,12 +1565,6 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
             );
           case "appearance":
             return <AppearanceSection />;
-          case "sidebar":
-            return <SidebarNavSection />;
-          case "chat":
-            return <ChatSection />;
-          case "terminal":
-            return <TerminalSection />;
           case "editor":
             return isWeb ? <EditorSection /> : null;
           case "shortcuts":
@@ -1591,7 +1596,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
             );
           // woowtech smart: the fork's own sections, such as notices (woowtech/README.md §24).
           default:
-            return renderWoowtechSettingsSection(view.section);
+            return renderAdditionalSettingsSection(view.section);
         }
       }
       return null;
