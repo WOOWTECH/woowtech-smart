@@ -46,6 +46,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Run settings on Android emulator
         run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
           echo y | sdkmanager "system-images;android-35;google_apis;x86_64"
           echo no | avdmanager create avd --force --name settings-ci --package "system-images;android-35;google_apis;x86_64"
           emulator -avd settings-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > /tmp/settings-emulator.log 2>&1 &
