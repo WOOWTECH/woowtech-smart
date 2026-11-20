@@ -1,4 +1,4 @@
-name: Settings mobile emulators
+name: Settings platform verification
 
 on:
   workflow_dispatch:
@@ -7,6 +7,7 @@ on:
       - "packages/app/src/screens/settings/**"
       - "packages/app/src/screens/settings-screen.tsx"
       - "packages/app/src/utils/host-routes.ts"
+      - "packages/app/e2e/browser/woowtech-settings-pages.spec.ts"
       - "packages/app/maestro/ci/settings-android.yaml"
       - "packages/app/maestro/ci/settings-ios.yaml"
       - ".github/workflows/settings-android-emulator.yml"
@@ -120,4 +121,36 @@ jobs:
             /tmp/settings-ios-maestro
             /tmp/settings-ios-metro.log
           include-hidden-files: true
+          if-no-files-found: ignore
+
+  browser-settings:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
+      E2E_WORKERS: "1"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm run build:server
+      - run: npm run build --workspace=@getpaseo/expo-two-way-audio
+      - name: Test settings in browser
+        run: npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/woowtech-settings-pages.spec.ts
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-browser-${{ matrix.os }}
+          path: packages/app/test-results/
           if-no-files-found: ignore
