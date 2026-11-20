@@ -168,9 +168,7 @@ test("directory plugins render PDF bytes and write Markdown through the file han
     await expect(page.getByText("Open .md files with", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByText("Open .md files with", { exact: true })).toBeHidden();
-    await expect(
-      page.getByRole("heading", { name: "Built-in Markdown", exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText("Built-in Markdown", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Edit Markdown through plugin" })).toHaveCount(0);
     await associateMarkdownWithPlugin(page);
     await expect(

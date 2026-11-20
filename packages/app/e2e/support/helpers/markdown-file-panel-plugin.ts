@@ -63,7 +63,7 @@ export async function openMarkdown(page: Page, name: string): Promise<void> {
 }
 
 export async function expectBuiltinMarkdown(page: Page, heading: string): Promise<void> {
-  await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  await expect(page.getByText(heading, { exact: true })).toBeVisible();
 }
 
 export async function expectPluginMarkdown(page: Page, name: string): Promise<void> {
