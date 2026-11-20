@@ -333,7 +333,10 @@ test("Settings opens the notices page at /settings/notices on every platform", (
   assert.doesNotMatch(item, /desktopOnly|webOnly/, "the page is not limited to one platform");
   // The section switch delegates additional pages and retains the fork's notices fallback.
   assert.match(settings, /default:\s*return renderAdditionalSettingsSection\(view\.section\);/);
-  assert.match(settings, /Component\s*\?\s*<Component\s*\/>\s*:\s*renderWoowtechSettingsSection\(section\)/);
+  assert.match(
+    settings,
+    /Component\s*\?\s*<Component\s*\/>\s*:\s*renderWoowtechSettingsSection\(section\)/,
+  );
   const page = read(NOTICES_PAGE);
   assert.match(page, /section === "notices" \? <ThirdPartyNoticesSection \/> : null/);
   assert.match(page, /buildThirdPartyNotices\(t\)/);

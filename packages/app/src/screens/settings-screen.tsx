@@ -942,6 +942,7 @@ function SidebarSectionButton({
     <Pressable
       accessibilityRole="button"
       accessibilityState={accessibilityState}
+      testID={`settings-section-${itemId}`}
       onPress={handlePress}
       style={isSelected ? selectedSidebarItemStyle : sidebarItemStyle}
     >

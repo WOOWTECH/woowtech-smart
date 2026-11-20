@@ -1,0 +1,28 @@
+appId: io.woowtech.smart.debug
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: welcome-open-settings
+    timeout: 120000
+- tapOn:
+    id: welcome-open-settings
+- extendedWaitUntil:
+    visible:
+      id: settings-section-sidebar
+    timeout: 30000
+- takeScreenshot: settings-menu
+- tapOn:
+    id: settings-section-sidebar
+- assertVisible:
+    id: sidebar-nav-section
+- back
+- tapOn:
+    id: settings-section-chat
+- assertVisible: "Always expand reasoning"
+- back
+- tapOn:
+    id: settings-section-terminal
+- assertVisible: "Terminal scrollback"
+- takeScreenshot: settings-terminal
