@@ -22,6 +22,7 @@ jobs:
       ONNXRUNTIME_NODE_INSTALL: skip
       APP_VARIANT: development
       CI: "1"
+      ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,7 +48,10 @@ jobs:
       - name: Install Android system image
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "system-images;android-35;google_apis;x86_64"
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name settings-ci --package "system-images;android-35;google_apis;x86_64"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name settings-ci --package "system-images;android-35;google_apis;x86_64" --path "$ANDROID_AVD_HOME/settings-ci.avd"
+          test -f "$ANDROID_AVD_HOME/settings-ci.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
       - name: Boot Android emulator
         run: |
           "$ANDROID_HOME/emulator/emulator" -avd settings-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > /tmp/settings-emulator.log 2>&1 &
