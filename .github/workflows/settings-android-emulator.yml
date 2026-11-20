@@ -68,6 +68,8 @@ jobs:
         run: |
           adb reverse tcp:8081 tcp:8081
           (cd packages/app && npx expo start --dev-client --port 8081 > /tmp/settings-metro.log 2>&1) &
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8081/status && break || sleep 2; done
+          curl -fsS --max-time 900 'http://127.0.0.1:8081/index.bundle?platform=android&dev=true&minify=false' -o /dev/null
           "$HOME/.maestro/bin/maestro" test --debug-output /tmp/settings-maestro packages/app/maestro/ci/settings-android.yaml
       - name: Upload emulator evidence
         if: always()
@@ -78,6 +80,7 @@ jobs:
             /tmp/settings-maestro
             /tmp/settings-metro.log
             /tmp/settings-emulator.log
+          include-hidden-files: true
           if-no-files-found: ignore
 
   ios-settings:
@@ -104,6 +107,8 @@ jobs:
         working-directory: packages/app
         run: |
           npx expo start --dev-client --port 8081 > /tmp/settings-ios-metro.log 2>&1 &
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8081/status && break || sleep 2; done
+          curl -fsS --max-time 900 'http://127.0.0.1:8081/index.bundle?platform=ios&dev=true&minify=false' -o /dev/null
           npx expo run:ios --no-bundler
           "$HOME/.maestro/bin/maestro" test --debug-output /tmp/settings-ios-maestro maestro/ci/settings-ios.yaml
       - name: Upload simulator evidence
@@ -114,4 +119,5 @@ jobs:
           path: |
             /tmp/settings-ios-maestro
             /tmp/settings-ios-metro.log
+          include-hidden-files: true
           if-no-files-found: ignore

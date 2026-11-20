@@ -1,11 +1,11 @@
 appId: io.woowtech.smart.debug
 ---
 - launchApp:
-    clearState: true
+    clearState: false
 - extendedWaitUntil:
     visible:
       id: welcome-open-settings
-    timeout: 120000
+    timeout: 600000
 - tapOn:
     id: welcome-open-settings
 - extendedWaitUntil:
