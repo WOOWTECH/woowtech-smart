@@ -44,19 +44,19 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Run settings on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          disable-animations: true
-          script: |
-            cd packages/app/android
-            ./gradlew installDebug
-            cd ../../..
-            adb reverse tcp:8081 tcp:8081
-            (cd packages/app && npx expo start --dev-client --port 8081 > /tmp/settings-metro.log 2>&1) &
-            "$HOME/.maestro/bin/maestro" test --debug-output /tmp/settings-maestro packages/app/maestro/ci/settings-android.yaml
+        run: |
+          echo y | sdkmanager "system-images;android-35;google_apis;x86_64"
+          echo no | avdmanager create avd --force --name settings-ci --package "system-images;android-35;google_apis;x86_64"
+          emulator -avd settings-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > /tmp/settings-emulator.log 2>&1 &
+          adb wait-for-device
+          timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 2; done'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          (cd packages/app/android && ./gradlew installDebug)
+          adb reverse tcp:8081 tcp:8081
+          (cd packages/app && npx expo start --dev-client --port 8081 > /tmp/settings-metro.log 2>&1) &
+          "$HOME/.maestro/bin/maestro" test --debug-output /tmp/settings-maestro packages/app/maestro/ci/settings-android.yaml
       - name: Upload emulator evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,4 +65,5 @@ jobs:
           path: |
             /tmp/settings-maestro
             /tmp/settings-metro.log
+            /tmp/settings-emulator.log
           if-no-files-found: ignore
