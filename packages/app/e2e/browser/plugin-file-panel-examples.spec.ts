@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -189,11 +190,15 @@ test("directory examples mount the PDF frame and write Markdown through the file
     });
 
     await openFile(page, "notes.md");
-    await expect(page.getByRole("radio", { name: "Markdown — Paseo", exact: true })).toBeChecked();
+    await expect(
+      page.getByRole("radio", { name: `Markdown — ${PRODUCT_NAME}`, exact: true }),
+    ).toBeChecked();
     await expect(
       page.getByRole("radio", { name: "Rich Markdown — markdown-panel", exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("radio", { name: "Source — Paseo", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("radio", { name: `Source — ${PRODUCT_NAME}`, exact: true }),
+    ).toBeVisible();
     await captureWideAndCompact(page, testInfo, "markdown-example-picker", async () => {
       await expect(page.getByRole("button", { name: "Use", exact: true })).toBeInViewport({
         ratio: 1,
