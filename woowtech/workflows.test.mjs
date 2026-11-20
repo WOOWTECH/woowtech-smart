@@ -35,7 +35,7 @@ const ENABLED = ["ci.yml"];
 const CALL_ONLY = ["pi-agent-signing.yml"];
 
 // Mobile simulator verification builds and tests the app on Android and iOS.
-const EMULATOR_VERIFICATION = ["settings-android-emulator.yml"];
+const EMULATOR_VERIFICATION = ["settings-android-emulator.yml", "settings-desktop-verify.yml"];
 
 // Reviewed artifact verification: manual or reusable, never push/PR triggered.
 const MANUAL_VERIFICATION = ["windows-installed-verify.yml"];
