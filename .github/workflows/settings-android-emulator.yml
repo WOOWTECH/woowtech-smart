@@ -22,7 +22,7 @@ jobs:
       ONNXRUNTIME_NODE_INSTALL: skip
       APP_VARIANT: development
       CI: "1"
-      ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd
+      ANDROID_AVD_HOME: /tmp/settings-ci-avd
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
