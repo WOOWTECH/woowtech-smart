@@ -1932,6 +1932,9 @@ export const ko: TranslationResources = {
     },
     groupInfo: "{{title}} 정보",
     sections: {
+      sidebar: "사이드바",
+      chat: "채팅",
+      terminal: "터미널",
       general: "일반",
       appearance: "모양",
       layout: en.settings.sections.layout,

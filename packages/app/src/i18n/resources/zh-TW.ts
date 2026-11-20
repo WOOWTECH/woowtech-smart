@@ -1920,6 +1920,9 @@ export const zhTW: TranslationResources = {
     },
     groupInfo: "關於 {{title}}",
     sections: {
+      sidebar: "側邊欄",
+      chat: "聊天",
+      terminal: "終端機",
       general: "通用",
       appearance: "外觀",
       layout: "版面配置",

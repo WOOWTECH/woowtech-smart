@@ -39,6 +39,8 @@ import {
   Sparkles,
   Blocks,
   PanelsTopLeft,
+  PanelLeft,
+  MessageSquare,
   ChevronRight,
   Scale,
 } from "lucide-react-native";
@@ -52,6 +54,9 @@ import { ScreenTitle } from "@/components/headers/screen-title";
 import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { AppearanceSection } from "@/screens/settings/appearance/appearance-section";
+import { SidebarNavSection } from "@/screens/settings/appearance/sidebar-nav-section";
+import { ChatSection } from "@/screens/settings/chat/chat-section";
+import { TerminalSection } from "@/screens/settings/terminal/terminal-section";
 import { LayoutSection } from "@/screens/settings/layout/layout-section";
 import {
   useAppSettings,
@@ -156,6 +161,9 @@ interface SidebarSectionItem {
 const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "general", labelKey: "settings.sections.general", icon: Settings },
   { id: "appearance", labelKey: "settings.sections.appearance", icon: Palette },
+  { id: "sidebar", labelKey: "settings.sections.sidebar", icon: PanelLeft },
+  { id: "chat", labelKey: "settings.sections.chat", icon: MessageSquare },
+  { id: "terminal", labelKey: "settings.sections.terminal", icon: SquareTerminal },
   {
     id: "layout",
     labelKey: "settings.sections.layout",
@@ -1546,6 +1554,12 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
             );
           case "appearance":
             return <AppearanceSection />;
+          case "sidebar":
+            return <SidebarNavSection />;
+          case "chat":
+            return <ChatSection />;
+          case "terminal":
+            return <TerminalSection />;
           case "editor":
             return isWeb ? <EditorSection /> : null;
           case "shortcuts":
