@@ -1,4 +1,4 @@
-name: Settings Android emulator
+name: Settings mobile emulators
 
 on:
   workflow_dispatch:
@@ -8,6 +8,7 @@ on:
       - "packages/app/src/screens/settings-screen.tsx"
       - "packages/app/src/utils/host-routes.ts"
       - "packages/app/maestro/ci/settings-android.yaml"
+      - "packages/app/maestro/ci/settings-ios.yaml"
       - ".github/workflows/settings-android-emulator.yml"
 
 permissions:
@@ -66,4 +67,40 @@ jobs:
             /tmp/settings-maestro
             /tmp/settings-metro.log
             /tmp/settings-emulator.log
+          if-no-files-found: ignore
+
+  ios-settings:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      APP_VARIANT: development
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build:app-deps
+      - name: Install Maestro
+        run: curl -Ls 'https://get.maestro.mobile.dev' | bash
+      - name: Generate iOS project
+        working-directory: packages/app
+        run: npx expo prebuild --platform ios --non-interactive
+      - name: Build and run iOS simulator
+        working-directory: packages/app
+        run: |
+          npx expo start --dev-client --port 8081 > /tmp/settings-ios-metro.log 2>&1 &
+          npx expo run:ios --no-bundler
+          "$HOME/.maestro/bin/maestro" test --debug-output /tmp/settings-ios-maestro maestro/ci/settings-ios.yaml
+      - name: Upload simulator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-ios-evidence
+          path: |
+            /tmp/settings-ios-maestro
+            /tmp/settings-ios-metro.log
           if-no-files-found: ignore
