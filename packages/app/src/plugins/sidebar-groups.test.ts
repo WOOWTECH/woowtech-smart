@@ -21,6 +21,7 @@ function installed(serverId: string, contributionId = "main"): InstalledPlugin {
         surface: "surface",
       },
     ],
+    filePanels: [],
     workspacePanels: [],
     commandCenterItems: [],
     clientSlashCommands: [],

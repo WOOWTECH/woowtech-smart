@@ -28,6 +28,16 @@ function bundle(body: string): string {
 }
 
 describe("evaluatePluginClientBundle", () => {
+  it("registers a file panel and rejects a duplicate id", () => {
+    const registration = `plugin.addFilePanel({ id: "pdf", title: "PDF", icon: "FileText", files: { extensions: ["pdf"] }, Component() {} });`;
+    const plugin = evaluatePluginClientBundle("file-panel", bundle(registration));
+    expect(plugin.filePanels.map((panel) => panel.id)).toEqual(["pdf"]);
+    plugin.cleanup();
+    expect(() =>
+      evaluatePluginClientBundle("file-panel", bundle(registration + registration)),
+    ).toThrow(/Duplicate file panel/);
+  });
+
   it("releases button registrations when client setup throws", () => {
     let active = 0;
     function addButton() {
@@ -521,7 +531,10 @@ describe("evaluatePluginClientBundle", () => {
         `(function(require) {
       const shared = require("@getpaseo/plugin");
       const client = require("@getpaseo/plugin/client");
-      for (const name of ["usePaseo", "useRpc", "useSettings", "useAgent", "useWorkspace"]) {
+      const { ExternalLink, Loading } = require("@getpaseo/plugin/client/ui");
+      if (typeof ExternalLink !== "function") throw new Error("ExternalLink");
+      if (typeof Loading !== "function") throw new Error("Loading");
+      for (const name of ["usePaseo", "useRpc", "useSettings", "useAgent", "useWorkspace", "useFileText", "useFileBytes", "useFileUrl", "PluginFileConflictError", "PluginFileDeletedError"]) {
         if (name in shared || typeof client[name] !== "function") throw new Error(name);
       }
       if ("Icon" in shared || typeof shared.PluginAttachmentItemSchema.parse !== "function") throw new Error("shared exports");

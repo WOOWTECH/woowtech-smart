@@ -66,6 +66,7 @@ function plugin(onAgentSelect: AgentCommandItem["onSelect"]): InstalledPlugin {
     settingsScreens: [],
     surfaces: [{ id: "main", Component: () => null }],
     sidebarItems: [],
+    filePanels: [],
     workspacePanels: [
       {
         id: "details",

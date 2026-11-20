@@ -22,3 +22,15 @@ export function Icon({ name, size, color }: PluginIconProps): ReactElement | nul
   const icon = findPluginIcon(name);
   return icon ? createElement(icon, { size, color }) : null;
 }
+
+export function PluginIconView({
+  icon,
+  size,
+  color,
+}: {
+  icon: string;
+  size?: number;
+  color?: string;
+}) {
+  return createElement(Icon, { name: icon, size, color });
+}

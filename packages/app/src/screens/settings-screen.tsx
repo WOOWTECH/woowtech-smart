@@ -35,6 +35,7 @@ import {
   FolderGit2,
   SquareTerminal,
   Code2,
+  Files,
   Smartphone,
   Sparkles,
   Blocks,
@@ -85,6 +86,7 @@ import { AddRemoteSshHostModal } from "@/components/add-remote-ssh-host-modal";
 import { PairLinkModal } from "@/components/pair-link-modal";
 import { KeyboardShortcutsSection } from "@/screens/settings/keyboard-shortcuts-section";
 import { EditorSection } from "@/screens/settings/editor-section";
+import { FilesSection } from "@/screens/settings/files-section";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { CommunityLinks } from "@/components/community-links";
@@ -164,6 +166,7 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "sidebar", labelKey: "settings.sections.sidebar", icon: PanelLeft },
   { id: "chat", labelKey: "settings.sections.chat", icon: MessageSquare },
   { id: "terminal", labelKey: "settings.sections.terminal", icon: SquareTerminal },
+  { id: "files", labelKey: "settings.sections.files", icon: Files },
   {
     id: "layout",
     labelKey: "settings.sections.layout",
@@ -200,6 +203,7 @@ const ADDITIONAL_SETTINGS_SECTIONS: Partial<Record<SettingsSectionSlug, Componen
   sidebar: SidebarNavSection,
   chat: ChatSection,
   terminal: TerminalSection,
+  files: FilesSection,
 };
 
 function renderAdditionalSettingsSection(section: SettingsSectionSlug): ReactNode {

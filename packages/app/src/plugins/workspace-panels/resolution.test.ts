@@ -14,6 +14,7 @@ function installed(): InstalledPlugin {
     settingsScreens: [],
     surfaces: [],
     sidebarItems: [],
+    filePanels: [],
     workspacePanels: [
       {
         id: "details",

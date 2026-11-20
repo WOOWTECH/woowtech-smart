@@ -54,3 +54,39 @@ export declare function SettingsSelect<Value extends string>(
 ): ReactNode;
 export declare const SettingsInput: ComponentType<SettingsInputProps>;
 export declare const SettingsAction: ComponentType<SettingsActionProps>;
+
+export interface ExternalLinkProps {
+  href: string;
+  children: ReactNode;
+  accessibilityLabel?: string;
+  testID?: string;
+  onError?: (error: unknown) => void;
+}
+export declare const ExternalLink: ComponentType<ExternalLinkProps>;
+
+export type SidebarIcon = string;
+export interface SidebarRowProps {
+  /**
+   * Tells rows of one item apart when the item renders several: "bot-2". Unique within the item.
+   * Omit it when the item renders one row.
+   */
+  id?: string;
+  /** A Lucide icon name, inline SVG, or a component. */
+  icon?: SidebarIcon;
+  /** Defaults to the item's registered title. */
+  label?: string;
+  onPress(): void;
+  active?: boolean;
+  /** Right slot. Renders beside the row's pressable, so a button here presses on its own. */
+  trailing?: ReactNode;
+}
+/** A sidebar navigation row. Render it from a sidebar item's `Component`. */
+export declare const SidebarRow: ComponentType<SidebarRowProps>;
+/** A line between groups of rows. Render it from a sidebar item's `Component`. */
+export declare const SidebarSeparator: ComponentType;
+
+/** Paseo's loading state. Fills the panel; the panel decides when to show it. */
+export declare const Loading: ComponentType;
+
+/** Render a local document URL in an isolated frame. */
+export declare const DocumentFrame: ComponentType<{ url: string; testID?: string }>;
