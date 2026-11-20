@@ -15,6 +15,7 @@ function installation(): InstalledPlugin {
     settingsScreens: [],
     surfaces: [],
     sidebarItems: [],
+    filePanels: [],
     workspacePanels: [],
     commandCenterItems: [],
     clientSlashCommands: [],

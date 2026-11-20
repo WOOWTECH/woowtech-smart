@@ -17,6 +17,7 @@ function plugin(input: {
     settingsScreens: [],
     surfaces: [],
     sidebarItems: [],
+    filePanels: [],
     workspacePanels: [],
     commandCenterItems: [],
     clientSlashCommands: [],

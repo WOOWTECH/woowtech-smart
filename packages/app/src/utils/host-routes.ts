@@ -497,6 +497,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "terminal",
   "layout",
   "editor",
+  "files",
   "shortcuts",
   "integrations",
   "notifications",

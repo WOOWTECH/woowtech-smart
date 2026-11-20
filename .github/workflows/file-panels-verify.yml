@@ -1,0 +1,42 @@
+name: File panels browser verification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packages/app/src/file-panels/**"
+      - "packages/app/src/file-pane/**"
+      - "packages/plugin/src/client/**"
+      - ".github/workflows/file-panels-verify.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  file-panels:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
+      E2E_WORKERS: "1"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm run build:server
+      - run: npm run build --workspace=@getpaseo/expo-two-way-audio
+      - name: Test file-panel registration and settings
+        run: npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/plugin-file-panels.spec.ts e2e/browser/plugin-file-panel-picker.spec.ts e2e/browser/plugin-file-panel-settings.spec.ts
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: file-panels-browser
+          path: packages/app/test-results/
+          if-no-files-found: ignore
