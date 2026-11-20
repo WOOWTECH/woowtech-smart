@@ -1954,6 +1954,9 @@ export const ru: TranslationResources = {
     },
     groupInfo: "О разделе «{{title}}»",
     sections: {
+      sidebar: "Боковая панель",
+      chat: "Чат",
+      terminal: "Терминал",
       general: "Основные",
       appearance: "Оформление",
       layout: en.settings.sections.layout,

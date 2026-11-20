@@ -1954,6 +1954,9 @@ export const ptBR: TranslationResources = {
     },
     groupInfo: "Sobre {{title}}",
     sections: {
+      sidebar: "Barra lateral",
+      chat: "Chat",
+      terminal: "Terminal",
       general: "Geral",
       appearance: "Aparência",
       layout: en.settings.sections.layout,

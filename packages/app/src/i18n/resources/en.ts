@@ -1948,6 +1948,9 @@ export const en = {
     },
     groupInfo: "About {{title}}",
     sections: {
+      sidebar: "Sidebar",
+      chat: "Chat",
+      terminal: "Terminal",
       general: "General",
       appearance: "Appearance",
       layout: "Layout",

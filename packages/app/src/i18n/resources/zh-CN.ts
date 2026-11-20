@@ -1901,6 +1901,9 @@ export const zhCN: TranslationResources = {
     },
     groupInfo: "关于 {{title}}",
     sections: {
+      sidebar: "侧边栏",
+      chat: "聊天",
+      terminal: "终端",
       general: "通用",
       appearance: "外观",
       layout: en.settings.sections.layout,

@@ -34,6 +34,9 @@ const ENABLED = ["ci.yml"];
 // It has no push, PR or standalone dispatch trigger.
 const CALL_ONLY = ["pi-agent-signing.yml"];
 
+// Mobile simulator verification builds and tests the app on Android and iOS.
+const EMULATOR_VERIFICATION = ["settings-android-emulator.yml", "settings-desktop-verify.yml"];
+
 // Reviewed artifact verification: manual or reusable, never push/PR triggered.
 const MANUAL_VERIFICATION = ["windows-installed-verify.yml"];
 
@@ -57,7 +60,13 @@ test("every workflow file is classified as CI, call-only, manual verification or
   const files = readdirSync(workflowsDir)
     .filter((name) => /\.ya?ml$/.test(name))
     .sort();
-  const known = [...ENABLED, ...CALL_ONLY, ...MANUAL_VERIFICATION, ...Object.keys(DISABLED_IN_UI)];
+  const known = [
+    ...ENABLED,
+    ...CALL_ONLY,
+    ...EMULATOR_VERIFICATION,
+    ...MANUAL_VERIFICATION,
+    ...Object.keys(DISABLED_IN_UI),
+  ];
   assert.deepEqual(
     {
       new: files.filter((name) => !known.includes(name)),
