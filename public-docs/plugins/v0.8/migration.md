@@ -80,6 +80,7 @@ Use this table as the complete registration checklist.
 | New header contribution                                                                       | `client.addHeaderButton({ id, workspaceId, button })`                                                        |
 | `plugin.addAttachmentSource(source)` in the old root entry                                    | `client.addAttachmentSource(source)` in `index.client.tsx`                                                   |
 | New settings screen contribution                                                              | `client.addSettingsScreen(screen)` in `index.client.tsx`; see [settings screens](reference#settings-screens) |
+| New file panel contribution                                                                   | `client.addFilePanel(panel)` in `index.client.tsx`; see [file panels](../../../docs/plugins.md)              |
 | `plugin.addTheme(theme)` in the old root entry                                                | `client.addTheme(theme)` in `index.client.tsx`                                                               |
 | `plugin.addTimelineTransformer(transformer)` in the old root entry                            | `client.addTimelineTransformer(transformer)` in `index.client.tsx`                                           |
 | `plugin.addTimelineRenderer(renderer)` in the old root entry                                  | `client.addTimelineRenderer(renderer)` in `index.client.tsx`                                                 |
