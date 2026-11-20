@@ -1,4 +1,4 @@
-name: Settings mobile emulators
+name: Settings platform verification
 
 on:
   workflow_dispatch:
@@ -7,6 +7,7 @@ on:
       - "packages/app/src/screens/settings/**"
       - "packages/app/src/screens/settings-screen.tsx"
       - "packages/app/src/utils/host-routes.ts"
+      - "packages/app/e2e/browser/woowtech-settings-pages.spec.ts"
       - "packages/app/maestro/ci/settings-android.yaml"
       - "packages/app/maestro/ci/settings-ios.yaml"
       - ".github/workflows/settings-android-emulator.yml"
@@ -22,6 +23,7 @@ jobs:
       ONNXRUNTIME_NODE_INSTALL: skip
       APP_VARIANT: development
       CI: "1"
+      ANDROID_AVD_HOME: /tmp/settings-ci-avd
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,20 +46,31 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run settings on Android emulator
+      - name: Install Android system image
         run: |
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
-          echo y | sdkmanager "system-images;android-35;google_apis;x86_64"
-          echo no | avdmanager create avd --force --name settings-ci --package "system-images;android-35;google_apis;x86_64"
-          emulator -avd settings-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > /tmp/settings-emulator.log 2>&1 &
-          adb wait-for-device
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "system-images;android-35;google_apis;x86_64"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --force --name settings-ci --package "system-images;android-35;google_apis;x86_64" --path "$ANDROID_AVD_HOME/settings-ci.avd"
+          test -f "$ANDROID_AVD_HOME/settings-ci.ini"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+      - name: Boot Android emulator
+        run: |
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          RUNNER_TRACKING_ID=settings-emulator "$ANDROID_HOME/emulator/emulator" -avd settings-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-metrics > /tmp/settings-emulator.log 2>&1 &
+          timeout 300 adb wait-for-device
           timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 2; done'
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
-          (cd packages/app/android && ./gradlew installDebug)
+      - name: Build and install Android app
+        run: (cd packages/app/android && ./gradlew installDebug)
+      - name: Test Android settings
+        run: |
           adb reverse tcp:8081 tcp:8081
           (cd packages/app && npx expo start --dev-client --port 8081 > /tmp/settings-metro.log 2>&1) &
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8081/status && break || sleep 2; done
+          curl -fsS --max-time 900 'http://127.0.0.1:8081/packages/app/index.bundle?platform=android&dev=true&minify=false' -o /dev/null
           "$HOME/.maestro/bin/maestro" test --debug-output /tmp/settings-maestro packages/app/maestro/ci/settings-android.yaml
       - name: Upload emulator evidence
         if: always()
@@ -68,6 +81,7 @@ jobs:
             /tmp/settings-maestro
             /tmp/settings-metro.log
             /tmp/settings-emulator.log
+          include-hidden-files: true
           if-no-files-found: ignore
 
   ios-settings:
@@ -94,6 +108,8 @@ jobs:
         working-directory: packages/app
         run: |
           npx expo start --dev-client --port 8081 > /tmp/settings-ios-metro.log 2>&1 &
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:8081/status && break || sleep 2; done
+          curl -fsS --max-time 900 'http://127.0.0.1:8081/packages/app/index.bundle?platform=ios&dev=true&minify=false' -o /dev/null
           npx expo run:ios --no-bundler
           "$HOME/.maestro/bin/maestro" test --debug-output /tmp/settings-ios-maestro maestro/ci/settings-ios.yaml
       - name: Upload simulator evidence
@@ -104,4 +120,37 @@ jobs:
           path: |
             /tmp/settings-ios-maestro
             /tmp/settings-ios-metro.log
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  browser-settings:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
+      E2E_WORKERS: "1"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - run: npm run build:server
+      - run: npm run build --workspace=@getpaseo/expo-two-way-audio
+      - name: Test settings in browser
+        run: npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/woowtech-settings-pages.spec.ts
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-browser-${{ matrix.os }}
+          path: packages/app/test-results/
           if-no-files-found: ignore

@@ -1,0 +1,45 @@
+name: Settings desktop verification
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    paths:
+      - "packages/desktop/e2e/settings-memory.electron.mjs"
+      - ".github/workflows/settings-desktop-verify.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  electron-settings:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build:server
+      - run: npm run build:app-deps
+      - run: npm run test:e2e:browser-tabs --workspace=@getpaseo/desktop
+        env:
+          PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR: ${{ runner.temp }}/settings-desktop-evidence
+      - name: Upload desktop test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-electron-${{ matrix.os }}
+          path: ${{ runner.temp }}/settings-desktop-evidence
+          if-no-files-found: ignore
