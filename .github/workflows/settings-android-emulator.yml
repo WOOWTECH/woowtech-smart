@@ -54,7 +54,9 @@ jobs:
           "$ANDROID_HOME/emulator/emulator" -list-avds
       - name: Boot Android emulator
         run: |
-          "$ANDROID_HOME/emulator/emulator" -avd settings-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > /tmp/settings-emulator.log 2>&1 &
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          RUNNER_TRACKING_ID=settings-emulator "$ANDROID_HOME/emulator/emulator" -avd settings-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-metrics > /tmp/settings-emulator.log 2>&1 &
           timeout 300 adb wait-for-device
           timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 2; done'
           adb shell settings put global window_animation_scale 0
