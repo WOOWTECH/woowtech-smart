@@ -45,6 +45,7 @@ import {
   type AgentModeControlValue,
 } from "@/composer/agent-controls/mode-control";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
+import { woowtechLocalizedFeatures } from "@/agent-controls/woowtech-feature-labels";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
   AgentFeature,
@@ -491,7 +492,7 @@ function ControlledAgentControls({
   onEditAgentProfiles,
   onCreateAgentProfile,
   onEditAgentProfile,
-  features,
+  features: daemonFeatures,
   onSetFeature,
   onDropdownClose,
   onModelSelectorOpen,
@@ -502,7 +503,12 @@ function ControlledAgentControls({
   isCompactLayout,
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
-  const { t } = useTranslation();
+  const { t, i18n: i18nState } = useTranslation();
+  // woowtech smart: the daemon's feature texts in the app's language (woowtech-feature-labels.ts).
+  const features = useMemo(
+    () => woowtechLocalizedFeatures(daemonFeatures, i18nState.language),
+    [daemonFeatures, i18nState.language],
+  );
   const isCompactFormFactor = useIsCompactFormFactor();
   const isCompact = isCompactLayout ?? isCompactFormFactor;
   const { fontScale } = useWindowDimensions();

@@ -6,6 +6,7 @@ import type {
 import type { ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { FormPreferences } from "@/create-agent-preferences/preferences";
 import { describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
 import { buildProjectOptionId, type ScheduleProjectTarget } from "./schedule-project-targets";
 import { openScheduleForm, type ScheduleFormSnapshot } from "./schedule-form-model";
 
@@ -454,6 +455,35 @@ describe("schedule form model", () => {
         showThinkingField: false,
       },
     });
+  });
+
+  // woowtech smart: the form names a built-in provider's mode as the composer does (README section 25).
+  it("names a built-in provider's mode in Traditional Chinese", async () => {
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+    await i18n.changeLanguage("zh-TW");
+    try {
+      const form = open({
+        mode: "create",
+        defaults: { serverId: "host-a", projectTargets: PROJECT_TARGETS, preferences: {} },
+      });
+      const snapshot = providerSnapshot([]);
+      const [entry] = snapshot.entries;
+      if (!entry) throw new Error("the provider snapshot has no entry");
+      snapshot.entries = [
+        { ...entry, modes: [{ id: "default", label: "Always Ask" }], defaultModeId: "default" },
+      ];
+
+      form.setProject(buildProjectOptionId("host-a", "project-a"), { label: "Project A" });
+      form.applyProviderSnapshot("host-a", snapshot);
+      form.setModel("mock", "");
+      form.setSessionMode("default");
+
+      expect(form.getState().selectedModeDisplay).toEqual({ label: "一律詢問" });
+    } finally {
+      await i18n.changeLanguage("en");
+    }
   });
 
   it("preserves stored worktree isolation until host resolution proves it unavailable", () => {

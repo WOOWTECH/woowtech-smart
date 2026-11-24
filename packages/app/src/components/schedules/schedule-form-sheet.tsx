@@ -20,6 +20,7 @@ import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-moda
 import { ComboboxItem } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
+import { woowtechModeLabel } from "@/agent-controls/woowtech-mode-labels";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import {
   HostStatusDotSlot,
@@ -584,7 +585,7 @@ function ScheduleTargetFields({
   controlSize,
   mutationServerId,
 }: ScheduleTargetFieldsProps): ReactElement {
-  const { t } = useTranslation();
+  const { t, i18n: i18nState } = useTranslation();
   const hostOptions = useMemo<SelectFieldOption<string>[]>(
     () =>
       state.hosts.map((host) => ({
@@ -611,9 +612,10 @@ function ScheduleTargetFields({
       state.modeOptions.map((option) => ({
         id: option.id,
         value: option.id,
-        label: option.label,
+        // woowtech smart: Traditional Chinese for the built-in providers' mode names.
+        label: woowtechModeLabel(option.label, i18nState.language) ?? option.label,
       })),
-    [state.modeOptions],
+    [i18nState.language, state.modeOptions],
   );
   const thinkingOptions = useMemo<SelectFieldOption<string>[]>(
     () =>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { i18n } from "@/i18n/i18next";
 import { buildToolCallDisplayModel } from "./tool-call-display";
 
 describe("tool-call-display", () => {
@@ -167,5 +168,26 @@ describe("tool-call-display", () => {
       displayName: "Terminal",
       summary: "npm run test",
     });
+  });
+
+  // woowtech smart: the reasoning block's name follows the app's language (README section 14).
+  it("names a reasoning block in the app's language", async () => {
+    const thinking = {
+      name: "thinking",
+      status: "completed" as const,
+      error: null,
+      detail: { type: "unknown" as const, input: "Planning the change", output: null },
+    };
+    if (!i18n.isInitialized) {
+      await i18n.init();
+    }
+    await i18n.changeLanguage("zh-TW");
+    try {
+      expect(buildToolCallDisplayModel(thinking).displayName).toBe("思考");
+      expect(buildToolCallDisplayModel({ ...thinking, name: "shell" }).displayName).toBe("Shell");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+    expect(buildToolCallDisplayModel(thinking).displayName).toBe("Thinking");
   });
 });
