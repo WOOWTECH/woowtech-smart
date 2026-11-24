@@ -523,14 +523,18 @@ test("installed resource markers inspect packed and unpacked runtime files and r
   const asar = require("@electron/asar");
   const {
     inspectInstalledMarkers,
+    SPEED,
   } = require("../packages/desktop/scripts/woowtech-windows-installed-markers.cjs");
   const server = "woowtechIsPushEligibleAttentionReason";
   const renderer = "agentNotificationBodies";
+  // PR #15's "選擇處理速度" as the escaped ASCII text the web bundle contains.
+  assert.equal(SPEED.length, 36);
+  assert.equal(JSON.parse(`"${SPEED}"`), "選擇處理速度");
   const temp = mkdtempSync(join(tmpdir(), "windows-installed-markers-"));
   try {
     for (const unpacked of [false, true]) {
-      for (const missing of [null, server, renderer]) {
-        const dir = join(temp, `${unpacked}-${missing}`);
+      for (const [index, missing] of [null, server, renderer, SPEED].entries()) {
+        const dir = join(temp, `${unpacked}-${index}`);
         const input = join(dir, "input");
         const compiled = join(input, "node_modules/@getpaseo/server/dist/server/server");
         const resources = join(dir, "installed/resources");
@@ -543,13 +547,15 @@ test("installed resource markers inspect packed and unpacked runtime files and r
         );
         writeFileSync(
           join(web, "entry.js"),
-          missing === renderer
-            ? "old renderer"
-            : `const copy = {${renderer}: {error: 'attention'}};`,
+          (missing === renderer
+            ? "old renderer;"
+            : `const copy = {${renderer}: {error: 'attention'}};`) +
+            // The decoded characters are not the bundle's form and must not count.
+            (missing === SPEED ? 'const speed = "選擇處理速度";' : `const speed = "${SPEED}";`),
         );
         // Source maps and checkout files must not rescue an old runtime bundle.
-        writeFileSync(join(web, "entry.js.map"), server + renderer);
-        writeFileSync(join(dir, "checkout.ts"), server + renderer);
+        writeFileSync(join(web, "entry.js.map"), server + renderer + SPEED);
+        writeFileSync(join(dir, "checkout.ts"), server + renderer + SPEED);
         await asar.createPackageWithOptions(
           input,
           join(resources, "app.asar"),
@@ -566,6 +572,7 @@ test("installed resource markers inspect packed and unpacked runtime files and r
         assert.equal(evidence.passed, missing === null);
         assert.equal(evidence.counts[server], missing === server ? 0 : 1);
         assert.equal(evidence.counts[renderer], missing === renderer ? 0 : 1);
+        assert.equal(evidence.counts[SPEED], missing === SPEED ? 0 : 1);
         assert.match(evidence.archiveSha256, /^[a-f0-9]{64}$/);
         if (missing !== server)
           assert.equal(
@@ -586,7 +593,7 @@ test("installed resource markers inspect packed and unpacked runtime files and r
   }
 });
 
-test("rc2 verifier checks actual installed resources in each launch phase and rejects rc1 pins", () => {
+test("rc3 verifier checks actual installed resources in each launch phase and rejects older pins", () => {
   const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
   assert.match(lifecycle, /woowtech-windows-installed-markers\.cjs'\) \$location/);
   assert.match(lifecycle, /installed-resource-markers\.json/);
@@ -594,6 +601,6 @@ test("rc2 verifier checks actual installed resources in each launch phase and re
   assert.match(lifecycle, /Test-InstalledLaunch \$updatedDir 'updated'/);
   assert.match(
     source("packages/desktop/scripts/download-windows-smoke-candidate.ps1"),
-    /\$pin.version -cne '0\.10\.2-rc\.2'/,
+    /\$pin.version -cne '0\.10\.2-rc\.3'/,
   );
 });

@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $config = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'windows-smoke-candidates.json') -Raw | ConvertFrom-Json
 $pin = $config.$Candidate
-if ($pin.version -cne '0.10.2-rc.2') { throw 'Only reviewed rc.2 pins may be verified by this branch' }
+if ($pin.version -cne '0.10.2-rc.3') { throw 'Only reviewed rc.3 pins may be verified by this branch' }
 $repo = 'WOOWTECH/woowtech-smart'
 $headers = @{ Authorization="Bearer $env:GH_TOKEN"; Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28' }
 $base = "https://api.github.com/repos/$repo/actions"

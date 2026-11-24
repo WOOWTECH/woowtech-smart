@@ -6,6 +6,13 @@ const { createRequire } = require("node:module");
 const asar = createRequire(path.join(__dirname, "../e2e/observer.cjs"))("@electron/asar");
 const SERVER = "woowtechIsPushEligibleAttentionReason";
 const RENDERER = "agentNotificationBodies";
+// PR #15's "選擇處理速度". The web bundle stores non-ASCII text as JavaScript unicode escapes, so
+// the installed file holds this 36-character ASCII form, never the decoded characters.
+const SPEED = Array.from(
+  "選擇處理速度",
+  (c) => `\\u${c.codePointAt(0).toString(16).padStart(4, "0")}`,
+).join("");
+const RENDERER_MARKERS = [RENDERER, SPEED];
 const digest = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 
 function inspectInstalledMarkers(installDir, evidencePath) {
@@ -14,7 +21,7 @@ function inspectInstalledMarkers(installDir, evidencePath) {
   const evidence = {
     resources,
     archiveSha256: null,
-    counts: { [SERVER]: 0, [RENDERER]: 0 },
+    counts: { [SERVER]: 0, [RENDERER]: 0, [SPEED]: 0 },
     matches: [],
     scanned: { server: 0, renderer: 0 },
     passed: false,
@@ -49,13 +56,14 @@ function inspectInstalledMarkers(installDir, evidencePath) {
         if (item.isDirectory()) walk(file);
         else if (item.isFile() && /\.(?:c?js|mjs)$/.test(item.name)) {
           evidence.scanned.renderer++;
-          inspect(fs.readFileSync(file), RENDERER, file, "file");
+          const bytes = fs.readFileSync(file);
+          for (const marker of RENDERER_MARKERS) inspect(bytes, marker, file, "file");
         }
       }
     }
     walk(path.join(resources, "app-dist"));
     if (Object.values(evidence.counts).some((count) => count < 1))
-      throw new Error("Required installed notification marker missing");
+      throw new Error("Required installed marker missing");
     evidence.passed = true;
   } catch (error) {
     evidence.error = error.message;
@@ -65,7 +73,7 @@ function inspectInstalledMarkers(installDir, evidencePath) {
   if (!evidence.passed) throw new Error(`${evidence.error}; evidence: ${evidencePath}`);
   return evidence;
 }
-module.exports = { inspectInstalledMarkers };
+module.exports = { inspectInstalledMarkers, SPEED };
 if (require.main === module) {
   if (process.argv.length !== 4)
     throw new Error("Usage: installed-markers <installed-directory> <evidence.json>");
