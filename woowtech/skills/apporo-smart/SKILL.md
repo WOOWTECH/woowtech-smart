@@ -1,35 +1,35 @@
 ---
-name: woowtech-smart
-description: woowtech smart reference for managing projects, workspaces, workspace scripts, agents, schedules, and heartbeats.
+name: apporo-smart
+description: Apporo smart reference for managing projects, workspaces, workspace scripts, agents, schedules, and heartbeats.
 ---
 
-woowtech smart is a remote daemon that manages coding agents, terminals. Control it through MCP tools or the CLI.
+Apporo smart is a remote daemon that manages coding agents, terminals. Control it through MCP tools or the CLI.
 
-The CLI command is `woowtech-smart`. If it is not on `PATH`, run `"$PASEO_CLI"` instead when that variable is set; the desktop app sets it to its bundled CLI for the daemon and the agents it starts.
+The CLI command is `apporo-smart`. If it is not on `PATH`, run `"$PASEO_CLI"` instead when that variable is set; the desktop app sets it to its bundled CLI for the daemon and the agents it starts.
 
 ## Projects
 
 Manage the daemon's project registry through the CLI:
 
 ```bash
-woowtech-smart project create [path]
-woowtech-smart project ls
-woowtech-smart project rename <project-id> <name>
-woowtech-smart project rename <project-id> --reset
-woowtech-smart project delete <project-id>
+apporo-smart project create [path]
+apporo-smart project ls
+apporo-smart project rename <project-id> <name>
+apporo-smart project rename <project-id> --reset
+apporo-smart project delete <project-id>
 ```
 
-For a local daemon, `project create` defaults to the current directory and resolves relative paths on the CLI machine. With `--host` or `PASEO_HOST`, always provide a path; the target daemon interprets it on its own machine. Deleting a project archives its active workspaces and removes the project from woowtech smart without deleting the project directory.
+For a local daemon, `project create` defaults to the current directory and resolves relative paths on the CLI machine. With `--host` or `PASEO_HOST`, always provide a path; the target daemon interprets it on its own machine. Deleting a project archives its active workspaces and removes the project from Apporo smart without deleting the project directory.
 
 ## Workspaces
 
 **`create_workspace`** — create a workspace independently of any agent. Required: `isolation` (`local` or `worktree`). Worktree isolation supports `mode: "branch-off" | "checkout-branch" | "checkout-pr"`: use `branchName`/`baseBranch` for a new branch, `branch` for an existing branch, or `prNumber` plus optional `forge`/`projectPath` for a change request. `worktreeSlug` controls the managed path. Returns the workspace descriptor centered on `workspaceId`.
 
-Choose `baseBranch` explicitly: `origin/main` selects the remote-tracking branch; `refs/heads/main` selects local main. Bare `main` prefers local main when it exists, otherwise origin/main. woowtech smart retains the resolved ref for workspace comparisons, even after rebasing the branch or changing its PR target.
+Choose `baseBranch` explicitly: `origin/main` selects the remote-tracking branch; `refs/heads/main` selects local main. Bare `main` prefers local main when it exists, otherwise origin/main. Apporo smart retains the resolved ref for workspace comparisons, even after rebasing the branch or changing its PR target.
 
 **`list_workspaces`** — list active workspaces.
 
-**`archive_workspace`** — `{ workspaceId }`. Archives the workspace, its agents, and its terminals. Local directories remain; woowtech smart removes an owned worktree only after its final active workspace reference is archived.
+**`archive_workspace`** — `{ workspaceId }`. Archives the workspace, its agents, and its terminals. Local directories remain; Apporo smart removes an owned worktree only after its final active workspace reference is archived.
 
 **`rename_workspace`** — `{ workspaceId, name }`. Rename workspace.
 
@@ -39,16 +39,16 @@ Configured `paseo.json` scripts use the same supervised lifecycle from tools and
 
 **`list_workspace_scripts`** — `{ workspaceId }`. Lists configured scripts with lifecycle, service port, proxy URLs, health, exit code, and terminal ID.
 
-**`start_workspace_script`** — `{ workspaceId, scriptName }`. Starts one configured script through woowtech smart's managed workspace-script launcher and returns its status metadata.
+**`start_workspace_script`** — `{ workspaceId, scriptName }`. Starts one configured script through Apporo smart's managed workspace-script launcher and returns its status metadata.
 
 **`stop_workspace_script`** — `{ workspaceId, scriptName }`. Stops a running script through its supervised terminal and returns the stopped status metadata.
 
 The matching CLI surface accepts either an explicit workspace ID or resolves the current directory:
 
 ```bash
-woowtech-smart script ls [--cwd <path> | --workspace <workspace-id>]
-woowtech-smart script start <name> [--cwd <path> | --workspace <workspace-id>]
-woowtech-smart script stop <name> [--cwd <path> | --workspace <workspace-id>]
+apporo-smart script ls [--cwd <path> | --workspace <workspace-id>]
+apporo-smart script start <name> [--cwd <path> | --workspace <workspace-id>]
+apporo-smart script stop <name> [--cwd <path> | --workspace <workspace-id>]
 ```
 
 ## Agents
@@ -117,17 +117,17 @@ Don't poll `list_agents` or `get_agent_status` to "check on" a running agent. Th
 The CLI and tools use the same ownership semantics even where their syntax differs:
 
 ```bash
-woowtech-smart workspace create --isolation worktree --mode branch-off --new-branch fix-x --base origin/main
-woowtech-smart workspace create --isolation worktree --mode checkout-branch --branch existing-work
-woowtech-smart workspace create --isolation worktree --mode checkout-pr --pr-number 42
-woowtech-smart run --provider codex/gpt-5.4 --mode full-access --workspace <workspace-id> "<prompt>"
-woowtech-smart run --provider codex/gpt-5.4 --mode full-access --new-workspace worktree --worktree-mode branch-off --new-branch fix-x --base origin/main "<prompt>"
-woowtech-smart send <agent-id> "<follow-up>"
-woowtech-smart ls
-woowtech-smart schedule create --cron "*/15 * * * *" "ping main build"
-woowtech-smart heartbeat create --cron "*/15 * * * *" "check the build"
+apporo-smart workspace create --isolation worktree --mode branch-off --new-branch fix-x --base origin/main
+apporo-smart workspace create --isolation worktree --mode checkout-branch --branch existing-work
+apporo-smart workspace create --isolation worktree --mode checkout-pr --pr-number 42
+apporo-smart run --provider codex/gpt-5.4 --mode full-access --workspace <workspace-id> "<prompt>"
+apporo-smart run --provider codex/gpt-5.4 --mode full-access --new-workspace worktree --worktree-mode branch-off --new-branch fix-x --base origin/main "<prompt>"
+apporo-smart send <agent-id> "<follow-up>"
+apporo-smart ls
+apporo-smart schedule create --cron "*/15 * * * *" "ping main build"
+apporo-smart heartbeat create --cron "*/15 * * * *" "check the build"
 ```
 
-Discover with `woowtech-smart --help` and `woowtech-smart <cmd> --help`.
+Discover with `apporo-smart --help` and `apporo-smart <cmd> --help`.
 
-For product questions, setup, logs, version problems, or troubleshooting, use the **woowtech-smart-help** skill.
+For product questions, setup, logs, version problems, or troubleshooting, use the **apporo-smart-help** skill.
