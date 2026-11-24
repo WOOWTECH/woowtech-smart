@@ -7,6 +7,7 @@ import type {
 import type { ScheduleCadence, ScheduleSummary } from "@getpaseo/protocol/schedule/types";
 import type { FormPreferences } from "@/create-agent-preferences/preferences";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
+import { woowtechModeLabel } from "@/agent-controls/woowtech-mode-labels";
 import { i18n } from "@/i18n/i18next";
 import {
   buildSelectableProviderSelectorProviders,
@@ -301,7 +302,9 @@ function resolveModeDisplay(input: {
   if (!modeId) {
     return { label: i18n.t("woowtech.schedules.form.defaultMode") };
   }
-  return { label: input.modeOptions.find((mode) => mode.id === modeId)?.label ?? modeId };
+  const label = input.modeOptions.find((mode) => mode.id === modeId)?.label;
+  // woowtech smart: Traditional Chinese for the built-in providers' mode names, as in the composer.
+  return { label: label ? (woowtechModeLabel(label, i18n.language) ?? label) : modeId };
 }
 
 function resolveThinkingDisplay(input: {

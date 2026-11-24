@@ -21,10 +21,15 @@ describe("upstream's hardcoded English", () => {
   it("reads in Traditional Chinese", async () => {
     await i18n.changeLanguage("zh-TW");
     expect(
-      ["markAsRead", "markAsUnread", "project", "searchProjects", "noMatchingHosts"].map((key) =>
-        i18n.t(`woowtech.interfaceText.${key}`),
-      ),
-    ).toEqual(["標示為已讀", "標示為未讀", "專案", "搜尋專案", "沒有符合的主機"]);
+      [
+        "markAsRead",
+        "markAsUnread",
+        "project",
+        "searchProjects",
+        "noMatchingHosts",
+        "thinking",
+      ].map((key) => i18n.t(`woowtech.interfaceText.${key}`)),
+    ).toEqual(["標示為已讀", "標示為未讀", "專案", "搜尋專案", "沒有符合的主機", "思考"]);
     expect(i18n.t("woowtech.interfaceText.questionPosition", { index: 2, total: 3 })).toBe(
       "第 2 題，共 3 題",
     );

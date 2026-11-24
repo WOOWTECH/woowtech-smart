@@ -657,6 +657,7 @@ const INTERFACE_TEXT_ENGLISH = {
   filterBy: "Filter: {{value}}",
   workspaceProject: "Workspace project",
   workspaceIsolation: "Workspace isolation",
+  thinking: "Thinking",
 };
 
 const INTERFACE_TEXT_ZH_TW: typeof INTERFACE_TEXT_ENGLISH = {
@@ -671,6 +672,7 @@ const INTERFACE_TEXT_ZH_TW: typeof INTERFACE_TEXT_ENGLISH = {
   filterBy: "篩選：{{value}}",
   workspaceProject: "工作區專案",
   workspaceIsolation: "工作區隔離方式",
+  thinking: "思考",
 };
 
 const DESKTOP_NOTIFICATIONS_ENGLISH = {
