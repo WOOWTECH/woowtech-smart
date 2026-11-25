@@ -113,7 +113,6 @@ import {
   type MarkdownCopyInlineTag,
 } from "@/assistant-selection-copy/markup";
 import { capAssistantMessageForRender, getUtf8ByteLength } from "./assistant-message-render-limit";
-import { AiContentReportAction } from "@/components/ai-content-report/ai-content-report-sheet";
 export type { InlinePathTarget } from "@/assistant-file-links";
 export type { AssistantForkTarget };
 
@@ -1517,7 +1516,6 @@ export const AssistantMessage = memo(function AssistantMessage({
     [],
   );
   const renderedMessage = useMemo(() => capAssistantMessageForRender(message), [message]);
-  const getReportContent = useCallback(() => message, [message]);
   // Paint a paced prefix while the turn is streaming so text arrives at a steady
   // rate instead of in whatever lumps the daemon's coalescing window produced.
   const revealedMessage = useRevealedText(renderedMessage.text, phase);
@@ -2015,7 +2013,6 @@ export const AssistantMessage = memo(function AssistantMessage({
           {t("agentStream.messageCapped", { bytes: fullMessageByteLength })}
         </Text>
       ) : null}
-      {phase === "complete" ? <AiContentReportAction getContent={getReportContent} /> : null}
     </View>
   );
 });
