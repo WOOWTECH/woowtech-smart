@@ -1974,6 +1974,9 @@ export const fr: TranslationResources = {
     },
     groupInfo: "À propos de{{title}}",
     sections: {
+      sidebar: "Barre latérale",
+      chat: "Discussion",
+      terminal: "Terminal",
       general: "Général",
       appearance: "Apparence",
       layout: en.settings.sections.layout,

@@ -136,18 +136,23 @@ function stopAll(signal) {
 
 registerDevRunnerShutdownSignals({ signalSource: process, stop: stopAll });
 
-spawnChild("metro", "npx", ["expo", "start", "--port", String(expoPort)], {
-  cwd: appDir,
-  detached: true,
-  env: {
-    ...process.env,
-    ...colorEnv,
-    BROWSER: "none",
-    APP_VARIANT: "development",
-    EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL: devBuildLabel,
-    PASEO_WEB_PLATFORM: "electron",
+spawnChild(
+  "metro",
+  process.execPath,
+  [require.resolve("expo/bin/cli"), "start", "--port", String(expoPort)],
+  {
+    cwd: appDir,
+    detached: true,
+    env: {
+      ...process.env,
+      ...colorEnv,
+      BROWSER: "none",
+      APP_VARIANT: "development",
+      EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL: devBuildLabel,
+      PASEO_WEB_PLATFORM: "electron",
+    },
   },
-});
+);
 
 try {
   await waitForMetro(expoDevUrl);

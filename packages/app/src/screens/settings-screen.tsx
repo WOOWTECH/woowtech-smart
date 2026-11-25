@@ -39,6 +39,8 @@ import {
   Sparkles,
   Blocks,
   PanelsTopLeft,
+  PanelLeft,
+  MessageSquare,
   ChevronRight,
   Scale,
 } from "lucide-react-native";
@@ -52,6 +54,9 @@ import { ScreenTitle } from "@/components/headers/screen-title";
 import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
 import { SettingsSection } from "@/components/settings/headings/settings-section";
 import { AppearanceSection } from "@/screens/settings/appearance/appearance-section";
+import { SidebarNavSection } from "@/screens/settings/appearance/sidebar-nav-section";
+import { ChatSection } from "@/screens/settings/chat/chat-section";
+import { TerminalSection } from "@/screens/settings/terminal/terminal-section";
 import { LayoutSection } from "@/screens/settings/layout/layout-section";
 import {
   useAppSettings,
@@ -156,6 +161,9 @@ interface SidebarSectionItem {
 const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "general", labelKey: "settings.sections.general", icon: Settings },
   { id: "appearance", labelKey: "settings.sections.appearance", icon: Palette },
+  { id: "sidebar", labelKey: "settings.sections.sidebar", icon: PanelLeft },
+  { id: "chat", labelKey: "settings.sections.chat", icon: MessageSquare },
+  { id: "terminal", labelKey: "settings.sections.terminal", icon: SquareTerminal },
   {
     id: "layout",
     labelKey: "settings.sections.layout",
@@ -187,6 +195,17 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   // woowtech smart: the third-party marks the app shows, on every platform (README §24).
   { id: "notices", labelKey: "woowtech.thirdPartyNotices.title", icon: Scale },
 ];
+
+const ADDITIONAL_SETTINGS_SECTIONS: Partial<Record<SettingsSectionSlug, ComponentType>> = {
+  sidebar: SidebarNavSection,
+  chat: ChatSection,
+  terminal: TerminalSection,
+};
+
+function renderAdditionalSettingsSection(section: SettingsSectionSlug): ReactNode {
+  const Component = ADDITIONAL_SETTINGS_SECTIONS[section];
+  return Component ? <Component /> : renderWoowtechSettingsSection(section);
+}
 
 interface HostSectionItem {
   id: HostSectionSlug;
@@ -923,6 +942,7 @@ function SidebarSectionButton({
     <Pressable
       accessibilityRole="button"
       accessibilityState={accessibilityState}
+      testID={`settings-section-${itemId}`}
       onPress={handlePress}
       style={isSelected ? selectedSidebarItemStyle : sidebarItemStyle}
     >
@@ -1577,7 +1597,7 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
             );
           // woowtech smart: the fork's own sections, such as notices (woowtech/README.md §24).
           default:
-            return renderWoowtechSettingsSection(view.section);
+            return renderAdditionalSettingsSection(view.section);
         }
       }
       return null;

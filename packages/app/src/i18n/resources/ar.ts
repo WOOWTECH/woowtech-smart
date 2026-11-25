@@ -1922,6 +1922,9 @@ export const ar: TranslationResources = {
     },
     groupInfo: "حول{{title}}",
     sections: {
+      sidebar: "الشريط الجانبي",
+      chat: "المحادثة",
+      terminal: "الطرفية",
       general: "عام",
       appearance: "مظهر",
       layout: en.settings.sections.layout,

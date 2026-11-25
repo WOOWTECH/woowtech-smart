@@ -1941,6 +1941,9 @@ export const ja: TranslationResources = {
     },
     groupInfo: "{{title}}について",
     sections: {
+      sidebar: "サイドバー",
+      chat: "チャット",
+      terminal: "ターミナル",
       general: "一般",
       appearance: "外観",
       layout: en.settings.sections.layout,
