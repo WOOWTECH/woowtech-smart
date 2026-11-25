@@ -441,10 +441,10 @@ test("installed candidate verification only downloads pinned successful release 
   assert.doesNotMatch(text, /ESIGNER|WOOWTECH_SIGN|build:desktop|secrets\./);
   assert.match(text, /steps\.candidate\.outputs\.source/);
   const pins = JSON.parse(source("packages/desktop/scripts/windows-smoke-candidates.json"));
-  assert.equal(pins.woowtech.run, "45364975626");
-  assert.equal(pins.apporo.run, "45367601295");
+  assert.equal(pins.woowtech.run, "45540119832");
+  assert.equal(pins.apporo.run, "45541633705");
   for (const pin of Object.values(pins)) {
-    assert.equal(pin.version, "0.10.2-rc.3");
+    assert.equal(pin.version, "0.10.2");
     assert.match(pin.source, /^[a-f0-9]{40}$/);
     assert.match(pin.digest, /^[a-f0-9]{64}$/);
     assert.match(pin.artifact, /^\d+$/);
@@ -593,7 +593,7 @@ test("installed resource markers inspect packed and unpacked runtime files and r
   }
 });
 
-test("rc3 verifier checks actual installed resources in each launch phase and rejects older pins", () => {
+test("0.10.2 final verifier checks actual installed resources in each launch phase and rejects older pins", () => {
   const lifecycle = source("packages/desktop/scripts/woowtech-windows-installed-smoke.ps1");
   assert.match(lifecycle, /woowtech-windows-installed-markers\.cjs'\) \$location/);
   assert.match(lifecycle, /installed-resource-markers\.json/);
@@ -601,6 +601,6 @@ test("rc3 verifier checks actual installed resources in each launch phase and re
   assert.match(lifecycle, /Test-InstalledLaunch \$updatedDir 'updated'/);
   assert.match(
     source("packages/desktop/scripts/download-windows-smoke-candidate.ps1"),
-    /\$pin.version -cne '0\.10\.2-rc\.3'/,
+    /\$pin.version -cne '0\.10\.2'/,
   );
 });
