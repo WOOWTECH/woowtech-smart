@@ -25,7 +25,7 @@ on:
         options: [all, linux, windows, macos, mobile]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ inputs.run_native_parity && inputs.native_parity_target || 'checks' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
