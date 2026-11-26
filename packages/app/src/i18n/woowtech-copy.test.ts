@@ -262,20 +262,23 @@ it("keeps desktop notification feedback exact with English fallback outside zh-T
   }
 });
 
-it("explains inactive metadata preferences in zh-TW and English without changing old translations", () => {
+it("scopes metadata generation disclosure to the connected host in zh-TW and English", () => {
   const english = {
-    projectInfo: `${PRODUCT_NAME} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.`,
-    description: `${PRODUCT_NAME} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.`,
-    automaticHint: "Automatic model selection is inactive while generation is disabled.",
-    preferredHint: "Saved model preferences are inactive while generation is disabled.",
-    fallbackHint: "This preference is retained; no model is called for metadata generation.",
+    projectInfo: `Project instructions are saved on the connected host. Full ${PRODUCT_NAME} hosts keep automatic naming and AI commit/PR generation disabled; other compatible hosts may use these instructions when generating metadata.`,
+    description: `Full ${PRODUCT_NAME} hosts disable automatic workspace titles, branch names, commit messages and PR drafts. Other compatible hosts, including Agent Connect runtimes, follow their own policy and may call models and consume quota. These settings save provider preferences on the connected host.`,
+    automaticHint:
+      "The connected host chooses providers automatically when its generation policy allows it.",
+    preferredHint:
+      "The connected host uses saved provider and model preferences when it allows generation.",
+    fallbackHint:
+      "Model calls and fallback behavior depend on the connected host's generation policy.",
   };
   const traditionalChinese = {
-    projectInfo: `${PRODUCT_NAME} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。`,
-    description: `${PRODUCT_NAME} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。`,
-    automaticHint: "自動產生已停用，目前不會自動選擇模型。",
-    preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
-    fallbackHint: "此偏好會保留；不會呼叫任何模型來產生後設資料。",
+    projectInfo: `專案指令會儲存在連線主機。完整的 ${PRODUCT_NAME} 主機仍停用自動命名與提交訊息／PR 的 AI 產生；其他相容主機可能在產生後設資料時使用這些指令。`,
+    description: `完整的 ${PRODUCT_NAME} 主機停用工作區標題、分支名稱、提交訊息與 PR 草稿的自動產生。其他相容主機（包含 Agent Connect 啟動的服務）依其自身政策，可能呼叫模型並使用額度。此處只儲存連線主機的供應商偏好。`,
+    automaticHint: "連線主機允許自動產生時，才會自行選擇供應商。",
+    preferredHint: "連線主機允許產生時，會使用已儲存的供應商與模型偏好。",
+    fallbackHint: "是否呼叫模型與使用哪些備援模型，取決於連線主機的生成政策。",
   };
   for (const language of [...Object.keys(i18n.store.data), "unknown-locale"]) {
     const copy = new Map(strings(woowtechCopyFor(language)));
