@@ -121,8 +121,9 @@ async function openSettingsDestination(page, title) {
   const button = sidebar.getByRole("button", { name: title, exact: true });
   await button.waitFor({ state: "visible" });
   await button.click();
+  // The heading row also contains actions such as "New profile"; assert the title leaf.
   await expect(
-    page.locator('[data-testid="settings-detail-header-title"]:visible'),
+    page.locator('[data-testid="settings-detail-header-title"]:visible').getByTestId("page-title"),
     `Settings destination ${title} at ${page.url()}`,
   ).toHaveText(title, { timeout: 30_000 });
 }
