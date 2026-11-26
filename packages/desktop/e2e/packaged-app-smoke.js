@@ -483,7 +483,9 @@ async function assertPackagedRendererLoaded(page, deadline) {
       return root instanceof HTMLElement && root.childElementCount > 0;
     },
     undefined,
-    { timeout: remainingTime(deadline) },
+    // DOM readiness does not require compositor frames. A virtual display can
+    // pause requestAnimationFrame even after the renderer has mounted the app.
+    { timeout: remainingTime(deadline), polling: 100 },
   );
 
   const bridgeKeys = await page.evaluate(() =>
