@@ -152,6 +152,31 @@ test("builtin Tasks opens by default in zh-TW with chat enhancement off and surv
         config: { pluginsEnabled: false, usage: { enabled: false } },
       });
     });
+
+    await test.step("Phone tabs expose exactly one selected lane and update after each tap", async () => {
+      await page.setViewportSize({ width: 390, height: 900 });
+      const tabs = page.locator('[data-testid^="phone-stat-"]');
+      await expect(tabs).toHaveCount(5);
+      for (const lane of ["needs_input", "running", "review", "done", "archived"]) {
+        const tab = page.getByTestId(`phone-stat-${lane}`);
+        await expect(tab).toHaveAttribute("role", "tab");
+        await tab.click();
+        await expect(tab).toHaveAttribute("aria-selected", "true");
+        await expect(
+          page.locator('[data-testid^="phone-stat-"][aria-selected="true"]'),
+        ).toHaveCount(1);
+        await expect(
+          page.locator('[data-testid^="phone-stat-"][aria-selected="false"]'),
+        ).toHaveCount(4);
+      }
+      await page.reload();
+      await expect(page.locator('[data-testid^="phone-stat-"][aria-selected="true"]')).toHaveCount(
+        1,
+      );
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await expectEmptyBoard(page);
+      await readBuiltinDefaults(client);
+    });
   } finally {
     await client.close();
   }
