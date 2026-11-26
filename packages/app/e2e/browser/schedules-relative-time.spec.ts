@@ -20,6 +20,7 @@ interface ScheduleSeedClient {
     runOnCreate: boolean;
   }): Promise<{ schedule: { id: string; createdAt: string } | null; error: string | null }>;
   schedulePause(input: { id: string }): Promise<{ error: string | null }>;
+  scheduleResume(input: { id: string }): Promise<{ error: string | null }>;
   scheduleDelete(input: { id: string }): Promise<{ error: string | null }>;
 }
 
@@ -100,6 +101,21 @@ test.describe("Schedule relative timestamps", () => {
     if (failures.length > 0) {
       throw new AggregateError(failures, "Test cleanup failed");
     }
+  });
+
+  test("the mounted list observes external status changes without a reload", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "schedule-status-refresh-", git: false });
+    cleanupTasks.push(() => workspace.cleanup());
+    const schedule = await seedPausedSchedule(workspace, "External status refresh");
+    cleanupTasks.push(() => deleteSeededSchedule(workspace, schedule.id));
+    const client = workspace.client as unknown as ScheduleSeedClient;
+    await page.goto(buildSchedulesRoute());
+    const row = page.getByTestId(`schedule-row-${schedule.id}`);
+    await expect(row).toContainText("Paused");
+    expect((await client.scheduleResume({ id: schedule.id })).error).toBeNull();
+    await expect(row).toContainText("Active", { timeout: 15_000 });
+    expect((await client.schedulePause({ id: schedule.id })).error).toBeNull();
+    await expect(row).toContainText("Paused", { timeout: 15_000 });
   });
 
   test("an idle schedule row keeps its created age current", async ({ page }) => {
