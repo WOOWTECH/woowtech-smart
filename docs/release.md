@@ -538,10 +538,14 @@ after seven days; this workflow does not update release channels or publish tags
 Use `native_parity_target` to repeat only a failing platform after a fix.
 `macos` runs both Mac architectures; `macos-intel` repeats just the Intel job.
 Desktop candidate checks also open Tasks through the command center, reload its
-built-in settings and cancel shortcut recording without leaving settings. On a
+built-in settings, verify a recorded shortcut survives reload and cancel shortcut
+recording without leaving settings. The plugin's inner tab selection resets on a
+reload, so the replay reopens Tasks before checking the saved preference. On a
 host requiring software rendering, pass Chromium flags through
 `PASEO_DESKTOP_SMOKE_ELECTRON_FLAGS`; keep that environment-specific workaround out
 of production defaults.
+The renderer export uses a 4 GiB Node heap and one Metro worker because the generated
+protocol validator exhausted the default heap on the 7 GiB Apple Silicon runner.
 
 The mobile jobs export iOS and Android separately and verify their bundle hashes
 and Expo identities. These are Metro/Hermes checks, not native compilation or device

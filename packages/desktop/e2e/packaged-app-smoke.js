@@ -860,10 +860,27 @@ async function assertWebParityInteractions(page) {
   await page.getByRole("button", { name: "Change shortcut", exact: true }).waitFor();
   assert.equal(page.url(), settingsUrl, "Cancelling shortcut recording must keep settings open");
   await settings.waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Change shortcut", exact: true }).click();
+  await page.keyboard.press("ControlOrMeta+Shift+9");
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="tasks-open-shortcut"]')?.textContent?.includes("9"),
+    undefined,
+    { polling: 100 },
+  );
+  const savedShortcut = await page.getByTestId("tasks-open-shortcut").textContent();
   await page.reload();
+  // Better Paseo's inner tabs live in module state. A reload selects Chat
+  // presentation; reopen Tasks before checking its persisted device preference.
+  await page.getByRole("radio", { name: "Tasks board", exact: true }).click();
   await settings.waitFor({ state: "visible" });
+  await page.waitForFunction(
+    (expected) =>
+      document.querySelector('[data-testid="tasks-open-shortcut"]')?.textContent === expected,
+    savedShortcut,
+    { polling: 100 },
+  );
   console.log(
-    "Packaged desktop parity: Open Tasks command, built-in settings, shortcut cancellation and settings reload passed",
+    "Packaged desktop parity: Open Tasks command, built-in settings, shortcut cancellation and saved shortcut reload passed",
   );
 }
 

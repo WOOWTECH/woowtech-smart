@@ -101,6 +101,7 @@ switch (process.argv[2]) {
         "Open Tasks command and board",
         "built-in settings and reload",
         "shortcut cancellation keeps settings open",
+        "recorded shortcut survives reload",
       ],
       signed: false,
       published: false,

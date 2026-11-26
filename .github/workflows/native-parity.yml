@@ -49,10 +49,19 @@ jobs:
       - name: Install virtual display
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb xauth
+      - name: Build shared app dependencies
+        run: npm run build:app-deps:clean
+      - name: Export Electron renderer
+        working-directory: packages/app
+        timeout-minutes: 15
+        env:
+          PASEO_WEB_PLATFORM: electron
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npx expo export --platform web --max-workers 1
       - name: Build unpacked candidate
         run: |
           node woowtech/tools/native-parity.mjs prepare-desktop
-          npm run build:desktop -- --dir --publish never --config native-parity-builder.json
+          npm run build --workspace=@getpaseo/desktop -- --dir --publish never --config native-parity-builder.json
       - name: Verify packaged candidate
         run: node woowtech/tools/native-parity.mjs verify-desktop
         env:
