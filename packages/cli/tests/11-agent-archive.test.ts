@@ -17,6 +17,7 @@
  */
 
 import assert from "node:assert";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { getAvailablePort } from "./helpers/network.ts";
 import { createTempDirs, runPaseoCli, startTestDaemon } from "./helpers/test-daemon.ts";
 import { $ } from "zx";
@@ -263,7 +264,7 @@ try {
         error: {
           code: "AGENT_NOT_FOUND",
           message: "Agent not found: no-such-agent",
-          details: 'Use "paseo ls" to list available agents',
+          details: `Use "${CLI_COMMAND} ls" to list available agents`,
         },
       });
     } finally {

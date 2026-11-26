@@ -18,6 +18,7 @@
  */
 
 import assert from "node:assert";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { getAvailablePort } from "./helpers/network.ts";
 import { runPaseoCli, startTestDaemon } from "./helpers/test-daemon.ts";
 import { $ } from "zx";
@@ -146,7 +147,7 @@ try {
       assert.notStrictEqual(result.exitCode, 0, "stop should fail for an unknown ID");
       const { error } = JSON.parse(result.stderr);
       assert.strictEqual(error.code, "AGENT_NOT_FOUND", result.stderr);
-      assert.match(error.details, /paseo ls/);
+      assert.ok(error.details.includes(`${CLI_COMMAND} ls`));
     } finally {
       await daemon.stop();
     }

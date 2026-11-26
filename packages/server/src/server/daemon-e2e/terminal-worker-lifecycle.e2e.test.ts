@@ -398,9 +398,8 @@ describe("terminals across daemon restarts", { timeout: 240_000 }, () => {
     await client.close();
   });
 
-  test("daemon.update.request restarts the daemon and keeps the terminal", async () => {
-    // Fake npm only: `ls` reports this checkout as the global install at the daemon's
-    // version, `install -g` does nothing, and anything else fails so real npm never runs.
+  test("daemon.update.request refuses npm updates and leaves the terminal running", async () => {
+    // Fake npm ensures this test never invokes the real package manager.
     const fakeBin = mkdtempSync(path.join(tmpdir(), "tw-npm-"));
     extraDirs.push(fakeBin);
     const listing = JSON.stringify({
@@ -438,10 +437,12 @@ if (has("-g", "ls", "@getpaseo/cli", "--json", "--depth=0", "--long")) {
     const daemonPid = await daemonWorkerPid(client);
 
     const update = await client.updateDaemon();
-    expect(update).toMatchObject({ success: true });
-    await client.close();
-    client = await waitForReplacement(harness, daemonPid);
-    await expectKept(client, terminal, "MARKER-UPDATE", "update");
+    expect(update).toMatchObject({
+      success: false,
+      error: expect.stringContaining("does not update the daemon through npm"),
+    });
+    expect(await daemonWorkerPid(client)).toBe(daemonPid);
+    await expectKept(client, terminal, "MARKER-UPDATE", "update-rejected");
     await client.close();
   });
 
