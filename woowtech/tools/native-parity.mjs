@@ -99,8 +99,9 @@ switch (process.argv[2]) {
   }
   case "verify-mobile": {
     const { getConfig } = require("@expo/config");
+    const { getNativeReleaseVersion } = require("../../packages/app/native-release-version.js");
     const { exp } = getConfig(path.join(root, "packages/app"));
-    assert.equal(exp.version, version);
+    assert.equal(exp.version, getNativeReleaseVersion(version).appVersion);
     assert.equal(exp.ios?.bundleIdentifier, brand.mobileAppId);
     assert.equal(exp.android?.package, brand.mobileAppId);
     assert.equal(exp.scheme, brand.scheme);

@@ -3,7 +3,8 @@ context platform=ios timeout=60000 retries=0
 # COMMAND_ROW must name an inserting command, not an immediate client action.
 env COMMAND_ROW="/advisor, Let Claude consult a stronger model at key moments"
 env COMMAND_TEXT="/advisor "
-open sh.paseo.debug
+env APP_ID=io.woowtech.smart.debug
+open "${APP_ID}"
 wait "editable=true" 60000
 fill "editable=true" "/"
 wait "label=\"${COMMAND_ROW}\"" 15000

@@ -18,6 +18,11 @@ on:
         description: "Build both brands for desktop and export iOS/Android candidates (no publishing)"
         type: boolean
         default: false
+      native_parity_target:
+        description: "Candidate platforms to verify when run_native_parity is selected"
+        type: choice
+        default: all
+        options: [all, linux, windows, macos, mobile]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -36,6 +41,8 @@ jobs:
       contents: read
       actions: read
     uses: ./.github/workflows/native-parity.yml
+    with:
+      target: ${{ inputs.native_parity_target || 'all' }}
 
   # woowtech smart: Ubuntu jobs pin ubuntu-24.04; ubuntu-latest moves to Ubuntu 26 from
   # 2026-10-19 (woowtech/README.md section 18). Job names keep upstream's "(ubuntu-latest)".

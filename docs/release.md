@@ -534,6 +534,7 @@ Each candidate must start its packaged renderer, preload, daemon, built-in plugi
 CLI and a real terminal in temporary state directories. The receipt records the
 source commit, brand, architecture, version and archive SHA256. Artifacts expire
 after seven days; this workflow does not update release channels or publish tags.
+Use `native_parity_target` to repeat only a failing platform after a fix.
 
 The mobile jobs export iOS and Android separately and verify their bundle hashes
 and Expo identities. These are Metro/Hermes checks, not native compilation or device

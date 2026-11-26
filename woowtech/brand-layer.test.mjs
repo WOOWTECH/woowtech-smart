@@ -7,7 +7,11 @@
 //
 //   node --test woowtech/brand-layer.test.mjs
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -26,6 +30,64 @@ const read = (relativePath) => readFileSync(new URL(relativePath, repoRoot), "ut
 
 const brands = brandIds().map(loadBrand);
 const applied = loadBrand(appliedBrandId());
+
+test(
+  "mobile replay targets the applied brand and honors an explicit installed app",
+  { skip: process.platform === "win32" },
+  () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "smart-mobile-replay-"));
+    const calls = path.join(directory, "calls.jsonl");
+    writeFileSync(
+      path.join(directory, "agent-device"),
+      `#!${process.execPath}\nconst fs = require('node:fs');\nfs.appendFileSync(process.env.PARITY_CALLS, JSON.stringify(process.argv.slice(2))+'\\n');\nif (process.argv[2] === 'metro') console.log(JSON.stringify({data:{started:false,pid:0}}));\n`,
+      { mode: 0o755 },
+    );
+    try {
+      for (const appId of ["", "org.example.explicit-parity-app"]) {
+        writeFileSync(calls, "");
+        execFileSync(
+          "bash",
+          [fileURLToPath(new URL("scripts/test-mobile-agent-device.sh", repoRoot))],
+          {
+            env: {
+              ...process.env,
+              PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+              PARITY_CALLS: calls,
+              PASEO_MOBILE_APP_ID: appId,
+              PASEO_MOBILE_E2E_STATE_DIR: path.join(directory, "state"),
+              PASEO_MOBILE_E2E_ARTIFACTS_DIR: path.join(directory, "artifacts"),
+            },
+            timeout: 10000,
+            stdio: "pipe",
+          },
+        );
+        const invocations = readFileSync(calls, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        const replay = invocations.find((args) => args[0] === "test");
+        assert.ok(replay, "The runner must execute mobile replay");
+        assert.equal(
+          replay[replay.indexOf("-e") + 1],
+          `APP_ID=${appId || applied.mobileAppIdDebug}`,
+        );
+        assert.equal(invocations.at(-1)[0], "daemon", "The runner must clean its owned session");
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+test("mobile replay flows use the selected app instead of opening a different installed brand", () => {
+  const directory = new URL("packages/app/e2e/mobile/agent-device/", repoRoot);
+  for (const name of readdirSync(directory).filter((file) => file.endsWith(".ad"))) {
+    const source = readFileSync(new URL(name, directory), "utf8");
+    for (const line of source.split("\n").filter((entry) => /^open\s/.test(entry))) {
+      assert.match(line, /^open "\$\{APP_ID\}"(?:\s|$)/, `${name} must use the selected APP_ID`);
+    }
+  }
+});
 
 // Upstream Paseo's values for what each brand must have of its own: an install of the official
 // Paseo on the same computer or phone keeps working next to ours.

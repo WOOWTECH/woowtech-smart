@@ -4,6 +4,10 @@ name: Native parity candidates
 # app-store submissions, stable update manifests, or production host changes.
 on:
   workflow_call:
+    inputs:
+      target:
+        type: string
+        default: all
 
 permissions:
   contents: read
@@ -18,12 +22,13 @@ env:
 jobs:
   desktop:
     name: ${{ matrix.brand }} desktop (${{ matrix.os }})
+    if: ${{ inputs.target != 'mobile' }}
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
         brand: [woowtech, apporo]
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+        os: ${{ fromJSON(inputs.target == 'windows' && '["windows-latest"]' || inputs.target == 'macos' && '["macos-latest"]' || inputs.target == 'linux' && '["ubuntu-24.04"]' || '["ubuntu-24.04","windows-latest","macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
     defaults:
@@ -64,6 +69,7 @@ jobs:
 
   mobile-export:
     name: ${{ matrix.brand }} mobile bundles
+    if: ${{ inputs.target == 'all' || inputs.target == 'mobile' }}
     strategy:
       fail-fast: false
       matrix:

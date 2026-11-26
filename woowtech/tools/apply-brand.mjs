@@ -32,7 +32,12 @@ function format(files) {
     console.warn(`${oxfmt} is missing (run npm ci); left unformatted: ${files.join(", ")}`);
     return;
   }
-  const result = spawnSync(oxfmt, files, { stdio: "inherit" });
+  const result = spawnSync(
+    process.platform === "win32" ? "npm.cmd" : "npm",
+    ["run", "format:files", "--", ...files.map((file) => path.relative(REPO_ROOT, file))],
+    { cwd: REPO_ROOT, shell: process.platform === "win32", stdio: "inherit" },
+  );
+  if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(`oxfmt failed on ${files.join(", ")}`);
   }
@@ -62,10 +67,11 @@ writeFileSync(BRAND_VALUES_PATH, renderBrandValues(loadBrand(id)));
 format([BRAND_VALUES_PATH]);
 const files = applyBrandToFiles(REPO_ROOT, loadBrand(current), loadBrand(id));
 const skills = spawnSync(
-  path.join(REPO_ROOT, "node_modules", ".bin", "tsx"),
-  ["woowtech/tools/generate-skills.mjs"],
+  process.execPath,
+  [require.resolve("tsx/cli"), "woowtech/tools/generate-skills.mjs"],
   { cwd: REPO_ROOT, stdio: "inherit" },
 );
+if (skills.error) throw skills.error;
 if (skills.status !== 0) {
   throw new Error("woowtech/tools/generate-skills.mjs failed");
 }
