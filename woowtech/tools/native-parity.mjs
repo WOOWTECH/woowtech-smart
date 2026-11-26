@@ -157,6 +157,8 @@ switch (process.argv[2]) {
     );
     assert.equal(/^native-code: (.+)$/m.exec(metadata)?.[1], "'arm64-v8a'");
     receipt("android-apk", {
+      targetPlatform: "android",
+      targetArch: "arm64",
       appId: brand.mobileAppId,
       apk: path.relative(root, apk),
       sha256: await digest(apk),
