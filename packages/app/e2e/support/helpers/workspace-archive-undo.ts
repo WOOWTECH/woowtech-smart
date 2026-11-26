@@ -73,8 +73,12 @@ export async function pressUndoShortcut(page: Page): Promise<void> {
 }
 
 /** Moves the page clock past the moment an unheld archived toast would have closed. */
-export async function outlastUndoWindow(page: Page): Promise<void> {
-  await page.clock.fastForward(UNDO_WINDOW_MS + 1000);
+export async function outlastUndoWindow(
+  page: Page,
+  { animationFrames = false }: { animationFrames?: boolean } = {},
+): Promise<void> {
+  if (animationFrames) await page.clock.runFor(UNDO_WINDOW_MS + 1000);
+  else await page.clock.fastForward(UNDO_WINDOW_MS + 1000);
 }
 
 /** Waits until the host lists the workspace as active with no archive running on it. */
@@ -173,21 +177,26 @@ export interface SidebarListLayout {
   /** Bottom edges of the visible project and workspace rows, top to bottom. */
   rowBottoms: number[];
   rowHeight: number;
+  scrollHeight: number;
+  clientHeight: number;
+  scrollTop: number;
+  clearance: number;
 }
 
 const SIDEBAR_LIST = "sidebar-project-workspace-list-scroll";
 
 /** Scrolls the sidebar's workspace list to its end and reads where its rows sit. */
 export async function scrollSidebarListToEnd(page: Page): Promise<SidebarListLayout> {
-  await page.getByTestId(SIDEBAR_LIST).evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  return readSidebarListLayout(page);
+  return readSidebarListLayout(page, { scrollToEnd: true });
 }
 
-/** Reads where the sidebar list's rows sit, without scrolling it. */
-export async function readSidebarListLayout(page: Page): Promise<SidebarListLayout> {
-  return page.getByTestId(SIDEBAR_LIST).evaluate((element) => {
+/** Reads layout atomically with scrolling so a concurrent footer resize cannot stale the offset. */
+export async function readSidebarListLayout(
+  page: Page,
+  { scrollToEnd = false }: { scrollToEnd?: boolean } = {},
+): Promise<SidebarListLayout> {
+  return page.getByTestId(SIDEBAR_LIST).evaluate((element, shouldScroll) => {
+    if (shouldScroll) element.scrollTop = element.scrollHeight;
     const visible = element.getBoundingClientRect();
     const rows = Array.from(
       element.querySelectorAll<HTMLElement>(
@@ -195,34 +204,45 @@ export async function readSidebarListLayout(page: Page): Promise<SidebarListLayo
       ),
     )
       .map((row) => row.getBoundingClientRect())
-      .filter((row) => row.height > 0 && row.bottom > visible.top && row.top < visible.bottom);
+      .filter((row) => row.height > 0);
     return {
       listBottom: visible.bottom,
       rowBottoms: rows.map((row) => row.bottom).sort((a, b) => a - b),
       rowHeight: Math.min(...rows.map((row) => row.height)),
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight,
+      scrollTop: element.scrollTop,
+      clearance:
+        element.querySelector('[data-testid="sidebar-toast-clearance"]')?.getBoundingClientRect()
+          .height ?? 0,
     };
-  });
+  }, scrollToEnd);
 }
 
-/**
- * Starts recording the bottom edge of the sidebar list's last row once per painted frame.
- * Resolves with one value per frame after `frameCount` frames.
- */
-export function recordLastRowBottomPerFrame(page: Page, frameCount: number): Promise<number[]> {
-  return page.getByTestId(SIDEBAR_LIST).evaluate(
-    (element, count) =>
-      new Promise<number[]>((resolve) => {
-        const bottoms: number[] = [];
-        const sample = () => {
-          const rows = element.querySelectorAll<HTMLElement>(
-            '[data-testid^="sidebar-workspace-row-"],[data-testid^="sidebar-project-row-"]',
-          );
-          bottoms.push(Math.max(...Array.from(rows, (row) => row.getBoundingClientRect().bottom)));
-          if (bottoms.length >= count) resolve(bottoms);
-          else requestAnimationFrame(sample);
-        };
-        requestAnimationFrame(sample);
-      }),
-    frameCount,
-  );
+/** Records the last row until the returned reader stops sampling and releases its handle. */
+export async function recordLastRowBottomPerFrame(page: Page) {
+  const recording = await page.getByTestId(SIDEBAR_LIST).evaluateHandle((element) => {
+    const bottoms: number[] = [];
+    let frame = 0;
+    const sample = () => {
+      const rows = element.querySelectorAll<HTMLElement>(
+        '[data-testid^="sidebar-workspace-row-"],[data-testid^="sidebar-project-row-"]',
+      );
+      bottoms.push(Math.max(...Array.from(rows, (row) => row.getBoundingClientRect().bottom)));
+      frame = requestAnimationFrame(sample);
+    };
+    sample();
+    return { bottoms, stop: () => cancelAnimationFrame(frame) };
+  });
+  // Installing the recorder completes before the caller advances the clock.
+  return async () => {
+    try {
+      return await recording.evaluate(({ bottoms, stop }) => {
+        stop();
+        return bottoms;
+      });
+    } finally {
+      await recording.dispose();
+    }
+  };
 }

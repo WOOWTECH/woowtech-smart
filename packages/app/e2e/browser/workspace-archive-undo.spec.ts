@@ -129,6 +129,7 @@ test.describe("Workspace archive undo", () => {
     await page.clock.install({ time: Date.now() });
     const fillers: Array<{ path: string; cleanup: () => Promise<void> }> = [];
     const fillerProjectIds: string[] = [];
+    const geometrySamples: unknown[] = [];
     try {
       for (let index = 0; index < 10; index += 1) {
         const repo = await createTempGitRepo(`archive-toast-filler-${index}-`);
@@ -139,23 +140,32 @@ test.describe("Workspace archive undo", () => {
 
       const resting = await scrollSidebarListToEnd(page);
       const restingEndGap = resting.listBottom - resting.rowBottoms.at(-1)!;
+      geometrySamples.push({ phase: "resting", ...resting });
       expect(restingEndGap).toBeLessThan(resting.rowHeight);
 
       await archiveFromRowButton(page, worktree.workspaceId);
       await page.mouse.move(0, 0);
-      const toastBox = await archivedToast(page).boundingBox();
-      if (!toastBox) throw new Error("Toast is not laid out");
-      // The list keeps its usual end gap, measured from the toast's top instead of its own bottom.
+      // The toast is still entering when it first becomes visible; read its current position.
       await expect
         .poll(async () => {
+          const toast = await archivedToast(page).boundingBox();
+          if (!toast) throw new Error("Toast is not laid out");
           const layout = await scrollSidebarListToEnd(page);
-          return Math.round(toastBox.y - layout.rowBottoms.at(-1)!);
+          geometrySamples.push({ phase: "toast", toast, ...layout });
+          return Math.round(toast.y - layout.rowBottoms.at(-1)!);
         })
         .toBe(Math.round(restingEndGap));
+      const toastBox = await archivedToast(page).boundingBox();
+      if (!toastBox) throw new Error("Toast is not laid out");
 
-      const frames = recordLastRowBottomPerFrame(page, 40);
-      await outlastUndoWindow(page);
-      const bottoms = await frames;
+      const finishFrames = await recordLastRowBottomPerFrame(page);
+      // fastForward skips animation frames; this assertion needs every frame through expiry.
+      await outlastUndoWindow(page, { animationFrames: true });
+      const bottoms = await finishFrames();
+      await test.info().attach("toast-clearance-frames", {
+        body: JSON.stringify(bottoms),
+        contentType: "application/json",
+      });
       await expect(archivedToast(page)).toHaveCount(0);
 
       // Without scrolling again, the list ends just below its last row once more.
@@ -168,6 +178,10 @@ test.describe("Workspace archive undo", () => {
       expect(Math.min(...steps)).toBeGreaterThanOrEqual(0);
       expect(Math.max(...steps)).toBeLessThan(travel / 2);
     } finally {
+      await test.info().attach("toast-clearance-geometry", {
+        body: JSON.stringify(geometrySamples),
+        contentType: "application/json",
+      });
       for (const projectId of fillerProjectIds) {
         await client.removeProject(projectId).catch(() => undefined);
       }
