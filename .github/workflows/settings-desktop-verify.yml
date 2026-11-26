@@ -35,6 +35,7 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: npm exec --workspace=@getpaseo/desktop -- install-electron
       - name: Set evidence directory
         run: echo "PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR=$RUNNER_TEMP/native-evidence" >> "$GITHUB_ENV"
       - name: Apply brand in isolated runner checkout

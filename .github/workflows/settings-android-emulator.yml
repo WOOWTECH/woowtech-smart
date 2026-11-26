@@ -81,18 +81,25 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Exercise installed Android candidate
         if: matrix.platform == 'android'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          script: |
-            adb install packages/app/android/app/build/outputs/apk/release/app-release.apk
-            adb logcat -c
-            cd "$EVIDENCE"
-            maestro test -e APP_ID="$APP_ID" --format junit --output results.xml --debug-output debug "$GITHUB_WORKSPACE/packages/app/maestro/ci/settings-native.yaml"
+        run: |
+          sdkmanager 'system-images;android-35;google_apis;x86_64'
+          echo no | avdmanager create avd --force --name native-parity --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
+          "$ANDROID_HOME/emulator/emulator" -avd native-parity -no-window -no-snapshot -no-audio -gpu swiftshader_indirect > "$EVIDENCE/emulator.log" 2>&1 &
+          EMULATOR_PID=$!
+          trap 'adb logcat -d > "$EVIDENCE/android-logcat.txt" 2>&1; kill "$EMULATOR_PID" || true' EXIT
+          timeout 180 adb wait-for-device
+          for attempt in $(seq 1 120); do
+            if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb install packages/app/android/app/build/outputs/apk/release/app-release.apk
+          adb logcat -c
+          cd "$EVIDENCE"
+          maestro test -e APP_ID="$APP_ID" --format junit --output results.xml --debug-output debug "$GITHUB_WORKSPACE/packages/app/maestro/ci/settings-native.yaml"
       - name: Generate iOS simulator project
         if: matrix.platform == 'ios'
         working-directory: packages/app
@@ -114,9 +121,6 @@ jobs:
           xcrun simctl install "$DEVICE_ID" "$APP_PATH"
           cd "$EVIDENCE"
           maestro --device "$DEVICE_ID" test -e APP_ID="$APP_ID" --format junit --output results.xml --debug-output debug "$GITHUB_WORKSPACE/packages/app/maestro/ci/settings-native.yaml"
-      - name: Collect Android runtime diagnostics
-        if: always() && matrix.platform == 'android'
-        run: adb logcat -d > "$EVIDENCE/android-logcat.txt" 2>&1 || true
       - name: Upload native evidence
         if: always()
         uses: actions/upload-artifact@v4

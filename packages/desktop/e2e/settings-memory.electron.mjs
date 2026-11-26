@@ -26,10 +26,12 @@ const SETTINGS_DESTINATIONS = [
   "Connections",
   "Devices",
   "Agents",
+  "Agent profiles",
   "Metadata",
+  "Voice",
   "Workspaces",
   "Providers",
-  // woowtech smart: no Usage row; account usage is hidden (woowtech/README.md section 23).
+  "Usage",
   "Terminals",
   "Plugins",
 ];
