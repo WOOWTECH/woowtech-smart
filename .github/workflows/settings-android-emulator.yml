@@ -156,7 +156,7 @@ jobs:
           timeout 600 sdkmanager 'system-images;android-35;google_apis;x86_64'
           echo no | avdmanager create avd --force --name native-parity --path "$ANDROID_AVD_HOME/native-parity.avd" --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
           test -f "$ANDROID_AVD_HOME/native-parity.ini"
-          "$ANDROID_HOME/emulator/emulator" -avd native-parity -no-window -no-snapshot -no-audio -gpu swiftshader_indirect > "$EVIDENCE/emulator.log" 2>&1 &
+          "$ANDROID_HOME/emulator/emulator" -avd native-parity -no-window -no-snapshot -no-audio -no-boot-anim -memory 3072 -cores 2 -gpu swiftshader_indirect > "$EVIDENCE/emulator.log" 2>&1 &
           EMULATOR_PID=$!
           trap 'timeout 15 adb logcat -d > "$EVIDENCE/android-logcat.txt" 2>&1 || true; kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
           sleep 3
