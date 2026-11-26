@@ -1,10 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { forgetHandledNotificationTapsForTest } from "./woowtech-notification-response";
 import {
   createColdStartScenario,
   seedPreviousProcess,
-  type ColdStartInput,
   type ColdStartScenario,
   type DirectoryContent,
   type PersistedWorkspaceLayout,
@@ -88,53 +86,45 @@ const scenarios: ColdStartScenario[] = [];
 
 beforeEach(async () => {
   await AsyncStorage.clear();
-  forgetHandledNotificationTapsForTest();
 });
-
 afterEach(() => {
-  for (const scenario of scenarios.splice(0)) {
-    scenario.dispose();
-  }
+  for (const app of scenarios.splice(0)) app.dispose();
 });
 
-async function launchFromTap(
-  fixture: Fixture,
-  options: Pick<ColdStartInput, "waitRule" | "router">,
-): Promise<ColdStartScenario> {
+async function launchFromTap(fixture: Fixture): Promise<ColdStartScenario> {
   await seedPreviousProcess(S, fixture.layouts);
-  const app = createColdStartScenario({
-    serverId: S,
-    persistedLayouts: fixture.layouts,
-    rememberedWorkspaceId: fixture.remembered,
-    ...options,
-  });
+  const app = createColdStartScenario({ serverId: S, rememberedWorkspaceId: fixture.remembered });
   scenarios.push(app);
-  // iOS hands the launch tap to the emitter module before JS reads it (EmitterModule.swift:40-46).
   app.native.tap("launch-tap", fixture.tap);
   return app;
 }
 
-// The order the code imposes: PushNotificationRouter's effect runs in the root layout's first
-// commit, before HostRuntimeBootstrapProvider boots the host registry (_layout.tsx), so the launch
-// tap is routed before any session exists. Storage reads land next, then the registry, the cached
-// directory (HostRuntimeStore restores it right after the registry), and the live one last.
 async function bootUntilCached(app: ColdStartScenario, fixture: Fixture): Promise<void> {
   await app.mountRouter();
   await app.layoutHydrates();
   app.selectionHydrates();
   app.hostRegistryLoads();
   app.cacheRestores(fixture.cache);
+  await app.settle();
 }
 
-describe("a cold-start notification tap focuses the tapped agent (RC-I-21c)", () => {
+async function bootLive(app: ColdStartScenario, fixture: Fixture): Promise<void> {
+  await bootUntilCached(app, fixture);
+  app.liveDirectoryArrives(fixture.live);
+  await app.settle();
+}
+
+describe("cold-start notifications resolve the current host agent (RC-I-21c)", () => {
   for (const [name, fixture] of VARIANTS) {
-    it(`${name}: as soon as the cached workspace and the layout are in`, async () => {
-      const app = await launchFromTap(fixture, { waitRule: "app", router: "app" });
-
+    it(`${name}: an uncached agent waits for the directory, then replaces the remembered focus`, async () => {
+      const app = await launchFromTap(fixture);
       await bootUntilCached(app, fixture);
-      expect(app.visible()).toBe(fixture.tappedAgent);
-
+      expect(app.visible()).toBe(`agent:${B}`);
+      expect(app.openTabCalls).toEqual([]);
+      expect(app.agentTabs(W)).not.toContain(B);
+      expect(app.agentTabs(W2)).not.toContain(B);
       app.liveDirectoryArrives(fixture.live);
+      await app.settle();
       expect(app.visible()).toBe(fixture.tappedAgent);
       expect(app.openTabCalls.filter((call) => call.agentId === B)).toEqual([
         {
@@ -146,43 +136,46 @@ describe("a cold-start notification tap focuses the tapped agent (RC-I-21c)", ()
       ]);
     });
 
-    it(`${name}: while the host cannot be reached`, async () => {
-      const app = await launchFromTap(fixture, { waitRule: "app", router: "app" });
-
+    it(`${name}: an unknown agent stays on its waiting route while the host is unreachable`, async () => {
+      const app = await launchFromTap(fixture);
       await bootUntilCached(app, fixture);
-
-      expect(app.visible()).toBe(fixture.tappedAgent);
+      await app.settle();
+      expect(app.visible()).toBe(`agent:${B}`);
+      expect(app.native.lastResponse).toBeNull();
+      expect(app.openTabCalls).toEqual([]);
     });
 
-    // Waiting for the live snapshot kept the remembered agent on screen, the device report.
-    it(`witness, ${name}: upstream's wait rule shows the remembered agent until the live snapshot`, async () => {
-      const app = await launchFromTap(fixture, { waitRule: "upstream", router: "upstream" });
-
-      await bootUntilCached(app, fixture);
-      expect(app.visible()).toBe(fixture.remembersAgent);
-
-      app.liveDirectoryArrives(fixture.live);
+    it(`${name}: a cached agent uses its recorded workspace even with a stale payload hint`, async () => {
+      const cachedFixture = {
+        ...fixture,
+        cache: fixture.live,
+        tap: { ...fixture.tap, serverId: S, agentId: B, workspaceId: "wks_stale" },
+      };
+      const app = await launchFromTap(cachedFixture);
+      await bootUntilCached(app, cachedFixture);
       expect(app.visible()).toBe(fixture.tappedAgent);
+      expect(app.agentTabs("wks_stale")).toEqual([]);
     });
   }
 
-  it("a workspace the store has never seen still waits for the live directory (T1, recovery)", async () => {
-    const fixture: Fixture = {
+  it("opens an agent with no workspace hint once the live directory arrives", async () => {
+    const fixture = {
       ...SAME_WORKSPACE,
       layouts: [],
       remembered: null,
       cache: { workspaceIds: [], agents: [] },
+      tap: { serverId: S, agentId: B },
     };
-    const app = await launchFromTap(fixture, { waitRule: "app", router: "app" });
-
+    const app = await launchFromTap(fixture);
     await bootUntilCached(app, fixture);
+    expect(app.visible()).toBe(`agent:${B}`);
     expect(app.openTabCalls).toEqual([]);
-
     app.liveDirectoryArrives(fixture.live);
+    await app.settle();
     expect(app.visible()).toBe(`${W}/${B}`);
   });
 
-  it("the startup restore never replaces the tap, in any order the code allows", async () => {
+  it("startup restore cannot replace the tap in any boot order", async () => {
     const orders: Record<string, (app: ColdStartScenario) => Promise<void>> = {
       "tap before boot": async (app) => {
         await app.mountRouter();
@@ -190,7 +183,7 @@ describe("a cold-start notification tap focuses the tapped agent (RC-I-21c)", ()
         app.selectionHydrates();
         app.hostRegistryLoads();
       },
-      "boot, then tap": async (app) => {
+      "boot before tap": async (app) => {
         await app.layoutHydrates();
         app.selectionHydrates();
         app.hostRegistryLoads();
@@ -208,7 +201,7 @@ describe("a cold-start notification tap focuses the tapped agent (RC-I-21c)", ()
         await app.mountRouter();
         await app.layoutHydrates();
       },
-      "tap while the host index waits to redirect": async (app) => {
+      "host index redirect pending": async (app) => {
         app.setHoldHostIndexRedirect(true);
         await app.layoutHydrates();
         app.selectionHydrates();
@@ -220,175 +213,159 @@ describe("a cold-start notification tap focuses the tapped agent (RC-I-21c)", ()
     const results: Record<string, string> = {};
     for (const [order, run] of Object.entries(orders)) {
       await AsyncStorage.clear();
-      forgetHandledNotificationTapsForTest();
-      const app = await launchFromTap(SAME_WORKSPACE, { waitRule: "app", router: "app" });
+      const app = await launchFromTap(SAME_WORKSPACE);
       await run(app);
       app.cacheRestores(SAME_WORKSPACE.cache);
+      app.liveDirectoryArrives(SAME_WORKSPACE.live);
+      await app.settle();
       results[order] = app.visible();
+      app.dispose();
     }
-
     expect(results).toEqual(
       Object.fromEntries(Object.keys(orders).map((order) => [order, `${W}/${B}`])),
     );
   });
 
-  it("a launch tap that reaches JS after the cache restore takes the warm path", async () => {
-    await seedPreviousProcess(S, SAME_WORKSPACE.layouts);
-    const app = createColdStartScenario({
-      serverId: S,
-      persistedLayouts: SAME_WORKSPACE.layouts,
-      rememberedWorkspaceId: W,
-      waitRule: "app",
-      router: "app",
-    });
-    scenarios.push(app);
-    await bootUntilCached(app, SAME_WORKSPACE);
-    expect(app.visible()).toBe(`${W}/${A}`);
-
-    // iOS may call didReceive after JS read an empty getLastNotificationResponse.
-    app.tapWhileRunning("late-launch-tap", tapData(W, B));
-
-    expect(app.visible()).toBe(`${W}/${B}`);
-  });
-
-  // The relay must put the ids in apns.payload.body: iOS hands JS userInfo["body"] only
-  // (EXNotificationSerializer.m:79-83). Without them the tap routes to "/" and the startup
-  // restore wins: the cross-workspace tap then shows W, not W2, which tells this apart on a device.
-  it("witness: a tap without ids falls back to the remembered workspace", async () => {
-    const app = await launchFromTap(
-      { ...CROSS_WORKSPACE, tap: null },
-      { waitRule: "app", router: "app" },
-    );
-
-    await bootUntilCached(app, CROSS_WORKSPACE);
-    app.liveDirectoryArrives(CROSS_WORKSPACE.live);
-
-    expect(app.visible()).toBe(`${W}/${A}`);
-  });
-
-  it("navigateToWorkspace defers instead of opening the tab before the layout hydrates", async () => {
-    const app = await launchFromTap(SAME_WORKSPACE, { waitRule: "app", router: "app" });
+  it("does not acknowledge a launch tap before the startup host index finishes redirecting", async () => {
+    const app = await launchFromTap(SAME_WORKSPACE);
+    app.setHoldHostIndexRedirect(true);
+    await app.mountRouter();
+    await app.layoutHydrates();
     app.selectionHydrates();
     app.hostRegistryLoads();
-    app.cacheRestores(SAME_WORKSPACE.cache);
+    await app.settle();
+    expect(app.visible()).toBe("host:index");
+    expect(app.native.clearCalls).toBe(0);
+    app.setHoldHostIndexRedirect(false);
+    app.liveDirectoryArrives(SAME_WORKSPACE.live);
+    await app.settle();
+    expect(app.native.clearCalls).toBe(1);
+    expect(app.visible()).toBe(`${W}/${B}`);
+  });
+
+  it("handles a launch response delivered by the native listener after its initial read was empty", async () => {
+    const app = await launchFromTap({ ...SAME_WORKSPACE, tap: null });
+    await bootLive(app, SAME_WORKSPACE);
+    expect(app.visible()).toBe(`${W}/${A}`);
+    await app.tapWhileRunning("late-launch-tap", tapData(W, B));
+    expect(app.visible()).toBe(`${W}/${B}`);
+  });
+
+  it("acknowledges a notice without IDs without changing startup's remembered workspace", async () => {
+    const app = await launchFromTap({ ...CROSS_WORKSPACE, tap: null });
+    await bootLive(app, CROSS_WORKSPACE);
+    expect(app.visible()).toBe(`${W}/${A}`);
+    expect(app.native.lastResponse).toBeNull();
+    expect(app.openTabCalls).toEqual([]);
+  });
+
+  it("does not consume a deferred tab until both the persisted layout and live workspace are ready", async () => {
+    const fixture = { ...SAME_WORKSPACE, cache: SAME_WORKSPACE.live };
+    const app = await launchFromTap(fixture);
+    app.selectionHydrates();
+    app.hostRegistryLoads();
+    app.cacheRestores(fixture.cache);
     await app.mountRouter();
     expect(app.openTabCalls).toEqual([]);
-
     await app.layoutHydrates();
-
-    expect(app.openTabCalls.every((call) => call.hydrated)).toBe(true);
+    expect(app.openTabCalls).toEqual([]);
+    app.liveDirectoryArrives(fixture.live);
+    await app.settle();
     expect(app.visible()).toBe(`${W}/${B}`);
+    expect(app.openTabCalls).toEqual([
+      { workspaceKey: `${S}:${W}`, agentId: B, pin: true, hydrated: true },
+    ]);
   });
 });
 
-describe("a remounted PushNotificationRouter does not replay the launch tap", () => {
-  async function tapLeaveRemount(router: ColdStartInput["router"]): Promise<ColdStartScenario> {
-    const app = await launchFromTap(SAME_WORKSPACE, { waitRule: "app", router });
-    await bootUntilCached(app, SAME_WORKSPACE);
+describe("notification router remount and native delivery identity", () => {
+  async function tapLeaveRemount() {
+    const app = await launchFromTap(SAME_WORKSPACE);
+    app.native.replayPendingOnSubscribe = true;
+    await bootLive(app, SAME_WORKSPACE);
     expect(app.visible()).toBe(`${W}/${B}`);
     app.userFocusesAgent(A);
-
-    // The root error boundary's Reload, a Fast Refresh of _layout.tsx, or any re-keyed tree.
     app.unmountRouter();
     await app.mountRouter();
     return app;
   }
 
-  it("keeps the agent the user moved to", async () => {
-    const app = await tapLeaveRemount("app");
-
+  it("keeps the user's later focus despite Android replaying its pending response list", async () => {
+    const app = await tapLeaveRemount();
     expect(app.visible()).toBe(`${W}/${A}`);
+    expect(app.native.clearCalls).toBe(1);
     expect(app.native.lastResponse).toBeNull();
+    expect(app.openTabCalls.filter((call) => call.agentId === B)).toHaveLength(1);
   });
 
-  it("still routes a later tap", async () => {
-    const app = await tapLeaveRemount("app");
-
-    app.tapWhileRunning("second-tap", tapData(W, B));
-
+  it("accepts a later notification even when the relay reuses the same collapse identifier", async () => {
+    const app = await tapLeaveRemount();
+    await app.tapWhileRunning("launch-tap", tapData(W, B));
     expect(app.visible()).toBe(`${W}/${B}`);
+    expect(app.native.clearCalls).toBe(2);
   });
 
-  it("witness: upstream's router replays it and pulls the user back to B", async () => {
-    const app = await tapLeaveRemount("upstream");
-
+  it("retains the launch tap if the router unmounts while startup is not ready", async () => {
+    const app = await launchFromTap(SAME_WORKSPACE);
+    await app.mountRouter();
+    app.unmountRouter();
+    await app.layoutHydrates();
+    app.selectionHydrates();
+    app.hostRegistryLoads();
+    app.liveDirectoryArrives(SAME_WORKSPACE.live);
+    await app.settle();
+    expect(app.native.clearCalls).toBe(0);
+    expect(app.openTabCalls).toEqual([]);
+    await app.mountRouter();
     expect(app.visible()).toBe(`${W}/${B}`);
+    expect(app.native.clearCalls).toBe(1);
   });
 });
 
-// Upstream #2002: an ?open=agent intent asks the workspace screen to inspect recovery, so a
-// workspace archived while the app was killed shows 「Workspace archived」 with Restore. The cached
-// directory still lists it until the live snapshot replaces the cache, and the intent is consumed
-// against the cache, so the route keeps the request until the live directory decides.
-describe("a cold-start tap still requests recovery for a workspace archived meanwhile", () => {
-  function withoutWorkspace(content: DirectoryContent, workspaceId: string): DirectoryContent {
-    return {
-      workspaceIds: content.workspaceIds.filter((id) => id !== workspaceId),
-      agents: content.agents.filter((agent) => agent.workspaceId !== workspaceId),
-    };
-  }
-
-  for (const [name, fixture] of VARIANTS) {
-    const tapped = fixture.tap?.workspaceId ?? "";
-
-    it(`${name}: the live directory drops the cached workspace`, async () => {
-      const app = await launchFromTap(fixture, { waitRule: "app", router: "app" });
-
-      await bootUntilCached(app, fixture);
-      expect(app.visible()).toBe(fixture.tappedAgent);
-      expect(app.recovery()).toEqual({ requested: true, inspects: false });
-
-      app.liveDirectoryArrives(withoutWorkspace(fixture.live, tapped));
-      expect(app.recovery()).toEqual({ requested: true, inspects: true });
-    });
-
-    it(`witness, ${name}: upstream's wait rule requests it the same way`, async () => {
-      const app = await launchFromTap(fixture, { waitRule: "upstream", router: "upstream" });
-
-      await bootUntilCached(app, fixture);
-      app.liveDirectoryArrives(withoutWorkspace(fixture.live, tapped));
-
-      expect(app.recovery()).toEqual({ requested: true, inspects: true });
-    });
-  }
-
-  it("ends once the live directory has the workspace, as upstream's consumption did", async () => {
-    const app = await launchFromTap(SAME_WORKSPACE, { waitRule: "app", router: "app" });
-    await bootUntilCached(app, SAME_WORKSPACE);
-
-    app.liveDirectoryArrives(SAME_WORKSPACE.live);
-    expect(app.recovery()).toEqual({ requested: false, inspects: false });
-
-    // Archived later, while the user is on it: not this route's intent any more.
-    app.liveDirectoryArrives(withoutWorkspace(SAME_WORKSPACE.live, W));
-    expect(app.recovery()).toEqual({ requested: false, inspects: false });
+describe("authoritative agent lookup and missing-workspace recovery", () => {
+  it("uses the current directory after an agent moved while the app was killed", async () => {
+    const fixture = { ...CROSS_WORKSPACE, tap: tapData(W, B) };
+    const app = await launchFromTap(fixture);
+    await bootLive(app, fixture);
+    expect(app.visible()).toBe(`${W2}/${B}`);
+    expect(app.agentTabs(W)).not.toContain(B);
+    expect(app.agentTabs(W2)).toContain(B);
   });
 
-  it("stays requested without inspecting while the host cannot be reached", async () => {
-    const app = await launchFromTap(SAME_WORKSPACE, { waitRule: "app", router: "app" });
+  it("uses a fetched agent record to queue recovery for a workspace missing from the live directory", async () => {
+    const app = await launchFromTap(CROSS_WORKSPACE);
+    await bootUntilCached(app, CROSS_WORKSPACE);
+    app.liveDirectoryArrives(SAME_WORKSPACE.cache);
+    app.agentLookupCompletes(B, W2);
+    await app.settle();
+    expect(app.visible()).toBe(`${W2}/-`);
+    expect(app.recovery()).toEqual({ requested: true, inspects: true });
+    expect(app.openTabCalls).toEqual([]);
 
-    await bootUntilCached(app, SAME_WORKSPACE);
-
-    expect(app.visible()).toBe(`${W}/${B}`);
-    expect(app.recovery()).toEqual({ requested: true, inspects: false });
+    // A successful restore brings the workspace and agent back through the directory.
+    app.liveDirectoryArrives(CROSS_WORKSPACE.live);
+    await app.settle();
+    expect(app.visible()).toBe(`${W2}/${B}`);
+    expect(app.recovery()).toEqual({ requested: false, inspects: false });
+    expect(app.openTabCalls.filter((call) => call.agentId === B)).toHaveLength(1);
   });
 
-  it("a tap after the live directory does not latch it", async () => {
-    await seedPreviousProcess(S, SAME_WORKSPACE.layouts);
-    const app = createColdStartScenario({
-      serverId: S,
-      persistedLayouts: SAME_WORKSPACE.layouts,
-      rememberedWorkspaceId: W,
-      waitRule: "app",
-      router: "app",
-    });
-    scenarios.push(app);
-    await bootUntilCached(app, SAME_WORKSPACE);
-    app.liveDirectoryArrives(SAME_WORKSPACE.live);
+  it("does not inspect a workspace from a stale hint while the agent is still unresolved", async () => {
+    const app = await launchFromTap(CROSS_WORKSPACE);
+    await bootUntilCached(app, CROSS_WORKSPACE);
+    expect(app.visible()).toBe(`agent:${B}`);
+    expect(app.recovery()).toBeNull();
+    expect(app.openTabCalls).toEqual([]);
+  });
 
-    app.tapWhileRunning("warm-tap", tapData(W, B));
-
-    expect(app.visible()).toBe(`${W}/${B}`);
-    expect(app.recovery()).toEqual({ requested: false, inspects: false });
+  it("returns to the host when an authoritative lookup says the agent no longer exists", async () => {
+    const app = await launchFromTap(CROSS_WORKSPACE);
+    await bootUntilCached(app, CROSS_WORKSPACE);
+    app.liveDirectoryArrives(SAME_WORKSPACE.cache);
+    app.agentLookupCompletes(B, null);
+    await app.settle();
+    expect(app.visible()).toBe(`${W}/${A}`);
+    expect(app.agentTabs(W)).not.toContain(B);
+    expect(app.agentTabs(W2)).not.toContain(B);
   });
 });

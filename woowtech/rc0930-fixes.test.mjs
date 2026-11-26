@@ -106,11 +106,14 @@ test("a turn's timestamp reads in the app language, not the system's (10/8)", ()
 });
 
 test("host lists show each host's address, so hosts with the same name differ (K-34)", () => {
+  const newWorkspace = source("packages/app/src/screens/new-workspace-screen.tsx");
+  assert.match(newWorkspace, /import \{ useNewWorkspaceForm \} from "\.\/new-workspace\/form";/);
+  assert.match(newWorkspace, /const formStack = useNewWorkspaceForm\(/);
   for (const path of [
-    "packages/app/src/screens/new-workspace-screen.tsx",
+    "packages/app/src/screens/new-workspace/form/index.tsx",
     "packages/app/src/components/hosts/host-filter.tsx",
   ]) {
-    assert.match(source(path), /<HostPicker[^>]*?\bshowActiveConnection\b/s, path);
+    assert.match(source(path), /<HostPicker\b[^>]*?\bshowActiveConnection\b(?!\s*=)/s, path);
   }
   assert.match(
     source("packages/app/src/components/schedules/schedule-form-sheet.tsx"),

@@ -78,7 +78,7 @@ export function isPathInsideRoot(root: string, candidate: string): boolean {
 }
 
 export function normalizePathForIdentity(value: string): string {
-  const canonicalPath = resolveRealpathVariants(value)[0] ?? value;
+  const canonicalPath = resolveNearestExistingAncestorRealpath(value);
   return normalizePathForComparison(canonicalPath, looksLikeDefiniteWindowsPath(canonicalPath));
 }
 
@@ -107,17 +107,18 @@ export function isRealpathInsideRoot(root: string, candidate: string): boolean {
   return getRealpathAwareRelativePath(root, candidate) !== null;
 }
 
-function getRelativePathInsideRoot(root: string, candidate: string): string | null {
+export function getRelativePathInsideRoot(root: string, candidate: string): string | null {
   const compareAsWindows = shouldCompareAsWindows(root, candidate);
   const platformPath = compareAsWindows ? nodePath.win32 : nodePath.posix;
   const normalizedRoot = normalizePathForComparison(root, compareAsWindows);
   const normalizedCandidate = normalizePathForComparison(candidate, compareAsWindows);
   const comparableRelative = platformPath.relative(normalizedRoot, normalizedCandidate);
 
-  if (
-    comparableRelative !== "" &&
-    (comparableRelative.startsWith("..") || platformPath.isAbsolute(comparableRelative))
-  ) {
+  const isOutsideRoot =
+    comparableRelative === ".." ||
+    comparableRelative.startsWith(`..${platformPath.sep}`) ||
+    platformPath.isAbsolute(comparableRelative);
+  if (isOutsideRoot) {
     return null;
   }
 
@@ -149,6 +150,26 @@ function resolveRealpathVariants(value: string): string[] {
   return variants;
 }
 
+function resolveNearestExistingAncestorRealpath(value: string): string {
+  if (process.platform !== "win32" && looksLikeDefiniteWindowsPath(value)) {
+    return value;
+  }
+  const tail: string[] = [];
+  let current = value;
+  while (true) {
+    const resolved = resolveRealpathVariants(current)[0];
+    if (resolved) {
+      return tail.length === 0 ? resolved : nodePath.join(resolved, ...tail.toReversed());
+    }
+    const parent = nodePath.dirname(current);
+    if (parent === current) {
+      return value;
+    }
+    tail.push(nodePath.basename(current));
+    current = parent;
+  }
+}
+
 function shouldCompareAsWindows(left: string, right: string): boolean {
   return looksLikeDefiniteWindowsPath(left) || looksLikeDefiniteWindowsPath(right);
 }
@@ -174,7 +195,7 @@ function normalizePathForComparison(value: string, compareAsWindows: boolean): s
   return compareAsWindows ? normalized.toLowerCase() : normalized;
 }
 
-function normalizePathPreservingCase(value: string, compareAsWindows: boolean): string {
+export function normalizePathPreservingCase(value: string, compareAsWindows: boolean): string {
   const platformPath = compareAsWindows ? nodePath.win32 : nodePath.posix;
   const comparableValue = compareAsWindows ? stripWindowsNamespacePrefix(value) : value;
   const platformNormalized = platformPath.normalize(comparableValue);

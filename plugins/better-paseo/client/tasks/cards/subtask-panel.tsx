@@ -1,0 +1,156 @@
+import React, { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Animated, LayoutAnimation, Platform, View, type ViewStyle } from "react-native";
+import { easing } from "../../ui/tokens/motion";
+import { useReducedMotion } from "../../ui/use-reduced-motion";
+
+interface SubtaskPanelProps {
+  expanded: boolean;
+  animated?: boolean;
+  testID?: string;
+  children: ReactNode;
+}
+
+type PanelProps = SubtaskPanelProps & { still: boolean };
+const OPEN_MS = 180;
+const CLOSE_MS = 140;
+
+/** Configure the native transaction before the press updates board-owned state. */
+export function prepareSubtaskToggle(expanded: boolean): void {
+  if (Platform.OS === "web") return;
+  LayoutAnimation.configureNext({
+    duration: expanded ? OPEN_MS : CLOSE_MS,
+    update: { type: "easeOut" },
+  });
+}
+
+/** Keeps the rows mounted through collapse, then releases their subscriptions. */
+export function SubtaskPanel(props: SubtaskPanelProps) {
+  const reduced = useReducedMotion();
+  const still = reduced || props.animated === false;
+  return Platform.OS === "web" ? (
+    <WebSubtaskPanel {...props} still={still} />
+  ) : (
+    <NativeSubtaskPanel {...props} still={still} />
+  );
+}
+
+/** Fabric animates the layout transaction; JS never writes a height per frame. */
+function NativeSubtaskPanel({
+  expanded,
+  still,
+  children,
+  testID = "task-card-subtasks-panel",
+}: PanelProps) {
+  const [present, setPresent] = useState(expanded);
+  const target = useRef(expanded);
+  const opacity = useRef(new Animated.Value(expanded ? 1 : 0)).current;
+
+  useLayoutEffect(() => {
+    if (still) {
+      target.current = expanded;
+      opacity.setValue(expanded ? 1 : 0);
+      setPresent(expanded);
+      return;
+    }
+    // Restored expansion and unrelated card updates start no animation.
+    if (target.current === expanded) return;
+    target.current = expanded;
+    let live = true;
+    const ms = expanded ? OPEN_MS : CLOSE_MS;
+    if (expanded) setPresent(true);
+    const animation = Animated.timing(opacity, {
+      toValue: expanded ? 1 : 0,
+      duration: ms,
+      easing: easing.out,
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    animation.start(({ finished }) => {
+      if (live && finished && !expanded) setPresent(false);
+    });
+    return () => {
+      live = false;
+      animation.stop();
+    };
+  }, [expanded, still, opacity]);
+
+  // The committed shell gives LayoutAnimation an existing view to resize on
+  // every expansion. Only the rows unmount, so no measurement commit is needed.
+  return (
+    <Animated.View
+      testID={testID}
+      collapsable={false}
+      pointerEvents={expanded ? "auto" : "none"}
+      accessibilityElementsHidden={!expanded}
+      importantForAccessibility={expanded ? "auto" : "no-hide-descendants"}
+      style={{
+        flexShrink: 0,
+        marginHorizontal: -6,
+        overflow: "hidden",
+        height: expanded ? undefined : 0,
+        opacity,
+      }}
+    >
+      {expanded || present ? (
+        <View style={{ flexShrink: 0, marginHorizontal: 6 }}>{children}</View>
+      ) : null}
+    </Animated.View>
+  );
+}
+
+/** CSS owns interpolation; only measurement and the exit boundary reach React. */
+function WebSubtaskPanel({
+  expanded,
+  still,
+  children,
+  testID = "task-card-subtasks-panel",
+}: PanelProps) {
+  const [present, setPresent] = useState(expanded);
+  const [height, setHeight] = useState<number | null>(null);
+  const initialExpanded = useRef(expanded).current;
+  useLayoutEffect(() => {
+    if (still || expanded) {
+      setPresent(expanded);
+      return;
+    }
+    if (!present) return;
+    const timer = setTimeout(() => setPresent(false), CLOSE_MS);
+    return () => clearTimeout(timer);
+  }, [expanded, still, present]);
+
+  const natural = still || (initialExpanded && expanded && height === null);
+  const visible = expanded && (natural || height !== null);
+  // Retain an empty, zero-height shell so a reopening has a CSS start state.
+  return (
+    <View
+      testID={testID}
+      pointerEvents={expanded ? "auto" : "none"}
+      aria-hidden={!expanded || undefined}
+      style={
+        {
+          flexShrink: 0,
+          marginHorizontal: -6,
+          overflow: "hidden",
+          height: expanded && natural ? undefined : visible ? height! : 0,
+          opacity: visible ? 1 : 0,
+          transitionProperty: "height, opacity",
+          transitionDuration: still ? "0ms" : `${expanded ? OPEN_MS : CLOSE_MS}ms`,
+          transitionTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
+        } as ViewStyle
+      }
+    >
+      {expanded || present ? (
+        <View
+          testID="task-card-subtasks-measure"
+          onLayout={(event) => setHeight(event.nativeEvent.layout.height)}
+          style={[
+            { marginHorizontal: 6 },
+            natural ? undefined : { position: "absolute", top: 0, left: 0, right: 0 },
+          ]}
+        >
+          {children}
+        </View>
+      ) : null}
+    </View>
+  );
+}

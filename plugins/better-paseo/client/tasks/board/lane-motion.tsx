@@ -1,0 +1,901 @@
+/**
+ * Lane changes without the jump: the board measures its rendered cards just
+ * before new lanes commit and again right after, and `planLaneMotion` turns
+ * the two into slides, flights and fades (see `lane-motion-plan.ts`).
+ *
+ * The first measure is taken while the new lanes render, from the screen as it
+ * still is; the second in the board's layout effect, which runs after every
+ * card's own. Measuring there is synchronous on the web
+ * (`getBoundingClientRect`) and on Fabric (`measureInWindow` answers from the
+ * shadow tree at once); where it is not, a card has no rect and no motion, and
+ * the board still shows the right lanes. What is measured is a card's slot,
+ * which never moves itself.
+ *
+ * Two ways to play it, as the platforms differ in what reaches the screen
+ * together with the new lanes:
+ *
+ * - Web: the browser paints after the layout effect, so the effect can still
+ *   set each card's offset (a slide back to its old place) and hide a card that
+ *   changed lanes while a copy of it flies there. Only the moving card is copied.
+ * - Native ("cover"): iOS drew the new layout a frame before anything the
+ *   layout effect set, Animated or React state alike, so a card jumped there
+ *   and back. Only what renders with the new lanes is safe: in that same render
+ *   the lanes that change hide their list and the layer draws copies of their
+ *   cards where they were. The effect then moves the copies to the measured new
+ *   places, and the lists show again, under copies that match them, once every
+ *   copy has arrived.
+ *
+ * A list scrolled to its end that loses its last card scrolls back on its own
+ * once the native view takes the shorter content, after the effect has
+ * measured: the measure still has the old offset. Native moves its copies to
+ * where the cards will be after that scroll (`scrollBack`), so the cards above
+ * slide down into the gap instead of the whole list dropping as it shows
+ * again. The browser scrolls back during layout, so the web measures it.
+ *
+ * The browser also anchors a scrolled list to what it shows: cards that come
+ * or go above the screen leave the cards on it in place. A native list keeps
+ * its offset instead, so a card renamed in the middle of the archived lane,
+ * sorted to its top, pulled every card above its old place down through the
+ * screen, and the place it left stood empty until they arrived. Native scrolls
+ * the hidden list by what its top card on screen moved (`anchorDrift`), and the
+ * card that moved out of view fades where it was while the cards below close
+ * the gap.
+ */
+import React, {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { Animated, Platform, View } from "react-native";
+import { LANE_ORDER, type LaneId, type LaneModel, type TaskCard } from "../model";
+import { MOTION } from "./board-style";
+import {
+  anchorDrift,
+  inView,
+  laneChurn,
+  laneNeighbours,
+  listScroll,
+  movedCards,
+  planLaneMotion,
+  sameCards,
+  sameOrder,
+  type LaneMove,
+  type MotionFrame,
+  type Neighbours,
+  type Rect,
+} from "./lane-motion-plan";
+
+const COVER = Platform.OS !== "web";
+/** JS-driven: the web's offsets are set from JS in the frame they belong to. */
+const nativeDriver = false;
+/**
+ * A copy starts at rest, where render drew it, so nothing has to land in a
+ * particular frame: native copies move on the UI thread, and the lists
+ * mounting the new cards under the cover do not stall them.
+ */
+const ghostDriver = COVER;
+/** A cover outlives no animation by more than this, whatever happens to the callbacks. */
+const COVER_LIMIT_MS = 1200;
+
+type Measurable = {
+  getBoundingClientRect?(): { left: number; top: number; width: number; height: number };
+  measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void;
+};
+
+/** The node's rect now, or null: not laid out, hidden (`display: none`), or not answered at once. */
+export function measureNow(node: unknown): Rect | null {
+  const target = node as Measurable | null;
+  if (!target) return null;
+  let rect: Rect | null = null;
+  if (Platform.OS === "web" && typeof target.getBoundingClientRect === "function") {
+    const box = target.getBoundingClientRect();
+    rect = { x: box.left, y: box.top, width: box.width, height: box.height };
+  } else {
+    target.measureInWindow?.((x, y, width, height) => {
+      rect = { x, y, width, height };
+    });
+  }
+  const out = rect as Rect | null;
+  return out && (out.width > 0 || out.height > 0) ? out : null;
+}
+
+/** A list's scrolling node: the element on the web, the native scroll view's instance elsewhere. */
+export function scrollNode(list: unknown): unknown {
+  const scroller = list as { getScrollableNode?(): unknown; getNativeScrollRef?(): unknown } | null;
+  return Platform.OS === "web" ? scroller?.getScrollableNode?.() : scroller?.getNativeScrollRef?.();
+}
+
+/** A web card's own offset and visibility. */
+interface CellValues {
+  x: Animated.Value;
+  y: Animated.Value;
+  opacity: Animated.Value;
+}
+
+interface Cell {
+  node: unknown;
+  values: CellValues | null;
+  onArrive?: () => void;
+}
+
+/** A web slide in progress, so a lane change in the middle of it starts from where the card is. */
+interface Slide {
+  dx: number;
+  dy: number;
+  start: number;
+  animation: Animated.CompositeAnimation;
+}
+
+export interface Ghost {
+  /** One copy per card. */
+  key: string;
+  card: TaskCard;
+  from: Rect;
+  to: Rect;
+  /** "out": fades on the way (a card that left, or heads out of view); "in": fades in where it is. */
+  fade: "none" | "out" | "in";
+  /** Web: the real card is hidden until this copy lands on it. */
+  reveal: boolean;
+  /** When it set off; `Infinity` for a cover's copy still waiting for its new place. */
+  start: number;
+  duration: number;
+  /** The layer's top left: rects are in window coordinates, a ghost draws in the layer. */
+  origin: { x: number; y: number };
+}
+
+interface Snapshot {
+  frame: MotionFrame;
+  cards: ReadonlyMap<string, TaskCard>;
+  /** Web: the cards hidden while their copy flies to them, which fly on from where the copy is. */
+  flying: ReadonlySet<string>;
+  /** Each card's neighbours in its lane, to tell the card that moved from the ones that made room. */
+  neighbours: Neighbours;
+}
+
+/** A lane's measurable node, and on native its list's scroll to an offset. */
+interface LaneTarget {
+  node(): unknown;
+  scrollTo?(offset: number): void;
+}
+
+const now = () => Date.now();
+
+function progress(start: number, duration: number, at: number): number {
+  if (!Number.isFinite(start)) return 0;
+  if (duration <= 0) return 1;
+  return MOTION.ease(Math.min(1, Math.max(0, (at - start) / duration)));
+}
+
+/** Where a ghost is drawn now. */
+function ghostRect(ghost: Ghost, at: number): Rect {
+  const t = progress(ghost.start, ghost.duration, at);
+  return {
+    x: ghost.from.x + (ghost.to.x - ghost.from.x) * t,
+    y: ghost.from.y + (ghost.to.y - ghost.from.y) * t,
+    width: ghost.to.width,
+    height: ghost.to.height,
+  };
+}
+
+export interface LaneMotionStore {
+  /** The ghosts' layer: its rect is their origin and the lanes' viewport. */
+  layer: unknown;
+  attach(id: string, node: unknown, values: CellValues | null, onArrive?: () => void): () => void;
+  /** A lane's measurable node: an expanded lane's list, a collapsed lane's pill; `scrollTo` moves the list without animation. */
+  setLane(id: LaneId, node: (() => unknown) | null, scrollTo?: (offset: number) => void): void;
+  ghosts(): readonly Ghost[];
+  /** Native: the lanes whose list is hidden under copies of their cards. */
+  covered(): ReadonlySet<LaneId>;
+  subscribe(listener: () => void): () => void;
+  /** The cards as drawn now, with the lanes they are in. */
+  snapshot(lanes: Record<LaneId, LaneModel>): Snapshot;
+  /** Native, while the new lanes render: cover the lanes that change with copies of what they show now. */
+  freeze(before: Snapshot, last: Record<LaneId, LaneModel>, next: Record<LaneId, LaneModel>): void;
+  /** Plays what changed between `before` and the lanes just committed. */
+  play(before: Snapshot, lanes: Record<LaneId, LaneModel>): void;
+  /** A ghost reached its end. */
+  finish(key: string): void;
+  /** Everything back in place: the board stopped showing motion (hidden, reduced motion, unmounted). */
+  settle(): void;
+}
+
+const NO_LANES: ReadonlySet<LaneId> = new Set();
+
+// A closure, not a class: Hermes compiles no class syntax.
+export function createLaneMotionStore(flights: boolean): LaneMotionStore {
+  const cells = new Map<string, Cell>();
+  const lanes = new Map<LaneId, LaneTarget>();
+  const slides = new Map<string, Slide>();
+  const arrivals = new Set<string>();
+  const listeners = new Set<() => void>();
+  let ghostList: readonly Ghost[] = [];
+  let coveredLanes: ReadonlySet<LaneId> = NO_LANES;
+  let coverTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function notify(): void {
+    listeners.forEach((listener) => listener());
+  }
+
+  function arrive(id: string): void {
+    if (!arrivals.delete(id)) return;
+    cells.get(id)?.onArrive?.();
+  }
+
+  function setGhosts(next: readonly Ghost[]): void {
+    if (next === ghostList) return;
+    ghostList = next;
+    notify();
+  }
+
+  /** The lists show again and the copies go, in one update: the copies sit where the cards are. */
+  function uncover(): void {
+    if (coverTimer) clearTimeout(coverTimer);
+    coverTimer = null;
+    if (coveredLanes.size === 0 && ghostList.length === 0) return;
+    coveredLanes = NO_LANES;
+    ghostList = [];
+    notify();
+    for (const id of arrivals) arrive(id);
+  }
+
+  function holdCover(ms: number): void {
+    if (coverTimer) clearTimeout(coverTimer);
+    coverTimer = setTimeout(uncover, ms);
+  }
+
+  /** How far a web card is still drawn from its place. */
+  function offset(id: string, at: number): { x: number; y: number } {
+    const slide = slides.get(id);
+    if (!slide) return { x: 0, y: 0 };
+    const left = 1 - progress(slide.start, MOTION.slideMs, at);
+    return { x: slide.dx * left, y: slide.dy * left };
+  }
+
+  /** The cards whose copy is where they are seen: their real card is hidden or covered. */
+  function standing(): Set<string> {
+    const out = new Set<string>();
+    for (const ghost of ghostList)
+      if (ghost.reveal || (COVER && ghost.fade !== "out")) out.add(ghost.key);
+    return out;
+  }
+
+  function laneRects(): Map<LaneId, Rect> {
+    const out = new Map<LaneId, Rect>();
+    for (const [id, lane] of lanes) {
+      const rect = measureNow(lane.node());
+      if (rect) out.set(id, rect);
+    }
+    return out;
+  }
+
+  /**
+   * Native: how far each lane's list scrolls, as how far its cards move down
+   * from where they were just laid out: back on its own for content that got
+   * shorter, and with its top card on screen (scrolled here) for cards that
+   * came or went above it.
+   */
+  function scrollLists(
+    before: MotionFrame,
+    after: MotionFrame,
+    moved: ReadonlySet<string>,
+  ): Map<LaneId, number> {
+    const out = new Map<LaneId, number>();
+    for (const [id, lane] of lanes) {
+      const viewport = after.lanes.get(id);
+      const scroller = lane.node() as { getInnerViewRef?(): unknown } | null;
+      const content = viewport ? measureNow(scroller?.getInnerViewRef?.()) : null;
+      if (!viewport || !content) continue;
+      const offset = viewport.y - content.y;
+      // Only a hidden list scrolls: one on screen would jump.
+      const drift =
+        lane.scrollTo && coveredLanes.has(id) ? anchorDrift(id, offset, before, after, moved) : 0;
+      const scroll = listScroll(viewport, content, drift);
+      if (drift !== 0 && scroll.shift !== 0) lane.scrollTo?.(scroll.target);
+      if (scroll.shift !== 0) out.set(id, scroll.shift);
+    }
+    return out;
+  }
+
+  function slide(id: string, values: CellValues, dx: number, dy: number, at: number): void {
+    slides.get(id)?.animation.stop();
+    values.x.setValue(dx);
+    values.y.setValue(dy);
+    const timing = (value: Animated.Value) =>
+      Animated.timing(value, {
+        toValue: 0,
+        duration: MOTION.slideMs,
+        easing: MOTION.ease,
+        useNativeDriver: nativeDriver,
+      });
+    const animation = Animated.parallel([timing(values.x), timing(values.y)]);
+    const entry: Slide = { dx, dy, start: at, animation };
+    slides.set(id, entry);
+    animation.start(({ finished }) => {
+      if (slides.get(id) !== entry) return;
+      slides.delete(id);
+      if (finished) arrive(id);
+    });
+  }
+
+  /** Web: offsets and visibility on the real cards, a copy only for a card that changes lanes or leaves. */
+  function playOnCards(
+    moves: LaneMove[],
+    at: number,
+    cardOf: (move: LaneMove) => TaskCard | undefined,
+    viewport: Rect | null,
+  ): void {
+    const replaced = new Set<string>();
+    const added: Ghost[] = [];
+    const origin = viewport ? { x: viewport.x, y: viewport.y } : { x: 0, y: 0 };
+    for (const move of moves) {
+      const values = cells.get(move.id)?.values ?? null;
+      if (move.kind === "slide") {
+        if (values) slide(move.id, values, move.dx, move.dy, at);
+        continue;
+      }
+      replaced.add(move.id);
+      const card = cardOf(move);
+      if (!card || !viewport) {
+        // No layer to draw a copy in: the card just shows in its new place.
+        values?.opacity.setValue(1);
+        continue;
+      }
+      if (move.kind === "leave") {
+        added.push({
+          key: move.id,
+          card,
+          from: move.from,
+          to: move.from,
+          fade: "out",
+          reveal: false,
+          start: at,
+          duration: MOTION.leaveMs,
+          origin,
+        });
+        continue;
+      }
+      const reveal = move.land && values !== null;
+      if (values && reveal) {
+        // The copy carries the card; the card itself waits, unmoved, where it lands.
+        slides.get(move.id)?.animation.stop();
+        slides.delete(move.id);
+        values.x.setValue(0);
+        values.y.setValue(0);
+        values.opacity.setValue(0);
+      } else {
+        values?.opacity.setValue(1);
+      }
+      added.push({
+        key: move.id,
+        card,
+        from: move.from,
+        to: move.to,
+        fade: reveal ? "none" : "out",
+        reveal,
+        start: at,
+        duration: MOTION.flyMs,
+        origin,
+      });
+    }
+    if (replaced.size > 0 || added.length > 0)
+      setGhosts([...ghostList.filter((ghost) => !replaced.has(ghost.key)), ...added]);
+  }
+
+  /** Native: every copy under the cover heads for its card's new place, and new cards fade in over theirs. */
+  function playCover(
+    moves: LaneMove[],
+    before: MotionFrame,
+    after: MotionFrame,
+    at: number,
+    cardOf: (move: LaneMove) => TaskCard | undefined,
+    current: ReadonlyMap<string, TaskCard>,
+    moved: ReadonlySet<string>,
+  ): void {
+    const byId = new Map(moves.map((move) => [move.id, move]));
+    const next: Ghost[] = [];
+    for (const ghost of ghostList) {
+      if (Number.isFinite(ghost.start)) {
+        // A card still fading out from an earlier change goes on.
+        next.push(ghost);
+        continue;
+      }
+      const move = byId.get(ghost.key);
+      const to = after.cards.get(ghost.key);
+      if (move?.kind === "fly") {
+        next.push({
+          ...ghost,
+          card: cardOf(move) ?? ghost.card,
+          to: move.to,
+          fade: move.land ? "none" : "out",
+          start: at,
+          duration: MOTION.flyMs,
+        });
+      } else if (move?.kind === "leave" || !to) {
+        next.push({ ...ghost, fade: "out", start: at, duration: MOTION.leaveMs });
+      } else if (
+        moved.has(ghost.key) &&
+        !inView(to, laneRectOf(after, ghost.key), after.viewport)
+      ) {
+        // Moved out of view in its lane (renamed to the top): it fades where it was as the cards below close the gap.
+        next.push({ ...ghost, fade: "out", start: at, duration: MOTION.leaveMs });
+      } else {
+        next.push({ ...ghost, to, start: at, duration: MOTION.slideMs });
+      }
+    }
+    const present = new Set(next.map((ghost) => ghost.key));
+    const origin =
+      next[0]?.origin ??
+      (after.viewport ? { x: after.viewport.x, y: after.viewport.y } : { x: 0, y: 0 });
+    for (const [id, to] of after.cards) {
+      const lane = after.laneOf.get(id);
+      if (present.has(id) || lane === undefined || !coveredLanes.has(lane)) continue;
+      const card = current.get(id);
+      if (!card || !inView(to, after.lanes.get(lane) ?? null, after.viewport)) continue;
+      const from = before.laneOf.get(id) === lane ? before.cards.get(id) : undefined;
+      // Laid out just out of view, it slides in with the cards around it (the list scrolled back).
+      if (from)
+        next.push({
+          key: id,
+          card,
+          from,
+          to,
+          fade: "none",
+          reveal: false,
+          start: at,
+          duration: MOTION.slideMs,
+          origin,
+        });
+      // Came in from out of view: it enters (as `EnterOnMount` does under it) once the cards around it are on their way.
+      else
+        next.push({
+          key: id,
+          card,
+          from: to,
+          to,
+          fade: "in",
+          reveal: false,
+          start: at + MOTION.enterDelayMs,
+          duration: MOTION.enterMs,
+          origin,
+        });
+    }
+    if (!next.some((ghost) => Number.isFinite(ghost.start))) {
+      uncover();
+      return;
+    }
+    holdCover(COVER_LIMIT_MS);
+    setGhosts(next);
+  }
+
+  const store: LaneMotionStore = {
+    layer: null,
+    attach(id, node, values, onArrive) {
+      const cell = { node, values, onArrive };
+      cells.set(id, cell);
+      return () => {
+        if (cells.get(id) !== cell) return;
+        cells.delete(id);
+        slides.get(id)?.animation.stop();
+        slides.delete(id);
+      };
+    },
+    setLane(id, node, scrollTo) {
+      if (node) lanes.set(id, { node, scrollTo });
+      else lanes.delete(id);
+    },
+    ghosts: () => ghostList,
+    covered: () => coveredLanes,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    snapshot(current) {
+      const at = now();
+      const cards = new Map<string, Rect>();
+      for (const [id, cell] of cells) {
+        const rect = measureNow(cell.node);
+        if (!rect) continue;
+        const shift = offset(id, at);
+        cards.set(id, { ...rect, x: rect.x + shift.x, y: rect.y + shift.y });
+      }
+      // A card stood in for by its copy is where the copy is, not where its hidden self waits.
+      const stand = standing();
+      for (const ghost of ghostList)
+        if (stand.has(ghost.key)) cards.set(ghost.key, ghostRect(ghost, at));
+      const { laneOf, byId } = index(current);
+      const flying = new Set(ghostList.filter((ghost) => ghost.reveal).map((ghost) => ghost.key));
+      return {
+        frame: { cards, lanes: laneRects(), laneOf, viewport: measureNow(store.layer) },
+        cards: byId,
+        flying,
+        neighbours: laneNeighbours(current, LANE_ORDER),
+      };
+    },
+    freeze(before, last, next) {
+      const viewport = before.frame.viewport;
+      if (!COVER || !viewport) return;
+      const changed = new Set(coveredLanes);
+      LANE_ORDER.forEach((lane) => {
+        // Cards added after a lane's last one (a new task in the running lane)
+        // move nothing on screen: they enter under no cover, and the lane's
+        // cards are not drawn a second time for it.
+        if (
+          !sameCards(last[lane].cards, next[lane].cards) &&
+          !appended(last[lane].cards, next[lane].cards)
+        )
+          changed.add(lane);
+      });
+      const { byId, laneOf } = index(next);
+      const origin = { x: viewport.x, y: viewport.y };
+      // The same objects, so a fade under way goes on rather than starting over.
+      const kept = ghostList.filter(
+        (ghost) => ghost.fade === "out" && Number.isFinite(ghost.start),
+      );
+      const copies: Ghost[] = [...kept];
+      const taken = new Set(kept.map((ghost) => ghost.key));
+      for (const [id, rect] of before.frame.cards) {
+        const lane = before.frame.laneOf.get(id);
+        if (taken.has(id) || lane === undefined || !changed.has(lane)) continue;
+        if (!inView(rect, before.frame.lanes.get(lane) ?? null, viewport)) continue;
+        // A card that leaves the lanes on screen fades as it was; one that stays or flies shows as it is now.
+        const leaves = !byId.has(id) || (!flights && laneOf.get(id) !== lane);
+        const card = leaves ? before.cards.get(id) : byId.get(id);
+        if (!card) continue;
+        copies.push({
+          key: id,
+          card,
+          from: rect,
+          to: rect,
+          fade: "none",
+          reveal: false,
+          start: Infinity,
+          duration: 0,
+          origin,
+        });
+      }
+      // Read by the lanes and the layer in this same render; nothing is notified while rendering.
+      coveredLanes = changed;
+      ghostList = copies;
+      // A render that never commits leaves no cover behind.
+      holdCover(COVER_LIMIT_MS);
+    },
+    play(before, next) {
+      const at = now();
+      const { laneOf, byId } = index(next);
+      const laneAt = laneRects();
+      const cards = new Map<string, Rect>();
+      for (const [id, cell] of cells) {
+        const rect = measureNow(cell.node);
+        if (rect) cards.set(id, rect);
+      }
+      const viewport = measureNow(store.layer);
+      const after: MotionFrame = { cards, lanes: laneAt, laneOf, viewport };
+      const moved = movedCards(before.neighbours, laneNeighbours(next, LANE_ORDER));
+      if (COVER) {
+        // Each card where it will be once its list has scrolled.
+        const shifts = scrollLists(before.frame, after, moved);
+        for (const [id, rect] of cards) {
+          const lane = laneOf.get(id);
+          const shift = lane !== undefined ? (shifts.get(lane) ?? 0) : 0;
+          if (shift) cards.set(id, { ...rect, y: rect.y + shift });
+        }
+      }
+      const moves = planLaneMotion(before.frame, after, { flights, flying: before.flying });
+      for (const move of moves) {
+        if (move.kind === "leave" || (move.kind === "fly" && !move.land)) {
+          arrivals.delete(move.id);
+          continue;
+        }
+        // Unchanged neighbours only make room; emphasize the updated card itself.
+        if (before.cards.get(move.id) !== byId.get(move.id)) arrivals.add(move.id);
+      }
+      // A card that leaves draws as it was; one that flies, as it will be where it lands.
+      const cardOf = (move: LaneMove) =>
+        move.kind === "leave"
+          ? before.cards.get(move.id)
+          : (byId.get(move.id) ?? before.cards.get(move.id));
+      if (COVER) {
+        if (coveredLanes.size > 0) playCover(moves, before.frame, after, at, cardOf, byId, moved);
+      } else if (moves.length > 0) {
+        playOnCards(moves, at, cardOf, viewport);
+      }
+    },
+    finish(key) {
+      const ghost = ghostList.find((item) => item.key === key);
+      if (!ghost) return;
+      if (COVER) {
+        // The last copy home lifts the cover; a copy that faded out simply goes.
+        const rest = ghostList.filter((item) => item !== ghost);
+        const moving = rest.some(
+          (item) => Number.isFinite(item.start) && now() < item.start + item.duration + 50,
+        );
+        if (moving) {
+          if (ghost.fade === "out") setGhosts(rest);
+        } else uncover();
+        return;
+      }
+      // The card it carried shows, and the ghost goes a frame later, over the card.
+      if (ghost.reveal) {
+        cells.get(key)?.values?.opacity.setValue(1);
+        arrive(key);
+      }
+      const remove = () => setGhosts(ghostList.filter((item) => item !== ghost));
+      if (ghost.reveal && typeof requestAnimationFrame === "function")
+        requestAnimationFrame(remove);
+      else remove();
+    },
+    settle() {
+      arrivals.clear();
+      slides.forEach((entry) => entry.animation.stop());
+      slides.clear();
+      cells.forEach((cell) => {
+        cell.values?.x.setValue(0);
+        cell.values?.y.setValue(0);
+        cell.values?.opacity.setValue(1);
+      });
+      uncover();
+    },
+  };
+  return store;
+}
+
+/** `next` is `last` with cards added after its last one, and at least one card was before them. */
+export function appended(
+  last: readonly { id: string }[],
+  next: readonly { id: string }[],
+): boolean {
+  if (last.length === 0 || next.length <= last.length) return false;
+  for (let index = 0; index < last.length; index++)
+    if (last[index]!.id !== next[index]!.id) return false;
+  return true;
+}
+
+function laneRectOf(frame: MotionFrame, id: string): Rect | null {
+  const lane = frame.laneOf.get(id);
+  return lane === undefined ? null : (frame.lanes.get(lane) ?? null);
+}
+
+function index(lanes: Record<LaneId, LaneModel>): {
+  laneOf: Map<string, LaneId>;
+  byId: Map<string, TaskCard>;
+} {
+  const laneOf = new Map<string, LaneId>();
+  const byId = new Map<string, TaskCard>();
+  LANE_ORDER.forEach((lane) => {
+    for (const card of lanes[lane].cards) {
+      laneOf.set(card.id, lane);
+      byId.set(card.id, card);
+    }
+  });
+  return { laneOf, byId };
+}
+
+/**
+ * The board's lane motion. `scope` is what the user set that takes effect at
+ * once (search, sort): lanes that change with it take their new order without
+ * motion, as a search would be slow to read if every keystroke slid the
+ * cards. A filter is outside it, so its cards slide and fade.
+ *
+ * `churnLimit`: a change that brings more cards into lanes or takes more out
+ * than this shows at once, as a new scope does. Native covers every card on
+ * screen in the lanes that change with a copy, mounted with the new lanes and
+ * gone after them; with several lanes on screen (a tablet), a switch that
+ * adds or hides a card in every lane (the subtasks switch) doubled the cards
+ * that render and stalled the motion it was for.
+ */
+export function useLaneMotion(
+  lanes: Record<LaneId, LaneModel>,
+  options: { enabled: boolean; scope: unknown; flights: boolean; churnLimit?: number },
+): LaneMotionStore {
+  const [store] = useState(() => createLaneMotionStore(options.flights));
+  const committed = useRef<{ lanes: Record<LaneId, LaneModel>; scope: unknown } | null>(null);
+  const pending = useRef<{ lanes: Record<LaneId, LaneModel>; before: Snapshot } | null>(null);
+  const skipped = useRef(false);
+  const { enabled, scope, churnLimit } = options;
+  const last = committed.current;
+  // While the new lanes render, the screen still shows the old ones: measure them now.
+  if (
+    enabled &&
+    last &&
+    last.lanes !== lanes &&
+    last.scope === scope &&
+    pending.current?.lanes !== lanes &&
+    !sameOrder(last.lanes, lanes, LANE_ORDER)
+  ) {
+    if (
+      churnLimit !== undefined &&
+      laneChurn(last.lanes, lanes, LANE_ORDER, churnLimit) > churnLimit
+    ) {
+      skipped.current = true;
+    } else {
+      const before = store.snapshot(last.lanes);
+      store.freeze(before, last.lanes, lanes);
+      pending.current = { lanes, before };
+    }
+  }
+  useLayoutEffect(() => {
+    committed.current = { lanes, scope };
+    const before = pending.current;
+    pending.current = null;
+    if (enabled && before && before.lanes === lanes) store.play(before.before, lanes);
+    // A motion still under way when a large change shows at once ends with it.
+    else if (skipped.current) store.settle();
+    skipped.current = false;
+  }, [store, lanes, scope, enabled]);
+  useEffect(() => {
+    if (!enabled) store.settle();
+  }, [store, enabled]);
+  useEffect(() => () => store.settle(), [store]);
+  return store;
+}
+
+const LaneMotionContext = createContext<LaneMotionStore | null>(null);
+export const LaneMotionProvider = LaneMotionContext.Provider;
+
+/**
+ * A card cell's part in the lane motion: its slot registered with the board's
+ * store under the card's id, and on the web its offset and visibility. Null
+ * values outside a board (the settings preview), on native, or when `off` (a
+ * copy of a card: a ghost, the phone's outgoing lane).
+ */
+export function useCardMotion(
+  id: string,
+  node: React.RefObject<unknown>,
+  off: boolean,
+  onArrive?: () => void,
+): CellValues | null {
+  const store = useContext(LaneMotionContext);
+  const [values] = useState<CellValues | null>(() =>
+    COVER
+      ? null
+      : { x: new Animated.Value(0), y: new Animated.Value(0), opacity: new Animated.Value(1) },
+  );
+  const active = store && !off ? store : null;
+  useLayoutEffect(() => {
+    if (!active) return;
+    return active.attach(id, node.current, values, onArrive);
+  }, [active, id, node, values, onArrive]);
+  return active ? values : null;
+}
+
+/** Native: the lane's list is hidden while copies of its cards move over it. */
+export function useLaneCovered(id: LaneId): boolean {
+  const store = useContext(LaneMotionContext);
+  const read = () => (store ? store.covered().has(id) : false);
+  return useSyncExternalStore(store ? store.subscribe : noSubscribe, read, read);
+}
+
+const noSubscribe = () => () => {};
+
+/**
+ * The copies of cards in motion, above the lanes and clipped to them. Its
+ * own rect is the ghosts' origin; nothing in it takes a touch.
+ */
+export function LaneMotionLayer(props: {
+  store: LaneMotionStore;
+  renderCard(card: TaskCard): ReactNode;
+}) {
+  const { store } = props;
+  const ghosts = useSyncExternalStore(store.subscribe, store.ghosts, store.ghosts);
+  const ref = useRef<View>(null);
+  useLayoutEffect(() => {
+    store.layer = ref.current;
+    return () => {
+      if (store.layer === ref.current) store.layer = null;
+    };
+  }, [store]);
+  return (
+    <View
+      ref={ref}
+      collapsable={false}
+      pointerEvents="none"
+      style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, overflow: "hidden" }}
+    >
+      {ghosts.map((ghost) => (
+        <GhostCard
+          key={ghost.key}
+          ghost={ghost}
+          onDone={store.finish}
+          renderCard={props.renderCard}
+        />
+      ))}
+    </View>
+  );
+}
+
+/** Drawn again only when its own ghost changes: another copy landing or fading out leaves it, and its animation, alone. */
+const GhostCard = memo(function GhostCard(props: {
+  ghost: Ghost;
+  onDone(key: string): void;
+  renderCard(card: TaskCard): ReactNode;
+}) {
+  const { ghost, onDone } = props;
+  // A value per ghost: a copy sent on from where it is starts at 0 in the
+  // draw that moves it, with no reset from an effect, which on the native
+  // driver would reach the screen before that draw.
+  const t = useMemo(() => new Animated.Value(0), [ghost]);
+  useLayoutEffect(() => {
+    // A cover's copy waits, drawn where its card was, until it knows where to go.
+    if (!Number.isFinite(ghost.start)) return;
+    // Drawn a little after the move was planned: pick up where the card should be by now.
+    const wait = Math.max(0, ghost.start - now());
+    const elapsed = Math.min(ghost.duration, Math.max(0, now() - ghost.start));
+    const animation = Animated.timing(t, {
+      toValue: 1,
+      delay: wait,
+      duration: ghost.duration - elapsed,
+      easing: MOTION.ease,
+      useNativeDriver: ghostDriver,
+    });
+    animation.start(({ finished }) => {
+      if (finished) onDone(ghost.key);
+    });
+    return () => animation.stop();
+  }, [ghost, t, onDone]);
+  // One set of animated nodes per ghost: new ones on every draw would be attached to the native value again mid-flight.
+  const style = useMemo(() => {
+    const { origin } = ghost;
+    const dx = ghost.to.x - ghost.from.x;
+    const dy = ghost.to.y - ghost.from.y;
+    const opacity =
+      ghost.fade === "out"
+        ? t.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })
+        : ghost.fade === "in"
+          ? t.interpolate({ inputRange: [0, 1], outputRange: [0, 1] })
+          : 1;
+    const scale =
+      ghost.fade === "out"
+        ? t.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] })
+        : ghost.fade === "in"
+          ? t.interpolate({ inputRange: [0, 1], outputRange: [MOTION.enterScale, 1] })
+          : 1;
+    // A card coming in rises into its place as it enters.
+    const rise = ghost.fade === "in" ? MOTION.enterShift : 0;
+    return {
+      position: "absolute" as const,
+      left: ghost.from.x - origin.x,
+      top: ghost.from.y - origin.y,
+      width: ghost.to.width,
+      opacity,
+      transform: [
+        { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, dx] }) },
+        { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [rise, dy] }) },
+        { scale },
+      ],
+    };
+  }, [ghost, t]);
+  return <Animated.View style={style}>{props.renderCard(ghost.card)}</Animated.View>;
+});
+
+/**
+ * Where a lane's cards show, for the cards that fly to it: `node` answers the
+ * lane's list when expanded and its pill when collapsed; `scrollTo` scrolls
+ * the list, so it keeps what it shows when cards come or go above it.
+ */
+export function useLaneTarget(
+  id: LaneId,
+  node: () => unknown,
+  scrollTo?: (offset: number) => void,
+): void {
+  const store = useContext(LaneMotionContext);
+  const latest = useRef({ node, scrollTo });
+  latest.current = { node, scrollTo };
+  useLayoutEffect(() => {
+    if (!store) return;
+    store.setLane(
+      id,
+      () => latest.current.node(),
+      (offset) => latest.current.scrollTo?.(offset),
+    );
+    return () => store.setLane(id, null);
+  }, [store, id]);
+}

@@ -1,0 +1,161 @@
+import type { TasksLanguage } from "../i18n";
+
+/**
+ * Only classify explicit provider errors; an ambiguous status code is not a diagnosis.
+ * `hasReset`: the card already shows when the limit resets (`cardErrorReset`).
+ */
+export function errorAction(
+  error: string,
+  language: TasksLanguage,
+  hasReset = false,
+): string | null {
+  const zh = language === "zh";
+  if (
+    /^Individual quota reached\. Please upgrade your subscription to increase your limits\. Resets in [\dhms]+\.$/i.test(
+      error.trim(),
+    )
+  ) {
+    return language === "zh-TW"
+      ? "檢視帳戶用量，等待重設或升級訂閱。"
+      : zh
+        ? "查看账户用量，等待重置或升级订阅。"
+        : "Check account usage, wait for the reset, or upgrade your subscription.";
+  }
+  if (/credit_balance_exhausted|credit balance is too low|insufficient_quota/i.test(error)) {
+    return language === "zh-TW"
+      ? "檢查服務商的餘額和用量限制，再繼續未完成的工作。"
+      : zh
+        ? "检查服务商的余额和用量限制，再继续未完成的工作。"
+        : "Check the provider's balance and usage limits, then continue the unfinished work.";
+  }
+  if (
+    /project_spend_limit_exceeded|organization_spend_limit_exceeded|monthly spend limit|org.s monthly usage limit/i.test(
+      error,
+    )
+  ) {
+    return language === "zh-TW"
+      ? "檢查帳戶或組織的支出上限，調整後繼續未完成的工作。"
+      : zh
+        ? "检查账户或组织的支出上限，调整后继续未完成的工作。"
+        : "Check the account or organization spending limit before continuing the unfinished work.";
+  }
+  if (
+    /subscription_sharing_usage_limit_exceeded|usage_limit_exceeded|you've hit your [^\n]*limit|you're out of extra usage|claude ai usage limit reached|individual quota reached/i.test(
+      error,
+    )
+  ) {
+    if (hasReset)
+      return language === "zh-TW"
+        ? "額度重設後繼續未完成的工作。"
+        : zh
+          ? "额度重置后继续未完成的工作。"
+          : "Continue the unfinished work after the limit resets.";
+    return language === "zh-TW"
+      ? "檢查帳戶用量，額度恢復後繼續。"
+      : zh
+        ? "检查账户用量，额度恢复后继续。"
+        : "Check account usage and continue once the limit is restored.";
+  }
+  if (
+    /rate_limit_exceeded|rate_limit_error|rate limit (?:reached|exceeded)|too many requests/i.test(
+      error,
+    )
+  ) {
+    return language === "zh-TW"
+      ? "降低請求頻率，稍後繼續未完成的工作。"
+      : zh
+        ? "降低请求频率，稍后继续未完成的工作。"
+        : "Reduce request frequency and continue the unfinished work after a delay.";
+  }
+  if (/\b(?:http|status|api error:)\s*429\b/i.test(error)) {
+    return language === "zh-TW"
+      ? "檢查服務商的限速和用量詳情，按原始錯誤提示處理。"
+      : zh
+        ? "检查服务商的限速和用量详情，按原始错误提示处理。"
+        : "Check the provider's rate and usage limits and follow the original error.";
+  }
+  if (
+    /context_length_exceeded|context window (?:is )?(?:full|exceeded)|prompt is too long|maximum context length/i.test(
+      error,
+    )
+  ) {
+    return language === "zh-TW"
+      ? "縮短輸入或整理上下文，再開啓新會話繼續。"
+      : zh
+        ? "缩短输入或整理上下文，再开启新会话继续。"
+        : "Shorten the input or summarize the context, then continue in a new session.";
+  }
+  if (
+    /invalid api key|authentication_error|authentication failed|unauthorized|please authenticate|token_expired|invalid_refresh_token|\b(?:http|status|api error:)\s*401\b/i.test(
+      error,
+    )
+  ) {
+    return language === "zh-TW"
+      ? "檢查登錄狀態或 API 憑據，修正後重試。"
+      : zh
+        ? "检查登录状态或 API 凭据，修正后重试。"
+        : "Check your sign-in or API credentials, correct them, and retry.";
+  }
+  if (
+    /permission_error|permission denied|forbidden|access denied|\b(?:http|status|api error:)\s*403\b/i.test(
+      error,
+    )
+  ) {
+    return language === "zh-TW"
+      ? "檢查錯誤詳情中的權限和資源訪問設定，再重試。"
+      : zh
+        ? "检查错误详情中的权限和资源访问设置，再重试。"
+        : "Check the permissions and resource access in the error details, then retry.";
+  }
+  if (/model_not_found|resource_not_found|model (?:is )?(?:not found|unavailable)/i.test(error)) {
+    return language === "zh-TW"
+      ? "檢查模型名稱和帳戶訪問權限，必要時更換模型。"
+      : zh
+        ? "检查模型名称和账户访问权限，必要时更换模型。"
+        : "Check the model name and account access; select another model if needed.";
+  }
+  if (/invalid_request_error|invalid_request\b|bad request/i.test(error)) {
+    return language === "zh-TW"
+      ? "檢查錯誤詳情中的輸入和設定，修正後重試。"
+      : zh
+        ? "检查错误详情中的输入和配置，修正后重试。"
+        : "Check the input and configuration in the error details, correct them, and retry.";
+  }
+  if (/sandbox_error|mcp_server_startup_failed/i.test(error)) {
+    return language === "zh-TW"
+      ? "檢查執行環境及相關服務的設定和日誌，修正後重試。"
+      : zh
+        ? "检查运行环境及相关服务的配置和日志，修正后重试。"
+        : "Check the environment and related service configuration and logs, then retry.";
+  }
+  if (
+    /request_timeout|api.?timeout|timed? ?out|connection_failed|connection (?:closed|failed|refused|reset)|network error|econnreset|econnrefused|enotfound/i.test(
+      error,
+    )
+  ) {
+    return language === "zh-TW"
+      ? "檢查網路和代理，確認已完成的操作後繼續。"
+      : zh
+        ? "检查网络和代理，确认已完成的操作后继续。"
+        : "Check the network and proxy, then continue after reviewing completed actions.";
+  }
+  if (
+    /overloaded_error|server_overloaded|server_is_overloaded|(?:api error:|http|status)\s*(?:500|502|503|504|529)\b/i.test(
+      error,
+    )
+  ) {
+    return language === "zh-TW"
+      ? "檢查已完成的操作，稍後繼續。"
+      : zh
+        ? "检查已完成的操作，稍后继续。"
+        : "Review completed actions and continue later.";
+  }
+  if (/provider exited|process exited|process terminated/i.test(error)) {
+    return language === "zh-TW"
+      ? "檢視錯誤詳情和執行日誌，處理退出原因後繼續。"
+      : zh
+        ? "查看错误详情和运行日志，处理退出原因后继续。"
+        : "Check the error details and runtime logs, resolve the exit cause, and continue.";
+  }
+  return null;
+}

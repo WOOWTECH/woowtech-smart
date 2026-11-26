@@ -163,7 +163,7 @@ test("Windows windows come to the front and the first close explains the tray (p
   const main = source("packages/desktop/src/main.ts");
   assert.match(
     main,
-    /once\("ready-to-show", \(\) => \{[\s\S]*?if \(process.platform === "win32"\) raiseWindowsWindow\(mainWindow\);\s*else mainWindow.show\(\);/,
+    /if \(process.platform === "win32"\) \{\s*(?:\/\/[^\n]*\n\s*)?mainWindow.once\("ready-to-show", \(\) => raiseWindowsWindow\(mainWindow\)\);\s*\} else \{\s*showWindowWhenReady\(mainWindow, \{\s*showOnLoad: process.platform === "linux",\s*\}\);/,
   );
   assert.match(
     main,

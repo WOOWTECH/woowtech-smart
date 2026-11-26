@@ -1,0 +1,907 @@
+import React, { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import type { PluginTheme } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/client/ui";
+import {
+  CARD_FIELDS,
+  DENSITY_PRESETS,
+  DONE_WINDOWS,
+  LABEL_LIMITS,
+  LANE_WIDTHS,
+  SIDEBAR_COUNTS,
+  applyDensity,
+  effectiveCard,
+  setCardSetting,
+  type CardField,
+  type Density,
+  type DoneWindow,
+  type LabelLimit,
+  type LaneWidth,
+  type SidebarCount,
+  type TasksSettings,
+} from "../../../shared/tasks-settings";
+import { CARD_TITLE_LINE_COUNTS } from "../device-store";
+import { mix, radiusV2, space } from "../../components/theme-tokens";
+import {
+  Group,
+  PHONE_PREVIEW_WIDTH,
+  PlainButton,
+  ResetRow,
+  Section,
+  Segmented,
+  SettingsTips,
+  SettingRow,
+  Toggle,
+  controlStyles,
+  settingsTextStyle,
+  type PageLook,
+} from "../../settings-controls";
+import { HOST_FONT, TaskText, TasksTypography } from "../typography";
+import { StatusIcon } from "../cards";
+import { taskTokens } from "../cards/tokens";
+import { LANE_STATUS } from "../model";
+import { sidebarCountParts, sidebarCountText } from "../board/navigation";
+import { BOARD_STRINGS } from "../board/strings";
+import { tasksBoardOpener } from "../board/enabled";
+import { useTasksLanguage } from "../i18n";
+import { PREVIEW_LANES_MAX_HEIGHT, TasksBoardPreview } from "./board-preview";
+import { TASKS_SETTINGS_STRINGS, type TasksSettingsStrings } from "./strings";
+import { dismissEnabledNotice, useTasksForm, type TasksForm } from "./use-tasks-form";
+import { TitleGenerationSettings } from "./title-generation";
+import { HiddenCount, hiddenExampleCard } from "../board/hidden-count";
+import { FieldPreview } from "./field-preview";
+import { OpenTasksShortcut } from "./open-shortcut";
+
+/**
+ * The Tasks half of Better Paseo's settings page: the switch, the preview
+ * of the board, and every option of it. It edits the host's Tasks settings
+ * through `useTasksForm`: board layout preferences stay on
+ * the device, while the shared enable switch updates the sidebar at once.
+ */
+
+const options = <Value extends string>(values: readonly Value[], labels: Record<Value, string>) =>
+  values.map((value) => ({ value, label: labels[value] }));
+
+function useStrings(): { strings: TasksSettingsStrings; language: "en" | "zh" | "zh-TW" } {
+  const language = useTasksLanguage();
+  return { strings: TASKS_SETTINGS_STRINGS[language], language };
+}
+
+/** A block inside a section's card, under a 1pt rule, padded like a row. */
+function RowBlock({
+  look,
+  children,
+  testID,
+  tint,
+}: {
+  look: PageLook;
+  children: React.ReactNode;
+  testID?: string;
+  tint?: string;
+}) {
+  return (
+    <View
+      testID={testID}
+      style={[
+        styles.block,
+        { borderTopColor: look.tokens.v2.border },
+        tint ? { backgroundColor: tint } : null,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+function Note({ text, look, danger = false }: { text: string; look: PageLook; danger?: boolean }) {
+  const { tokens, compact } = look;
+  return (
+    <Text
+      style={[
+        controlStyles.rowNote,
+        settingsTextStyle(tokens, -1),
+        compact ? controlStyles.sectionTitleInset : controlStyles.sectionTitleDesktop,
+        { color: danger ? tokens.warning : tokens.foregroundMuted, fontFamily: tokens.fontUi },
+      ]}
+    >
+      {text}
+    </Text>
+  );
+}
+
+/** Saving, a refused save, a failed one: one line over the options. */
+function FormNotes({
+  form,
+  strings,
+  look,
+}: {
+  form: TasksForm;
+  strings: TasksSettingsStrings;
+  look: PageLook;
+}) {
+  const { settings } = form;
+  if (form.localError) return <Note text={strings.saveError(form.localError)} look={look} danger />;
+  if (settings.saveError)
+    return <Note text={strings.saveError(settings.saveError)} look={look} danger />;
+  if (form.conflict) return <Note text={strings.conflict} look={look} />;
+  return null;
+}
+
+/** Said once the switch went on here: where the entry is, and the board one press away. */
+function EnabledNotice({ strings, look }: { strings: TasksSettingsStrings; look: PageLook }) {
+  const { tokens } = look;
+  const open = tasksBoardOpener();
+  return (
+    <RowBlock
+      look={look}
+      testID="tasks-enabled-notice"
+      tint={mix(tokens.v2.surface1, tokens.accent, tokens.isDark ? 0.14 : 0.07)}
+    >
+      <View accessibilityLiveRegion="polite" style={styles.noticeLine}>
+        <View style={[styles.noticeDot, { backgroundColor: tokens.accent }]} />
+        <View style={styles.noticeText}>
+          <Text
+            style={[
+              look.compact ? controlStyles.rowTitleCompact : controlStyles.rowTitleDesktop,
+              settingsTextStyle(tokens),
+              { color: tokens.foreground, fontFamily: tokens.fontUi },
+            ]}
+          >
+            {strings.enabledConfirm}
+          </Text>
+          <Text
+            style={[
+              controlStyles.rowNote,
+              settingsTextStyle(tokens, -1),
+              { color: tokens.foregroundMuted, fontFamily: tokens.fontUi },
+            ]}
+          >
+            {strings.enabledConfirmHint}
+          </Text>
+        </View>
+        {open ? (
+          <PlainButton
+            label={strings.openBoard}
+            onPress={() => {
+              dismissEnabledNotice();
+              open();
+            }}
+            look={look}
+          />
+        ) : null}
+      </View>
+    </RowBlock>
+  );
+}
+
+/** The switch row and the host-scoped settings intro. */
+function EnabledRow({
+  form,
+  strings,
+  look,
+}: {
+  form: TasksForm;
+  strings: TasksSettingsStrings;
+  look: PageLook;
+}) {
+  const { settings } = form;
+  const ready = settings.status === "ready";
+  let description = strings.enabledHint;
+  if (settings.status === "loading") description = strings.loading;
+  else if (settings.status === "error") description = strings.error(settings.error);
+  else if (settings.status === "invalid") description = strings.invalid(settings.error);
+  return (
+    <SettingRow
+      title={strings.enabled}
+      description={`${description}\n${look.t.pageIntro}`}
+      control={
+        <Toggle
+          value={ready ? settings.values.enabled : false}
+          onChange={form.setEnabled}
+          label={strings.enabled}
+          look={look}
+        />
+      }
+      look={look}
+      first
+      disabled={!ready}
+    />
+  );
+}
+
+type PreviewDevice = "desktop" | "mobile";
+
+/**
+ * The preview in its frame: a title, what it shows, the board. On a wide
+ * page a Desktop / Mobile switch, as the chat preview has, draws the board
+ * as a phone does in a phone-wide frame; on a phone it is the phone's already.
+ */
+function PreviewCard(props: {
+  look: PageLook;
+  theme: PluginTheme;
+  values: TasksSettings;
+  titleLines: TasksForm["titleLines"];
+  strings: TasksSettingsStrings;
+  language: "en" | "zh" | "zh-TW";
+  hostId?: string;
+}) {
+  const { look, strings, values } = props;
+  const { tokens, compact } = look;
+  const [device, setDevice] = useState<PreviewDevice>("desktop");
+  const phone = compact || device === "mobile";
+  const header = (
+    <View style={styles.previewHeader}>
+      <View style={styles.previewHeaderText}>
+        <Text
+          style={[
+            controlStyles.rowTitleDesktop,
+            settingsTextStyle(tokens),
+            { color: tokens.foreground, fontFamily: tokens.fontUi },
+          ]}
+        >
+          {strings.previewTitle}
+        </Text>
+        <Text
+          style={[
+            controlStyles.rowNote,
+            settingsTextStyle(tokens, -1),
+            { color: tokens.foregroundMuted, fontFamily: tokens.fontUi },
+          ]}
+        >
+          {values.enabled ? strings.previewOnHint : strings.previewOffHint}
+        </Text>
+      </View>
+      {values.enabled ? null : (
+        <Text
+          style={[
+            styles.tag,
+            settingsTextStyle(tokens, -2),
+            {
+              color: tokens.foregroundMuted,
+              borderColor: tokens.v2.border,
+              fontFamily: tokens.fontUi,
+            },
+          ]}
+        >
+          {strings.previewOffTag}
+        </Text>
+      )}
+      {compact ? null : (
+        <Segmented<PreviewDevice>
+          label={look.t.previewDevice}
+          value={device}
+          options={[
+            { value: "desktop", label: look.t.previewDesktop },
+            { value: "mobile", label: look.t.previewMobile },
+          ]}
+          onChange={setDevice}
+          look={look}
+        />
+      )}
+    </View>
+  );
+  const frame = { backgroundColor: props.theme.colors.surface0, borderColor: tokens.v2.border };
+  const board =
+    phone && !compact ? (
+      <View style={styles.previewPhoneStage} testID="tasks-preview-phone">
+        <View style={[styles.previewPhone, frame]}>
+          <TasksBoardPreview
+            theme={props.theme}
+            values={values}
+            titleLines={props.titleLines}
+            language={props.language}
+            phone
+            listMaxHeight={PREVIEW_LANES_MAX_HEIGHT}
+            hostId={props.hostId}
+          />
+        </View>
+      </View>
+    ) : (
+      <View style={[styles.previewBoard, compact ? styles.previewBoardCompact : null, frame]}>
+        <TasksBoardPreview
+          theme={props.theme}
+          values={values}
+          titleLines={props.titleLines}
+          language={props.language}
+          phone={phone}
+          hostId={props.hostId}
+        />
+      </View>
+    );
+  return (
+    <View
+      testID="tasks-preview-card"
+      style={[
+        styles.previewCard,
+        { borderColor: tokens.v2.border, backgroundColor: tokens.v2.surface1 },
+      ]}
+    >
+      {header}
+      <TasksTypography theme={props.theme}>{board}</TasksTypography>
+    </View>
+  );
+}
+
+/** A field switch as a chip: a row of them fits beside the preview where fifteen switch rows would not. */
+function FieldChip({
+  label,
+  on,
+  onPress,
+  look,
+}: {
+  label: string;
+  on: boolean;
+  onPress(): void;
+  look: PageLook;
+}) {
+  const { tokens } = look;
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: on }}
+      aria-checked={on}
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={look.compact ? 4 : 0}
+      style={({ pressed }) => [
+        styles.chip,
+        look.compact ? styles.chipCompact : null,
+        {
+          borderColor: on ? tokens.accent : tokens.v2.border,
+          backgroundColor: on
+            ? mix(tokens.v2.surface0, tokens.accent, tokens.isDark ? 0.2 : 0.1)
+            : pressed
+              ? tokens.v2.surface2
+              : tokens.v2.surface0,
+        },
+      ]}
+    >
+      <Text
+        style={[
+          styles.chipMark,
+          settingsTextStyle(tokens, -2),
+          { color: on ? tokens.accent : tokens.foregroundSubtle },
+        ]}
+      >
+        {on ? "\u2713" : "+"}
+      </Text>
+      <Text
+        style={[
+          styles.chipLabel,
+          settingsTextStyle(tokens, -1),
+          { color: on ? tokens.foreground : tokens.foregroundMuted, fontFamily: tokens.fontUi },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ResetRows({
+  strings,
+  look,
+  hint,
+  onRestore,
+}: {
+  strings: TasksSettingsStrings;
+  look: PageLook;
+  hint: string;
+  onRestore(): Promise<void>;
+}) {
+  return (
+    <Section title={strings.resetTitle} look={look}>
+      <ResetRow
+        first
+        look={look}
+        title={strings.reset}
+        description={hint}
+        confirmDescription={strings.resetConfirmHint}
+        onReset={onRestore}
+      />
+    </Section>
+  );
+}
+
+function ModuleResetRow({
+  module,
+  strings,
+  look,
+  onRestore,
+}: {
+  module: string;
+  strings: TasksSettingsStrings;
+  look: PageLook;
+  onRestore(): Promise<void>;
+}) {
+  return (
+    <ResetRow
+      look={look}
+      title={strings.moduleReset(module)}
+      description={strings.moduleResetHint}
+      confirmDescription={strings.moduleResetConfirmHint}
+      onReset={onRestore}
+    />
+  );
+}
+
+/**
+ * The Tasks half of the settings page: the switch, sidebar counts, preview,
+ * and the board options. Wide, board display options sit beside title
+ * generation under the preview, so a switch and its effect share a screen.
+ */
+export function TasksSettingsPanel({
+  look,
+  theme,
+  side,
+  hostId,
+}: {
+  look: PageLook;
+  theme: PluginTheme;
+  side: boolean;
+  hostId?: string;
+}) {
+  const { strings, language } = useStrings();
+  const form = useTasksForm();
+  const { settings, commit, titleLines, setTitleLines } = form;
+
+  const switchSection = (
+    <View style={styles.section}>
+      <Group look={look}>
+        <EnabledRow form={form} strings={strings} look={look} />
+        <OpenTasksShortcut
+          value={form.openShortcut}
+          ready={form.shortcutReady}
+          onChange={form.setOpenShortcut}
+          strings={strings}
+          look={look}
+        />
+        {form.turnedOn ? <EnabledNotice strings={strings} look={look} /> : null}
+      </Group>
+      {settings.status === "ready" ? (
+        <Group look={look}>
+          <SettingRow
+            title={strings.showArchived}
+            description={strings.showArchivedHint}
+            control={
+              <Toggle
+                value={settings.values.board.showArchived}
+                onChange={(next) =>
+                  void commit({
+                    ...settings.values,
+                    board: { ...settings.values.board, showArchived: next },
+                  })
+                }
+                label={strings.showArchived}
+                look={look}
+              />
+            }
+            look={look}
+            first
+          />
+        </Group>
+      ) : null}
+      <FormNotes form={form} strings={strings} look={look} />
+    </View>
+  );
+
+  if (settings.status === "invalid") {
+    return (
+      <View style={styles.panel} testID="tasks-settings-panel">
+        {switchSection}
+        <ResetRows
+          strings={strings}
+          look={look}
+          hint={strings.resetInvalidHint}
+          onRestore={() => form.restoreDefaults()}
+        />
+      </View>
+    );
+  }
+  if (settings.status !== "ready") {
+    return (
+      <View style={styles.panel} testID="tasks-settings-panel">
+        {switchSection}
+      </View>
+    );
+  }
+
+  const values = settings.values;
+  const card = values.card;
+  const densities: Density[] =
+    values.density === "custom" ? [...DENSITY_PRESETS, "custom"] : [...DENSITY_PRESETS];
+
+  const cards = (
+    <Section title={strings.cardTitle} look={look}>
+      <SettingRow
+        title={strings.density}
+        description={strings.densityHint}
+        control={
+          <Segmented<Density>
+            label={strings.density}
+            value={values.density}
+            options={options(densities, strings.densities)}
+            onChange={(next) => {
+              if (next !== "custom") void commit(applyDensity(values, next));
+            }}
+            look={look}
+          />
+        }
+        look={look}
+        first
+        stacked
+      />
+      <SettingRow
+        title={strings.fieldsTitle}
+        description={strings.fieldsHint}
+        control={
+          <View>
+            <View
+              accessibilityLabel={strings.fieldsTitle}
+              style={styles.chips}
+              testID="tasks-field-chips"
+            >
+              {CARD_FIELDS.map((field: CardField) => (
+                <FieldChip
+                  key={field}
+                  label={strings.fields[field]}
+                  on={card[field]}
+                  onPress={() => void commit(setCardSetting(values, field, !card[field]))}
+                  look={look}
+                />
+              ))}
+            </View>
+            <FieldPreview
+              values={values}
+              titleLines={titleLines}
+              theme={theme}
+              look={look}
+              language={language}
+              strings={strings}
+              hostId={hostId}
+            />
+          </View>
+        }
+        look={look}
+        stacked
+      />
+      <SettingRow
+        title={strings.labelLimit}
+        control={
+          <Segmented<LabelLimit>
+            label={strings.labelLimit}
+            value={card.labelLimit}
+            options={options(LABEL_LIMITS, strings.labelLimits)}
+            onChange={(next) => void commit(setCardSetting(values, "labelLimit", next))}
+            look={look}
+          />
+        }
+        look={look}
+        stacked={look.compact}
+        disabled={!card.labels}
+      />
+      <SettingRow
+        title={strings.titleLines}
+        description={strings.titleLinesHint}
+        control={
+          <Segmented
+            label={strings.titleLines}
+            value={titleLines}
+            options={options(CARD_TITLE_LINE_COUNTS, strings.titleLineCounts)}
+            onChange={(next) => void setTitleLines(next)}
+            look={look}
+          />
+        }
+        look={look}
+        stacked={look.compact}
+      />
+      <SettingRow
+        title={strings.compactCards}
+        description={strings.compactCardsHint}
+        control={
+          <Toggle
+            value={values.mobile.compactCards}
+            onChange={(next) =>
+              void commit({ ...values, mobile: { ...values.mobile, compactCards: next } })
+            }
+            label={strings.compactCards}
+            look={look}
+          />
+        }
+        look={look}
+      />
+      <ModuleResetRow
+        module={strings.cardTitle}
+        strings={strings}
+        look={look}
+        onRestore={() => form.restoreCardDefaults()}
+      />
+    </Section>
+  );
+
+  const sidebar = (
+    <Section title={strings.sidebarTitle} look={look}>
+      <SettingRow
+        title={strings.sidebarCount}
+        control={
+          <Segmented<SidebarCount>
+            label={strings.sidebarCount}
+            value={values.sidebar.count}
+            options={options(SIDEBAR_COUNTS, strings.sidebarCounts)}
+            onChange={(next) => void commit({ ...values, sidebar: { count: next } })}
+            look={look}
+          />
+        }
+        look={look}
+        first
+        stacked
+        below={
+          <TasksTypography theme={theme}>
+            <View
+              testID="tasks-sidebar-preview"
+              style={{
+                borderWidth: 1,
+                borderColor: look.tokens.v2.border,
+                borderRadius: radiusV2.block,
+                backgroundColor: theme.colors.surface0,
+              }}
+            >
+              <View
+                style={{
+                  minHeight: 40,
+                  paddingHorizontal: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <Icon name="SquareKanban" size={16} color={theme.colors.foregroundMuted} />
+                <TaskText
+                  style={{ flex: 1, fontSize: HOST_FONT.base, color: theme.colors.foregroundMuted }}
+                >
+                  {BOARD_STRINGS[language].name}
+                </TaskText>
+                {values.sidebar.count !== "none" ? (
+                  <HiddenCount
+                    theme={theme}
+                    language={language}
+                    fields={effectiveCard(values, look.compact)}
+                    compact={look.compact}
+                    hostId={hostId}
+                    tasks={[hiddenExampleCard(language)]}
+                  />
+                ) : null}
+                <View
+                  accessible
+                  accessibilityLabel={sidebarCountText(
+                    sidebarCountParts(
+                      { needsInput: 2, running: 1, review: 1 },
+                      values.sidebar.count,
+                    ),
+                    language,
+                  )}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  {sidebarCountParts(
+                    { needsInput: 2, running: 1, review: 1 },
+                    values.sidebar.count,
+                  ).map((part) => (
+                    <View
+                      key={part.lane}
+                      testID={`tasks-sidebar-preview-${part.lane}`}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 3 }}
+                    >
+                      <StatusIcon
+                        kind={LANE_STATUS[part.lane]}
+                        size={14}
+                        theme={theme}
+                        animated={false}
+                      />
+                      <TaskText
+                        style={{
+                          fontSize: HOST_FONT.sm,
+                          fontWeight: part.lane === "needs_input" ? "600" : "400",
+                          color:
+                            part.lane === "needs_input"
+                              ? taskTokens(theme).status.warning
+                              : theme.colors.foregroundMuted,
+                        }}
+                      >
+                        {part.count}
+                      </TaskText>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </TasksTypography>
+        }
+      />
+    </Section>
+  );
+
+  const board = (
+    <Section title={strings.boardTitle} look={look}>
+      <SettingRow
+        title={strings.doneWindow}
+        control={
+          <Segmented<DoneWindow>
+            label={strings.doneWindow}
+            value={values.board.doneWindow}
+            options={options(DONE_WINDOWS, strings.doneWindows)}
+            onChange={(next) =>
+              void commit({ ...values, board: { ...values.board, doneWindow: next } })
+            }
+            look={look}
+          />
+        }
+        look={look}
+        first
+        stacked
+      />
+      {/* A phone shows one lane at a time: its lane width has nothing to change there. */}
+      {look.compact ? null : (
+        <SettingRow
+          title={strings.laneWidth}
+          description={strings.laneWidthHint}
+          control={
+            <Segmented<LaneWidth>
+              label={strings.laneWidth}
+              value={values.board.laneWidth}
+              options={options(LANE_WIDTHS, strings.laneWidths)}
+              onChange={(next) =>
+                void commit({ ...values, board: { ...values.board, laneWidth: next } })
+              }
+              look={look}
+            />
+          }
+          look={look}
+          stacked
+        />
+      )}
+      <SettingRow
+        title={strings.showSubtasks}
+        description={<SettingsTips items={strings.showSubtasksTips} look={look} />}
+        control={
+          <Toggle
+            value={!values.board.hideSubtasks}
+            onChange={(next) =>
+              void commit({ ...values, board: { ...values.board, hideSubtasks: !next } })
+            }
+            label={strings.showSubtasks}
+            look={look}
+          />
+        }
+        look={look}
+      />
+      <SettingRow
+        title={strings.showEmptyGroups}
+        description={<SettingsTips items={strings.showEmptyGroupsTips} look={look} />}
+        control={
+          <Toggle
+            value={values.board.showEmptyGroups}
+            onChange={(next) =>
+              void commit({ ...values, board: { ...values.board, showEmptyGroups: next } })
+            }
+            label={strings.showEmptyGroups}
+            look={look}
+          />
+        }
+        look={look}
+      />
+      <ModuleResetRow
+        module={strings.boardTitle}
+        strings={strings}
+        look={look}
+        onRestore={() => form.restoreBoardDefaults()}
+      />
+    </Section>
+  );
+  const reset = (
+    <ResetRows
+      strings={strings}
+      look={look}
+      hint={strings.resetHint}
+      onRestore={() => form.restoreDefaults()}
+    />
+  );
+
+  return (
+    <View style={styles.panel} testID="tasks-settings-panel">
+      {switchSection}
+      {sidebar}
+      <PreviewCard
+        look={look}
+        theme={theme}
+        values={values}
+        titleLines={titleLines}
+        strings={strings}
+        language={language}
+        hostId={hostId}
+      />
+      {side ? (
+        <View style={styles.columns}>
+          <View style={styles.column}>
+            {cards}
+            {board}
+          </View>
+          <View style={styles.column}>
+            <TitleGenerationSettings look={look} />
+            {reset}
+          </View>
+        </View>
+      ) : (
+        <>
+          {cards}
+          <TitleGenerationSettings look={look} />
+          {board}
+          {reset}
+        </>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  panel: { gap: space.xl },
+  section: { gap: space.sm },
+  columns: { flexDirection: "row", alignItems: "flex-start", gap: space.xl },
+  column: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, gap: space.xl },
+  block: {
+    borderTopWidth: 1,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    gap: space.md,
+  },
+  noticeLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.md },
+  noticeDot: { width: 8, height: 8, borderRadius: 4 },
+  noticeText: { flexGrow: 1, flexShrink: 1, flexBasis: 200, minWidth: 0, gap: 2 },
+  previewCard: { borderWidth: 1, borderRadius: radiusV2.card, overflow: "hidden" },
+  previewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingTop: space.md,
+    paddingHorizontal: space.lg,
+  },
+  previewHeaderText: { flex: 1, minWidth: 0, gap: 2 },
+  previewBoard: {
+    margin: space.md,
+    marginTop: space.md,
+    padding: space.sm,
+    borderWidth: 1,
+    borderRadius: radiusV2.block,
+  },
+  previewBoardCompact: { margin: space.sm, padding: 0, overflow: "hidden" },
+  previewPhoneStage: { margin: space.md, alignItems: "center" },
+  previewPhone: {
+    width: "100%",
+    maxWidth: PHONE_PREVIEW_WIDTH,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
+    borderWidth: 1,
+    borderRadius: radiusV2.bubble,
+  },
+  tag: {
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderRadius: radiusV2.chip,
+  },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderRadius: radiusV2.pill,
+  },
+  chipCompact: { minHeight: 34, paddingHorizontal: 12 },
+  chipMark: { fontSize: 12, lineHeight: 16, minWidth: 10, textAlign: "center", fontWeight: "600" },
+  chipLabel: { fontSize: 13, lineHeight: 18 },
+});

@@ -1,6 +1,13 @@
 import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { TFunction } from "i18next";
 import { PASEO_COPYRIGHT, PASEO_LICENSE_TEXT } from "./woowtech-paseo-license";
+import {
+  BETTER_PASEO_COPYRIGHT,
+  BETTER_PASEO_LICENSE_TEXT,
+  BETTER_PASEO_NAME,
+  BETTER_PASEO_SOURCE,
+  BETTER_PASEO_VERSION,
+} from "./woowtech-better-paseo-license";
 
 // woowtech smart: the Trademarks and third-party notices page (商標與第三方授權) in Settings,
 // woowtech/README.md section 24. It lists every third-party mark the app shows, with its owner and
@@ -63,6 +70,8 @@ export interface MitNotice {
   /** The work's copyright notices, as its license file writes them. */
   readonly copyright: readonly string[];
   readonly source: string;
+  /** A bundled work's complete license, reproduced verbatim alongside its attribution. */
+  readonly licenseText?: string;
 }
 
 const LICENSES = {
@@ -330,6 +339,12 @@ export const MIT_NOTICES: readonly MitNotice[] = [
     copyright: ["Copyright (c) 2016 The Gitea Authors", "Copyright (c) 2015 The Gogs Authors"],
     source: "https://github.com/go-gitea/gitea",
   },
+  {
+    work: `${BETTER_PASEO_NAME} ${BETTER_PASEO_VERSION}`,
+    copyright: [BETTER_PASEO_COPYRIGHT],
+    source: BETTER_PASEO_SOURCE,
+    licenseText: BETTER_PASEO_LICENSE_TEXT,
+  },
 ];
 
 /** The MIT License's permission notice, as material-icon-theme's LICENSE writes it. */
@@ -436,7 +451,11 @@ export function buildThirdPartyNotices(t: TFunction): NoticeSection[] {
         ...MIT_NOTICES.map((notice) => ({
           key: notice.logo ? `${notice.work} logo` : notice.work,
           title: notice.logo ? t(`${COPY}.logoOf`, { name: notice.work }) : notice.work,
-          lines: notice.copyright.concat(t(`${COPY}.source`, { source: notice.source })),
+          lines: [
+            ...notice.copyright,
+            t(`${COPY}.source`, { source: notice.source }),
+            ...(notice.licenseText ? [notice.licenseText] : []),
+          ],
         })),
         { key: "text", title: t(`${COPY}.sections.mitTextTitle`), lines: [MIT_LICENSE_TEXT] },
       ],

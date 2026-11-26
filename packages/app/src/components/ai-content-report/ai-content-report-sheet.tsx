@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useReducer } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Flag } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { AdaptiveModalSheet, AdaptiveTextInput } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
+import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
+import { PressHighlight } from "@/components/ui/press-highlight";
 import { Switch } from "@/components/ui/switch";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { getUtf8ByteLength } from "@/components/assistant-message-render-limit";
@@ -128,14 +130,15 @@ function ReasonOption({ reason, label, selected, onSelect }: ReasonOptionProps) 
   const style = useMemo(() => [styles.reason, selected ? styles.reasonSelected : null], [selected]);
 
   return (
-    <Pressable
+    <PressHighlight
       accessibilityRole="radio"
       accessibilityState={accessibilityState}
       onPress={handlePress}
       style={style}
+      highlightStyle={styles.reasonPressed}
     >
       <Text style={styles.bodyText}>{label}</Text>
-    </Pressable>
+    </PressHighlight>
   );
 }
 
@@ -181,16 +184,15 @@ export function AiContentReportAction({ getContent }: { getContent: () => string
   else if (state.error) submitLabel = copy.retry;
   return (
     <>
-      <Pressable
+      <ToolbarButton
         onPress={open}
-        accessibilityRole="button"
-        accessibilityLabel={copy.action}
+        label={copy.action}
         hitSlop={8}
         style={styles.trigger}
         testID="assistant-report-trigger"
       >
         <ThemedFlag size={ICON_SIZE.sm} uniProps={muted} />
-      </Pressable>
+      </ToolbarButton>
       <AdaptiveModalSheet
         visible={state.visible}
         onClose={close}
@@ -290,6 +292,7 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing[3],
   },
   reasonSelected: { borderColor: theme.colors.accent, backgroundColor: theme.colors.surface2 },
+  reasonPressed: { backgroundColor: theme.colors.surface2 },
   switchRow: {
     flexDirection: "row",
     alignItems: "center",

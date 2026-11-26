@@ -5,7 +5,6 @@ import { StyleSheet } from "react-native-unistyles";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
-import { ExternalLink } from "@/components/ui/external-link";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
@@ -21,12 +20,15 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const { config, isLoading: isConfigLoading, patchConfig } = useDaemonConfig(serverId);
   const snapshot = useProvidersSnapshot(serverId);
-  const providers = useMemo(
-    () => buildSelectableProviderSelectorProviders(snapshot.entries),
-    [snapshot.entries],
-  );
   const configuredProviders = config?.metadataGeneration.providers;
   const configuredProvider = configuredProviders?.[0] ?? null;
+  const providers = useMemo(
+    () =>
+      buildSelectableProviderSelectorProviders(snapshot.entries, {
+        selectedProvider: configuredProvider?.provider ?? null,
+      }),
+    [configuredProvider?.provider, snapshot.entries],
+  );
   const savedMode: SelectionMode = configuredProvider ? "preferred" : "automatic";
   const [draftMode, setDraftMode] = useState<SelectionMode | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,12 +93,7 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
     [snapshot],
   );
   const docsLink = useMemo(
-    () => (
-      <ExternalLink
-        href={METADATA_GENERATION_DOCS_URL}
-        label={t("settings.metadataGeneration.docs")}
-      />
-    ),
+    () => ({ href: METADATA_GENERATION_DOCS_URL, label: t("settings.metadataGeneration.docs") }),
     [t],
   );
 
@@ -112,7 +109,7 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
     <SettingsSection
       title={t("settings.metadataGeneration.title")}
       info={t("woowtech.metadataGeneration.description")}
-      trailing={docsLink}
+      link={docsLink}
       testID="metadata-generation-settings"
     >
       <View style={settingsStyles.card}>
@@ -131,7 +128,6 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
             options={modeOptions}
             value={mode}
             onValueChange={handleModeChange}
-            size="sm"
             testID="metadata-generation-mode"
           />
         </View>

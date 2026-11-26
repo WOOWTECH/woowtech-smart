@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { DesktopNotificationBridge, NotificationDeliveryResult } from "@/desktop/host";
 import { i18n } from "@/i18n/i18next";
 import {
@@ -7,6 +7,10 @@ import {
   sendDesktopTestNotification,
   type TestNotificationState,
 } from "./woowtech-notification-test";
+
+beforeAll(async () => {
+  await i18n.loadLanguages("zh-TW");
+});
 
 describe("woowtech notification test feedback", () => {
   it("reports timeout as unconfirmed instead of success or failure", async () => {

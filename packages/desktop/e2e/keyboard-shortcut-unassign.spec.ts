@@ -1,3 +1,5 @@
+import { clickNewChat, gotoWorkspace } from "../../app/e2e/support/helpers/launcher";
+import { clickSettingsBackToWorkspace } from "../../app/e2e/support/helpers/settings";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../../app/e2e/support/fixtures";
 import { gotoAppShell, openSettings } from "../../app/e2e/support/helpers/app";
@@ -145,6 +147,29 @@ test("unassigning a shortcut leaves it inert until it is reset", async ({ page }
   await page.keyboard.press("Shift+?");
   await expect(dialog).not.toBeVisible({ timeout: 5_000 });
 
+  await test.step("show the cleared shortcut in help, then bind new keys", async () => {
+    const help = await openCheatSheet(page);
+    const row = help.getByTestId(`shortcut-help-row-${SHORTCUTS_ROW}`);
+    await expect(row.getByText("Not set", { exact: true })).toBeVisible();
+    await expect(help.getByText("?", { exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await openSettings(page);
+    await openSettingsSection(page, "shortcuts");
+
+    await openRowMenu(page);
+    await bind.click();
+    await page.keyboard.press("Alt+Shift+K");
+    await page.getByText("Done", { exact: true }).click();
+    await expect(page.getByText("⌥⇧K", { exact: true })).toBeVisible();
+    const reboundHelp = await openCheatSheet(page);
+    const reboundRow = reboundHelp.getByTestId(`shortcut-help-row-${SHORTCUTS_ROW}`);
+    await expect(reboundRow.getByText("⌥⇧K", { exact: true })).toBeVisible();
+    await expect(reboundRow.getByText("?", { exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await openSettings(page);
+    await openSettingsSection(page, "shortcuts");
+  });
+
   await openRowMenu(page);
   await page.getByTestId(`shortcut-reset-${SHORTCUTS_ROW}`).click();
   await expect(notSet).toHaveCount(0);
@@ -157,49 +182,6 @@ test("unassigning a shortcut leaves it inert until it is reset", async ({ page }
   await expect(dialog).toBeVisible({ timeout: 10_000 });
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible({ timeout: 10_000 });
-});
-
-test("an unassigned shortcut lists no keys in the shortcuts cheat sheet", async ({ page }) => {
-  await openShortcutsSettings(page);
-
-  await openRowMenu(page);
-  await page.getByTestId(`shortcut-clear-${SHORTCUTS_ROW}`).click();
-  await expect(page.getByText("Not set", { exact: true })).toBeVisible();
-
-  const dialog = await openCheatSheet(page);
-
-  // Addressed by testID rather than by filtering on its own text: an anchored
-  // `hasText` matches only the innermost node holding exactly that label, so a
-  // row-scoped assertion about anything *else* in the row finds nothing.
-  const row = dialog.getByTestId(`shortcut-help-row-${SHORTCUTS_ROW}`);
-  await expect(row).toBeVisible();
-  // No badge pill, blank or otherwise, for a shortcut with no keys.
-  await expect(dialog.getByText("?", { exact: true })).toHaveCount(0);
-  // It says so, rather than leaving a silent gap where the keys were. Same words
-  // the settings row uses for the same state.
-  await expect(row.getByText("Not set", { exact: true })).toBeVisible();
-});
-
-test("a rebound shortcut lists its new keys in the shortcuts cheat sheet", async ({ page }) => {
-  await openShortcutsSettings(page);
-
-  const defaultKeys = page.getByText("?", { exact: true });
-  await expect(defaultKeys).toBeVisible();
-
-  await page.getByTestId(`shortcut-actions-${SHORTCUTS_ROW}`).click();
-  await page.getByTestId(`shortcut-bind-${SHORTCUTS_ROW}`).click();
-  await page.keyboard.press("Alt+Shift+K");
-  await page.getByText("Done", { exact: true }).click();
-
-  const reboundKeys = page.getByText("⌥⇧K", { exact: true });
-  await expect(reboundKeys).toBeVisible();
-  await expect(defaultKeys).toHaveCount(0);
-
-  const dialog = await openCheatSheet(page);
-  const row = dialog.getByTestId(`shortcut-help-row-${SHORTCUTS_ROW}`);
-  await expect(row.getByText("⌥⇧K", { exact: true })).toBeVisible();
-  // The whole point: the cheat sheet stops advertising the shipped default.
-  await expect(row.getByText("?", { exact: true })).toHaveCount(0);
 });
 
 for (const { platform, keys, label, firstCombo, secondCombo } of [
@@ -231,5 +213,85 @@ for (const { platform, keys, label, firstCombo, secondCombo } of [
     await eraseLastCapturedCombo(page, firstCombo, secondCombo);
     await finishInterruptCapture(page, "Cancel");
     await expectInterruptShortcut(page, label);
+  });
+}
+
+async function rebindTabNumbers(page: Page) {
+  await captureShortcut(page, "Jump to tab", "workspace-tab-jump-index", "Control+1");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+}
+
+async function expectTabNumberRange(page: Page) {
+  const row = page.getByText("Jump to tab", { exact: true }).locator("..");
+  await expect(row.getByText("⌃1-9", { exact: true })).toBeVisible();
+}
+
+async function openTwoDraftTabs(page: Page, workspaceId: string) {
+  await installDesktopBridge(page);
+  await gotoWorkspace(page, workspaceId);
+  await clickNewChat(page);
+  await clickNewChat(page);
+  await expect(
+    page.locator('[data-testid^="workspace-tab-draft_"]').filter({ visible: true }),
+  ).toHaveCount(2);
+  await openSettings(page);
+  await openSettingsSection(page, "shortcuts");
+}
+
+async function expectTabNumberNavigation(page: Page) {
+  const tabs = page.locator('[data-testid^="workspace-tab-draft_"]').filter({ visible: true });
+  await expect(page.getByTestId("settings-sidebar")).not.toBeVisible();
+  await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Control+1");
+  await expect(tabs.nth(0)).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Control+2");
+  await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
+}
+
+test("rebinding Jump to tab preserves the number group after reload", async ({
+  page,
+  withWorkspace,
+}) => {
+  const workspace = await withWorkspace({ prefix: "tab-number-rebind-" });
+  await openTwoDraftTabs(page, workspace.workspaceId);
+  await rebindTabNumbers(page);
+  await clickSettingsBackToWorkspace(page);
+  await expectTabNumberNavigation(page);
+  await page.reload();
+  await expectTabNumberNavigation(page);
+  await openSettings(page);
+  await openSettingsSection(page, "shortcuts");
+  await expectTabNumberRange(page);
+});
+
+async function expectNumberRequiredBeforeSaving(page: Page, label: string) {
+  const row = page.getByText(label, { exact: true }).locator("..");
+  await expect(row.getByRole("button", { name: "Done", exact: true })).toBeDisabled();
+  await expect(row.getByText("End with a number from 1 to 9.", { exact: true })).toBeVisible();
+}
+
+async function completeNumberShortcut(page: Page, label: string) {
+  const row = page.getByText(label, { exact: true }).locator("..");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Control+2");
+  await expect(row.getByRole("button", { name: "Done", exact: true })).toBeEnabled();
+  await row.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(row.getByText("⌃K", { exact: true })).toBeVisible();
+  await expect(row.getByText("⌃1-9", { exact: true })).toBeVisible();
+}
+
+for (const { label, action } of [
+  { label: "Jump to tab", action: "workspace-tab-jump-index" },
+  { label: "Jump to workspace", action: "workspace-jump-index" },
+]) {
+  test(`${label} requires a final number before a recorded shortcut can be saved`, async ({
+    page,
+  }) => {
+    await openShortcutsSettings(page);
+    await captureShortcut(page, label, action, "Control+K");
+    await expectNumberRequiredBeforeSaving(page, label);
+    await page.keyboard.press("Control+0");
+    await expectNumberRequiredBeforeSaving(page, label);
+    await completeNumberShortcut(page, label);
   });
 }

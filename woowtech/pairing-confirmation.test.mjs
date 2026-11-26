@@ -42,20 +42,64 @@ function count(text, needle) {
   return text.split(needle).length - 1;
 }
 
-// (a) The scanner and the paste field ask before they probe the relay or save the host.
-const ASK = /if \(!\(await confirmPairingLink\(\w+\)\)\) return;/;
-
-function asksBeforeConnecting(source) {
-  const code = withoutCommentLines(source);
-  const asked = code.search(ASK);
-  if (asked === -1) return ["never asks: no `if (!(await confirmPairingLink(…))) return;`"];
+// (a) The shared pairing flow asks before probing or saving. Password retries may reuse an
+// approval only within this flow and only for the same linked connection.
+function orderedPatterns(source, patterns) {
   const problems = [];
-  for (const call of ["connectToDaemon(", "upsertDaemonFromOfferUrl("]) {
-    const at = code.indexOf(call);
-    if (at === -1) problems.push(`no ${call} call to ask before`);
-    else if (at < asked) problems.push(`${call} comes before the question`);
+  let previous = -1;
+  for (const pattern of patterns) {
+    const at = withoutCommentLines(source).search(pattern);
+    if (at === -1) problems.push(`missing ${pattern}`);
+    else if (at < previous) problems.push(`out of order: ${pattern}`);
+    previous = Math.max(previous, at);
   }
   return problems;
+}
+
+function pairingEntryProblems(source, patterns) {
+  const problems = orderedPatterns(source, patterns);
+  if (
+    /\b(?:connectToDaemon|upsertDaemonFromOfferUrl|upsertConnectionFromOfferUrl|upsertConnectionFromOffer|probeAndUpsertOffer)\s*\(/.test(
+      withoutCommentLines(source),
+    )
+  ) {
+    problems.push("entry bypasses the shared pairing confirmation flow");
+  }
+  return problems;
+}
+
+function linkPairingOrder(runtime) {
+  const confirm = block(runtime, "  private async confirmLink(", "  }") ?? "";
+  const flow = block(runtime, "  beginLinkPairing(): LinkPairing {", "  }") ?? "";
+  const importing = block(runtime, "  async importConnectionLink(", "  }") ?? "";
+  return [
+    ...orderedPatterns(confirm, [
+      /await this\.loadRegistry\(\)/,
+      /return confirmPairingOffer\(offer, \{ hosts: this, confirmations: this\.hostConfirmations \}\)/,
+    ]),
+    ...orderedPatterns(flow, [
+      /let approvedOffer: ConnectionOffer \| null = null;/,
+      /submit: async \(link, password\) => \{/,
+      /parseOfferConnectionUrl\(link\)/,
+      /if \(!approvedOffer \|\| !isSameLinkedConnection\(approvedOffer, offer\)\) \{/,
+      /if \(!\(await this\.confirmLink\(offer\)\)\) return \{ status: "cancelled" \};/,
+      /approvedOffer = offer;/,
+      /await this\.probeAndUpsertOffer\(offer, password \?\? linkPassword\)/,
+    ]),
+    ...orderedPatterns(importing, [
+      /if \(target === "openProject"\) \{/,
+      /parseOfferConnectionUrl\(url\)/,
+      /if \(!\(await this\.confirmLink\(offer\)\)\) return \{ status: "cancelled" \};/,
+      /await this\.upsertConnectionFromOffer\(offer, undefined, password\)/,
+      /const pairing = this\.beginLinkPairing\(\)/,
+      /await pairing\.submit\(url\)/,
+      /if \(result\.status === "cancelled"\) return result;/,
+    ]),
+    ...orderedPatterns(block(runtime, "function isSameLinkedConnection(", "}") ?? "", [
+      /left\.serverId === right\.serverId &&/,
+      /equal\(relayConnectionFromOffer\(left\), relayConnectionFromOffer\(right\)\)/,
+    ]),
+  ];
 }
 
 // (b) handlePairingLink clears the address bar, then asks, then imports.
@@ -81,32 +125,33 @@ function pairingLinkOrder(source) {
 // (c) Every way to add or change a host, and every place that parses an offer, with the files
 // allowed to use it. A new caller (an upstream merge) must go through the question first.
 const ALLOWED_CALLERS = {
-  upsertConnectionFromOfferUrl: [
-    "runtime/host-runtime.ts",
-    "app/_layout.tsx",
-    "app/pair-scan.tsx",
-    "components/pair-link-modal.tsx",
-  ],
+  upsertConnectionFromOfferUrl: ["runtime/host-runtime.ts", "app/_layout.tsx"],
   upsertConnectionFromOffer: ["runtime/host-runtime.ts"],
   upsertRelayConnection: ["runtime/host-runtime.ts"],
   probeAndUpsertConnection: ["runtime/host-runtime.ts"],
   upsertDirectConnection: ["runtime/host-runtime.ts"],
   probeAndUpsertDirectConnection: [
     "runtime/host-runtime.ts",
-    "components/add-host-modal.tsx",
+    "hosts/add-host/internal/add-host-modal.tsx",
     "hosts/woowtech-this-computer-action.ts",
   ],
   probeAndUpsertRemoteSshConnection: [
     "runtime/host-runtime.ts",
-    "components/add-remote-ssh-host-modal.tsx",
+    "hosts/add-host/internal/add-remote-ssh-host-modal.tsx",
   ],
   upsertConnectionFromListen: ["runtime/host-runtime.ts", "runtime/daemon-start-service.ts"],
-  "ConnectionOfferSchema.parse": [
+  "ConnectionOfferSchema.parse": ["runtime/host-runtime.ts", "runtime/woowtech-offer-link.ts"],
+  beginLinkPairing: [
     "runtime/host-runtime.ts",
-    "app/pair-scan.tsx",
-    "components/pair-link-modal.tsx",
-    "runtime/woowtech-offer-link.ts",
+    "hosts/add-host/internal/pair-link-modal.tsx",
+    "hosts/add-host/internal/add-host-modal.tsx",
   ],
+  importConnectionLink: [
+    "runtime/host-runtime.ts",
+    "hosts/add-host/internal/scan.tsx",
+    "hosts/add-host/internal/pair-scan-model.ts",
+  ],
+  probeAndUpsertOffer: ["runtime/host-runtime.ts"],
 };
 
 function callersOutsideTheAllowList(files) {
@@ -252,13 +297,14 @@ function importsHostRuntimeAtRuntime(source) {
   return problems;
 }
 
-const PAIR_SCAN = read("app/pair-scan.tsx");
-const PAIR_LINK_MODAL = read("components/pair-link-modal.tsx");
+const PAIR_SCAN = read("hosts/add-host/internal/scan.tsx");
+const PAIR_SCAN_MODEL = read("hosts/add-host/internal/pair-scan-model.ts");
+const PAIR_LINK_MODAL = read("hosts/add-host/internal/pair-link-modal.tsx");
 const PAIRING_LINK = read("runtime/woowtech-pairing-link.ts");
 const LAYOUT = read("app/_layout.tsx");
 const HOST_RUNTIME = read("runtime/host-runtime.ts");
-const ADD_HOST_MODAL = read("components/add-host-modal.tsx");
-const ADD_SSH_HOST_MODAL = read("components/add-remote-ssh-host-modal.tsx");
+const ADD_HOST_MODAL = read("hosts/add-host/internal/add-host-modal.tsx");
+const ADD_SSH_HOST_MODAL = read("hosts/add-host/internal/add-remote-ssh-host-modal.tsx");
 const THIS_COMPUTER = read("hosts/woowtech-this-computer-action.ts");
 const CONFIRMATIONS = read("runtime/woowtech-host-confirmations.ts");
 
@@ -267,20 +313,103 @@ function replaceOnce(source, from, to) {
   return source.replace(from, to);
 }
 
-test("the scanner and the paste field ask before they connect", () => {
-  assert.deepEqual(asksBeforeConnecting(PAIR_SCAN), []);
-  assert.deepEqual(asksBeforeConnecting(PAIR_LINK_MODAL), []);
-
-  const question = /^.*if \(!\(await confirmPairingLink\(\w+\)\)\) return;\n/m;
-  const probed = "await client.close().catch(() => undefined);\n";
-  for (const source of [PAIR_SCAN, PAIR_LINK_MODAL]) {
-    const line = question.exec(source)?.[0];
-    assert.ok(line, "the fixture needs the question");
-    const unasked = source.replace(line, "");
-    assert.notDeepEqual(asksBeforeConnecting(unasked), [], "question removed");
-    const late = replaceOnce(unasked, probed, `${probed}${line}`);
-    assert.notDeepEqual(asksBeforeConnecting(late), [], "question moved after the probe");
+test("scanner and paste entries use the shared confirmation flow and respect cancellation", () => {
+  const entries = [
+    [
+      PAIR_SCAN,
+      [
+        /openPairScan\(\{/,
+        /importConnectionLink: \(link\) => getHostRuntimeStore\(\)\.importConnectionLink\(link, "hostRoot"\)/,
+        /scan\.scan\(typeof result\.data === "string" \? result\.data : ""\)/,
+      ],
+    ],
+    [
+      block(PAIR_SCAN_MODEL, "  async function pair(", "  }") ?? "",
+      [
+        /const outcome = await deps\.importConnectionLink\(link\)/,
+        /if \(outcome\.status === "connected"\) \{\s*publish\(\{ status: "connected" \}\);\s*deps\.onConnected\(outcome\.serverId\);\s*return;/,
+        /publish\(\{ status: "stopped", error: null \}\)/,
+      ],
+    ],
+    [
+      PAIR_LINK_MODAL.slice(0, PAIR_LINK_MODAL.indexOf("  const handleChangeOfferUrl")),
+      [
+        /passwordRequired\?\.pairing \?\? beginLinkPairing\(\)/,
+        /const result = await pairing\.submit\(raw, password \|\| undefined\)/,
+        /if \(result\.status === "cancelled"\) return;/,
+        /onSaved\?\.\(\{ profile, serverId, hostname, isNewHost \}\)/,
+      ],
+    ],
+    [
+      ADD_HOST_MODAL.slice(0, ADD_HOST_MODAL.indexOf("  const handleSave =")),
+      [
+        /const \[linkPairing\] = useState\(\(\) => beginLinkPairing\(\)\)/,
+        /const result = await linkPairing\.submit\(relayUri, password \|\| undefined\)/,
+        /if \(result\.status === "cancelled"\) return;/,
+        /onSaved\?\.\(\{ profile, serverId, hostname, isNewHost \}\)/,
+      ],
+    ],
+  ];
+  for (const [source, patterns] of entries) {
+    assert.deepEqual(pairingEntryProblems(source, patterns), []);
+    assert.notDeepEqual(
+      pairingEntryProblems(`connectToDaemon(input);\n${source}`, patterns),
+      [],
+      "probe bypasses confirmation",
+    );
+    for (const pattern of patterns) {
+      assert.notDeepEqual(
+        pairingEntryProblems(source.replace(pattern, ""), patterns),
+        [],
+        `${pattern} removed`,
+      );
+    }
   }
+});
+
+test("shared link pairing confirms before probing or saving, including changed retry targets", () => {
+  assert.deepEqual(linkPairingOrder(HOST_RUNTIME), []);
+  const question = 'if (!(await this.confirmLink(offer))) return { status: "cancelled" };';
+  assert.equal(count(HOST_RUNTIME, question), 2);
+  for (const at of [
+    ...HOST_RUNTIME.matchAll(
+      /if \(!\(await this\.confirmLink\(offer\)\)\) return \{ status: "cancelled" \};/g,
+    ),
+  ].map((match) => match.index)) {
+    const unasked = HOST_RUNTIME.slice(0, at) + HOST_RUNTIME.slice(at + question.length);
+    assert.notDeepEqual(linkPairingOrder(unasked), [], "question removed");
+  }
+  const probe = "const result = await this.probeAndUpsertOffer(offer, password ?? linkPassword);";
+  const late = HOST_RUNTIME.replace(question, "").replace(probe, `${probe}\n${question}`);
+  assert.notDeepEqual(linkPairingOrder(late), [], "probe before confirmation");
+  const save = "const profile = await this.upsertConnectionFromOffer(offer, undefined, password);";
+  const lastQuestion = HOST_RUNTIME.lastIndexOf(question);
+  const lateSave = (
+    HOST_RUNTIME.slice(0, lastQuestion) + HOST_RUNTIME.slice(lastQuestion + question.length)
+  ).replace(save, `${save}\n${question}`);
+  assert.notDeepEqual(linkPairingOrder(lateSave), [], "save before confirmation");
+  assert.notDeepEqual(
+    linkPairingOrder(
+      replaceOnce(
+        HOST_RUNTIME,
+        "!approvedOffer || !isSameLinkedConnection(approvedOffer, offer)",
+        "!approvedOffer",
+      ),
+    ),
+    [],
+    "changed targets must ask again",
+  );
+  assert.notDeepEqual(
+    linkPairingOrder(
+      replaceOnce(
+        HOST_RUNTIME,
+        "return confirmPairingOffer(offer, { hosts: this, confirmations: this.hostConfirmations });",
+        "return true;",
+      ),
+    ),
+    [],
+    "confirmation must reach the fork's validation and key checks",
+  );
 });
 
 test("a pairing link is cleared from the address bar, then asked about, then imported", () => {
@@ -331,7 +460,7 @@ test("only the known files add hosts or parse offers", () => {
   // upsertConnectionFromOffer is not upsertConnectionFromOfferUrl.
   assert.deepEqual(
     callersOutsideTheAllowList([
-      { file: "app/pair-scan.tsx", source: "upsertConnectionFromOfferUrl(" },
+      { file: "app/_layout.tsx", source: "upsertConnectionFromOfferUrl(" },
     ]),
     [],
   );

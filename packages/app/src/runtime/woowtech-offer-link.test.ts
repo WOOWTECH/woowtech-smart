@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConnectionOffer } from "@getpaseo/protocol/connection-offer";
+import { serializeRelayConnectionUri } from "@getpaseo/protocol/daemon-endpoints";
 import {
   displayText,
   formatDaemonKeyFingerprint,
@@ -72,6 +73,27 @@ describe("reading a pairing link", () => {
   it("returns the offer of a valid link", () => {
     expect(readPairingOffer(`https://web.example.test/#offer=${PAYLOAD}`)).toEqual(OFFER);
     expect(readPairingOffer(`woowtech-smart:///#offer=${PAYLOAD}`)).toEqual(OFFER);
+  });
+
+  it("validates relay URIs and hosted connection fragments without losing the security pin", () => {
+    const offer = offerWith({ minimumSecurityMode: "protected" });
+    const uri = serializeRelayConnectionUri({ offer, password: "private-password" });
+    for (const link of [uri, `https://web.example.test/#connect=${encodeURIComponent(uri)}`]) {
+      expect(readPairingOffer(link)).toEqual(offer);
+      expect(linkMentionsOffer(link)).toBe(true);
+    }
+  });
+
+  it("rejects malformed hosted fragments and invalid relay identities before confirmation", () => {
+    const uri = serializeRelayConnectionUri({ offer: OFFER });
+    for (const link of [
+      `https://web.example.test/#other#connect=${encodeURIComponent(uri)}`,
+      "https://web.example.test/#connect=%",
+      serializeRelayConnectionUri({ offer: offerWith({ daemonPublicKeyB64: "AAAA" }) }),
+      serializeRelayConnectionUri({ offer: offerWith({ serverId: "srv:untrusted" }) }),
+    ]) {
+      expect(() => readPairingOffer(link)).toThrow(PairingOfferError);
+    }
   });
 
   it("throws a PairingOfferError for every link it cannot use", () => {

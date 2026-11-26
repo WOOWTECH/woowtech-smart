@@ -1,5 +1,6 @@
 // Merge guards for the small upstream notification seams. Native delivery behavior
-// is covered by woowtech-notification-delivery.test.ts with a typed event/timer port.
+// is covered by woowtech-notification-delivery.test.ts with a typed event/timer port;
+// renderer click handoff is covered by packages/app/src/notification-open/electron.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -163,7 +164,7 @@ test("notification icon ships with every packaged desktop and is resolved from r
   }
 });
 
-test("notification clicks reopen a window and wait for the renderer's PushNotificationRouter", () => {
+test("notification clicks reopen a window and reach the renderer's notification-open router", () => {
   const main = source("packages/desktop/src/features/notifications.ts");
   assert.match(main, /createNotificationClickRouter\(\{/);
   assert.match(main, /void clickRouter\.routeClick\(senderWebContentsId, data\)/);
@@ -183,13 +184,38 @@ test("notification clicks reopen a window and wait for the renderer's PushNotifi
   );
   const host = source("packages/app/src/desktop/host.ts");
   assert.match(host, /takePendingClick\?: \(\) => Promise</);
-  const layout = source("packages/app/src/app/_layout.tsx");
-  const router = layout.slice(layout.indexOf("function PushNotificationRouter()"));
-  const subscribe = router.indexOf("removeDesktopNotificationListener = unlisten;");
-  const take = router.indexOf("takePendingDesktopNotificationClick(");
+  const entry = source("packages/app/src/notification-open/source.electron.ts");
+  assert.match(
+    entry,
+    /return createElectronNotificationOpenSource\(\{ getHost: getDesktopHost, web: createWebSource\(\) \}\)/,
+  );
+  const adapter = source("packages/app/src/notification-open/electron.ts");
+  assert.match(adapter, /const subscription = host\?\.events\?\.on\?\.\(\s*"notification-click"/);
+  assert.match(adapter, /Promise\.resolve\(subscription\)\s*\.then\(async \(stop\) =>/);
+  const subscribe = adapter.indexOf("stopDesktop = stop;");
+  const take = adapter.indexOf("await takePendingDesktopNotificationClick(");
   assert.notEqual(subscribe, -1);
   assert.ok(take > subscribe, "pending click is taken only after the click listener exists");
-  assert.match(router.slice(take), /openNotification\(data\)/);
+  assert.match(adapter.slice(subscribe, take), /if \(!stop\) return undefined;/);
+  assert.match(adapter.slice(take), /if \(data\) deliver\(data\)/);
+  assert.match(
+    adapter,
+    /if \(activeListener\) activeListener\(tap\);\s*else pendingTaps\.push\(tap\);/,
+    "a consumed click must survive a renderer router remount",
+  );
+  assert.match(adapter, /for \(const tap of pendingTaps\.splice\(0\)\) onTap\(tap\)/);
+  assert.match(adapter, /stopWeb\(\);\s*stopDesktop\?\.\(\);/);
+  const router = source("packages/app/src/notification-open/react/index.tsx");
+  assert.match(router, /import \{ createNotificationOpenSource \} from "\.\.\/source"/);
+  assert.match(
+    router,
+    /createNotificationOpenRouter\(\{\s*source: createNotificationOpenSource\(\)/,
+  );
+  assert.match(router, /useEffect\(\(\) => notificationRouter\.start\(\), \[\]\)/);
+  assert.match(
+    source("packages/app/src/app/_layout.tsx"),
+    /<NotificationOpenRouter startupBlocked=/,
+  );
 });
 
 test("Windows gets the electron-builder appId as AppUserModelID before the app is ready", async () => {

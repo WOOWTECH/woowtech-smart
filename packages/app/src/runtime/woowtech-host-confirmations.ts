@@ -1,13 +1,10 @@
 import { BRAND_RELAY } from "@getpaseo/protocol/brand-relay";
 import type { ConnectionOffer } from "@getpaseo/protocol/connection-offer";
-import {
-  normalizeHostPort,
-  parseHostPort,
-  shouldUseTlsForDefaultHostedRelay,
-} from "@getpaseo/protocol/daemon-endpoints";
+import { parseHostPort } from "@getpaseo/protocol/daemon-endpoints";
 import { DEFAULT_SSH_DAEMON_PORT } from "@getpaseo/protocol/ssh-transport";
 import {
   hostHasConnection,
+  relayConnectionFromOffer,
   type HostConnection,
   type HostProfile,
   type RelayHostConnection,
@@ -368,19 +365,8 @@ async function keyOfSavedDaemon(
   return daemonKey === link.daemonPublicKeyB64 ? "same" : "different";
 }
 
-/** The relay connection an offer saves: built exactly as HostRuntimeStore.upsertConnectionFromOffer does. */
-export function relayConnectionFromOffer(offer: ConnectionOffer): RelayHostConnection {
-  // COMPAT(oldRelayOfferTls): added in v0.1.73, remove after 2026-11-10 with host-runtime.ts's.
-  const useTls = offer.relay.useTls ?? shouldUseTlsForDefaultHostedRelay(offer.relay.endpoint);
-  const relayEndpoint = normalizeHostPort(offer.relay.endpoint);
-  return {
-    id: useTls ? `relay:wss:${relayEndpoint}` : `relay:${relayEndpoint}`,
-    type: "relay",
-    relayEndpoint,
-    useTls,
-    daemonPublicKeyB64: offer.daemonPublicKeyB64.trim(),
-  };
-}
+// Use the runtime's mapping, including protected relay security pins.
+export { relayConnectionFromOffer } from "@/types/host-connection";
 
 function hostIdChangedQuestion(
   reportedServerId: string,
@@ -443,6 +429,8 @@ function describeConnection(connection: HostConnection): string {
       return connection.path;
     case "relay":
       return connection.relayEndpoint;
+    case "routed":
+      return connection.originServerId;
   }
 }
 

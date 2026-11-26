@@ -1,46 +1,27 @@
 /**
  * @vitest-environment jsdom
  */
-// The QR scanner is the /pair-scan route (src/app/pair-scan.tsx). Its test lives out
-// here because Expo Router treats every file in src/app as a route.
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import React from "react";
-import { Alert, Linking } from "react-native";
+// The scanner now belongs to the add-host flow. The caller owns success navigation.
 import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-  type MockInstance,
-} from "vitest";
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen as renderedScreen,
+  waitFor,
+} from "@testing-library/react";
+import React from "react";
+import { Linking } from "react-native";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PairingOfferError } from "@/runtime/woowtech-offer-link";
 
 const scanner = vi.hoisted(() => ({
   onBarcodeScanned: null as ((result: { type: string; data: string }) => unknown) | null,
-  routes: [] as string[],
-  probes: [] as unknown[],
-  probeFailures: 0,
-  imports: [] as Array<{ link: string; label: string | undefined }>,
+  connected: [] as string[],
+  imports: [] as Array<{ link: string; target: string }>,
+  outcome: "connected" as "connected" | "cancelled" | Error,
   permission: { granted: true, canAskAgain: true },
   permissionRequests: 0,
-}));
-
-// The user's answer to the host confirmation (runtime/woowtech-pairing-confirmation.ts), or the
-// error it throws for a link it cannot use, and the codes it was asked about.
-const confirmation = vi.hoisted(() => ({
-  answer: true as boolean | Error,
-  asked: [] as string[],
-}));
-
-vi.mock("@/runtime/woowtech-pairing-confirmation", () => ({
-  confirmPairingLink: async (link: string) => {
-    confirmation.asked.push(link);
-    if (confirmation.answer instanceof Error) throw confirmation.answer;
-    return confirmation.answer;
-  },
 }));
 
 // The camera exists on phones only.
@@ -62,34 +43,20 @@ vi.mock("expo-camera", () => ({
   ],
 }));
 
-vi.mock("expo-router", () => ({
-  useRouter: () => ({
-    replace: (route: string) => scanner.routes.push(route),
-    back: () => undefined,
-  }),
-  useLocalSearchParams: () => ({ source: "onboarding" }),
-}));
-
-vi.mock("@/components/headers/back-header", () => ({ BackHeader: () => null }));
-
 vi.mock("@/runtime/host-runtime", () => ({
-  useHostMutations: () => ({
-    upsertConnectionFromOfferUrl: async (link: string, label?: string) => {
-      scanner.imports.push({ link, label });
-      return { serverId: "srv_pairing_test" };
+  getHostRuntimeStore: () => ({
+    importConnectionLink: async (link: string, target: string) => {
+      scanner.imports.push({ link, target });
+      if (scanner.outcome instanceof Error) throw scanner.outcome;
+      return scanner.outcome === "cancelled"
+        ? { status: "cancelled" }
+        : { status: "connected", serverId: "srv_pairing_test" };
     },
   }),
-}));
-
-vi.mock("@/utils/test-daemon-connection", () => ({
-  connectToDaemon: async (connection: unknown, options: unknown) => {
-    scanner.probes.push({ connection, options });
-    if (scanner.probeFailures > 0) {
-      scanner.probeFailures -= 1;
-      throw new Error("relay unreachable");
-    }
-    return { client: { close: async () => undefined }, hostname: "mbp" };
-  },
+  useHosts: () => [],
+  useHostMutations: () => ({
+    beginLinkPairing: () => ({ submit: async () => ({ status: "cancelled" }) }),
+  }),
 }));
 
 const OFFER = {
@@ -101,24 +68,16 @@ const OFFER = {
 const PAYLOAD = Buffer.from(JSON.stringify(OFFER)).toString("base64url");
 const APP_LINK = `woowtech-smart:///#offer=${PAYLOAD}`;
 const WEB_LINK = `https://smart.woowtech.io/#offer=${PAYLOAD}`;
-const PROBE = {
-  connection: {
-    id: "probe",
-    type: "relay",
-    relayEndpoint: "relay.woowtech.io:443",
-    useTls: true,
-    daemonPublicKeyB64: OFFER.daemonPublicKeyB64,
-  },
-  options: { serverId: "srv_pairing_test" },
+let screen: typeof import("@/hosts/add-host/internal/scan");
+const onConnected = (serverId: string) => {
+  scanner.connected.push(serverId);
 };
-
-let screen: typeof import("@/app/pair-scan");
-let alert: MockInstance<typeof Alert.alert>;
+const onClose = () => {};
 const linksGivenToUrl: string[] = [];
 
 beforeAll(async () => {
   vi.stubGlobal("React", React);
-  screen = await import("@/app/pair-scan");
+  screen = await import("@/hosts/add-host/internal/scan");
 }, 120_000);
 
 beforeEach(() => {
@@ -135,17 +94,12 @@ beforeEach(() => {
     },
   );
   scanner.onBarcodeScanned = null;
-  scanner.routes = [];
-  scanner.probes = [];
+  scanner.connected = [];
   scanner.imports = [];
   scanner.permission = { granted: true, canAskAgain: true };
   scanner.permissionRequests = 0;
-  scanner.probeFailures = 0;
-  confirmation.answer = true;
-  confirmation.asked = [];
+  scanner.outcome = "connected";
   linksGivenToUrl.length = 0;
-  // react-native-web's Alert.alert does nothing; the spy records what the scanner showed.
-  alert = vi.spyOn(Alert, "alert").mockImplementation(() => undefined);
 });
 
 afterEach(() => {
@@ -162,87 +116,80 @@ async function frame(data: string): Promise<void> {
 }
 
 async function scan(data: string): Promise<void> {
-  render(<screen.default />);
+  render(<screen.PairScanContent onConnected={onConnected} onClose={onClose} />);
   await waitFor(() => expect(scanner.onBarcodeScanned).not.toBeNull());
   await frame(data);
 }
 
 // woowtech smart's QR codes carry links that open the web app; older daemons' QR codes carry
-// links in the app's own scheme. The scanner pairs both once the user confirms the host.
+// links in the app's own scheme. The scanner passes both to the runtime's pairing flow.
 describe("scanning a pairing QR code in the app", () => {
-  it("pairs the host from a web app link once the user confirms it", async () => {
+  it("forwards a web app link and reports the runtime's connected host", async () => {
     await scan(WEB_LINK);
 
-    await waitFor(() => expect(scanner.routes).toEqual(["/h/srv_pairing_test"]));
-    expect(confirmation.asked).toEqual([WEB_LINK]);
-    expect(scanner.probes).toEqual([PROBE]);
-    expect(scanner.imports).toEqual([{ link: WEB_LINK, label: "mbp" }]);
+    await waitFor(() => expect(scanner.connected).toEqual(["srv_pairing_test"]));
+    expect(scanner.imports).toEqual([{ link: WEB_LINK, target: "hostRoot" }]);
     expect(linksGivenToUrl).toEqual([]);
   });
 
-  it("pairs the host from a link in the app's own scheme", async () => {
+  it("forwards a link in the app's own scheme unchanged", async () => {
     await scan(APP_LINK);
 
-    await waitFor(() => expect(scanner.routes).toEqual(["/h/srv_pairing_test"]));
-    expect(confirmation.asked).toEqual([APP_LINK]);
-    expect(scanner.probes).toEqual([PROBE]);
-    expect(scanner.imports).toEqual([{ link: APP_LINK, label: "mbp" }]);
+    await waitFor(() => expect(scanner.connected).toEqual(["srv_pairing_test"]));
+    expect(scanner.imports).toEqual([{ link: APP_LINK, target: "hostRoot" }]);
     expect(linksGivenToUrl).toEqual([]);
   });
 
-  it("connects to nothing when the user says no, and does not ask again about the same code", async () => {
-    confirmation.answer = false;
+  it("reports no connected host after cancellation and ignores repeated frames", async () => {
+    scanner.outcome = "cancelled";
     await scan(WEB_LINK);
     await frame(WEB_LINK);
     await frame(WEB_LINK);
 
-    expect(confirmation.asked).toEqual([WEB_LINK]);
-    expect(scanner.probes).toEqual([]);
-    expect(scanner.imports).toEqual([]);
-    expect(scanner.routes).toEqual([]);
-    expect(alert).not.toHaveBeenCalled();
+    expect(scanner.imports).toEqual([{ link: WEB_LINK, target: "hostRoot" }]);
+    expect(scanner.connected).toEqual([]);
+    expect(renderedScreen.queryByText(/Invalid pairing offer/)).toBeNull();
   });
 
   it("shows why a code cannot be used, connects to nothing, and does not ask again about it", async () => {
-    confirmation.answer = new PairingOfferError(
-      "Invalid pairing offer: the relay is not host:port",
-    );
+    scanner.outcome = new PairingOfferError("Invalid pairing offer: the relay is not host:port");
     await scan(WEB_LINK);
     await frame(WEB_LINK);
     await frame(WEB_LINK);
 
-    expect(confirmation.asked).toEqual([WEB_LINK]);
-    expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert).toHaveBeenCalledWith(
-      expect.any(String),
-      "Invalid pairing offer: the relay is not host:port",
-    );
-    expect(scanner.probes).toEqual([]);
-    expect(scanner.imports).toEqual([]);
-    expect(scanner.routes).toEqual([]);
+    expect(
+      renderedScreen.getByText("Invalid pairing offer: the relay is not host:port"),
+    ).toBeTruthy();
+    expect(scanner.imports).toEqual([{ link: WEB_LINK, target: "hostRoot" }]);
+    expect(scanner.connected).toEqual([]);
   });
 
   it("does not retry the same code on every frame after a failed connection", async () => {
-    scanner.probeFailures = 1;
+    scanner.outcome = new Error("relay unreachable");
     await scan(WEB_LINK);
     await frame(WEB_LINK);
     await frame(WEB_LINK);
 
-    expect(confirmation.asked).toEqual([WEB_LINK]);
-    expect(scanner.probes).toEqual([PROBE]);
-    expect(scanner.imports).toEqual([]);
+    expect(scanner.imports).toEqual([{ link: WEB_LINK, target: "hostRoot" }]);
 
-    // Another code is a new attempt.
+    // A stopped attempt ignores every camera frame until the user explicitly scans again.
     await frame(APP_LINK);
-    await waitFor(() => expect(scanner.routes).toEqual(["/h/srv_pairing_test"]));
-    expect(confirmation.asked).toEqual([WEB_LINK, APP_LINK]);
+    expect(scanner.imports).toEqual([{ link: WEB_LINK, target: "hostRoot" }]);
+    scanner.outcome = "connected";
+    fireEvent.click(renderedScreen.getByTestId("pair-scan-again"));
+    await frame(APP_LINK);
+    await waitFor(() => expect(scanner.connected).toEqual(["srv_pairing_test"]));
+    expect(scanner.imports).toEqual([
+      { link: WEB_LINK, target: "hostRoot" },
+      { link: APP_LINK, target: "hostRoot" },
+    ]);
   });
 
   it("ignores a QR code without an offer", async () => {
     await scan("woowtech-smart:///");
 
-    expect(scanner.probes).toEqual([]);
-    expect(scanner.routes).toEqual([]);
+    expect(scanner.imports).toEqual([]);
+    expect(scanner.connected).toEqual([]);
   });
 });
 
@@ -257,7 +204,7 @@ describe("the camera permission page", () => {
     Object.assign(Linking, { openSettings });
     scanner.permission = { granted: false, canAskAgain: false };
 
-    const view = render(<screen.default />);
+    const view = render(<screen.PairScanContent onConnected={onConnected} onClose={onClose} />);
     await waitFor(() => expect(scanner.permissionRequests).toBeGreaterThan(0));
     const requestsBeforeTap = scanner.permissionRequests;
     fireEvent.click(view.getByText(GRANT_BUTTON));
@@ -271,7 +218,7 @@ describe("the camera permission page", () => {
     Object.assign(Linking, { openSettings });
     scanner.permission = { granted: false, canAskAgain: true };
 
-    const view = render(<screen.default />);
+    const view = render(<screen.PairScanContent onConnected={onConnected} onClose={onClose} />);
     await waitFor(() => expect(scanner.permissionRequests).toBeGreaterThan(0));
     const requestsBeforeTap = scanner.permissionRequests;
     fireEvent.click(view.getByText(GRANT_BUTTON));

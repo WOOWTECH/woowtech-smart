@@ -26,6 +26,8 @@ describe("naming our command in upstream's text", () => {
       `Use \`${BRAND.cliCommand} terminal ls --all\` to list available terminals.`,
     );
     expect(withCliCommand("paseo --help")).toBe(`${BRAND.cliCommand} --help`);
+    expect(withCliCommand("paseo host ls")).toBe(`${BRAND.cliCommand} host ls`);
+    expect(withCliCommand("paseo usage")).toBe(`${BRAND.cliCommand} usage`);
     expect(withCliCommand("Run paseo hub init again.")).toBe(
       `Run ${BRAND.cliCommand} hub init again.`,
     );

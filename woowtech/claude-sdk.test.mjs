@@ -12,7 +12,7 @@ const manifest = (file) => JSON.parse(readFileSync(path.join(repoRoot, file), "u
 
 test("SDK stays development-only, undici is a direct server production dependency", () => {
   const server = manifest("packages/server/package.json");
-  assert.equal(server.devDependencies[sdkName], "0.3.246");
+  assert.equal(server.devDependencies[sdkName], "0.3.326");
   for (const name of readdirSync(path.join(repoRoot, "packages"))) {
     const pkg = manifest(`packages/${name}/package.json`);
     for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {

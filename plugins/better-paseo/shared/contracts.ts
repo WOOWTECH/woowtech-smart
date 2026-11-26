@@ -1,0 +1,453 @@
+/**
+ * Shared types and data contracts for OMP Chat Enhancer plugin.
+ * Used across client components and server handlers.
+ */
+
+export type StepStatus = "completed" | "active" | "pending" | "failed";
+
+export interface ReasoningStep {
+  id: string;
+  number: number;
+  /** Omitted when the source is a plain reasoning stream: the body is the step. */
+  title?: string;
+  summary?: string;
+  durationMs?: number;
+  tokenCount?: number;
+  status: StepStatus;
+  content: string;
+  codeSnippet?: {
+    language: "typescript" | "bash" | "diff" | "json" | "python";
+    code: string;
+    filename?: string;
+  };
+}
+
+export interface ReasoningTraceData {
+  id: string;
+  agentModel: string;
+  durationMs: number;
+  totalTokens: number;
+  isStreaming?: boolean;
+  status: "thinking" | "completed" | "interrupted";
+  steps: ReasoningStep[];
+}
+
+export type TaskStatus = "completed" | "in_progress" | "pending" | "blocked";
+
+export interface TaskItemData {
+  id: string;
+  title: string;
+  phase: string;
+  status: TaskStatus;
+  duration?: string;
+  blockerReason?: string;
+}
+
+export interface TaskListData {
+  id: string;
+  phaseName: string;
+  tasks: TaskItemData[];
+}
+
+export type ToolCallKind =
+  | "bash"
+  | "shell"
+  | "git"
+  | "github"
+  | "thinking"
+  | "mcp"
+  | "read"
+  | "edit"
+  | "write"
+  | "hub"
+  | "paseo"
+  | "ast_grep"
+  | "lsp";
+
+/**
+ * The hub tool answers with a text block plus a typed `details` record, and the
+ * shapes below mirror that record op by op, as of omp's current hub tool:
+ * coordination ops return `{ op, from?, to?, receipts?, waited?, inbox?, peers?,
+ * counts?, jobs?, cancelled?, agents? }` and process ops return
+ * `{ op, daemon?, daemons?, text?, cursor?, timedOut?, matched?, state?, spec? }`.
+ * Rendering from `details` rather than from the prose is what keeps a raw JSON
+ * envelope off the screen when an op answers with an empty text block, which is
+ * what a job-snapshot `wait` does.
+ */
+
+/** One peer message, as the bus stores it. */
+export interface HubMessage {
+  id?: string;
+  from: string;
+  to?: string;
+  body: string;
+  replyTo?: string;
+  ts?: number;
+}
+
+/** Per-recipient delivery outcome from `send`. */
+export interface HubReceipt {
+  to: string;
+  /** `injected`, `woken`, `revived`, `queued`, or `failed`; open for new outcomes. */
+  outcome: string;
+  error?: string;
+}
+
+/** One row of the `list` roster. */
+export interface HubPeer {
+  id: string;
+  displayName?: string;
+  kind?: string;
+  status: string;
+  parentId?: string;
+  unread?: number;
+  lastActivity?: number;
+  activity?: string;
+}
+
+export interface HubPeerCounts {
+  running: number;
+  idle: number;
+  parked: number;
+  shown?: number;
+  truncated?: number;
+}
+
+/** One background job in a `wait`, `jobs`, or `cancel` snapshot. */
+export interface HubJobRow {
+  id: string;
+  type: string;
+  /** `running`, `completed`, `failed`, or `cancelled`; open for new states. */
+  status: string;
+  label?: string;
+  durationMs?: number;
+  resolvedModel?: string;
+  advisor?: boolean;
+  resultText?: string;
+  errorText?: string;
+  schema?: { status: string; error?: string; hasData?: boolean; agentUrl?: string };
+}
+
+/** A running subagent with no job entry, which `wait` reports beside the jobs. */
+export interface HubAgentRow {
+  id: string;
+  parentId?: string;
+  activity?: string;
+  ageMs?: number;
+  live?: boolean;
+}
+
+export interface HubCancelRow {
+  id: string;
+  status: string;
+  message?: string;
+}
+
+/** One supervised process, as the launch broker reports it. */
+export interface HubDaemonRow {
+  name: string;
+  id?: string;
+  state: string;
+  pid?: number;
+  restarts?: number;
+  readyMatch?: string;
+  exitCode?: number;
+  exitReason?: string;
+  startedAt?: number;
+  readyAt?: number;
+  exitedAt?: number;
+  outputBytes?: number;
+  persist?: boolean;
+  detached?: boolean;
+}
+
+export interface HubProcessSpec {
+  application?: string;
+  args?: string[];
+  cwd?: string;
+  pty?: boolean;
+  restart?: string;
+  readyLog?: string;
+  readyPort?: number;
+}
+
+export interface HubProcessData {
+  op: "start" | "ps" | "logs" | "stop" | "restart" | "describe" | "wait" | "send";
+  name?: string;
+  spec?: HubProcessSpec;
+  daemon?: HubDaemonRow;
+  /** The roster a `ps` call returns, one row per supervised process. */
+  daemons?: HubDaemonRow[];
+  logs?: string[];
+  cursor?: number;
+  timedOut?: boolean;
+  /** The output a `wait` with a pattern matched. */
+  matched?: string;
+  state?: string;
+  /** Stdin text, keys, or signal sent to the process. */
+  input?: string;
+}
+
+export interface HubSendData {
+  from?: string;
+  to?: string;
+  message?: string;
+  replyTo?: string;
+  awaitReply: boolean;
+  receipts: HubReceipt[];
+  /** The awaited answer: a message, or null when the wait ended without one. */
+  reply?: HubMessage | null;
+}
+
+export interface HubWaitedData {
+  from?: string;
+  message: HubMessage | null;
+  timeoutMs?: number;
+}
+
+export interface HubInboxData {
+  peek: boolean;
+  messages: HubMessage[];
+}
+
+export interface HubPeersData {
+  peers: HubPeer[];
+  counts?: HubPeerCounts;
+  statusFilter?: string;
+}
+
+export interface HubJobsData {
+  op: "wait" | "jobs" | "cancel";
+  jobs: HubJobRow[];
+  cancelled?: HubCancelRow[];
+  agents?: HubAgentRow[];
+}
+
+/**
+ * Every variant keeps the op's prose in `text`. A view shows it when the record
+ * is empty — an older omp build, or an op this plugin has not typed yet — so a
+ * hub card always has something to draw and never falls back to a JSON dump.
+ */
+export type HubData =
+  | { kind: "send"; text?: string; data: HubSendData }
+  | { kind: "waited"; text?: string; data: HubWaitedData }
+  | { kind: "inbox"; text?: string; data: HubInboxData }
+  | { kind: "peers"; text?: string; data: HubPeersData }
+  | { kind: "jobs"; text?: string; data: HubJobsData }
+  | { kind: "process"; text?: string; data: HubProcessData }
+  | { kind: "note"; text?: string; data: { op: string } };
+
+export interface McpToolData {
+  server: string;
+  tool: string;
+  transport?: "stdio" | "sse" | "websocket";
+  arguments: Record<string, unknown>;
+  result?: unknown;
+  error?: string;
+  durationMs?: number;
+}
+
+export interface ShellToolData {
+  command: string;
+  cwd?: string;
+  pty?: boolean;
+  timeoutSeconds?: number;
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+  durationMs?: number;
+}
+
+export interface ThinkingToolData {
+  text: string;
+  model?: string;
+  durationMs?: number;
+  tokenCount?: number;
+  status: "thinking" | "completed";
+  steps?: string[];
+}
+
+export type PaseoToolKind =
+  | "create_agent"
+  | "get_agent_activity"
+  | "list_providers"
+  | "list_models"
+  | "send_agent_prompt"
+  | "get_agent_status"
+  | "list_agents"
+  | "cancel_agent"
+  | "archive_agent"
+  | "kill_agent"
+  | "update_agent"
+  | "set_agent_mode"
+  | "list_pending_permissions"
+  | "respond_to_permission"
+  | "list_profiles"
+  | "inspect_provider";
+
+export interface PaseoCreateAgentData {
+  title: string;
+  provider: string;
+  model?: string;
+  modeId?: string;
+  thinkingOptionId?: string;
+  initialPrompt: string;
+  agentId?: string;
+  status: "created" | "running" | "failed" | "canceled";
+}
+
+export interface PaseoSendAgentPromptData {
+  agentId?: string;
+  prompt: string;
+  state: "sending" | "sent" | "failed" | "canceled" | "unconfirmed";
+  success?: boolean;
+  disposition?: string;
+  agentStatus?: string;
+  guidance?: string;
+  sessionMode?: string;
+  arguments: Record<string, unknown>;
+  result: unknown;
+}
+
+export interface PaseoAgentOperationData {
+  title: string;
+  agentId?: string;
+  /** The agent's own title, when the result carries a snapshot. */
+  agentTitle?: string;
+  /** The agent's state as the result reports it ("running", "idle"). */
+  agentStatus?: string;
+  label: string;
+  tone: "neutral" | "active" | "success" | "warning" | "danger";
+  facts: Array<{ label: string; value: string }>;
+  agents?: Array<{ id: string; title: string; status?: string; provider?: string; cwd?: string }>;
+  permissions?: Array<{
+    agentId: string;
+    requestId: string;
+    title: string;
+    description?: string;
+    status?: string;
+    /** The whole request record, read again by the card for its command, plan or questions. */
+    request?: Record<string, unknown>;
+  }>;
+  content?: string;
+  arguments: Record<string, unknown>;
+  result: unknown;
+}
+
+export interface PaseoCatalogMode {
+  id: string;
+  label: string;
+  description?: string;
+  /** A lucide name and the composer's colour tier for it. */
+  icon?: string;
+  colorTier?: string;
+}
+
+/** What list_providers, list_models, list_profiles and inspect_provider answer, read once. */
+export interface PaseoCatalogData {
+  kind: "providers" | "models" | "profiles" | "provider";
+  /** The provider list_models and inspect_provider were asked about. */
+  provider?: string;
+  providers?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    available: boolean;
+    modes: PaseoCatalogMode[];
+  }>;
+  models?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    isDefault: boolean;
+    thinking: string[];
+    defaultThinking?: string;
+  }>;
+  profiles?: Array<{
+    id: string;
+    name: string;
+    icon?: string;
+    provider: string;
+    model?: string;
+    modeId?: string;
+    thinkingOptionId?: string;
+    notes?: string;
+  }>;
+  /** inspect_provider's feature settings: a label and its current value. */
+  features?: Array<{ label: string; value?: string }>;
+  arguments: Record<string, unknown>;
+  result: unknown;
+}
+
+export interface PaseoToolData {
+  id: string;
+  tool: PaseoToolKind;
+  durationMs?: number;
+  createAgent?: PaseoCreateAgentData;
+  sendAgentPrompt?: PaseoSendAgentPromptData;
+  agentOperation?: PaseoAgentOperationData;
+  catalog?: PaseoCatalogData;
+}
+/**
+ * A `github` device call: one op, the arguments it was given, and whatever the
+ * op answered with.
+ *
+ * The card reads this instead of printing the request JSON twice. `rows` are
+ * the typed facts an op reports — a pull request number, a check result, a
+ * file and its match count — so each op draws as a list rather than as prose.
+ * `file` is set only by an op that answers with file content, and `text` holds
+ * the reply for an op this plugin has no typed shape for yet.
+ */
+export interface GitHubToolData {
+  op: string;
+  repo?: string;
+  /** The path, query, pull request or run the op names. */
+  subject?: string;
+  /** The request as sent, kept verbatim for the disclosure. */
+  request?: string;
+  rows?: Array<{
+    label: string;
+    value: string;
+    /** Colours the value: a passing check reads green, a failure red. */
+    tone?: "ok" | "bad";
+  }>;
+  file?: { name: string; language?: string; code: string };
+  /** The first http(s) URL in the reply, when the op answered with one. */
+  link?: string;
+  text?: string;
+}
+
+export interface ToolCalloutData {
+  id: string;
+  tool: ToolCallKind;
+  title: string;
+  status: "running" | "completed" | "failed";
+  durationMs?: number;
+  exitCode?: number;
+  filePath?: string;
+  lineRange?: string;
+  command?: string;
+  code?: string;
+  language?: string;
+  diff?: string;
+  output?: string;
+  hub?: HubData;
+  mcp?: McpToolData;
+  shell?: ShellToolData;
+  thinking?: ThinkingToolData;
+  paseo?: PaseoToolData;
+  github?: GitHubToolData;
+}
+
+/**
+ * A host `notification` or `error` timeline item. Both carry a level and one
+ * message string and nothing else — no title, no duration — so the callout
+ * that draws them stays a single row wherever the message allows it.
+ */
+export interface NoticeCalloutData {
+  id: string;
+  level: "info" | "warning" | "error";
+  message: string;
+  /** Present when the item came from the host's `error` type rather than `notification`. */
+  fatal?: boolean;
+}

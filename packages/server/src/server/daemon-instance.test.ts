@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir, uptime } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 import { readDaemonInstance, stopDaemonInstance } from "./daemon-instance.js";
 import { acquirePidLock, getPidLockInfo, isLocked, type PidLockInfo } from "./pid-lock.js";
@@ -24,8 +25,7 @@ function lockFor(pid: number, startedAt: Date): PidLockInfo {
     startedAt: startedAt.toISOString(),
     hostname: "old-host",
     uid: process.getuid?.() ?? 0,
-    // Nothing listens on port 1, so a status probe cannot reach an installed daemon.
-    listen: "127.0.0.1:1",
+    listen: "127.0.0.1:6767",
     desktopManaged: true,
     heartbeat: true,
   };
@@ -93,5 +93,44 @@ describe("daemon instance identity across a reboot", () => {
     expect(existsSync(signalMarker)).toBe(false);
     expect(exited).toBe(false);
     await expect(readFile(join(paseoHome, "paseo.pid"), "utf-8")).rejects.toThrow(/ENOENT/);
+  });
+});
+
+// Linux keeps a boot's id while a VM is paused for a host sleep, though the VM's wall clock
+// runs ahead of its uptime once it resumes. A sleep longer than the time between boot and
+// the supervisor's start puts the wall-clock boot instant after the lock's startedAt.
+describe.runIf(process.platform === "linux")("daemon instance identity on Linux", () => {
+  let paseoHome: string;
+
+  beforeEach(async () => {
+    paseoHome = await mkdtemp(join(tmpdir(), "paseo-daemon-instance-linux-"));
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await rm(paseoHome, { recursive: true, force: true });
+  });
+
+  test("a supervisor still holds the lock after its paused VM resumes", async () => {
+    await acquirePidLock(paseoHome, null, { ownerPid: process.pid });
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + uptime() * 1000 + 12 * 60 * 60_000);
+
+    expect(await readDaemonInstance(paseoHome)).toMatchObject({ pid: process.pid });
+    expect(await isLocked(paseoHome)).toMatchObject({ locked: true });
+    await expect(
+      acquirePidLock(paseoHome, null, { ownerPid: process.pid + 10_000 }),
+    ).rejects.toThrow(`Another ${PRODUCT_NAME} daemon is already running`);
+  });
+
+  test("a lock written during another boot has no running owner", async () => {
+    await writeLock(paseoHome, {
+      ...lockFor(process.pid, new Date()),
+      bootId: "00000000-0000-0000-0000-000000000000",
+    });
+
+    expect(await readDaemonInstance(paseoHome)).toBeNull();
+    expect(await isLocked(paseoHome)).toMatchObject({ locked: false });
   });
 });

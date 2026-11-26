@@ -21,6 +21,7 @@ describe("product name in translations", () => {
     if (!i18n.isInitialized) {
       await i18n.init();
     }
+    await i18n.loadLanguages(["ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN", "zh-TW"]);
   });
 
   it("names the selected product in English", () => {
@@ -79,6 +80,7 @@ describe("CLI commands in translations", () => {
     if (!i18n.isInitialized) {
       await i18n.init();
     }
+    await i18n.loadLanguages(["ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN", "zh-TW"]);
   });
 
   it("show the selected CLI command in every language", () => {
@@ -157,6 +159,7 @@ describe("help channels in translations", () => {
     if (!i18n.isInitialized) {
       await i18n.init();
     }
+    await i18n.loadLanguages(["ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN", "zh-TW"]);
   });
 
   it("names the website and support email", () => {

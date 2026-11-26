@@ -23,7 +23,7 @@ export { ClaudeAgentSdkDownloadError } from "./claude-agent-sdk-download.js";
 export type ClaudeAgentSdkModule = typeof ClaudeAgentSdk;
 
 /** The SDK version the Claude provider is written against (see options.ts). */
-export const CLAUDE_AGENT_SDK_VERSION = "0.3.246";
+export const CLAUDE_AGENT_SDK_VERSION = "0.3.326";
 
 /**
  * Registry integrity of that version's tarball. Downloaded code is executed, so
@@ -31,7 +31,7 @@ export const CLAUDE_AGENT_SDK_VERSION = "0.3.246";
  * CLAUDE_AGENT_SDK_VERSION: `npm view @anthropic-ai/claude-agent-sdk@<v> dist.integrity`.
  */
 export const CLAUDE_AGENT_SDK_INTEGRITY =
-  "sha512-FtR0HoHHNqeqJWjZN8qLUAzZVFUI9ztXYNPPwv98Ecmv9qq2QTauI8IzkY26CC0mleWAqb9RQEW2C0OtiUliug==";
+  "sha512-BUTSky/4YWfL/MxC+4kV0NDbJFjbJPoQMFEk/s9G6hV9LUfYPMbsWz94bFQ7ZIo2ubj2xwJ2c2NVxkNlQhVw+Q==";
 
 export class ClaudeAgentSdkIntegrityError extends Error {
   constructor(

@@ -21,16 +21,15 @@ import { ComboboxItem } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
 import { CombinedModelSelector } from "@/components/combined-model-selector";
 import { woowtechModeLabel } from "@/agent-controls/woowtech-mode-labels";
-import { useIsCompactFormFactor } from "@/constants/layout";
 import {
   HostStatusDotSlot,
   hostsSharingAName,
   useHostSubtitle,
 } from "@/components/hosts/host-picker";
-import { createControlGeometry, type FieldControlSize } from "@/components/ui/control-geometry";
+import { createControlGeometry, type ControlSize } from "@/components/ui/control-geometry";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
-import { getProviderIcon } from "@/components/provider-icons";
+import { useProviderIcon } from "@/components/provider-icons";
 import { CadenceEditor } from "@/components/schedules/cadence-editor";
 import {
   SelectField,
@@ -247,7 +246,7 @@ function OpenScheduleFormSheet({
   schedule,
 }: ScheduleFormSheetProps & { onDismiss: () => void }): ReactElement {
   const { t } = useTranslation();
-  const controlSize: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
+  const controlSize: ControlSize = "md";
   const { projects } = useProjects();
   const hostProfiles = useHosts();
   const hosts = useStoreWithEqualityFn(
@@ -475,7 +474,7 @@ interface ScheduleFormFieldsProps {
   state: ScheduleFormState;
   providerSnapshot: ReturnType<typeof useScheduleFormProviderSnapshot>;
   agentTargetLabel: string | null;
-  controlSize: FieldControlSize;
+  controlSize: ControlSize;
   cadenceError: string | null;
   mutationServerId: string;
 }
@@ -573,7 +572,7 @@ interface ScheduleTargetFieldsProps {
   state: ScheduleFormState;
   providerSnapshot: ReturnType<typeof useScheduleFormProviderSnapshot>;
   agentTargetLabel: string | null;
-  controlSize: FieldControlSize;
+  controlSize: ControlSize;
   mutationServerId: string;
 }
 
@@ -840,7 +839,7 @@ function ScheduleIsolationField({
 }: {
   model: ScheduleFormModel;
   state: ScheduleFormState;
-  size: FieldControlSize;
+  size: ControlSize;
 }): ReactElement {
   const { t } = useTranslation();
   const options = useMemo<SelectFieldOption<"local" | "worktree">[]>(
@@ -919,7 +918,7 @@ function ScheduleAgentTargetField({
   size,
 }: {
   label: string | null;
-  size: FieldControlSize;
+  size: ControlSize;
 }): ReactElement {
   const { t } = useTranslation();
   const fieldStyle = useMemo(
@@ -1059,10 +1058,10 @@ function ProviderGlyph({
   provider: string | null;
   serverId: string | null;
 }): ReactElement | null {
+  const Icon = useProviderIcon(provider ?? "", serverId);
   if (!provider) {
     return null;
   }
-  const Icon = getProviderIcon(provider, serverId);
   return <Icon size={16} color={styles.providerIcon.color} />;
 }
 

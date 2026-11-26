@@ -1,0 +1,322 @@
+import React, { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { Platform, StyleSheet, View, type ViewProps, type ViewStyle } from "react-native";
+import type { PluginTheme } from "@getpaseo/plugin";
+import { TaskText as Text, HOST_LINE, HOST_FONT as F, TASK_MONO } from "../typography";
+import { useReducedMotion } from "../../ui/use-reduced-motion";
+import { DESKTOP_OVERLAY } from "../../ui/tokens/motion";
+import { tipChrome } from "./panel";
+import { openToolbarDetailsLayer } from "../../web";
+
+/**
+ * Hover hints on a desktop card: a pointer resting on a pill, the status
+ * icon, the meta row or the footer's times names what it shows ("分支：main").
+ *
+ * One layer per card instead of one hover per mark: each mark carries a
+ * `data-bchint` key (`hintProps`), and the card's layer listens on the card
+ * once and reads the key under the pointer. The marks keep their layout, and
+ * the hint, drawn as the card's last child, paints over every row of it.
+ * Touch has no hover, and native none of this.
+ */
+
+/** How long a pointer rests on a mark before its hint shows, as the toolbars' names. */
+export const HINT_DELAY_MS = 400;
+/** The hint's distance from the card's edges and from its mark. */
+const EDGE = 6;
+const GAP = 4;
+/** Room a one-line hint needs above its mark; with less it opens below. */
+const ROOM = 30;
+
+/** The hint texts a card registers each render, by key; read only when a hint opens. */
+export type CardHintTexts = Map<string, () => string>;
+
+/** The DOM attribute that marks a hinted element; nothing on native. */
+export function hintProps(key: string | undefined): ViewProps {
+  return Platform.OS === "web" && key ? ({ dataSet: { bchint: key } } as unknown as ViewProps) : {};
+}
+
+/**
+ * A board control's hover tip: the text itself, on its own
+ * attribute, so the board's layer (`BoardTips`) never answers a card's marks.
+ */
+export function tipProps(text: string | undefined): ViewProps {
+  return Platform.OS === "web" && text
+    ? ({ dataSet: { bctip: text } } as unknown as ViewProps)
+    : {};
+}
+
+export interface HintBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface HintPlace {
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+  maxWidth: number;
+}
+
+/**
+ * Where a mark's hint sits in the card, in the card's own coordinates (inside
+ * its border): above the mark when the card has room there, else below; from
+ * the mark's left edge when the mark is in the card's left half, else ending
+ * at its right edge, so the hint never leaves the card (the lane clips it).
+ */
+export function placeHint(anchor: HintBox, card: { width: number; height: number }): HintPlace {
+  const above = anchor.top >= ROOM;
+  const vertical = above
+    ? { bottom: card.height - anchor.top + GAP }
+    : { top: anchor.top + anchor.height + GAP };
+  return { ...vertical, ...alongside(anchor, card.width) };
+}
+
+/**
+ * A board control's tip opens below it, or above when the board's bottom
+ * leaves too little room. The board owns the layer, outside sidebar scrollers.
+ */
+export function placeTip(anchor: HintBox, board: { width: number; height: number }): HintPlace {
+  const below = anchor.top + anchor.height + GAP;
+  const vertical =
+    below + ROOM + EDGE > board.height && anchor.top >= ROOM + GAP + EDGE
+      ? { bottom: board.height - anchor.top + GAP }
+      : { top: below };
+  return { ...vertical, ...alongside(anchor, board.width) };
+}
+
+/** From the mark's left edge in the left half of `width`, else ending at its right edge. */
+function alongside(anchor: HintBox, width: number): Pick<HintPlace, "left" | "right" | "maxWidth"> {
+  if (anchor.left + anchor.width / 2 <= width / 2) {
+    const left = Math.max(EDGE, anchor.left);
+    return { left, maxWidth: Math.max(0, width - EDGE - left) };
+  }
+  const right = Math.max(EDGE, width - anchor.left - anchor.width);
+  return { right, maxWidth: Math.max(0, width - EDGE - right) };
+}
+
+interface Shown {
+  text: string;
+  place: HintPlace;
+  titleAnchor: Element | null;
+}
+
+/** The card's hint layer: render it last in the card, with the card's root and its texts. */
+export function CardHints(props: {
+  root: RefObject<View | null>;
+  texts: RefObject<CardHintTexts>;
+  theme: PluginTheme;
+  color: string;
+}) {
+  const { texts } = props;
+  return (
+    <HintLayer
+      root={props.root}
+      theme={props.theme}
+      color={props.color}
+      attribute="bchint"
+      read={(mark) => texts.current?.get(mark.getAttribute("data-bchint") ?? "")?.()}
+      place={placeHint}
+      testID="task-card-hint"
+    />
+  );
+}
+
+/**
+ * The desktop board's tips for its toolbar and sidebar controls (`tipProps`): render
+ * it last in the board, with the board's root, so a tip paints over the lanes.
+ */
+export function BoardTips(props: {
+  root: RefObject<View | null>;
+  theme: PluginTheme;
+  color: string;
+}) {
+  return (
+    <HintLayer
+      root={props.root}
+      theme={props.theme}
+      color={props.color}
+      attribute="bctip"
+      read={(mark) => mark.getAttribute("data-bctip") ?? undefined}
+      place={placeTip}
+      testID="board-tip"
+    />
+  );
+}
+
+/** One hover layer over `root`: the marks under it carry `data-<attribute>`, `read` gives a mark's text. */
+function HintLayer(props: {
+  root: RefObject<View | null>;
+  theme: PluginTheme;
+  color: string;
+  attribute: "bchint" | "bctip";
+  read(mark: Element): string | undefined;
+  place(anchor: HintBox, box: { width: number; height: number }): HintPlace;
+  testID: string;
+}) {
+  const [shown, setShown] = useState<Shown | null>(null);
+  const titleLayer = useRef<View>(null);
+  useLayoutEffect(() => {
+    if (!shown?.titleAnchor) return;
+    return openToolbarDetailsLayer(titleLayer.current, shown.titleAnchor, "below");
+  }, [shown]);
+  const { root, attribute, place } = props;
+  const read = useRef(props.read);
+  read.current = props.read;
+  const reducedMotion = useReducedMotion();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    const card = root.current as unknown as HTMLElement | null;
+    if (Platform.OS !== "web" || !card?.addEventListener) return;
+    let target: Element | null = null;
+    const close = () => {
+      clearTimeout(timer.current);
+      setShown(null);
+    };
+    const over = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      const found = (event.target as Element | null)?.closest?.(`[data-${attribute}]`) ?? null;
+      const next = found && card.contains(found) ? found : null;
+      if (next === target) return;
+      target = next;
+      close();
+      if (!next) return;
+      timer.current = setTimeout(() => {
+        const text = read.current(next);
+        if (!text || !next.isConnected) return;
+        const box = card.getBoundingClientRect();
+        const mark = next.getBoundingClientRect();
+        // Absolute children sit inside the card's border.
+        const anchor = {
+          left: mark.left - box.left - card.clientLeft,
+          top: mark.top - box.top - card.clientTop,
+          width: mark.width,
+          height: mark.height,
+        };
+        setShown({
+          text,
+          place: place(anchor, { width: card.clientWidth, height: card.clientHeight }),
+          titleAnchor:
+            attribute === "bchint" &&
+            ["title", "permission-question"].includes(next.getAttribute("data-bchint") ?? "")
+              ? next
+              : null,
+        });
+      }, HINT_DELAY_MS);
+    };
+    const leave = () => {
+      target = null;
+      close();
+    };
+    // A press or a scroll ends the hint; the same mark shows it again only once the pointer leaves it.
+    card.addEventListener("pointerover", over);
+    card.addEventListener("pointerleave", leave);
+    card.addEventListener("pointerdown", close);
+    card.addEventListener("wheel", close, { passive: true });
+    card.addEventListener("scroll", close, true);
+    return () => {
+      clearTimeout(timer.current);
+      card.removeEventListener("pointerover", over);
+      card.removeEventListener("pointerleave", leave);
+      card.removeEventListener("pointerdown", close);
+      card.removeEventListener("wheel", close);
+      card.removeEventListener("scroll", close, true);
+    };
+  }, [root, attribute, place]);
+  if (!shown) return null;
+  const { place: at } = shown;
+  // Board controls append their keyboard shortcut in parentheses; card hints remain prose.
+  const shortcut =
+    attribute === "bctip"
+      ? /^([\s\S]* \()([A-Z/,\]]|Esc|Space|\u7a7a\u683c)(\))$/.exec(shown.text)
+      : null;
+  const content = (
+    <View
+      pointerEvents="none"
+      style={[
+        {
+          position: shown.titleAnchor ? "relative" : "absolute",
+          zIndex: 40,
+          left: shown.titleAnchor ? undefined : at.left,
+          right: shown.titleAnchor ? undefined : at.right,
+          top: shown.titleAnchor ? undefined : at.top,
+          bottom: shown.titleAnchor ? undefined : at.bottom,
+          maxWidth: at.maxWidth,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          ...tipChrome(props.theme),
+        } as ViewStyle,
+        reducedMotion ? null : at.bottom !== undefined ? motion?.above : motion?.below,
+      ]}
+      testID={props.testID}
+    >
+      <Text
+        style={{
+          fontSize: F.sm,
+          lineHeight: HOST_LINE.sm,
+          color: props.color,
+          ...(Platform.OS === "web" ? { overflowWrap: "anywhere" } : null),
+        }}
+      >
+        {shortcut ? (
+          <>
+            {shortcut[1]}
+            <Text style={{ fontFamily: TASK_MONO }}>{shortcut[2]}</Text>
+            {shortcut[3]}
+          </>
+        ) : (
+          shown.text
+        )}
+      </Text>
+    </View>
+  );
+  if (!shown.titleAnchor) return content;
+  return (
+    <View
+      ref={titleLayer}
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: at.left,
+        right: at.right,
+        top: at.top,
+        bottom: at.bottom,
+        maxWidth: at.maxWidth,
+      }}
+    >
+      {content}
+    </View>
+  );
+}
+
+/** The toolbars' preview entrance: a fade with a short drift away from the mark. RNW compiles keyframes only through `StyleSheet.create`. */
+const motion =
+  Platform.OS === "web"
+    ? StyleSheet.create({
+        above: {
+          animationKeyframes: [
+            {
+              from: {
+                opacity: DESKTOP_OVERLAY.opacity,
+                transform: `translateY(${DESKTOP_OVERLAY.shift}px)`,
+              },
+            },
+          ],
+          animationDuration: `${DESKTOP_OVERLAY.ms}ms`,
+          animationTimingFunction: DESKTOP_OVERLAY.cssEase,
+        } as ViewStyle,
+        below: {
+          animationKeyframes: [
+            {
+              from: {
+                opacity: DESKTOP_OVERLAY.opacity,
+                transform: `translateY(-${DESKTOP_OVERLAY.shift}px)`,
+              },
+            },
+          ],
+          animationDuration: `${DESKTOP_OVERLAY.ms}ms`,
+          animationTimingFunction: DESKTOP_OVERLAY.cssEase,
+        } as ViewStyle,
+      })
+    : null;

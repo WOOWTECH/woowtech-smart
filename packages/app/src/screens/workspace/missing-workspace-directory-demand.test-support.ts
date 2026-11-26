@@ -21,6 +21,8 @@ export const workspace: WorkspaceDescriptor = {
   projectKind: "git",
   workspaceKind: "local_checkout",
   name: "main",
+  createdAt: null,
+  lastUserMessageAt: null,
   status: "done",
   statusEnteredAt: null,
   archivingAt: null,
@@ -215,6 +217,8 @@ class DirectoryTransport implements DaemonTransport {
         subscriptionId: message.subscribe ? this.subscription() : null,
         entries: this.entries.map((entry) => ({
           ...entry,
+          createdAt: entry.createdAt?.toISOString(),
+          lastUserMessageAt: entry.lastUserMessageAt?.toISOString() ?? null,
           statusEnteredAt: entry.statusEnteredAt?.toISOString() ?? null,
           activityAt: null,
         })),

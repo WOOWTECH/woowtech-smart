@@ -132,6 +132,12 @@ export class DeferredQuery implements Query {
     return this.forward("applyFlagSettings", (query) => query.applyFlagSettings(...args));
   }
 
+  updateSettings(
+    ...args: Parameters<Query["updateSettings"]>
+  ): ReturnType<Query["updateSettings"]> {
+    return this.forward("updateSettings", (query) => query.updateSettings(...args));
+  }
+
   initializationResult(): ReturnType<Query["initializationResult"]> {
     return this.forward("initializationResult", (query) => query.initializationResult());
   }
@@ -178,6 +184,18 @@ export class DeferredQuery implements Query {
 
   reloadSkills(): ReturnType<Query["reloadSkills"]> {
     return this.forward("reloadSkills", (query) => query.reloadSkills());
+  }
+
+  reloadOutputStyles(
+    ...args: Parameters<Query["reloadOutputStyles"]>
+  ): ReturnType<Query["reloadOutputStyles"]> {
+    return this.forward("reloadOutputStyles", (query) => query.reloadOutputStyles(...args));
+  }
+
+  readMcpResource(
+    ...args: Parameters<Query["readMcpResource"]>
+  ): ReturnType<Query["readMcpResource"]> {
+    return this.forward("readMcpResource", (query) => query.readMcpResource(...args));
   }
 
   accountInfo(): ReturnType<Query["accountInfo"]> {

@@ -23,13 +23,14 @@ export default defineConfig({
   // spec on one worker avoids repeating its file-level setup across daemons.
   fullyParallel: false,
   workers: Number(process.env.E2E_WORKERS ?? (process.env.CI ? "2" : "1")),
+  // Workspace packages are already compiled. Tests import them at run time, so
+  // on a cold cache every worker transpiles the same files and writes them into
+  // Playwright's shared transform cache without locking. A worker that reads an
+  // entry mid-write loads an empty module and fails with "does not provide an
+  // export named".
+  build: { external: ["**/packages/*/dist/**"] },
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
-  // woowtech smart: Node loads the built packages as they are. Playwright keeps one transpiled
-  // copy of each file, so a dist module that test code requires first (protocol's brand-values,
-  // through the app's host-routes) reaches the client's later import() as CommonJS, and the
-  // import fails with "does not provide an export named".
-  build: { external: ["**/packages/*/dist/**"] },
   use: {
     baseURL,
     trace: process.env.CI ? "on-first-retry" : "retain-on-failure",

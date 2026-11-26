@@ -9,8 +9,40 @@ import { i18n } from "@/i18n/i18next";
 vi.mock("@/components/adaptive-modal-sheet", async () => {
   const ReactModule = await vi.importActual<typeof import("react")>("react");
   return {
-    AdaptiveModalSheet: ({ children }: { children: React.ReactNode }) =>
-      ReactModule.createElement("div", { role: "dialog" }, children),
+    AdaptiveModalSheet: ({
+      visible,
+      header,
+      children,
+      testID,
+    }: React.ComponentProps<
+      typeof import("@/components/adaptive-modal-sheet").AdaptiveModalSheet
+    >) =>
+      visible
+        ? ReactModule.createElement(
+            "div",
+            { role: "dialog", "aria-label": header?.title, "data-testid": testID },
+            header?.leading,
+            ReactModule.createElement("h1", null, header?.title),
+            header?.actions,
+            children,
+          )
+        : null,
+    SheetHeaderIconButton: ({
+      label,
+      onPress,
+      busy,
+      disabled,
+      testID,
+    }: React.ComponentProps<
+      typeof import("@/components/adaptive-modal-sheet").SheetHeaderIconButton
+    >) =>
+      ReactModule.createElement("button", {
+        type: "button",
+        "aria-label": label,
+        onClick: onPress,
+        disabled: disabled || busy,
+        "data-testid": testID,
+      }),
   };
 });
 

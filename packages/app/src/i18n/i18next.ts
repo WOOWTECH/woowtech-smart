@@ -1,45 +1,77 @@
-import { createInstance } from "i18next";
+import { createInstance, type BackendModule, type ResourceKey } from "i18next";
 import { initReactI18next } from "react-i18next";
 import { rebrandResources } from "./brand";
-import { observeI18nInit } from "./init";
 import { followDocumentLanguage } from "./woowtech-document-language";
-import { ar } from "./resources/ar";
+import { observeI18nInit } from "./init";
 import { en } from "./resources/en";
-import { es } from "./resources/es";
-import { fr } from "./resources/fr";
-import { ja } from "./resources/ja";
-import { ko } from "./resources/ko";
-import { ptBR } from "./resources/pt-BR";
-import { ru } from "./resources/ru";
-import { zhCN } from "./resources/zh-CN";
-import { zhTW } from "./resources/zh-TW";
+
+// Literal requires keep every locale bundled for offline use, while evaluating
+// its resource module only when selected. Synchronous reads preserve the language
+// provider's contract: translations are ready before it renders children.
+const bundledTranslations: BackendModule = {
+  type: "backend",
+  init() {},
+  read(language, _namespace, callback) {
+    const receive = (translation: ResourceKey) =>
+      callback(null, rebrandResources({ [language]: { translation } })[language].translation);
+    switch (language) {
+      case "en":
+        receive(en);
+        return;
+      case "ar":
+        receive(require("./resources/ar").ar);
+        return;
+      case "es":
+        receive(require("./resources/es").es);
+        return;
+      case "fr":
+        receive(require("./resources/fr").fr);
+        return;
+      case "ja":
+        receive(require("./resources/ja").ja);
+        return;
+      case "ko":
+        receive(require("./resources/ko").ko);
+        return;
+      case "pt-BR":
+        receive(require("./resources/pt-BR").ptBR);
+        return;
+      case "ru":
+        receive(require("./resources/ru").ru);
+        return;
+      case "zh-CN":
+        receive(require("./resources/zh-CN").zhCN);
+        return;
+      case "zh-TW":
+        receive(require("./resources/zh-TW").zhTW);
+        return;
+      default:
+        callback(null, undefined);
+    }
+  },
+};
 
 const i18n = createInstance();
 
 observeI18nInit(
-  i18n.use(initReactI18next).init({
-    compatibilityJSON: "v4",
-    fallbackLng: "en",
-    lng: "en",
-    resources: rebrandResources({
-      ar: { translation: ar },
-      en: { translation: en },
-      es: { translation: es },
-      fr: { translation: fr },
-      ja: { translation: ja },
-      ko: { translation: ko },
-      "pt-BR": { translation: ptBR },
-      ru: { translation: ru },
-      "zh-CN": { translation: zhCN },
-      "zh-TW": { translation: zhTW },
+  i18n
+    .use(bundledTranslations)
+    .use(initReactI18next)
+    .init({
+      compatibilityJSON: "v4",
+      fallbackLng: "en",
+      lng: "en",
+      partialBundledLanguages: true,
+      resources: rebrandResources({
+        en: { translation: en },
+      }),
+      interpolation: {
+        escapeValue: false,
+      },
+      react: {
+        useSuspense: false,
+      },
     }),
-    interpolation: {
-      escapeValue: false,
-    },
-    react: {
-      useSuspense: false,
-    },
-  }),
 );
 followDocumentLanguage(i18n);
 

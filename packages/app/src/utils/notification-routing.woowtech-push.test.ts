@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { buildHostWorkspaceOpenRoute } from "@/utils/host-routes";
-import { buildNotificationRoute, resolveNotificationTarget } from "./notification-routing";
+import { describe, expect, it, vi } from "vitest";
+import { createNotificationOpenRouter } from "@/notification-open";
+import type { NotificationTap } from "@/notification-open";
 
 // woowtech smart push (fork-owned): a tapped push from WoowTech's relay reaches
-// notification-routing.ts in two shapes. These tests lock that both still open the agent or
-// terminal, so notification-routing.ts needs no fork change.
+// notification-open in two shapes. Agents resolve their current workspace through navigation;
+// terminal targets retain the workspace carried by the relay.
 
 const SERVER_ID = "srv_Ab3dEf9hIjK_";
 const WORKSPACE_ID = "wks_0123456789abcdef";
@@ -45,47 +45,64 @@ function iosTapData(target: { agentId: string } | { terminalId: string }) {
   return relayData(target);
 }
 
+async function openRelayTap(data: NotificationTap["data"]) {
+  const openAgent = vi.fn();
+  const openTerminal = vi.fn();
+  const openRoute = vi.fn();
+  let acknowledge = () => {};
+  const dispatched = new Promise<void>((resolve) => {
+    acknowledge = resolve;
+  });
+  const router = createNotificationOpenRouter({
+    source: {
+      subscribe: () => () => {},
+      takeLaunchTap: async () => ({ id: "relay-delivery", data }),
+      acknowledge: () => acknowledge(),
+    },
+    openAgent,
+    openTerminal,
+    openRoute,
+    whenReadyToNavigate: () => Promise.resolve(),
+  });
+  const stop = router.start();
+  await dispatched;
+  stop();
+  return { openAgent, openTerminal, openRoute };
+}
+
 describe("tapping a woowtech push", () => {
-  it("opens the agent from an Android tap", () => {
-    const data = androidTapData({ agentId: AGENT_ID });
+  it.each([
+    ["Android", androidTapData],
+    ["iOS", iosTapData],
+  ] as const)(
+    "opens the agent from an %s tap without trusting the old workspace hint",
+    async (_platform, tapData) => {
+      const opened = await openRelayTap(tapData({ agentId: AGENT_ID }));
+      expect(opened.openAgent).toHaveBeenCalledExactlyOnceWith({
+        serverId: SERVER_ID,
+        agentId: AGENT_ID,
+      });
+      expect(opened.openTerminal).not.toHaveBeenCalled();
+      expect(opened.openRoute).not.toHaveBeenCalled();
+    },
+  );
 
-    expect(resolveNotificationTarget(data)).toEqual({
+  it.each([androidTapData, iosTapData])("opens the terminal in its workspace", async (tapData) => {
+    const opened = await openRelayTap(tapData({ terminalId: TERMINAL_ID }));
+    expect(opened.openTerminal).toHaveBeenCalledExactlyOnceWith({
+      kind: "terminal",
       serverId: SERVER_ID,
       workspaceId: WORKSPACE_ID,
-      agentId: AGENT_ID,
-      terminalId: null,
+      terminalId: TERMINAL_ID,
     });
-    expect(buildNotificationRoute(data)).toBe(
-      buildHostWorkspaceOpenRoute(SERVER_ID, WORKSPACE_ID, `agent:${AGENT_ID}`),
-    );
+    expect(opened.openAgent).not.toHaveBeenCalled();
+    expect(opened.openRoute).not.toHaveBeenCalled();
   });
 
-  it("opens the agent from an iOS tap", () => {
-    const data = iosTapData({ agentId: AGENT_ID });
-
-    expect(resolveNotificationTarget(data)).toEqual({
-      serverId: SERVER_ID,
-      workspaceId: WORKSPACE_ID,
-      agentId: AGENT_ID,
-      terminalId: null,
-    });
-    expect(buildNotificationRoute(data)).toBe(
-      buildHostWorkspaceOpenRoute(SERVER_ID, WORKSPACE_ID, `agent:${AGENT_ID}`),
-    );
-  });
-
-  it("opens the terminal from an Android or iOS tap", () => {
-    const terminalRoute = buildHostWorkspaceOpenRoute(
-      SERVER_ID,
-      WORKSPACE_ID,
-      `terminal:${TERMINAL_ID}`,
-    );
-
-    expect(buildNotificationRoute(androidTapData({ terminalId: TERMINAL_ID }))).toBe(terminalRoute);
-    expect(buildNotificationRoute(iosTapData({ terminalId: TERMINAL_ID }))).toBe(terminalRoute);
-  });
-
-  it("opens the app's start from the relay's daily-limit notice, which names no host", () => {
-    expect(buildNotificationRoute({ v: "1", reason: "daily_limit" })).toBe("/");
+  it("acknowledges a daily-limit notice without replacing the current screen", async () => {
+    const opened = await openRelayTap({ v: "1", reason: "daily_limit" });
+    expect(opened.openAgent).not.toHaveBeenCalled();
+    expect(opened.openTerminal).not.toHaveBeenCalled();
+    expect(opened.openRoute).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,8 @@
 // cmd.exe and the `which` package look in the current folder first on Windows, and the daemon runs
 // tools by name inside users' project folders, so a project carrying gh.cmd would have it run.
 // Relative PATH entries resolve against the current folder too, so they are skipped as well.
+// TODO: migrate PATH probes with spawnProcess and the shared synchronous executable lookup.
+// eslint-disable-next-line paseo/no-sync-io -- Preserve lstat handling of Windows execution aliases.
 import { lstatSync } from "node:fs";
 import path from "node:path";
 

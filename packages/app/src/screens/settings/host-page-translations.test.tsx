@@ -52,6 +52,13 @@ vi.mock("@/components/adaptive-modal-sheet", async () => {
   };
 });
 
+// PageLayout imports the Android keyboard scroller even on web. Keep that native
+// animation boundary out of these tests while preserving scroll content and props.
+vi.mock("react-native-keyboard-controller", async () => {
+  const { ScrollView } = await vi.importActual<typeof import("react-native")>("react-native");
+  return { KeyboardAwareScrollView: ScrollView };
+});
+
 // The settings switches animate their colors; the test theme has none to animate.
 vi.mock("react-native-reanimated", () => ({
   default: { View: "div" },

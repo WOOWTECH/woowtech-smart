@@ -1,9 +1,10 @@
 import { useCallback } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { withUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ExternalLink } from "lucide-react-native";
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
+import { PressHighlight } from "@/components/ui/press-highlight";
 import { settingsStyles } from "@/styles/settings";
 import { openExternalUrl } from "@/utils/open-external-url";
 
@@ -25,8 +26,9 @@ export function WoowtechPrivacyPolicyRow() {
   }, [policyUrl]);
 
   return (
-    <Pressable
+    <PressHighlight
       style={[settingsStyles.row, settingsStyles.rowBorder]}
+      highlightStyle={styles.pressed}
       onPress={handlePress}
       accessibilityRole="link"
       testID="settings-privacy-policy"
@@ -36,6 +38,12 @@ export function WoowtechPrivacyPolicyRow() {
         <Text style={settingsStyles.rowHint}>{t("woowtech.privacyPolicy.hint")}</Text>
       </View>
       <ThemedExternalLink />
-    </Pressable>
+    </PressHighlight>
   );
 }
+
+const styles = StyleSheet.create((theme) => ({
+  pressed: {
+    backgroundColor: theme.colors.surface3,
+  },
+}));

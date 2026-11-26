@@ -24,6 +24,7 @@ type WorkerLifecycleMessage =
   | {
       type: "paseo:shutdown";
       reason?: string;
+      keepTerminals: boolean;
     }
   | {
       type: "paseo:ready";
@@ -33,6 +34,7 @@ type WorkerLifecycleMessage =
   | {
       type: "paseo:restart";
       reason?: string;
+      keepTerminals: boolean;
     };
 
 interface SupervisorHeartbeatMessage {
@@ -42,7 +44,10 @@ interface SupervisorHeartbeatMessage {
 interface SupervisorGracefulShutdownMessage {
   type: "paseo:graceful-shutdown";
   reason: string;
+  keepTerminals: boolean;
 }
+
+export type SupervisorLifecycleLog = (message: string, fields?: Record<string, unknown>) => void;
 
 interface SupervisorOptions {
   name: string;
@@ -60,15 +65,29 @@ interface SupervisorOptions {
   onWorkerExit?: () => Promise<void> | void;
   restartOnCrash?: boolean;
   onSupervisorExit?: () => Promise<void> | void;
+  // Closes every terminal the worker left. Runs after a kill-intent restart or stop once the
+  // worker has exited (also after a forced kill), before a respawn, and on any supervisor
+  // exit except a keep-terminals stop. A crash restart keeps terminals and skips it.
+  cleanupTerminals?: (log: SupervisorLifecycleLog) => Promise<void>;
   logFile?: SupervisorLogFileOptions;
 }
 
 export interface SupervisorController {
-  requestShutdown(reason: string): void;
+  requestShutdown(reason: string, options?: { keepTerminals?: boolean }): void;
 }
 
 function describeExit(code: number | null, signal: NodeJS.Signals | null): string {
   return signal ?? (typeof code === "number" ? `code ${code}` : "unknown");
+}
+
+function describeWorkerRestart(input: {
+  exitDescriptor: string;
+  crashed: boolean;
+  delayMs: number;
+}): string {
+  const outcome = input.crashed ? "crashed" : "exited";
+  const delay = input.delayMs > 0 ? ` in ${input.delayMs} ms` : "";
+  return `Worker ${outcome} (${input.exitDescriptor}). Restarting worker${delay}...`;
 }
 
 function parseLifecycleMessage(msg: unknown): WorkerLifecycleMessage | null {
@@ -77,10 +96,11 @@ function parseLifecycleMessage(msg: unknown): WorkerLifecycleMessage | null {
   }
   const type = (msg as { type?: unknown }).type;
   if (type === "paseo:shutdown") {
-    const reason = (msg as { reason?: unknown }).reason;
+    const { reason, keepTerminals } = msg as { reason?: unknown; keepTerminals?: unknown };
     return {
       type: "paseo:shutdown",
       ...(typeof reason === "string" && reason.trim().length > 0 ? { reason } : {}),
+      keepTerminals: keepTerminals === true,
     };
   }
   if (type === "paseo:ready") {
@@ -94,10 +114,11 @@ function parseLifecycleMessage(msg: unknown): WorkerLifecycleMessage | null {
     return { type: "paseo:ready", listen, serverId };
   }
   if (type === "paseo:restart") {
-    const reason = (msg as { reason?: unknown }).reason;
+    const { reason, keepTerminals } = msg as { reason?: unknown; keepTerminals?: unknown };
     return {
       type: "paseo:restart",
       ...(typeof reason === "string" && reason.trim().length > 0 ? { reason } : {}),
+      keepTerminals: keepTerminals === true,
     };
   }
   return null;
@@ -169,6 +190,15 @@ function createDurableLog(
   };
 }
 
+// The program that started the daemon can close its end of stdout or stderr, as
+// `paseo daemon run | head -1` does. Drop the output nobody reads and keep supervising
+// the worker; daemon.log still records it.
+function ignoreClosedOutput(error: NodeJS.ErrnoException): void {
+  if (error.code !== "EPIPE") {
+    throw error;
+  }
+}
+
 export function runSupervisor(options: SupervisorOptions): SupervisorController {
   const restartOnCrash = options.restartOnCrash ?? false;
   const workerArgs = options.workerArgs ?? process.argv.slice(2);
@@ -183,6 +213,9 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
   let crashRestartTimer: NodeJS.Timeout | null = null;
   let restarting = false;
   let shuttingDown = false;
+  // The resolved terminal decision of the pending restart or stop. It survives the force-kill
+  // path, so a hung kill restart still closes terminals before the respawn.
+  let pendingKeepTerminals = false;
   let exiting = false;
   let lifecycleFailed = false;
   let publication = Promise.resolve();
@@ -215,12 +248,31 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
 
   const closeLogStream = (): Promise<void> => durableLog.close();
 
-  const exitSupervisor = (code: number): void => {
+  const runTerminalCleanup = async (when: string): Promise<void> => {
+    if (!options.cleanupTerminals) {
+      return;
+    }
+    writeLifecycleLog("Closing terminals", { when });
+    try {
+      await options.cleanupTerminals(writeLifecycleLog);
+      writeLifecycleLog("Terminal cleanup finished", { when });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Terminal cleanup not confirmed (${when}): ${message}`);
+    }
+  };
+
+  const exitSupervisor = (code: number, exitOptions: { keepTerminals?: boolean } = {}): void => {
     if (exiting) {
       return;
     }
     exiting = true;
-    Promise.resolve(options.onSupervisorExit?.())
+    const cleanup =
+      exitOptions.keepTerminals === true
+        ? Promise.resolve()
+        : runTerminalCleanup("supervisor_exit");
+    cleanup
+      .then(() => options.onSupervisorExit?.())
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         log(`Supervisor exit cleanup failed: ${message}`);
@@ -282,11 +334,15 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
 
     const spawnSpec = resolveWorkerSpawnSpec?.(workerEntry) ?? null;
     workerStartedAt = Date.now();
+    // The supervisor receives terminal signals and orders shutdown over IPC.
+    // Providers must stay alive until the worker has captured restart recovery.
+    const detached = process.platform !== "win32";
     writeLifecycleLog("Spawning worker", { workerEntry });
     // woowtech smart: not in a working directory that was removed (scripts/woowtech-worker-cwd.ts).
     const cwd = workerCwd();
     if (spawnSpec) {
       child = spawn(spawnSpec.command, spawnSpec.args, {
+        detached,
         stdio: ["inherit", "pipe", "pipe", "ipc"],
         env: spawnSpec.env ?? workerEnv,
         windowsHide: true,
@@ -297,6 +353,7 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
         workerEntry,
         workerArgs,
         withHiddenWindow({
+          detached,
           stdio: ["inherit", "pipe", "pipe", "ipc"],
           env: workerEnv,
           execArgv: workerExecArgv,
@@ -365,14 +422,20 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
 
       if (lifecycleMessage.type === "paseo:shutdown") {
         const reason = lifecycleMessage.reason ?? "worker_requested_shutdown";
-        writeLifecycleLog("Worker requested shutdown", { reason });
-        requestShutdown(reason);
+        writeLifecycleLog("Worker requested shutdown", {
+          reason,
+          keepTerminals: lifecycleMessage.keepTerminals,
+        });
+        requestShutdown(reason, { keepTerminals: lifecycleMessage.keepTerminals });
         return;
       }
 
       const reason = lifecycleMessage.reason ?? "worker_requested_restart";
-      writeLifecycleLog("Worker requested restart", { reason });
-      requestRestart(reason);
+      writeLifecycleLog("Worker requested restart", {
+        reason,
+        keepTerminals: lifecycleMessage.keepTerminals,
+      });
+      requestRestart(reason, lifecycleMessage.keepTerminals);
     });
 
     child.on("error", (error) => {
@@ -403,7 +466,7 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
 
         if (shuttingDown) {
           log(`Worker exited (${exitDescriptor}). Supervisor shutting down.`);
-          exitSupervisor(0);
+          exitSupervisor(0, { keepTerminals: pendingKeepTerminals });
           return;
         }
 
@@ -414,20 +477,34 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
         if (restarting || crashed) {
           const delayMs =
             crashed && !restarting ? crashBackoff.nextDelayMs(Date.now() - workerStartedAt) : 0;
+          const closeTerminals = restarting && !pendingKeepTerminals;
           restarting = false;
+          pendingKeepTerminals = false;
           log(
-            crashed
-              ? `Worker crashed (${exitDescriptor}). Restarting worker${delayMs > 0 ? ` in ${delayMs} ms` : ""}...`
-              : `Worker exited (${exitDescriptor}). Restarting worker...`,
+            describeWorkerRestart({
+              exitDescriptor,
+              crashed: crashed && !closeTerminals,
+              delayMs,
+            }),
           );
-          if (delayMs > 0) {
-            crashRestartTimer = setTimeout(() => {
-              crashRestartTimer = null;
-              if (!shuttingDown) spawnWorker();
-            }, delayMs);
+          if (!closeTerminals) {
+            if (delayMs > 0) {
+              crashRestartTimer = setTimeout(() => {
+                crashRestartTimer = null;
+                if (!shuttingDown) spawnWorker();
+              }, delayMs);
+              return;
+            }
+            spawnWorker();
             return;
           }
-          spawnWorker();
+          // The replacement daemon must never adopt terminals the user asked to close.
+          void runTerminalCleanup("before_respawn").then(() => {
+            if (!shuttingDown) {
+              spawnWorker();
+            }
+            return;
+          });
           return;
         }
 
@@ -446,9 +523,11 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
     const message: SupervisorGracefulShutdownMessage = {
       type: "paseo:graceful-shutdown",
       reason,
+      keepTerminals: pendingKeepTerminals,
     };
     writeLifecycleLog("Supervisor requesting graceful worker shutdown", {
       reason,
+      keepTerminals: pendingKeepTerminals,
       supervisorPid: process.pid,
       workerPid: currentChild.pid ?? null,
     });
@@ -472,18 +551,19 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
     });
   };
 
-  const requestRestart = (reason: string) => {
+  const requestRestart = (reason: string, keepTerminals: boolean) => {
     if (!child || restarting || shuttingDown) {
       return;
     }
     restarting = true;
-    writeLifecycleLog("Restart requested", { reason });
+    pendingKeepTerminals = keepTerminals;
+    writeLifecycleLog("Restart requested", { reason, keepTerminals });
     log(`${reason}. Stopping worker for restart...`);
     requestWorkerShutdown(reason);
     scheduleForceKill(reason);
   };
 
-  const requestShutdown = (reason: string) => {
+  const requestShutdown = (reason: string, shutdownOptions: { keepTerminals?: boolean } = {}) => {
     if (shuttingDown) {
       return;
     }
@@ -493,11 +573,15 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
       clearTimeout(crashRestartTimer);
       crashRestartTimer = null;
     }
-    writeLifecycleLog("Supervisor shutdown requested", { reason });
+    pendingKeepTerminals = shutdownOptions.keepTerminals === true;
+    writeLifecycleLog("Supervisor shutdown requested", {
+      reason,
+      keepTerminals: pendingKeepTerminals,
+    });
     log(`${reason}. Stopping worker...`);
     if (!child) {
       void publication.then(() => {
-        exitSupervisor(lifecycleFailed ? 1 : 0);
+        exitSupervisor(lifecycleFailed ? 1 : 0, { keepTerminals: pendingKeepTerminals });
         return;
       });
       return;
@@ -512,6 +596,8 @@ export function runSupervisor(options: SupervisorOptions): SupervisorController 
 
   process.on("SIGINT", () => forwardSignal("SIGINT"));
   process.on("SIGTERM", () => forwardSignal("SIGTERM"));
+  process.stdout.on("error", ignoreClosedOutput);
+  process.stderr.on("error", ignoreClosedOutput);
 
   process.stdout.write(`[${options.name}] ${options.startupMessage}\n`);
   writeLifecycleLog(options.startupMessage);

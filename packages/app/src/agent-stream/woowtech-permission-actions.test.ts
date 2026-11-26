@@ -34,6 +34,7 @@ describe("localizePermissionActions", () => {
     if (!i18n.isInitialized) {
       await i18n.init();
     }
+    await i18n.loadLanguages("zh-TW");
   });
 
   afterAll(async () => {

@@ -1,0 +1,208 @@
+/**
+ * The details panel's layer on web: a top-layer popover over the whole
+ * window, as the hover preview's (`openPreviewLayer`). Never `position: fixed`
+ * inside the row on its own: a virtualized row's transform would make the row
+ * its containing block (host facts §6); the top layer has the viewport.
+ *
+ * The layer is non-modal. Its stage lets the pointer through outside the
+ * panel (`pointerEvents="box-none"`), so the timeline behind stays live and a
+ * click on another row switches the panel to it; only the phone-width drawer
+ * catches the pointer, on its scrim.
+ */
+import { Platform } from "react-native";
+
+/** A hover preview open besides the panel. */
+function previewOpenBesides(layer: HTMLElement): boolean {
+  const previews = layer.ownerDocument.querySelectorAll<HTMLElement>(
+    '[data-testid="hover-preview"]',
+  );
+  return Array.from(previews).some((preview) => {
+    if (layer.contains(preview)) return false;
+    try {
+      return preview.matches(":popover-open");
+    } catch {
+      return preview.getClientRects().length > 0;
+    }
+  });
+}
+
+/**
+ * Raises `node` to the top layer over the window; returns what lowers it.
+ * The panel's keys, Escape among them, are `client/details/keyboard.ts`'s.
+ */
+export function bindDetailsLayer(node: unknown): () => void {
+  if (Platform.OS !== "web") return () => {};
+  const layer = node as HTMLElement | null;
+  if (!layer || typeof layer.setAttribute !== "function") return () => {};
+  layer.setAttribute("popover", "manual");
+  const style = layer.style;
+  style.position = "fixed";
+  style.inset = "0";
+  style.width = "100%";
+  style.height = "100%";
+  style.maxWidth = "none";
+  style.maxHeight = "none";
+  style.margin = "0";
+  style.padding = "0";
+  style.border = "0";
+  style.background = "transparent";
+  style.overflow = "hidden";
+  try {
+    layer.showPopover?.();
+  } catch {
+    // Already shown, or a browser without popovers: the fixed layer still draws in place.
+  }
+  return () => {
+    try {
+      layer.hidePopover?.();
+    } catch {
+      // Gone with its pane.
+    }
+  };
+}
+
+/** Dismiss a work side panel after an outside click without taking that click from the timeline. */
+export function bindWorkOutsideClick(node: unknown, id: string, close: () => void): () => void {
+  if (Platform.OS !== "web") return () => {};
+  const layer = node as HTMLElement | null;
+  if (!layer) return () => {};
+  const doc = layer.ownerDocument;
+  let start: { x: number; y: number } | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const down = (event: PointerEvent) => {
+    start = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+  };
+  const click = (event: MouseEvent) => {
+    const origin = start;
+    start = null;
+    if (
+      event.button !== 0 ||
+      layer.getClientRects().length === 0 ||
+      layer.contains(event.target as Node)
+    )
+      return;
+    if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) >= 4) return;
+    if (
+      event
+        .composedPath()
+        .some((item) => (item as Element).getAttribute?.("data-bcworkdetails") === id)
+    )
+      return;
+    if (
+      event.composedPath().some((item) => {
+        const bar = item as HTMLElement & { bcSelectionSource?: () => Element | null };
+        const source = bar.bcSelectionSource?.();
+        return source !== null && source !== undefined && layer.contains(source);
+      })
+    )
+      return;
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      close();
+    }, 0);
+  };
+  doc.addEventListener("pointerdown", down, true);
+  doc.addEventListener("click", click, true);
+  return () => {
+    doc.removeEventListener("pointerdown", down, true);
+    doc.removeEventListener("click", click, true);
+    if (timer !== null) clearTimeout(timer);
+  };
+}
+
+/**
+ * Keeps the window's title bar drag off `node`; returns what gives it back.
+ * Paseo desktop sets `-webkit-app-region: initial !important` on everything
+ * inside the timeline (`[data-window-content] *`), and the panel's DOM is
+ * there, so it emits no region of its own. Where it covers the pane header or
+ * the tab row, their drag regions stay, and Electron takes a press there as a
+ * window drag before the page sees it: the toolbar's copy and width buttons
+ * did nothing. An inline `!important` outranks the host's sheet. Only for
+ * what catches the pointer: the panel, not the stage around it.
+ */
+export function keepOffWindowDrag(node: unknown): () => void {
+  if (Platform.OS !== "web") return () => {};
+  const style = (node as HTMLElement | null)?.style;
+  if (!style || typeof style.setProperty !== "function") return () => {};
+  style.setProperty("-webkit-app-region", "no-drag", "important");
+  return () => style.removeProperty("-webkit-app-region");
+}
+
+/**
+ * Whether the panel's keys are this layer's: it is shown (Paseo keeps hidden
+ * panes mounted, and a layer in one must not react), and for Escape no hover
+ * preview or the panel's copy menu is open over it. Those take the key
+ * first, so one Escape closes one layer (`openPreviewLayer` asks
+ * `hasActiveDetailsKeyboard`).
+ */
+export function layerTakesKey(node: unknown, event?: KeyboardEvent): boolean {
+  const layer = node as HTMLElement | null;
+  if (!layer || typeof layer.getClientRects !== "function" || layer.getClientRects().length === 0)
+    return false;
+  if (event?.key !== "Escape") return true;
+  // The copy menu's own Escape closes the menu, not the panel.
+  if (layer.querySelector?.('[data-testid="details-copy-menu"]')) return false;
+  return !previewOpenBesides(layer);
+}
+
+/** The scroller a row sits in: its nearest ancestor that scrolls vertically, within its own pane. */
+export function nearestScroller(node: unknown): HTMLElement | null {
+  if (Platform.OS !== "web") return null;
+  let element = (node as HTMLElement | null)?.parentElement ?? null;
+  const view = element?.ownerDocument.defaultView;
+  while (element && view) {
+    const overflow = view.getComputedStyle(element).overflowY;
+    if (
+      /auto|scroll|overlay/.test(overflow) &&
+      (element.matches('[data-testid="agent-chat-scroll"]') ||
+        element.scrollHeight > element.clientHeight)
+    )
+      return element;
+    element = element.parentElement;
+  }
+  return null;
+}
+
+/** Reserve space in the host's timeline content without resizing its scroll viewport. */
+export function bindTimelineSpace(node: unknown): {
+  setWidth(width: number): void;
+  release(): void;
+} {
+  const scroller = nearestScroller(node);
+  const content = scroller?.matches('[data-testid="agent-chat-scroll"]')
+    ? (scroller.firstElementChild as HTMLElement | null)
+    : null;
+  if (!content) return { setWidth() {}, release() {} };
+  const original = content.style.getPropertyValue("padding-right");
+  const priority = content.style.getPropertyPriority("padding-right");
+  const padding = content.ownerDocument.defaultView!.getComputedStyle(content).paddingRight;
+  return {
+    setWidth(width) {
+      content.style.setProperty("padding-right", `calc(${padding} + ${width}px)`, priority);
+    },
+    release() {
+      if (original) content.style.setProperty("padding-right", original, priority);
+      else content.style.removeProperty("padding-right");
+    },
+  };
+}
+
+/** The host's constrained content column above this row, within its own scroller. */
+export function timelineColumn(node: unknown, scroller: HTMLElement): HTMLElement | null {
+  let element = (node as HTMLElement | null)?.parentElement ?? null;
+  const view = scroller.ownerDocument.defaultView;
+  let column: HTMLElement | null = null;
+  while (element && element !== scroller && view) {
+    if (Number.parseFloat(view.getComputedStyle(element).maxWidth) > 0) column = element;
+    element = element.parentElement;
+  }
+  return column;
+}
+
+/** The body the panel's content draws (`HoverPreviewBody`) is scrolled to its top. */
+export function webBodyAtTop(panel: unknown): boolean {
+  const node = panel as HTMLElement | null;
+  const body = node?.querySelector?.<HTMLElement>('[data-testid="hover-preview-body"]');
+  return !body || body.scrollTop <= 0;
+}

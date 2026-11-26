@@ -2,7 +2,6 @@ import {
   BUILTIN_PROVIDER_ICON_NAMES,
   KNOWN_PROVIDER_ICON_NAMES,
 } from "@getpaseo/protocol/provider-icon-names";
-import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import { isClaudeProviderId } from "./icons/claude-badge";
 
 export type ProviderIconName =
@@ -13,40 +12,17 @@ export type ProviderIconName =
 
 const BUILTIN_PROVIDER_IDS = new Set(BUILTIN_PROVIDER_ICON_NAMES);
 const KNOWN_PROVIDER_IDS = new Set(KNOWN_PROVIDER_ICON_NAMES);
-const providerSnapshotIconSvgsByServer = new Map<string, ReadonlyMap<string, string>>();
-
-export function replaceProviderSnapshotIcons(
-  serverId: string,
-  entries: readonly Pick<ProviderSnapshotEntry, "provider" | "iconSvg">[],
-): void {
-  const icons = new Map<string, string>();
-  for (const entry of entries) {
-    if (entry.iconSvg) {
-      icons.set(entry.provider, entry.iconSvg);
-    }
-  }
-  providerSnapshotIconSvgsByServer.set(serverId, icons);
-}
-
-export function resolveProviderIconName(
-  provider: string,
-  serverId?: string | null,
-): ProviderIconName {
-  // woowtech smart: Claude ids show the text badge, never a host's SVG (woowtech/README.md §22).
+export function resolveProviderIconName(provider: string, iconSvg?: string): ProviderIconName {
+  // Keep the catalog brand policy ahead of host-provided artwork.
   if (isClaudeProviderId(provider)) {
     return { kind: "builtin", id: "claude" };
   }
   if (BUILTIN_PROVIDER_IDS.has(provider)) {
     return { kind: "builtin", id: provider };
   }
-  // woowtech smart: a known id keeps its own icon even when a host sends an SVG for it
-  // (woowtech/README.md §22).
   if (KNOWN_PROVIDER_IDS.has(provider)) {
     return { kind: "catalog", id: provider };
   }
-  const iconSvg = serverId
-    ? providerSnapshotIconSvgsByServer.get(serverId)?.get(provider)
-    : undefined;
   if (iconSvg) {
     return { kind: "svg", svg: iconSvg };
   }

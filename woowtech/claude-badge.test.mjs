@@ -72,8 +72,8 @@ const ALLOWED_DRAWINGS = {
     "file-type icons the owner kept, each on the notices page or generic (section 24)",
   "packages/app/src/components/markdown/fence/mermaid/runtime/html.gen.ts":
     "the generated Mermaid runtime's diagram shapes",
-  "packages/app/src/terminal/native-renderer/terminal-custom-glyph.ts": "terminal box glyphs",
-  "packages/app/src/terminal/webview/terminal-emulator-webview-html.ts": "the terminal bundle",
+  "packages/app/src/components/terminal-emulator-native-grid.native.tsx":
+    "terminal text-selection grips, geometric handles",
 };
 
 // The bitmap images of woowtech smart's own that ship (woowtech/tools/generate-icons.mjs).
@@ -113,9 +113,14 @@ const UNREFERENCED_IMAGES_DIR = "packages/app/assets/images/editor-apps/";
 // host's or a vendor's SVG on screen, so it needs a decision first.
 const SVG_RENDER_SITES = {
   "packages/app/src/components/provider-icons.ts": "provider icons; a host's SVG as a badge",
-  "packages/app/src/components/provider-catalog-list.tsx": "the ACP catalog's icons",
   "packages/app/src/components/material-file-icon.tsx": "file-type icons",
   "packages/app/src/components/project-icon-image.tsx": "the user's own project icon",
+  "packages/app/src/plugins/icons.ts":
+    "user-installed plugin contributions; inline SVG is validated at registration and kit entry",
+  "packages/app/src/provider-settings/internal/add-provider-sheet.tsx":
+    "the bundled ACP catalog, curated by vendor-marks.mjs; no host artwork",
+  "packages/app/src/usage/source-icon.tsx":
+    "curated known usage sources and validated custom plugin SVGs",
   "packages/app/src/desktop/components/pair-device-section.tsx": "the pairing QR code",
 };
 
@@ -333,6 +338,27 @@ test("only woowtech smart's own images ship, and the vendor logos cleared for us
   assert.deepEqual(references, [], "The unreferenced editor logos are now used; badge them.");
 });
 
+test("plugin test fixtures are excluded without excluding plugin production code", () => {
+  const files = [...shippedFiles()].map(relative);
+  assert.ok(files.includes("packages/server/src/server/plugins/provider-icon.ts"));
+  assert.deepEqual(
+    files.filter((file) => file.includes("/test-fixtures/")),
+    [],
+  );
+});
+
+test("Xcode uses its curated badge when its uncleared desktop logo is absent", async () => {
+  const { loadEditorTargetIcon } = requireSource(
+    "packages/desktop/src/features/editor-targets/woowtech-editor-icons.ts",
+  );
+  const { vendorMonogram } = requireSource("packages/app/src/components/icons/vendor-badge.ts");
+  assert.deepEqual(
+    await loadEditorTargetIcon("xcode.png", path.join(repoRoot, EDITOR_LOGO_DIR, "xcode.png")),
+    { kind: "badge", vendor: "xcode" },
+  );
+  assert.equal(vendorMonogram("xcode"), "Xc");
+});
+
 test("only the allowlisted places render an SVG document", () => {
   const sites = [...shippedFiles(/\.[cm]?[jt]sx?$/)]
     .map(relative)
@@ -340,40 +366,122 @@ test("only the allowlisted places render an SVG document", () => {
   assert.deepEqual(
     sites.filter((file) => !(file in SVG_RENDER_SITES)),
     [],
-    "A new place renders SVG documents. A host's or vendor's SVG must show as a text badge.",
+    "A new place renders SVG documents. Review its provenance and validation; provider artwork must remain curated.",
   );
   for (const file of Object.keys(SVG_RENDER_SITES)) {
     assert.ok(existsSync(path.join(repoRoot, file)), `${file} is gone; update SVG_RENDER_SITES`);
   }
 });
 
+test("custom plugin SVGs retain validation at registration and kit rendering", async () => {
+  const { findSvgIconProblem } = await importSource("packages/plugin/src/icons.ts");
+  const safeSvg = '<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6" /></svg>';
+  assert.equal(findSvgIconProblem(safeSvg), null);
+  for (const svg of [
+    "<svg><script /></svg>",
+    "<svg><foreignObject /></svg>",
+    "<svg><style /></svg>",
+    '<svg onload="run()"></svg>',
+    '<svg><image href="https://example.com/tracker.svg" /></svg>',
+    `<svg>${" ".repeat(64 * 1024)}</svg>`,
+  ]) {
+    assert.notEqual(findSvgIconProblem(svg), null);
+  }
+  const pluginIcons = read("packages/app/src/plugins/icons.ts");
+  assert.match(pluginIcons, /const problem = findSvgIconProblem\(svg\);\s*if \(problem\) throw/);
+  assert.match(pluginIcons, /return parseSerializablePluginIcon\(owner, icon\)/);
+  assert.match(pluginIcons, /findSvgIconProblem\(icon\.svg\) === null/);
+  assert.match(pluginIcons, /if \(!isRenderable\(icon\)\) return null/);
+  assert.match(
+    read("packages/server/src/server/plugins/provider-icon.ts"),
+    /const problem = findSvgIconProblem\(svg\);\s*if \(problem\) throw/,
+  );
+});
+
+test("usage icons keep curated identities before validated custom plugin artwork", () => {
+  const { curatedUsageSourceIcon } = requireSource(
+    "packages/app/src/usage/woowtech-source-icon.ts",
+  );
+  const { ACP_PROVIDER_ICON_SVGS } = requireSource(ACP_ICONS_FILE);
+  const { vendorBadgeSvg } = requireSource("packages/app/src/components/icons/vendor-badge.ts");
+  const hostSvg = '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>';
+  for (const [id, curated] of Object.entries(ACP_PROVIDER_ICON_SVGS)) {
+    assert.equal(curatedUsageSourceIcon(id, hostSvg), curated, id);
+  }
+  for (const [sourceId, iconId] of [
+    ["claude", "claude-acp"],
+    ["codex", "codex-acp"],
+    ["copilot", "github-copilot-cli"],
+    ["antigravity", "agy"],
+    ["minimax", "minimax-code"],
+    ["opencode-go", "opencode"],
+    ["zai", "glm-acp-agent"],
+  ]) {
+    assert.equal(curatedUsageSourceIcon(sourceId, hostSvg), ACP_PROVIDER_ICON_SVGS[iconId]);
+    assert.equal(curatedUsageSourceIcon(sourceId, null), ACP_PROVIDER_ICON_SVGS[iconId]);
+  }
+  assert.equal(curatedUsageSourceIcon("pi", hostSvg), vendorBadgeSvg("pi"));
+  assert.equal(curatedUsageSourceIcon("custom-source", hostSvg), hostSvg);
+  assert.equal(curatedUsageSourceIcon("constructor", hostSvg), hostSvg);
+  assert.equal(curatedUsageSourceIcon("custom-source", null), null);
+  assert.equal(curatedUsageSourceIcon("custom-source", "<svg><script /></svg>"), null);
+  assert.equal(
+    curatedUsageSourceIcon("custom-source", '<svg><image href="https://example.com/icon" /></svg>'),
+    null,
+  );
+  for (const file of ["card.tsx", "options.tsx", "sidebar-item.tsx"]) {
+    assert.ok(
+      read(`packages/app/src/usage/${file}`).includes(
+        "curatedUsageSourceIcon(entry.sourceId, entry.icon)",
+      ),
+      `${file} must curate source icons before rendering`,
+    );
+  }
+  assert.match(
+    read("packages/app/src/hooks/use-acp-provider-catalog.ts"),
+    /useState<AcpProviderCatalogItem\[\]>\(ACP_PROVIDER_CATALOG\)/,
+    "the add-provider sheet must use the bundled curated catalog",
+  );
+});
+
 test("no provider shows the SVG a host sends for it", async () => {
   // A known provider resolves to its own icon before any host SVG; for any other provider the
   // app draws the badge in place of the host's SVG.
-  const { replaceProviderSnapshotIcons, resolveProviderIconName } = requireSource(
+  const { resolveProviderIconName } = requireSource(
     "packages/app/src/components/provider-icon-name.ts",
   );
-  const { KNOWN_PROVIDER_ICON_NAMES } = await importSource(
+  const { replaceProviderSnapshotIcons, providerSnapshotIcons } = requireSource(
+    "packages/app/src/data/provider-icons.ts",
+  );
+  const { KNOWN_PROVIDER_ICON_NAMES, BUILTIN_PROVIDER_ICON_NAMES } = await importSource(
     "packages/protocol/src/provider-icon-names.ts",
   );
   const hostSvg = '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>';
-  replaceProviderSnapshotIcons(
-    "guard-host",
-    [...KNOWN_PROVIDER_ICON_NAMES, "claude-acp"].map((provider) => ({
-      provider,
-      iconSvg: hostSvg,
-    })),
-  );
-  const showingHostSvg = [...KNOWN_PROVIDER_ICON_NAMES, "claude-acp"].filter(
-    (provider) => resolveProviderIconName(provider, "guard-host").kind === "svg",
-  );
-  assert.deepEqual(showingHostSvg, []);
+  const before = providerSnapshotIcons.getState();
+  const providers = [...KNOWN_PROVIDER_ICON_NAMES, "claude-acp"];
+  try {
+    replaceProviderSnapshotIcons(
+      "guard-host",
+      [...providers, "custom-provider"].map((provider) => ({ provider, iconSvg: hostSvg })),
+    );
+    const icons = providerSnapshotIcons.getState().get("guard-host");
+    for (const provider of providers) {
+      assert.equal(icons.get(provider), hostSvg);
+      const id = provider === "claude-acp" ? "claude" : provider;
+      const kind = BUILTIN_PROVIDER_ICON_NAMES.includes(id) ? "builtin" : "catalog";
+      assert.deepEqual(resolveProviderIconName(provider, icons.get(provider)), { kind, id });
+    }
+    assert.deepEqual(resolveProviderIconName("custom-provider", icons.get("custom-provider")), {
+      kind: "svg",
+      svg: hostSvg,
+    });
+  } finally {
+    providerSnapshotIcons.setState(before, true);
+  }
 
   const providerIcons = read("packages/app/src/components/provider-icons.ts");
   assert.ok(
-    providerIcons.includes(
-      "return getSnapshotProviderIcon(`${serverId}:${provider}`, vendorBadgeSvg(provider));",
-    ),
+    providerIcons.includes("return getSnapshotProviderIcon(provider, vendorBadgeSvg(provider));"),
     "provider-icons.ts must draw the badge in place of a host's SVG.",
   );
   assert.doesNotMatch(providerIcons, /getSnapshotProviderIcon\([^)]*name\.svg\)/);
@@ -384,6 +492,11 @@ test("no theme is named after Claude, and the Claude theme keeps its id", async 
   if (!i18n.isInitialized) {
     await i18n.init();
   }
+  await i18n.loadLanguages("zh-TW");
+  const locales = readdirSync(path.join(repoRoot, "packages/app/src/i18n/resources"))
+    .filter((file) => file.endsWith(".ts"))
+    .map((file) => path.basename(file, ".ts"));
+  await i18n.loadLanguages(locales);
   // Claude in the scripts upstream's translations use, including es's "claudio".
   const namesClaude = /claud|クロード|클로드|克劳德|克勞德|كلود|клод/i;
   const naming = Object.keys(i18n.store.data).flatMap((language) =>

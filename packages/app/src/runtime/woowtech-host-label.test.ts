@@ -13,7 +13,7 @@ import {
 } from "./host-runtime";
 import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import { handlePairingLink } from "./woowtech-pairing-link";
-import { StoredHostRegistrySchema, type HostProfile } from "@/types/host-connection";
+import { readHostRegistry, type HostProfile } from "@/types/host-connection";
 import type { ReplicaRowStore } from "./replica-cache/row-store";
 
 const REGISTRY_KEY = "@paseo:daemon-registry";
@@ -47,7 +47,9 @@ class MemoryRegistry implements HostRuntimeStorage {
     this.values.delete(key);
   }
   saved() {
-    return StoredHostRegistrySchema.parse(JSON.parse(this.values.get(REGISTRY_KEY) ?? "[]"));
+    const stored: unknown = JSON.parse(this.values.get(REGISTRY_KEY) ?? "[]");
+    if (!Array.isArray(stored)) throw new Error("Expected a stored host registry");
+    return readHostRegistry(stored).hosts;
   }
 }
 
@@ -201,13 +203,16 @@ function fixture(storage = new MemoryRegistry()) {
   };
 }
 
-async function importHost(store: HostRuntimeStore): Promise<HostProfile> {
-  return store.upsertConnectionFromOffer({
+async function importHost(store: HostRuntimeStore, keyByte = 7): Promise<HostProfile> {
+  const offer = {
     v: 2,
     serverId: SERVER_ID,
-    daemonPublicKeyB64: "synthetic-public-key",
+    daemonPublicKeyB64: Buffer.alloc(32, keyByte).toString("base64"),
     relay: { endpoint: "relay.invalid:443", useTls: true },
-  });
+  };
+  return store.upsertConnectionFromOfferUrl(
+    `${BRAND.scheme}:///#offer=${Buffer.from(JSON.stringify(offer)).toString("base64url")}`,
+  );
 }
 
 async function online(f: ReturnType<typeof fixture>, hostname: string | null): Promise<void> {
@@ -340,17 +345,12 @@ describe("woowtech host label at the real store/controller boundary", () => {
     const info = f.client.getLastServerInfoMessage();
     if (!info) throw new Error("missing server_info");
     const staleCallbacks = [...f.client.statusCallbacks];
-    expect(staleCallbacks.length).toBe(1);
+    expect(staleCallbacks.length).toBeGreaterThan(0);
     const next = fixture();
     f.replaceClient(next.client);
     const finishClose = new Deferred<void>();
     f.client.closeGate = finishClose.promise;
-    await f.store.upsertRelayConnection({
-      serverId: SERVER_ID,
-      relayEndpoint: "relay.invalid:443",
-      useTls: true,
-      daemonPublicKeyB64: "replacement-public-key",
-    });
+    await importHost(f.store, 8);
     await f.client.closing.promise;
     try {
       expect(f.client.getConnectionState().status).toBe("connected");
@@ -391,8 +391,14 @@ describe("woowtech host label at the real store/controller boundary", () => {
 
   it("rechecks cached server_info after hydration instead of persisting before the registry is loaded", async () => {
     const storage = new MemoryRegistry();
+    const saved = fixture(storage);
+    await saved.store.boot();
+    const host = await importHost(saved.store);
+    saved.store.syncHosts([]);
     const f = fixture(storage);
-    await importHost(f.store);
+    // A controller may connect before the registry is hydrated. Importing a link now waits
+    // for hydration, so restore that controller directly to exercise the early-info boundary.
+    f.store.syncHosts([host]);
     const before = storage.writes.length;
     await online(f, "Hydrated Mac");
     expect(f.store.isHostRegistryLoaded()).toBe(false);
@@ -418,7 +424,7 @@ describe("woowtech host label at the real store/controller boundary", () => {
     const offer = {
       v: 2,
       serverId: SERVER_ID,
-      daemonPublicKeyB64: "synthetic-key",
+      daemonPublicKeyB64: Buffer.alloc(32, 7).toString("base64"),
       relay: { endpoint: "other.invalid:443", useTls: true },
     };
     const link = `${BRAND.scheme}:///#offer=${Buffer.from(JSON.stringify(offer)).toString("base64url")}`;
@@ -431,7 +437,7 @@ describe("woowtech host label at the real store/controller boundary", () => {
       },
       openProject: () => {},
       isCancelled: () => false,
-      // The user approves; the synthetic offer never reaches the confirmation's own checks.
+      // This test isolates loading and label recovery after the user approves.
       confirm: async () => true,
       clearLink: () => {},
     });

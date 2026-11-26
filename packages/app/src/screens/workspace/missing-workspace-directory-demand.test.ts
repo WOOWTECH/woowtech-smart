@@ -14,7 +14,6 @@ import {
   workspace,
 } from "./missing-workspace-directory-demand.test-support";
 
-import { parseWorkspaceOpenIntent } from "@/utils/host-routes";
 import {
   acquireMissingWorkspaceDirectoryDemand,
   type MissingWorkspaceDirectoryDemandInput,
@@ -54,10 +53,16 @@ function routeState(f: Awaited<ReturnType<typeof fixture>>, id = workspaceId) {
 function navigation(f: Awaited<ReturnType<typeof fixture>>) {
   const routes: string[] = [];
   const tabs: Parameters<NavigateToWorkspaceDeps["openTab"]>[0][] = [];
+  const deferredTabs: Parameters<NavigateToWorkspaceDeps["deferOpenTab"]>[0][] = [];
   const deps: NavigateToWorkspaceDeps = {
     getSessionWorkspaces: () => f.session()?.workspaces ?? null,
-    getSessionAgents: () => [],
     isWorkspaceLayoutHydrated: () => true,
+    deferOpenTab: (input) => {
+      deferredTabs.push(input);
+      return null;
+    },
+    revealTab: () => {},
+    revealWorkspace: () => {},
     openTab: (input) => {
       tabs.push(input);
       return "t1-agent";
@@ -72,7 +77,7 @@ function navigation(f: Awaited<ReturnType<typeof fixture>>) {
       { serverId, workspaceId, target: { kind: "agent", agentId: "t1-agent" } },
       deps,
     );
-  return { routes, tabs, navigate };
+  return { routes, tabs, deferredTabs, navigate };
 }
 
 const missingInput = { serverId, workspaceId, isRouteFocused: true, hasWorkspaceDescriptor: false };
@@ -119,6 +124,7 @@ async function expectSecondWorkspaceRefreshed(f: Fixture) {
 // Real timeline owner. Its timeline ports throw: only its directory demand is under test.
 function directoryOnlyTimeline(f: Fixture) {
   return f.runtime.createViewedTimelineOwner(serverId, {
+    canCheckFreshness: () => false,
     observe: () => {
       throw new Error("Timeline is not connected in this directory handoff test");
     },
@@ -131,9 +137,6 @@ function directoryOnlyTimeline(f: Fixture) {
     },
     reportError: (error) => {
       throw error;
-    },
-    schedule: () => {
-      throw new Error("Unexpected timeline retry");
     },
   });
 }
@@ -168,7 +171,13 @@ describe("missing workspace directory demand", () => {
       const f = await fixture();
       const release = acquireMissingWorkspaceDirectoryDemand(f.runtime, missingInput);
       await f.runtime.refreshDirectories(serverId);
-      expect(f.transport.activeSubscriptions.size).toBe(3);
+      // Agents, workspaces, project updates and script status each own a subscription.
+      expect(
+        f.transport.requests.flatMap((request) =>
+          request.type === "session.events.set_subscription.request" ? [request.events] : [],
+        ),
+      ).toEqual([["project.update"], ["script_status_update"]]);
+      expect(f.transport.activeSubscriptions.size).toBe(4);
       if (transition === "descriptor") f.runtime.acceptWorkspaceSnapshots(serverId, [workspace]);
       // Exercise the production cleanup returned to React, then the next effect setup.
       // The source guard separately pins React's dependency list and cleanup return.
@@ -185,7 +194,7 @@ describe("missing workspace directory demand", () => {
         await f.runtime.refreshDirectories(serverId);
         expect(nextRelease).toBeUndefined();
         expect(f.transport.activeSubscriptions.size).toBe(0);
-        expect(f.transport.count("subscription.release.request")).toBe(3);
+        expect(f.transport.count("subscription.release.request")).toBe(4);
         expect(f.transport.count("fetch_workspaces_request")).toBe(1);
       } finally {
         nextRelease?.();
@@ -216,10 +225,8 @@ describe("missing workspace directory demand", () => {
     const epoch = f.runtime.getSnapshot(serverId)?.connectionEpoch;
     const nav = navigation(f);
     nav.navigate();
-    const intent = parseWorkspaceOpenIntent(
-      new URL(nav.routes[0]!, "https://test.invalid").searchParams.get("open"),
-    );
-    expect(intent).toEqual({ kind: "agent", agentId: "t1-agent" });
+    expect(nav.deferredTabs).toHaveLength(1);
+    expect(nav.deferredTabs[0]?.target).toEqual({ kind: "agent", agentId: "t1-agent" });
     expect(nav.tabs).toEqual([]);
     f.transport.disconnect();
     const release = acquireMissingWorkspaceDirectoryDemand(f.runtime, missingInput);
@@ -247,13 +254,14 @@ describe("missing workspace directory demand", () => {
         pin: false,
         intent: "reveal",
         placement: undefined,
+        asTab: undefined,
       },
     ]);
     const timeline = directoryOnlyTimeline(f);
     try {
       timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
       release?.();
-      expect(f.transport.activeSubscriptions.size).toBe(3);
+      expect(f.transport.activeSubscriptions.size).toBe(4);
       expect(f.transport.count("fetch_workspaces_request")).toBe(1);
       timeline.dispose();
       await f.runtime.refreshDirectories(serverId);
@@ -279,7 +287,7 @@ describe("missing workspace directory demand", () => {
       await f.runtime.refreshDirectories(serverId);
       expect(f.transport.count("fetch_workspaces_request")).toBe(1);
       expect(f.transport.count("fetch_agents_request")).toBe(1);
-      expect(f.transport.activeSubscriptions.size).toBe(3);
+      expect(f.transport.activeSubscriptions.size).toBe(4);
     } finally {
       release?.();
     }
@@ -291,7 +299,8 @@ describe("missing workspace directory demand", () => {
     const nav = navigation(f);
     nav.navigate();
     expect(nav.tabs).toEqual([]);
-    expect(nav.routes).toEqual(["/h/t1-host/workspace/t1-workspace?open=agent%3At1-agent"]);
+    expect(nav.routes).toEqual(["/h/t1-host/workspace/t1-workspace"]);
+    expect(nav.deferredTabs[0]?.target).toEqual({ kind: "agent", agentId: "t1-agent" });
     expect(
       selectVisibleAgentIds({ layout: null, tabs: [], routeFocused: true, focusedPaneOnly: false }),
     ).toEqual([]);
@@ -417,7 +426,7 @@ describe("directory demand that leaves while its own refresh is still running", 
           workspaceRequests: f.transport.count("fetch_workspaces_request"),
           subscriptions: f.transport.activeSubscriptions.size,
         }))
-        .toEqual({ workspaceRequests: 2, subscriptions: 3 });
+        .toEqual({ workspaceRequests: 2, subscriptions: 4 });
     } finally {
       timeline.dispose();
     }
@@ -432,7 +441,7 @@ describe("directory demand that leaves while its own refresh is still running", 
         // The agent tab opens before the descriptor releases the owner, so the subscriptions stay.
         timeline.replaceVisibleAgentIds("workspace-screen", ["t1-agent"]);
         route.rerender({ hasWorkspaceDescriptor: true });
-        expect(f.transport.activeSubscriptions.size).toBe(3);
+        expect(f.transport.activeSubscriptions.size).toBe(4);
         // The agent tab closes before the label catalog arrives: route demand drops last.
         // dispose() ends it on both sides of upstream #5040, where a hidden chat stays demanded
         // until its tab closes.
@@ -468,7 +477,7 @@ describe("directory demand that leaves while its own refresh is still running", 
           hasSecond: f.session()?.workspaces.has(secondWorkspace.id) ?? false,
           subscriptions: f.transport.activeSubscriptions.size,
         }))
-        .toEqual({ hasSecond: true, subscriptions: 3 });
+        .toEqual({ hasSecond: true, subscriptions: 4 });
     } finally {
       second.unmount();
     }
@@ -496,15 +505,15 @@ describe("directory demand that leaves while its own refresh is still running", 
     // Nothing demands the directory now, so this joins the running refresh without starting one.
     await f.runtime.refreshDirectories(serverId);
     await settle();
-    // The events subscription was released; the agent and workspace subscriptions stay.
+    // Project-update and script-status subscriptions were released; agents and workspaces stay.
     expect({
       subscriptions: f.transport.activeSubscriptions.size,
       releases: f.transport.count("subscription.release.request"),
-    }).toEqual({ subscriptions: 2, releases: 1 });
+    }).toEqual({ subscriptions: 2, releases: 2 });
     // The next demand's refresh replaces both, and its release drops everything.
     const closeSidebar = f.runtime.acquireDirectoryDemand(serverId);
     await f.runtime.refreshDirectories(serverId);
-    expect(f.transport.activeSubscriptions.size).toBe(3);
+    expect(f.transport.activeSubscriptions.size).toBe(4);
     closeSidebar();
     await expect.poll(() => f.transport.activeSubscriptions.size).toBe(0);
   });
@@ -580,8 +589,8 @@ describe("failed directory refresh", () => {
         "Workspace directory unavailable",
       );
       await settle();
-      // The rejected request replaced the live workspace subscription: agents and events remain.
-      expect(f.transport.activeSubscriptions.size).toBe(2);
+      // The rejected request replaced workspaces: agents, project updates and script status remain.
+      expect(f.transport.activeSubscriptions.size).toBe(3);
       expect(f.transport.count("fetch_workspaces_request")).toBe(2);
       f.transport.failWorkspaces = false;
       f.transport.entries = [workspace, secondWorkspace];

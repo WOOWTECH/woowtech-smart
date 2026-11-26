@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BRAND_LINKS } from "./brand-links.js";
 import type { AgentMode } from "./agent-types.js";
 
 export type AgentModeColorTier = "safe" | "moderate" | "dangerous" | "planning" | `#${string}`;
@@ -25,6 +26,8 @@ export interface AgentProviderDefinition {
   id: string;
   label: string;
   description: string;
+  /** The page that helps users set up and troubleshoot this provider. */
+  docsUrl?: string;
   enabledByDefault?: boolean;
   defaultModeId: string | null;
   modes: AgentProviderModeDefinition[];
@@ -199,6 +202,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "claude",
     label: "Claude",
     description: "Anthropic's multi-tool assistant with MCP support, streaming, and deep reasoning",
+    docsUrl: BRAND_LINKS.docs.home,
     defaultModeId: "auto",
     modes: CLAUDE_MODES,
     voice: {
@@ -211,6 +215,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "codex",
     label: "Codex",
     description: "OpenAI's Codex workspace agent with sandbox controls and optional network access",
+    docsUrl: BRAND_LINKS.docs.home,
     defaultModeId: "auto-review",
     modes: CODEX_MODES,
     voice: {
@@ -223,6 +228,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "copilot",
     label: "Copilot",
     description: "GitHub Copilot via Agent Client Protocol with dynamic modes and session support",
+    docsUrl: BRAND_LINKS.docs.home,
     defaultModeId: "https://agentclientprotocol.com/protocol/session-modes#agent",
     modes: COPILOT_MODES,
   },
@@ -230,6 +236,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "opencode",
     label: "OpenCode",
     description: "Open-source coding assistant with multi-provider model support",
+    docsUrl: BRAND_LINKS.docs.home,
     // No static default: OpenCode users can rename or delete any agent,
     // including "build". Leaving this unset means the daemon and OpenCode
     // itself decide (see normalizeOpenCodeModeId in opencode-agent.ts).
@@ -244,6 +251,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "pi",
     label: "Pi",
     description: "Minimal terminal-based coding agent with multi-provider LLM support",
+    docsUrl: BRAND_LINKS.docs.home,
     defaultModeId: null,
     modes: [],
   },
@@ -251,6 +259,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "omp",
     label: "Oh My Pi",
     description: "Multi-provider coding agent with native approvals, host tools, and subagents",
+    docsUrl: BRAND_LINKS.docs.home,
     enabledByDefault: false,
     defaultModeId: "full",
     modes: OMP_MODES,

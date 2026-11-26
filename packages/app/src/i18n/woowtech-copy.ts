@@ -1197,6 +1197,7 @@ const WORKSPACE_RECOVERY_ZH_TW: typeof WORKSPACE_RECOVERY_ENGLISH = {
 // only those words (voice/woowtech-voice-readiness-copy.ts). The English matches the daemon's text.
 const VOICE_READINESS_ENGLISH = {
   dictationDisabled: "Dictation is disabled in daemon config.",
+  featuresDisabled: "Voice features are disabled in daemon config.",
   dictationSttUnavailable: "Dictation is unavailable: speech-to-text service is not ready.",
   voiceDisabled: "Realtime voice is disabled in daemon config.",
   voiceTurnDetectionUnavailable:
@@ -1209,6 +1210,7 @@ const VOICE_READINESS_ENGLISH = {
 
 const VOICE_READINESS_ZH_TW: typeof VOICE_READINESS_ENGLISH = {
   dictationDisabled: "主機的設定關閉了聽寫。",
+  featuresDisabled: "主機的設定關閉了語音功能。",
   dictationSttUnavailable: "無法使用聽寫：主機的語音轉文字服務還沒準備好。",
   voiceDisabled: "主機的設定關閉了語音模式。",
   voiceTurnDetectionUnavailable: "無法使用語音模式：主機偵測說話停頓的服務還沒準備好。",

@@ -46,6 +46,7 @@ describe("Traditional Chinese (zh-TW)", () => {
     if (!i18n.isInitialized) {
       await i18n.init();
     }
+    await i18n.loadLanguages(["ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN", "zh-TW"]);
   });
 
   it("translates every English string", () => {
@@ -74,9 +75,7 @@ describe("Traditional Chinese (zh-TW)", () => {
         ? `此 Daemon 由渥屋智能桌面版管理。請在主機上更新渥屋智能桌面版。`
         : `此 Daemon 由 ${PRODUCT_NAME_ZH} 桌面版管理。請在主機上更新 ${PRODUCT_NAME_ZH} 桌面版。`,
     );
-    expect(inTraditional("shell.commandCenter.placeholder")).toBe(
-      "搜尋指令、檔案、工作區和 Agent...",
-    );
+    expect(inTraditional("shell.commandCenter.placeholder")).toBe("搜尋工作區、檔案和操作...");
     expect(inTraditional("pairing.connectionMethods.scanQr.title")).toBe("掃描 QR Code");
     expect(inTraditional("pairing.remoteSsh.errors.failedToConnect", { detail: "" })).toBe(
       "無法透過 SSH 連線。",

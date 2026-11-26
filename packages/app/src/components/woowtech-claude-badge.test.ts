@@ -1,5 +1,7 @@
+/** @vitest-environment jsdom */
+import { cleanup, renderHook } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { CLAUDE_BADGE_SVG } from "@/components/icons/claude-badge";
 import {
   VENDOR_BADGE_FRAME,
@@ -9,8 +11,9 @@ import {
 } from "@/components/icons/vendor-badge";
 import { createVendorBadgeIcon } from "@/components/icons/vendor-badge-icon";
 import { ICON_SIZE, REGISTERED_THEMES } from "@/styles/theme";
-import { replaceProviderSnapshotIcons, resolveProviderIconName } from "./provider-icon-name";
-import { getProviderIcon, type ProviderIconComponent } from "./provider-icons";
+import { replaceProviderSnapshotIcons } from "@/data/provider-icons";
+import { resolveProviderIconName } from "./provider-icon-name";
+import { useProviderIcon, type ProviderIconComponent } from "./provider-icons";
 
 // A host can send its own SVG for a provider id. For a Claude id it must not reach the screen.
 // Whether the app shows this badge or Claude's upstream logo is woowtech/vendor-marks.mjs's
@@ -82,15 +85,19 @@ describe("the Claude text badge", () => {
   it("is what claude-acp shows, even when a host sends its own SVG for that id", () => {
     replaceProviderSnapshotIcons("server-1", [{ provider: "claude-acp", iconSvg: HOST_SVG }]);
 
-    expect(resolveProviderIconName("claude-acp", "server-1")).toEqual({
+    expect(resolveProviderIconName("claude-acp", HOST_SVG)).toEqual({
       kind: "builtin",
       id: "claude",
     });
-    expect(getProviderIcon("claude-acp", "server-1")).toBe(getProviderIcon("claude"));
+    expect(renderHook(() => useProviderIcon("claude-acp", "server-1")).result.current).toBe(
+      renderHook(() => useProviderIcon("claude")).result.current,
+    );
   });
 
   it("is what claude-acp shows without any host SVG", () => {
-    expect(getProviderIcon("claude-acp")).toBe(getProviderIcon("claude"));
+    expect(renderHook(() => useProviderIcon("claude-acp")).result.current).toBe(
+      renderHook(() => useProviderIcon("claude")).result.current,
+    );
   });
 
   it("is the vendor badge for both Claude ids", () => {
@@ -106,3 +113,5 @@ describe("the Claude text badge", () => {
     ]);
   });
 });
+
+afterEach(cleanup);

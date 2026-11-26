@@ -45,7 +45,7 @@ test("the welcome screen moves on to the host only while it is focused", () => {
     importedFrom(tree, "@/navigation/woowtech-welcome-host-online").join(),
     /\bshouldWelcomeMoveOnToHost\b/,
   );
-  assert.match(importedFrom(tree, "@react-navigation/native").join(), /\buseIsFocused\b/);
+  assert.match(importedFrom(tree, "expo-router/react-navigation").join(), /\buseIsFocused\b/);
 
   const [screen] = findAll(
     tree,

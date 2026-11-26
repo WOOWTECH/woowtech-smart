@@ -1,4 +1,5 @@
 import { BRAND } from "@getpaseo/protocol/brand-values";
+import { brandSkillName } from "@getpaseo/protocol/brand-skills";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -26,17 +27,10 @@ const OFFICIAL_RETIRED_SKILLS = [
   "paseo-orchestrate",
   "paseo-orchestrator",
 ];
-const OUR_SKILLS = [
-  `${BRAND.cliCommand}`,
-  `${BRAND.cliCommand}-advisor`,
-  `${BRAND.cliCommand}-committee`,
-  `${BRAND.cliCommand}-handoff`,
-  `${BRAND.cliCommand}-help`,
-  `${BRAND.cliCommand}-plugin`,
-];
+const OUR_SKILLS = OFFICIAL_SKILLS.map(brandSkillName);
 
 function skillRoots(targets: SkillTargets): string[] {
-  return [targets.agentsDir, targets.claudeDir, targets.codexDir];
+  return [...targets.installDirs, targets.codexDir];
 }
 
 function memorySelectionStore(): SkillSelectionStore {
@@ -123,15 +117,17 @@ describe("orchestration skills beside the official Paseo's", () => {
     expect(status.available).toEqual(OUR_SKILLS);
     expect(status.installed).toEqual(OUR_SKILLS);
     expect(status.state).toBe("up-to-date");
-    for (const root of skillRoots(targets)) {
+    for (const root of targets.installDirs) {
       expect(await listSkillDirs(root)).toEqual([...OFFICIAL_SKILLS, ...OUR_SKILLS].sort());
     }
+    // Codex now discovers the shared .agents root; its legacy root stays untouched.
+    expect(await listSkillDirs(targets.codexDir)).toEqual(OFFICIAL_SKILLS);
     expect(await readSkills(targets, OFFICIAL_SKILLS)).toEqual(officialBefore);
   });
 
   it("repairs woowtech smart's skills without touching the official ones", async () => {
     await controller.install();
-    const edited = path.join(targets.claudeDir, `${BRAND.cliCommand}`, "SKILL.md");
+    const edited = path.join(targets.installDirs[1]!, brandSkillName("paseo"), "SKILL.md");
 
     await writeFile(edited, "edited");
     expect((await controller.autoUpdate()).state).toBe("up-to-date");
@@ -158,7 +154,7 @@ describe("orchestration skills beside the official Paseo's", () => {
     const before = await readSkills(targets, official);
     await controller.install();
     // A name an older woowtech smart shipped.
-    await plantSkills(targets, [`${BRAND.cliCommand}-chat`]);
+    await plantSkills(targets, [brandSkillName("paseo-chat")]);
 
     const status = await controller.uninstall();
 
@@ -174,30 +170,30 @@ describe("orchestration skills beside the official Paseo's", () => {
     await plantSkills(targets, OFFICIAL_RETIRED_SKILLS);
     const before = await readSkills(targets, official);
     await controller.install();
-    const deselected = OUR_SKILLS.filter((name) => name !== `${BRAND.cliCommand}`);
+    const deselected = OUR_SKILLS.filter((name) => name !== brandSkillName("paseo"));
 
-    const asked = await controller.save({ mode: "custom", skills: [`${BRAND.cliCommand}`] });
+    const asked = await controller.save({ mode: "custom", skills: [brandSkillName("paseo")] });
     const saved = await controller.save({
       mode: "custom",
-      skills: [`${BRAND.cliCommand}`],
+      skills: [brandSkillName("paseo")],
       confirmedRemovals: deselected,
     });
 
     expect(asked.confirmationRequired).toEqual({ removals: deselected });
     expect(saved.confirmationRequired).toBeNull();
-    expect(saved.installed).toEqual([`${BRAND.cliCommand}`]);
+    expect(saved.installed).toEqual([brandSkillName("paseo")]);
     expect(await readSkills(targets, official)).toEqual(before);
   });
 
   it("stages a save in a folder named for woowtech smart", async () => {
     await controller.install();
-    const parent = path.dirname(targets.agentsDir);
+    const parent = path.dirname(targets.installDirs[0]!);
 
     const transaction = await beginSkillsTransaction(
       targets,
       { mode: "all" },
-      { mode: "custom", skills: [`${BRAND.cliCommand}`] },
-      [{ kind: "delete", name: `${BRAND.cliCommand}-advisor` }],
+      { mode: "custom", skills: [brandSkillName("paseo")] },
+      [{ kind: "delete", name: brandSkillName("paseo-advisor") }],
     );
     const staged = (await readdir(parent)).filter((entry) => entry.includes("-skills-"));
     await transaction.rollback();
@@ -209,7 +205,7 @@ describe("orchestration skills beside the official Paseo's", () => {
   it("leaves the official Paseo's interrupted saves for the official Paseo", async () => {
     // Saves the official app was interrupted in while capturing: one that was
     // switching to the selection we have, and one that matches neither of ours.
-    const parent = path.dirname(targets.agentsDir);
+    const parent = path.dirname(targets.installDirs[0]!);
     const interrupted = [
       { next: { mode: "all" }, id: "0b7f3f5e-7a6c-4a4e-9d3e-1f2a3b4c5d6e" },
       {
@@ -235,7 +231,7 @@ describe("orchestration skills beside the official Paseo's", () => {
     await controller.install();
     await controller.save({
       mode: "custom",
-      skills: [`${BRAND.cliCommand}`],
+      skills: [brandSkillName("paseo")],
       confirmedRemovals: OUR_SKILLS,
     });
     await controller.uninstall();

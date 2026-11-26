@@ -21,6 +21,7 @@ import { createStub } from "./test-utils/class-mocks.js";
 import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
 import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 import type { WorkspaceAutoName } from "./workspace-auto-name.js";
+import { createWorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 
 // woowtech smart: only same-brand pairing (packages/protocol/src/brand-match.ts). The daemon
 // names its brand in server_info and turns away the app of another brand, counting an app that
@@ -140,6 +141,7 @@ function createWebSocketServer(httpServer: HTTPServer): VoiceAssistantWebSocketS
   const agentManager = {
     setAgentAttentionCallback() {},
     subscribe: () => () => {},
+    onStop: () => () => {},
     getMetricsSnapshot: () => ({
       total: 0,
       byLifecycle: {},
@@ -167,6 +169,7 @@ function createWebSocketServer(httpServer: HTTPServer): VoiceAssistantWebSocketS
       scheduleForWorktree: () => {},
       scheduleForDirectory: () => {},
     }),
+    createWorkspaceRuntimeStore(),
     undefined,
     undefined,
     undefined,

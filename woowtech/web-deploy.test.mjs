@@ -25,6 +25,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import nodeTest from "node:test";
@@ -2001,43 +2002,25 @@ test("packages/app/public adds nothing that changes how Pages serves the export"
   assert.doesNotMatch(read("packages/app/public/index.html"), /<script/i);
 });
 
-/**
- * The text from `start` to the brace that closes the block opened by the first ") {" after it:
- * a function's body, not the destructured parameters before it. Braces in strings count.
- */
-function block(text, start) {
-  const open = text.indexOf(") {", start);
-  if (start === -1 || open === -1) throw new Error("no block there");
-  let depth = 0;
-  for (let at = open + 2; at < text.length; at += 1) {
-    if (text[at] === "{") depth += 1;
-    if (text[at] === "}") depth -= 1;
-    if (depth === 0) return text.slice(start, at + 1);
-  }
-  throw new Error("unbalanced braces");
-}
-
 test("Expo's single-page export writes only external, deferred scripts into index.html", () => {
-  // check-export.mjs checks the real index.html; this says why there is nothing else to expect.
-  // Without line comments: one of them is a <script> template with an unclosed "${".
-  const source = read(
-    "node_modules/@expo/cli/build/src/start/server/metro/serializeHtml.js",
-  ).replace(/^\s*\/\/.*$/gm, "");
-  const start = source.indexOf("function htmlFromSerialAssets(");
-  assert.notEqual(
-    start,
-    -1,
-    "Expo no longer has htmlFromSerialAssets: check how it writes index.html",
+  // Exercise Expo's serializer, including its helper calls, rather than its source layout.
+  const { serializeHtmlWithAssets } = createRequire(import.meta.url)(
+    path.join(repoRoot, "node_modules/@expo/cli/build/src/start/server/metro/serializeHtml.js"),
   );
-  const body = block(source, start);
-  const tags = [...body.matchAll(/<script\b[^>]*>/g)].map(([tag]) => tag);
-  const inline = tags.filter((tag) => !/^<script src="\$\{[^}]+\}" defer>$/.test(tag));
-  assert.deepEqual(inline, ['<script type="module">']);
-  assert.ok(
-    block(body, body.indexOf("if (hydrate) {")).includes('<script type="module">'),
-    "only for hydrate",
-  );
-  // hydrate is only for static and server output.
+  const html = serializeHtmlWithAssets({
+    resources: [
+      { type: "js", filename: "_expo/static/js/web/index-entry.js", metadata: {} },
+      { type: "js", filename: "_expo/static/js/web/diagram.js", metadata: { isAsync: true } },
+    ],
+    template: "<html><head></head><body></body></html>",
+    baseUrl: "",
+    isExporting: true,
+    hydrate: false,
+  });
+  const scripts = [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/g)].map(([tag]) => tag);
+  assert.deepEqual(scripts, ['<script src="/_expo/static/js/web/index-entry.js" defer></script>']);
+  assert.doesNotMatch(html, /diagram\.js/);
+  // Single-page output does not inject the static/server hydration script.
   assert.match(read("packages/app/app.config.js"), /\bweb:\s*\{[^}]*\boutput:\s*"single"/);
 });
 

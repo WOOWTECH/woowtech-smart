@@ -1,11 +1,15 @@
 // woowtech smart: tests for woowtech-terminal-name.ts (woowtech/README.md section 25).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import { terminalDisplayName } from "./woowtech-terminal-name";
 
 const SERVER_TERMINAL = join(__dirname, "../../../server/src/terminal");
+
+beforeAll(async () => {
+  await i18n.loadLanguages("zh-TW");
+});
 
 describe("a terminal's name", () => {
   it("reads the daemon's default names in Traditional Chinese", () => {

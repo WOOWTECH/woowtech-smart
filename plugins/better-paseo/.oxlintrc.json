@@ -1,0 +1,49 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  // This pinned vendor snapshot uses its own UI conventions. Nested configs do
+  // not inherit the root config: keep correctness checks without Paseo app style
+  // and React allocation/performance rules. No source files are ignored.
+  "plugins": ["react", "typescript", "oxc", "promise"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "react-hooks/rules-of-hooks": "error",
+    "no-unsafe-finally": "error",
+    "no-async-promise-executor": "error",
+    // Keep these upstream audit findings visible without turning this bounded
+    // integration into a rewrite of effect lifecycles, callback APIs or parsers.
+    "react-hooks/exhaustive-deps": "warn",
+    "promise/no-multiple-resolved": "warn",
+    "no-unmodified-loop-condition": "warn",
+    "no-unused-vars": "warn",
+    "no-useless-escape": "warn"
+  },
+  "overrides": [
+    {
+      // Marked's generated Hermes bundle lowers classes to functions (`this`
+      // belongs to lexer/parser instances, not React components), uses comma
+      // and short-circuit expressions for side effects, and assigns extension
+      // tokens while testing whether they matched. Its URL grammar deliberately
+      // excludes control characters. Keep every other check on this file.
+      "files": ["client/vendor/marked.js"],
+      "rules": {
+        "react/no-this-in-sfc": "off",
+        "no-unused-expressions": "off",
+        "no-cond-assign": "off",
+        "no-control-regex": "off"
+      }
+    },
+    {
+      // These patterns intentionally remove ANSI escape/control sequences.
+      "files": ["client/copy/content.ts", "client/tools/detail.ts"],
+      "rules": { "no-control-regex": "off" }
+    },
+    {
+      // TypeScript's emitted declaration marker has no executable class body.
+      "files": ["client/vendor/marked.types.d.ts"],
+      "rules": { "no-unused-private-class-members": "off" }
+    }
+  ]
+}

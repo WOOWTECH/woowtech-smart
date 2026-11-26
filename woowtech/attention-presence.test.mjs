@@ -55,10 +55,12 @@ test("attention raised while the daemon stops notifies nobody", () => {
       /^const woowtechStopping = this\.connectionLifecycle === "stopping";$/,
       `${name} must read the stopping flag first`,
     );
+    // Agent finishes additionally pass through the unread-finish deduplicator, which can only
+    // suppress delivery. Suppress shutdown first so an undelivered finish is never marked sent.
     assert.match(
       method(tree, name).body.getText(tree),
-      /const plan = woowtechNotificationPlanWhileStopping\(\s*this\.woowtechPlanWithoutPhone\(\s*computeNotificationPlan\(/,
-      `${name} must pass its plan through woowtechNotificationPlanWhileStopping last`,
+      /const plan = (?:this\.planOncePerUnreadFinish\(\s*params,\s*)?woowtechNotificationPlanWhileStopping\(\s*this\.woowtechPlanWithoutPhone\(\s*computeNotificationPlan\(/,
+      `${name} must suppress shutdown notifications before any finish deduplication`,
     );
   }
 

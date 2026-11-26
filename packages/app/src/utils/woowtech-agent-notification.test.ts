@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   buildAgentAttentionNotificationPayload,
   type AgentAttentionNotificationPayload,
@@ -17,6 +17,10 @@ const notification: AgentAttentionNotificationPayload = {
     extra: "untouched",
   },
 };
+
+beforeAll(async () => {
+  await i18n.loadLanguages("zh-TW");
+});
 
 describe("woowtech agent notification titles", () => {
   it("uses the supplied reason, never title or body text, to choose permission and attention", () => {

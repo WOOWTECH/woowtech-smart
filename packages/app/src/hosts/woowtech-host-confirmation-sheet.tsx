@@ -1,18 +1,12 @@
-import { useCallback, useMemo, useRef, useSyncExternalStore, type Ref } from "react";
-import {
-  Pressable,
-  Text,
-  View,
-  type GestureResponderEvent,
-  type PressableStateCallbackType,
-} from "react-native";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { BRAND_RELAY } from "@getpaseo/protocol/brand-relay";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Alert } from "@/components/ui/alert";
-import { createControlGeometry } from "@/components/ui/control-geometry";
+import { Button } from "@/components/ui/button";
 import { isWeb } from "@/constants/platform";
 import {
   hostConfirmations,
@@ -368,23 +362,32 @@ function ConfirmationSheet({ request, confirmations }: ConfirmationSheetProps) {
           />
         ) : null}
         <View style={styles.actions}>
-          <SheetButton
-            buttonRef={attachDismiss}
-            label={t(dismiss.labelKey)}
+          <Button
+            ref={attachDismiss}
+            variant="secondary"
+            size="sm"
+            style={styles.button}
+            accessibilityLabel={t(dismiss.labelKey)}
             testID={dismiss.testID}
             onPress={decline}
-          />
+          >
+            {t(dismiss.labelKey)}
+          </Button>
           {model.canConnect ? (
-            <SheetButton
-              primary
+            <Button
+              variant="default"
+              size="sm"
+              style={styles.button}
               disabled={!armed}
-              label={t(`${COPY}.connect`)}
+              accessibilityLabel={t(`${COPY}.connect`)}
               testID="host-confirmation-connect"
               onPressIn={onConnectPressIn}
               onFocus={handleConnectFocus}
               onBlur={onConnectBlur}
               onPress={connect}
-            />
+            >
+              {t(`${COPY}.connect`)}
+            </Button>
           ) : null}
         </View>
       </View>
@@ -415,62 +418,7 @@ function DetailRow({ row, showBorder }: DetailRowProps) {
   );
 }
 
-interface SheetButtonProps {
-  label: string;
-  testID: string;
-  onPress: () => void;
-  primary?: boolean;
-  disabled?: boolean;
-  onPressIn?: (event: GestureResponderEvent) => void;
-  onFocus?: (event: unknown) => void;
-  onBlur?: () => void;
-  /** A Pressable rather than the shared Button, which takes no ref: Cancel takes the focus. */
-  buttonRef?: Ref<View>;
-}
-
-function SheetButton({
-  label,
-  testID,
-  onPress,
-  primary = false,
-  disabled = false,
-  onPressIn,
-  onFocus,
-  onBlur,
-  buttonRef,
-}: SheetButtonProps) {
-  const accessibilityState = useMemo(() => ({ disabled }), [disabled]);
-  const pressableStyle = useCallback(
-    ({ pressed }: PressableStateCallbackType) => [
-      styles.button,
-      primary ? styles.buttonPrimary : styles.buttonSecondary,
-      pressed ? styles.buttonPressed : null,
-      disabled ? styles.buttonDisabled : null,
-    ],
-    [disabled, primary],
-  );
-  return (
-    <Pressable
-      ref={buttonRef}
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={accessibilityState}
-      disabled={disabled}
-      onPressIn={onPressIn}
-      onFocus={onFocus}
-      onBlur={onBlur}
-      onPress={onPress}
-      style={pressableStyle}
-    >
-      <Text style={primary ? styles.buttonTextPrimary : styles.buttonText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-// The buttons look like the shared Button's secondary and default variants at size sm.
 const styles = StyleSheet.create((theme) => {
-  const geometry = createControlGeometry(theme);
   return {
     content: {
       gap: theme.spacing[4],
@@ -492,34 +440,7 @@ const styles = StyleSheet.create((theme) => {
       gap: theme.spacing[2],
     },
     button: {
-      ...geometry.buttonSm,
       flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1,
-    },
-    buttonSecondary: {
-      backgroundColor: theme.colors.surface3,
-      borderColor: theme.colors.surface3,
-    },
-    buttonPrimary: {
-      backgroundColor: theme.colors.accent,
-      borderColor: theme.colors.accent,
-    },
-    buttonPressed: {
-      opacity: 0.85,
-    },
-    buttonDisabled: {
-      opacity: theme.opacity[50],
-    },
-    buttonText: {
-      ...geometry.buttonText,
-      color: theme.colors.foreground,
-    },
-    buttonTextPrimary: {
-      ...geometry.buttonText,
-      color: theme.colors.accentForeground,
     },
   };
 });
