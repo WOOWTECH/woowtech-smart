@@ -32,7 +32,7 @@ const ENABLED = ["ci.yml"];
 
 // Owner-authorized signing service, invoked only by the manual Desktop Release mode.
 // It has no push, PR or standalone dispatch trigger.
-const CALL_ONLY = ["pi-agent-signing.yml"];
+const CALL_ONLY = ["pi-agent-signing.yml", "native-parity.yml"];
 
 // Reviewed artifact verification: manual or reusable, never push/PR triggered.
 const MANUAL_VERIFICATION = ["windows-installed-verify.yml"];
@@ -100,6 +100,37 @@ test("Pi Agent signing only runs through the explicitly selected nonpublishing m
   }
 });
 
+test("native candidates require an explicit manual request and cannot publish", () => {
+  const ci = workflow("ci.yml");
+  assert.deepEqual(
+    {
+      type: ci.on.workflow_dispatch.inputs.run_native_parity.type,
+      default: ci.on.workflow_dispatch.inputs.run_native_parity.default,
+    },
+    { type: "boolean", default: false },
+  );
+  const caller = ci.jobs["native-parity"];
+  assert.equal(caller.uses, "./.github/workflows/native-parity.yml");
+  assert.deepEqual(requiredTerms(caller.if), [
+    "github.event_name == 'workflow_dispatch'",
+    "inputs.run_native_parity",
+  ]);
+  const candidates = workflow("native-parity.yml");
+  assert.deepEqual(Object.keys(candidates.on), ["workflow_call"]);
+  assert.deepEqual(candidates.permissions, { contents: "read", actions: "read" });
+  assert.doesNotMatch(
+    JSON.stringify(candidates),
+    /secrets\.|--publish always|eas (?:build|submit)|deploy:web/,
+  );
+  assert.deepEqual(candidates.jobs.desktop.strategy.matrix.brand, ["woowtech", "apporo"]);
+  assert.deepEqual(candidates.jobs["mobile-export"].strategy.matrix.brand, ["woowtech", "apporo"]);
+  assert.ok(candidates.jobs.desktop.steps.some(({ run }) => run?.includes("--publish never")));
+  assert.ok(candidates.jobs.desktop.steps.some(({ run }) => run?.includes("verify-desktop")));
+  assert.ok(
+    candidates.jobs["mobile-export"].steps.some(({ run }) => run?.includes("verify-mobile")),
+  );
+});
+
 test("CI runs on every push to main, on pull requests and on demand, as upstream does", () => {
   // The repository is public since 2026-10-08, so standard runners cost no minutes. While it
   // was private (GitHub Free, 2,000 minutes a month) CI ran weekly instead.
@@ -157,8 +188,8 @@ test("CI runs the Playwright shards only on a manual run that asks for them", ()
   );
   assert.deepEqual(
     ids((job) => /\b(?:github\.event_name|inputs)\b/.test(String(job.if ?? ""))),
-    playwright,
-    "Only the Playwright jobs depend on the event or the inputs; the weekly run runs the rest.",
+    ["native-parity", ...playwright],
+    "Only explicit candidate verification and Playwright depend on manual inputs.",
   );
 });
 
@@ -168,6 +199,7 @@ test("CI jobs run on Ubuntu, and on Windows only when WOOWTECH_CI_WINDOWS is tru
   const offUbuntu = [];
   for (const name of ENABLED) {
     for (const [id, job] of Object.entries(workflow(name).jobs)) {
+      if (id === "native-parity" && job.uses === "./.github/workflows/native-parity.yml") continue;
       const runner = String(job["runs-on"]);
       if (runner.startsWith("ubuntu-")) continue;
       if (runner.startsWith("windows-") && windowsGate.test(job.if ?? "")) continue;
