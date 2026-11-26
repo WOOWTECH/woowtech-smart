@@ -67,8 +67,8 @@ jobs:
           npm run typecheck --workspace=@getpaseo/desktop
       - name: Check changed source formatting and lint
         run: |
-          npm run lint -- packages/desktop/src/features/menu.ts packages/desktop/src/features/menu.test.ts packages/desktop/e2e/settings-memory.electron.mjs packages/desktop/e2e/browser-tabs.e2e.mjs packages/app/src/screens/settings-screen.tsx packages/app/src/screens/settings/terminal/terminal-section.tsx packages/app/src/screens/settings/keyboard-shortcuts-section.tsx packages/app/maestro/ci/run-native.mjs woowtech/tools/apply-brand.mjs woowtech/workflows.test.mjs
-          npm run format:check:files -- .github/workflows/settings-desktop-verify.yml .github/workflows/settings-android-emulator.yml packages/app/maestro/ci/settings-native.yaml packages/app/maestro/ci/run-native.mjs packages/desktop/src/features/menu.ts packages/desktop/src/features/menu.test.ts packages/desktop/e2e/settings-memory.electron.mjs packages/desktop/e2e/browser-tabs.e2e.mjs woowtech/tools/apply-brand.mjs
+          npm run lint -- packages/desktop/src/features/menu.ts packages/desktop/src/features/menu.test.ts packages/desktop/scripts/dev-runner.mjs packages/desktop/e2e/settings-memory.electron.mjs packages/desktop/e2e/browser-tabs.e2e.mjs packages/app/src/screens/settings-screen.tsx packages/app/src/screens/settings/terminal/terminal-section.tsx packages/app/src/screens/settings/keyboard-shortcuts-section.tsx packages/app/maestro/ci/run-native.mjs woowtech/tools/apply-brand.mjs woowtech/workflows.test.mjs
+          npm run format:check:files -- .github/workflows/settings-desktop-verify.yml .github/workflows/settings-android-emulator.yml packages/app/maestro/ci/settings-native.yaml packages/app/maestro/ci/run-native.mjs packages/desktop/src/features/menu.ts packages/desktop/src/features/menu.test.ts packages/desktop/scripts/dev-runner.mjs packages/desktop/e2e/settings-memory.electron.mjs packages/desktop/e2e/browser-tabs.e2e.mjs woowtech/tools/apply-brand.mjs
       - name: Verify brand and native distribution boundaries
         run: node --test --test-concurrency=1 woowtech/brand-layer.test.mjs woowtech/desktop-notification-launch.test.mjs woowtech/desktop-fuses.test.mjs
       - name: Exercise real Electron settings, browser, plugins and workspace routing
@@ -92,7 +92,8 @@ jobs:
           fs.writeFileSync(path.join(root, 'provenance.json'), JSON.stringify({source:process.env.GITHUB_SHA,brand:process.env.WOOWTECH_BRAND,platform:process.platform,arch:process.arch,signed:false}, null, 2));
           NODE
       - name: Archive verified candidate with executable permissions
-        run: tar -czf "$RUNNER_TEMP/native-desktop.tar.gz" -C packages/desktop release
+        # Redirect through the shell so GNU tar does not treat Windows' D: as a remote host.
+        run: tar -czf - -C packages/desktop release > "$RUNNER_TEMP/native-desktop.tar.gz"
       - name: Upload verified unsigned candidate
         uses: actions/upload-artifact@v4
         with:
