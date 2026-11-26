@@ -26,7 +26,6 @@ jobs:
       NODE_OPTIONS: "--max-old-space-size=4096"
       WOOWTECH_BRAND: ${{ matrix.brand }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR: ${{ runner.temp }}/native-evidence
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,6 +35,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Set evidence directory
+        run: echo "PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR=$RUNNER_TEMP/native-evidence" >> "$GITHUB_ENV"
       - name: Apply brand in isolated runner checkout
         run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
       - run: npm run build:server

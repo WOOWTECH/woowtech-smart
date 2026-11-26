@@ -32,7 +32,6 @@ jobs:
       WOOWTECH_BRAND: ${{ matrix.brand }}
       NODE_OPTIONS: "--max-old-space-size=4096"
       MAESTRO_CLI_NO_ANALYTICS: "1"
-      EVIDENCE: ${{ runner.temp }}/native-evidence
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,6 +45,8 @@ jobs:
           distribution: temurin
           java-version: "21"
       - run: npm ci
+      - name: Set evidence directory
+        run: echo "EVIDENCE=$RUNNER_TEMP/native-evidence" >> "$GITHUB_ENV"
       - name: Apply brand and record candidate identity
         run: |
           node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
