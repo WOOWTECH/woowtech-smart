@@ -53,17 +53,17 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      full: ${{ github.event_name != 'pull_request' || steps.filter.outputs.routing != 'false' || steps.filter.outputs.workspace != 'false' || steps.filter.outputs.ci != 'false' }}
-      format: ${{ steps.filter.outputs.format }}
-      quality: ${{ steps.filter.outputs.quality }}
-      hub: ${{ steps.filter.outputs.hub }}
-      server: ${{ steps.filter.outputs.server }}
-      desktop: ${{ steps.filter.outputs.desktop }}
-      app: ${{ steps.filter.outputs.app }}
-      sdk: ${{ steps.filter.outputs.sdk }}
-      browser: ${{ steps.filter.outputs.browser }}
-      relay: ${{ steps.filter.outputs.relay }}
-      cli: ${{ steps.filter.outputs.cli }}
+      full: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || github.event_name != 'pull_request' || steps.filter.outputs.routing != 'false' || steps.filter.outputs.workspace != 'false' || steps.filter.outputs.ci != 'false' }}
+      format: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.format }}
+      quality: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.quality }}
+      hub: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.hub }}
+      server: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.server }}
+      desktop: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.desktop }}
+      app: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.app }}
+      sdk: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.sdk }}
+      browser: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.browser }}
+      relay: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.relay }}
+      cli: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.cli }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

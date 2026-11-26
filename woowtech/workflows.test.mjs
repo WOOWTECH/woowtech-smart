@@ -116,6 +116,13 @@ test("native candidates require an explicit manual request and cannot publish", 
     "inputs.run_native_parity",
   ]);
   const candidates = workflow("native-parity.yml");
+  for (const condition of Object.values(ci.jobs.changes.outputs)) {
+    assert.match(
+      condition,
+      /^\$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.run_native_parity && 'false' \|\| /,
+      "Only explicit candidate runs bypass the ordinary CI contracts",
+    );
+  }
   assert.deepEqual(Object.keys(candidates.on), ["workflow_call"]);
   assert.deepEqual(candidates.permissions, { contents: "read", actions: "read" });
   assert.doesNotMatch(

@@ -536,6 +536,10 @@ CLI and a real terminal in temporary state directories. The receipt records the
 source commit, brand, architecture, version and archive SHA256. Artifacts expire
 after seven days; this workflow does not update release channels or publish tags.
 Use `native_parity_target` to repeat only a failing platform after a fix.
+Candidate dispatches run the native jobs and CI policy checks; use a normal CI
+dispatch for the full suite. This keeps platform retries from occupying runners
+with duplicate server/app/CLI suites. Push, PR and merge-queue checks keep their
+normal change-based routing.
 `macos` runs both Mac architectures; `macos-intel` repeats just the Intel job.
 Desktop candidate checks also open Tasks through the command center, reload its
 built-in settings, verify a recorded shortcut survives reload and cancel shortcut
