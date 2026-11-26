@@ -121,16 +121,10 @@ async function openSettingsDestination(page, title) {
   const button = sidebar.getByRole("button", { name: title, exact: true });
   await button.waitFor({ state: "visible" });
   await button.click();
-  await page.waitForFunction(
-    (expectedTitle) =>
-      [...document.querySelectorAll('[data-testid="settings-detail-header-title"]')].some(
-        (element) =>
-          element instanceof HTMLElement &&
-          element.getBoundingClientRect().width > 0 &&
-          element.textContent === expectedTitle,
-      ),
-    title,
-  );
+  await expect(
+    page.locator('[data-testid="settings-detail-header-title"]:visible'),
+    `Settings destination ${title} at ${page.url()}`,
+  ).toHaveText(title, { timeout: 30_000 });
 }
 
 async function rotateSettings(page) {

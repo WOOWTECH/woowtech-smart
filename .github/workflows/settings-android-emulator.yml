@@ -58,6 +58,12 @@ jobs:
       - run: npm ci
       - name: Set evidence directory
         run: echo "EVIDENCE=$RUNNER_TEMP/native-evidence" >> "$GITHUB_ENV"
+      - name: Expose Android command-line tools
+        if: matrix.platform == 'android'
+        run: |
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
       - name: Apply brand and record candidate identity
         run: |
           node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
@@ -82,6 +88,7 @@ jobs:
         working-directory: packages/app
         run: npx expo prebuild --platform android --no-install
       - name: Build embedded Android candidate
+        id: android_build
         if: matrix.platform == 'android'
         working-directory: packages/app/android
         run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=2 -Dorg.gradle.parallel=false
@@ -129,6 +136,7 @@ jobs:
           xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/native-derived-data" -resultBundlePath "$EVIDENCE/build.xcresult" CODE_SIGNING_ALLOWED=NO build > "$EVIDENCE/build.log" 2>&1
           APP_PATH=$(find "$RUNNER_TEMP/native-derived-data/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
           test -n "$APP_PATH"
+          tar -czf "$RUNNER_TEMP/ios-simulator-app.tar.gz" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
           xcrun simctl install "$DEVICE_ID" "$APP_PATH"
           node --import tsx packages/app/maestro/ci/run-native.mjs ios
       - name: Upload native evidence
@@ -140,9 +148,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Upload emulator APK
-        if: success() && matrix.platform == 'android'
+        if: always() && matrix.platform == 'android' && steps.android_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: emulator-apk-${{ matrix.brand }}-${{ github.sha }}
           path: packages/app/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+      - name: Upload simulator app when compilation succeeded
+        if: always() && matrix.platform == 'ios'
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-app-${{ matrix.brand }}-${{ github.sha }}
+          path: ${{ runner.temp }}/ios-simulator-app.tar.gz
+          if-no-files-found: warn
           retention-days: 14

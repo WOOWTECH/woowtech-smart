@@ -236,7 +236,7 @@ export function setupApplicationMenu(options: ApplicationMenuOptions): void {
     rebuildApplicationMenu();
   });
 
-  // If the renderer reloads mid-capture (e.g. Cmd+R) the renderer-side effect
+  // If the renderer reloads mid-capture (e.g. developer tooling) the renderer-side effect
   // never gets to send `false`, so reset the flag from the main process when a
   // main window finishes loading. Workspace browser webviews are not
   // BrowserWindows, so they don't trigger this.
