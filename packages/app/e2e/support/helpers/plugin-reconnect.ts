@@ -80,7 +80,7 @@ async function createProbe(page: Page) {
       await expect(page.getByText("Stored title: Agent monitor", { exact: true })).toBeVisible();
     },
     async disconnect() {
-      catalogCount = gate.getClientRequestCount("plugin.catalog.get.request");
+      catalogCount = gate.getServerMessageCount("plugin.catalog.get.response");
       await gate.drop();
       await gate.waitForBlockedConnection();
     },

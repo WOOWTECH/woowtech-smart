@@ -384,5 +384,6 @@ async function connectToTestHost(page: import("@playwright/test").Page) {
   await page.getByRole("textbox", { name: "Host", exact: true }).fill("127.0.0.1");
   await page.getByRole("textbox", { name: "Port", exact: true }).fill(String(getE2EDaemonPort()));
   await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page.getByTestId("host-confirmation-connect").click();
   await expect(page.getByTestId("add-host-modal")).toBeHidden({ timeout: 30_000 });
 }

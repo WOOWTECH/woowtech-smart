@@ -165,6 +165,7 @@ test.describe("Sidebar items in Appearance settings", () => {
         { key: "schedules", visible: true },
         { key: "history", visible: false },
         { key: "search", visible: true },
+        { key: "plugin:better-paseo:tasks", visible: true },
       ]);
 
       await leaveSettings(page);

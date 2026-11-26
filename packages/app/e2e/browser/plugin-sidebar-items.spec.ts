@@ -578,6 +578,8 @@ test.describe("Plugin sidebar items", () => {
       await page.setViewportSize(COMPACT);
       await page.getByRole("button", { name: "Open menu", exact: true }).first().click();
       await expect(botRow(page, "bot-1")).toBeInViewport();
+      // The built-in Tasks entry also occupies space in the compact sidebar.
+      await botRow(page, "status").scrollIntoViewIfNeeded();
       await expect(botRow(page, "status")).toBeInViewport();
       await qaScreenshot(page, "phase6-compact-sidebar-bots");
     });

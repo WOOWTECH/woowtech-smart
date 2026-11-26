@@ -1,3 +1,4 @@
+import { vendorBadgeSvg } from "../../src/components/icons/vendor-badge";
 import path from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures";
@@ -528,10 +529,10 @@ test("released hosts supply source logos through the client conversion", async (
   await page.setViewportSize(WIDE);
   await gotoAppShell(page);
   await expectPinnedUsage(page, ["31% 5h", "54% wk", "7% 5h", "12% wk"]);
-  // Source logos are decorative SVGs with no accessible role. Their path data distinguishes
-  // the source artwork from the fallback gauge.
-  const claudePath = /<path[^>]* d="([^"]+)"/.exec(claudeAndCodexReports()[0]!.icon!)![1]!;
-  const codexPath = /<path[^>]* d="([^"]+)"/.exec(claudeAndCodexReports()[1]!.icon!)![1]!;
+  // The fork renders the neutral vendor badge for each provider. Distinct path data
+  // verifies source identity survives client conversion rather than falling back to a gauge.
+  const claudePath = /<path[^>]* d="([^"]+)"/.exec(vendorBadgeSvg("claude"))![1]!;
+  const codexPath = /<path[^>]* d="([^"]+)"/.exec(vendorBadgeSvg("codex"))![1]!;
   const summary = usageItem(page).getByTestId("sidebar-usage-source");
   await expect(summary.nth(0).locator("svg path").first()).toHaveAttribute("d", claudePath);
   await expect(summary.nth(1).locator("svg path").first()).toHaveAttribute("d", codexPath);

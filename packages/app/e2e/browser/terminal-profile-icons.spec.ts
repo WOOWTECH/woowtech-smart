@@ -41,7 +41,7 @@ async function expectBundledArtwork(page: Page, name: string, artwork: string) {
     .getByRole("menuitem", { name: "Terminal", exact: true })
     .locator("svg")
     .evaluate((element) => getComputedStyle(element).stroke);
-  await expect(icon.locator("path").first()).toHaveCSS("fill", terminalColor);
+  await expect(icon.locator("path").first()).toHaveCSS("stroke", terminalColor);
 }
 
 async function expectUnknownArtworkFallback(page: Page) {

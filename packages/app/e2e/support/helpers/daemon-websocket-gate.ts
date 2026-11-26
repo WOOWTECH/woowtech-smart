@@ -850,6 +850,9 @@ export async function installDaemonWebSocketGate(page: Page, options: { port?: n
         total: { ...directoryStarts.total },
       };
     },
+    getServerMessageCount(type: string): number {
+      return serverMessageCounts.get(type) ?? 0;
+    },
     getClientRequestCount(type: string): number {
       return clientRequestCounts.get(type) ?? 0;
     },

@@ -148,9 +148,10 @@ function observePluginCatalog(page: Page) {
   let responses = 0;
   page.on("websocket", (socket) => {
     socket.on("framereceived", ({ payload }) => {
-      if (typeof payload !== "string") return;
       try {
-        const envelope = JSON.parse(payload) as {
+        const envelope = JSON.parse(
+          typeof payload === "string" ? payload : payload.toString("utf8"),
+        ) as {
           type?: unknown;
           message?: { type?: unknown };
         };

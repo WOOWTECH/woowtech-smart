@@ -136,7 +136,9 @@ test.describe("provider settings overlay stack", () => {
       await openAgentRoute(page, session);
       await expectComposerVisible(page);
       await openProviderSettingsFromModelSelector(page);
-      await expect(page.getByText("Updated just now", { exact: true })).toBeVisible({
+      await expect(
+        page.getByTestId("provider-settings-sheet").getByText(/Checked just now$/),
+      ).toBeVisible({
         timeout: 30_000,
       });
     } finally {

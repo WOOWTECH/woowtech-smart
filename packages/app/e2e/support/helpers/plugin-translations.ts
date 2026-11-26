@@ -11,14 +11,14 @@ import { copyPluginExample } from "./plugin-fixture";
 async function chooseChinese(page: Page) {
   await openSettings(page);
   await page.getByRole("button", { name: "System", exact: true }).click();
-  await page.getByRole("menuitem", { name: "简体中文 - Simplified Chinese", exact: true }).click();
+  await page.getByRole("menuitem", { name: "繁體中文 - Traditional Chinese", exact: true }).click();
   await page.goBack();
 }
 
 async function chooseEnglish(page: Page) {
   await page.getByTestId("sidebar-settings").click();
-  await page.getByRole("button", { name: "简体中文", exact: true }).click();
-  await page.getByRole("menuitem", { name: "English - 英语", exact: true }).click();
+  await page.getByRole("button", { name: "繁體中文", exact: true }).click();
+  await page.getByRole("menuitem", { name: "English - 英文", exact: true }).click();
   await page.goBack();
 }
 
@@ -59,7 +59,7 @@ export async function verifyPluginTranslations(page: Page, info: TestInfo) {
     await second.goto(page.url());
     await expect(second.getByText("App language: en", { exact: true })).toBeVisible();
     await chooseChinese(second);
-    await expect(second.getByText("应用语言：zh-CN", { exact: true })).toBeVisible();
+    await expect(second.getByText("應用語言：zh-TW", { exact: true })).toBeVisible();
     await second
       .getByRole("textbox", { name: "你的草稿", exact: true })
       .fill("A separate client draft");
@@ -70,17 +70,17 @@ export async function verifyPluginTranslations(page: Page, info: TestInfo) {
     await expect(page.getByRole("textbox", { name: "你的草稿", exact: true })).toHaveValue(
       "Remember the language switch",
     );
-    await expect(page.getByTestId("plugin-surface-title")).toHaveText("工作区笔记");
-    await expect(page.getByText("应用语言：zh-CN", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("plugin-surface-title")).toHaveText("工作區筆記");
+    await expect(page.getByText("應用語言：zh-TW", { exact: true })).toBeVisible();
     await expect(
       page.getByText("This English-only message demonstrates fallback.", { exact: true }),
     ).toBeVisible();
     await capture(page, info, "04-chinese-draft-preserved");
-    await page.getByRole("button", { name: "预览草稿", exact: true }).click();
-    await expect(page.getByText("草稿预览", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "关闭预览", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "預覽草稿", exact: true }).click();
+    await expect(page.getByText("草稿預覽", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "關閉預覽", exact: true })).toBeVisible();
     await capture(page, info, "05-chinese-preview");
-    await page.getByRole("button", { name: "关闭预览", exact: true }).click();
+    await page.getByRole("button", { name: "關閉預覽", exact: true }).click();
     await chooseEnglish(page);
     await expect(page.getByRole("textbox", { name: "Your draft", exact: true })).toHaveValue(
       "Remember the language switch",
@@ -146,12 +146,12 @@ export async function verifyPluginToolTranslations(page: Page, info: TestInfo) {
     );
     const translatedTools = page
       .getByRole("toolbar")
-      .getByRole("button", { name: "笔记工具", exact: true });
+      .getByRole("button", { name: "筆記工具", exact: true });
     await translatedTools.hover();
-    await expect(page.getByRole("tooltip")).toContainText("笔记工具");
+    await expect(page.getByRole("tooltip")).toContainText("筆記工具");
     await capture(page, info, "08-chinese-tooltip-and-panel-draft");
     await translatedTools.click();
-    await expect(page.getByRole("menuitem", { name: "打开笔记面板", exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "開啟筆記面板", exact: true })).toBeVisible();
     await capture(page, info, "09-chinese-menu");
     await page.keyboard.press("Escape");
   } finally {

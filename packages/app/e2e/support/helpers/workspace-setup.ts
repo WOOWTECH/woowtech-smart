@@ -340,7 +340,12 @@ export function observeSetupPanelTraffic(page: Page) {
   const outputWorkspaces: string[] = [];
   page.on("websocket", (socket) => {
     socket.on("framesent", ({ payload }) => {
-      const frame = JSON.parse(String(payload));
+      let frame;
+      try {
+        frame = JSON.parse(String(payload));
+      } catch {
+        return;
+      }
       if (frame.type !== "session") return;
       if (frame.message?.type === "subscription.release.request")
         releases.add(frame.message.subscriptionId);
@@ -353,7 +358,12 @@ export function observeSetupPanelTraffic(page: Page) {
         legacySetupDemand = true;
     });
     socket.on("framereceived", ({ payload }) => {
-      const frame = JSON.parse(String(payload));
+      let frame;
+      try {
+        frame = JSON.parse(String(payload));
+      } catch {
+        return;
+      }
       if (frame.type !== "session") return;
       if (frame.message?.type === "workspace.setup.subscribe.response")
         subscriptions.push(frame.message.payload);

@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -138,7 +139,7 @@ export async function goToSetupStep(page: Page, label: string): Promise<void> {
 }
 
 export function paseoToolsSwitch(scope: Page | Locator): Locator {
-  return scope.getByRole("switch", { name: "Inject Paseo tools", exact: true });
+  return scope.getByRole("switch", { name: `Inject ${PRODUCT_NAME} tools`, exact: true });
 }
 
 /** Whether the host gives its agents Paseo tools, read from the host itself. */

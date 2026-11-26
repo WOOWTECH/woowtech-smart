@@ -1,3 +1,4 @@
+import { version as appVersion } from "../../package.json";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { BUILTIN_PROVIDER_IDS } from "@getpaseo/protocol/provider-manifest";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -107,7 +108,7 @@ test("builtin Tasks opens by default in zh-TW with chat enhancement off and surv
   const client = await connectDaemonClient<BuiltinClient>({ clientIdPrefix: "builtin-tasks" });
   try {
     await test.step("The updated host serves the builtin while user plugins are disabled", async () => {
-      expect(client.getLastServerInfoMessage()).toMatchObject({ version: "0.17.4" });
+      expect(client.getLastServerInfoMessage()).toMatchObject({ version: appVersion });
       expect(await client.getDaemonConfig()).toMatchObject({
         config: {
           pluginsEnabled: false,

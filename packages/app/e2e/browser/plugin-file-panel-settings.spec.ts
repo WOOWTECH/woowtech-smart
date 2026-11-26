@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import type { TestInfo } from "@playwright/test";
 import { expect, test, type Page } from "../support/fixtures";
 import { openSettings } from "../support/helpers/app";
@@ -17,7 +18,7 @@ import { seedWorkspace } from "../support/helpers/seed-client";
 import { openSettingsSection } from "../support/helpers/settings";
 
 const ASK_EVERY_TIME = "Ask every time";
-const SOURCE_OPTION = "Source — Paseo";
+const SOURCE_OPTION = `Source — ${PRODUCT_NAME}`;
 
 function markdownRow(page: Page) {
   return page.getByTestId("file-panel-settings-row-ext:md");

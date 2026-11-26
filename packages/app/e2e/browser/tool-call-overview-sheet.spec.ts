@@ -432,7 +432,13 @@ async function provideLongToolDetails(page: Page, transformItem = provideLongRea
     ws.onMessage((message) => server.send(message));
     server.onMessage((message) => {
       const raw = typeof message === "string" ? message : message.toString("utf8");
-      const envelope = JSON.parse(raw);
+      let envelope;
+      try {
+        envelope = JSON.parse(raw);
+      } catch {
+        ws.send(message);
+        return;
+      }
       const item = envelope.message?.payload?.event?.item;
       transformItem(item);
       if (envelope.message?.type === "fetch_agent_timeline_response") {

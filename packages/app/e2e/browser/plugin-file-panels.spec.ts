@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -95,7 +96,7 @@ async function editMarkdownThroughPlugin(page: Page) {
 async function openBuiltinMarkdownSource(page: Page, name: string) {
   await page.getByTestId(`workspace-tab-file_${name}`).first().click({ button: "right" });
   await page.getByRole("menuitem", { name: "Open with…" }).hover();
-  await page.getByRole("menuitem", { name: "Markdown — Paseo" }).click();
+  await page.getByRole("menuitem", { name: `Markdown — ${PRODUCT_NAME}` }).click();
   await page
     .getByTestId("file-preview-mode")
     .filter({ visible: true })
