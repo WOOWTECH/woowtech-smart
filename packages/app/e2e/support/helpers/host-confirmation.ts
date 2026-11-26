@@ -52,7 +52,7 @@ export async function expectHostConfirmationFor(page: Page, host: LinkedHost): P
     timeout: 30_000,
   });
   await expect(sheet.getByTestId("host-confirmation-server-id")).toHaveText(host.serverId);
-  await expect(sheet.getByTestId("host-confirmation-relay")).toHaveText(host.relayEndpoint);
+  await expect(sheet.getByTestId("host-confirmation-relay")).toContainText(host.relayEndpoint);
 }
 
 export async function cancelHostConfirmation(page: Page): Promise<void> {

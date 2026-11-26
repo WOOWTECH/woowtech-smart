@@ -17,6 +17,7 @@ interface ClientRequest {
   direction?: unknown;
   subscribe?: unknown;
   page?: { cursor?: unknown };
+  filter?: unknown;
   payload?: unknown;
   mode?: unknown;
   path?: unknown;
@@ -83,7 +84,8 @@ function readClientRequest(message: string | Buffer): ClientRequest | null {
 }
 
 function directoryForRequest(request: ClientRequest): keyof DirectoryBootstrapCounts | null {
-  if (request.page?.cursor) return null;
+  // Core directory replicas bootstrap unfiltered pages. Plugins own their filtered subscriptions.
+  if (request.page?.cursor || request.filter !== undefined) return null;
   if (request.type === "fetch_agents_request") return "agents";
   if (request.type === "fetch_workspaces_request") return "workspaces";
   return null;

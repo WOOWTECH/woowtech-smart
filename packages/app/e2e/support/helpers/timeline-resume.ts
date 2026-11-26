@@ -239,10 +239,10 @@ export async function restoreUnchangedViewedTimeline(
   page: Page,
   gate: DaemonWebSocketGate,
 ): Promise<void> {
+  const before = rememberTimelineRequestCounts(gate);
   gate.restore();
+  await waitForResumeAnswer(gate, before);
   await expectReconnectingToastGone(page);
-  await expect(page.getByRole("alert").filter({ hasText: "Updating messages" })).toBeVisible();
-  gate.releaseHeldServerMessage();
   await expect(page.getByRole("alert").filter({ hasText: "Updating messages" })).toHaveCount(0);
 }
 

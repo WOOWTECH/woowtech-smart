@@ -407,6 +407,10 @@ export function PluginPage({
 }) {
   const { t } = useTranslation();
   const compact = useIsCompactFormFactor();
+  const runtimePlugin = useInstalledPlugin(
+    serverId,
+    subject.kind === "installed" ? subject.pluginId : "",
+  );
   const { plugin, listingId, listing, detail, loading } = useResolvedPlugin(serverId, subject);
   const installOperation = usePluginOperation(serverId, listingId);
   const model = usePluginPageModel({
@@ -443,6 +447,24 @@ export function PluginPage({
         <PluginPageSkeleton />
       </View>
     );
+  // Built-ins are in the running catalog, but intentionally absent from the install list.
+  // Their settings use the same runtime provider without directory lifecycle controls.
+  if (!plugin && !listing && runtimePlugin?.settingsScreens.length) {
+    const screenId =
+      subject.kind === "installed" && subject.screenId
+        ? subject.screenId
+        : runtimePlugin.settingsScreens[0]!.id;
+    return (
+      <View>
+        {back}
+        <PluginSettingsContent
+          serverId={serverId}
+          pluginId={runtimePlugin.id}
+          screenId={screenId}
+        />
+      </View>
+    );
+  }
   if (!plugin && !listing)
     return (
       <Alert

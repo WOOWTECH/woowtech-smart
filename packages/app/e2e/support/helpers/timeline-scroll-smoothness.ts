@@ -230,8 +230,11 @@ export function observeTimelinePages(page: Page, agentId: string): TimelinePage[
   const pages: TimelinePage[] = [];
   page.on("websocket", (socket) => {
     socket.on("framereceived", ({ payload }) => {
-      const envelope = JSON.parse(String(payload));
-      const message = envelope.message;
+      // Metro's hot-reload socket also emits frames; only daemon JSON carries timeline pages.
+      const text = String(payload);
+      if (!text.trimStart().startsWith("{")) return;
+      const envelope = JSON.parse(text);
+      const message = envelope.message ?? envelope;
       if (message?.type !== "fetch_agent_timeline_response" || message.payload.agentId !== agentId)
         return;
       pages.push({

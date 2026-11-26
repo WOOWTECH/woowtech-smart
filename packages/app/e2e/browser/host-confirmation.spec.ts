@@ -17,7 +17,7 @@ import {
 const linkedHost: LinkedHost = {
   serverId: "srv_link_confirmation",
   relayEndpoint: "127.0.0.1:59998",
-  daemonPublicKeyB64: "bGlua0NvbmZpcm1hdGlvbktleQ",
+  daemonPublicKeyB64: Buffer.alloc(32, 7).toString("base64"),
 };
 
 test("a pairing link asks before saving a host and reconnects without asking again", async ({

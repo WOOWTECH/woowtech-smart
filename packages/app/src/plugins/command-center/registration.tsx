@@ -10,17 +10,31 @@ import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
 import { createPluginClientStateSource } from "../client-state/source";
 import { publishFocusedAgent } from "../focused-agent";
-import { hostIdFromPathname } from "../routes";
 import { useInstalledPlugins } from "../registry";
 import { buildPluginCommandCenterContributions } from "./contributions";
-import { getFocusedAgentId } from "./context";
+import { getFocusedAgentId, getPluginCommandCenterLocation } from "./context";
 import { createPluginNavigation } from "../navigation";
+import { getPreferredPluginContributionHost, pluginScreensHostKey } from "../contribution-host";
 
 export function PluginCommandCenterActions() {
   const pathname = usePathname();
   const selection = useActiveWorkspaceSelection();
-  const serverId = selection?.serverId ?? hostIdFromPathname(pathname);
-  const workspaceId = selection?.workspaceId ?? null;
+  const installed = useInstalledPlugins();
+  const firstGlobalPlugin = installed.find((plugin) =>
+    plugin.commandCenterItems.some((item) => item.context === "global"),
+  );
+  const preferredHostId = firstGlobalPlugin
+    ? getPreferredPluginContributionHost(pluginScreensHostKey(firstGlobalPlugin.id))
+    : null;
+  const defaultPlugin =
+    installed.find(
+      (plugin) => plugin.id === firstGlobalPlugin?.id && plugin.serverId === preferredHostId,
+    ) ?? firstGlobalPlugin;
+  const { serverId, workspaceId } = getPluginCommandCenterLocation(
+    pathname,
+    selection,
+    defaultPlugin?.serverId ?? null,
+  );
   const workspaceExists = useWorkspaceExists(serverId, workspaceId);
   const workspaceKey = serverId && workspaceId ? `${serverId}:${workspaceId}` : null;
   const layout = useWorkspaceLayoutStore((state) =>
@@ -48,7 +62,6 @@ export function PluginCommandCenterActions() {
     return () => publishFocusedAgent(null);
   }, [handedAgentId, serverId]);
   const client = useHostRuntimeClient(serverId ?? "");
-  const installed = useInstalledPlugins();
   const plugins = useMemo(
     () => installed.filter((plugin) => plugin.serverId === serverId),
     [installed, serverId],

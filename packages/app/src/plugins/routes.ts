@@ -67,7 +67,7 @@ export function buildLegacyPluginSurfaceRedirectRoute(
 }
 
 export function hostIdFromPathname(pathname: string): string | null {
-  const encoded = /^\/h\/([^/]+)/.exec(pathname)?.[1];
+  const encoded = /^\/(?:h|settings\/hosts)\/([^/]+)(?:\/|$)/.exec(pathname)?.[1];
   if (!encoded) return null;
   try {
     return decodeURIComponent(encoded);
