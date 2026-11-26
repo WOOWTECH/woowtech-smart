@@ -48,10 +48,8 @@ appId: ${APP_ID}
 - takeScreenshot: settings-files
 - tapOn:
     id: header-back-button
-- tapOn:
-    id: header-back-button
-- assertVisible:
-    id: welcome-open-settings
+# Leaving the settings root opens the workspace picker, not onboarding.
+# Restart from the settings list to verify persisted data on a fresh launch.
 - stopApp
 - launchApp:
     clearState: false
@@ -69,8 +67,13 @@ appId: ${APP_ID}
 - takeScreenshot: settings-terminal-persisted
 - tapOn:
     id: header-back-button
-- tapOn:
-    id: header-back-button
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: welcome-open-settings
+    timeout: 60000
 - tapOn:
     id: welcome-direct-connection
 - extendedWaitUntil:

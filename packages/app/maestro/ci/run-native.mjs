@@ -40,6 +40,8 @@ try {
     path.join(evidence, "results.xml"),
     "--debug-output",
     path.join(evidence, "debug"),
+    "--test-output-dir",
+    path.join(evidence, "debug"),
     fileURLToPath(new URL("./settings-native.yaml", import.meta.url)),
   );
   const { stdout, stderr } = await execute("maestro", args, {
