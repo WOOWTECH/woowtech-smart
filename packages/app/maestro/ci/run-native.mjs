@@ -1,9 +1,17 @@
 import { execFile } from "node:child_process";
 import { copyFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { startIsolatedHostDaemon } from "../../e2e/support/helpers/isolated-host-daemon.ts";
+// The app package is CommonJS; tsx exposes its TypeScript fixture through require.
+const require = createRequire(import.meta.url);
+const { startIsolatedHostDaemon } = require("../../e2e/support/helpers/isolated-host-daemon.ts");
+if (typeof startIsolatedHostDaemon !== "function") throw new Error("Host fixture did not load");
+if (process.argv.includes("--check")) {
+  console.log("Native test runner and isolated host fixture loaded.");
+  process.exit(0);
+}
 
 const execute = promisify(execFile);
 const evidence = process.env.EVIDENCE;
@@ -52,12 +60,13 @@ try {
     path.join(evidence, "result.json"),
     JSON.stringify(
       {
-        source: process.env.GITHUB_SHA,
+        source: process.env.NATIVE_CANDIDATE_SHA ?? process.env.GITHUB_SHA,
+        testSource: process.env.GITHUB_SHA,
         brand: process.env.WOOWTECH_BRAND,
         platform,
         appId,
         passed,
-        hostVersion: "same source as client",
+        hostSource: process.env.GITHUB_SHA,
       },
       null,
       2,

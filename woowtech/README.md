@@ -1107,6 +1107,10 @@ node --test woowtech/*.test.mjs
 | Sidebar、Chat、Terminal、Files 設定與主機管理頁 | 共用 0.17.5 基線   | 桌面輪巡 27 個設定目的地、檢查捲動與記憶體；手機檢查四個設定頁、重開保存及連線後頁面。                                              |
 | woowtech／Apporo 品牌隔離                       | 品牌設定與共用來源 | 兩品牌分別建置；Windows 品牌工具和桌面 Metro 啟動器改由 Node 啟動專案內 CLI。                                                       |
 
+平台能力差異也要分開判讀：內建 Browser 設定僅桌面可用，Editor 設定依 web renderer 能力顯示，Shortcuts 需要實體鍵盤，手機 Chat 頁不顯示網頁的聊天大綱開關。本輪保留共用來源的這些條件，沒有把缺少相應能力的設定強行顯示在手機上。
+
+手機若只修改驗證腳本、產品程式沒有變更，可傳 `android_apk_run_id=<前一輪 run ID>` 或 `ios_app_run_id=<前一輪 run ID>`，下載同一個 repo、指定品牌及該 run commit 命名的 APK／simulator app 重驗，省去重編譯。證據另存候選包的來源與 run；`result.json` 的 `source` 是候選包 commit，`testSource`／`hostSource` 是本輪測試與主機的 commit。這種重驗不等同重新編譯本輪 commit，產品程式有變更時應留空該欄重新建置。編譯前先執行 runner 的 `--check`，確認 Node／tsx 能載入隔離主機 fixture。
+
 重驗時先確認待驗分支已推送，再以 `gh workflow run -R WOOWTECH/woowtech-smart settings-desktop-verify.yml --ref <branch> -f platform=all -f brand=all` 與 `gh workflow run -R WOOWTECH/woowtech-smart settings-android-emulator.yml --ref <branch> -f platform=all -f brand=all` 啟動。單平台可選 `macos`／`windows` 或 `ios`／`android`，單品牌可選 `woowtech`／`apporo`。核對 run 的 commit 與 artifact 內的來源，再看每個 matrix job 的結果；編譯成功、可下載 APK 或 simulator app 都不代表操作驗證通過。桌面候選包只在打包後 smoke 通過才上傳；手機編譯成功即保留包供診斷，須另看 Maestro 結果。相機實掃、真正 relay／推播、舊版資料升級、正式簽章和商店安裝仍是獨立驗收項目。
 
 2026-11-14 owner 授權 Pi Agent 共用 eSigner 簽章：新增 `pi-agent-signing.yml`，只有 `workflow_call`，由 Desktop Release 的手動 `platform=pi-agent`、`publish=false` 呼叫。它不會因 push／PR 自動簽章，不發佈 release；使用方式見 `docs/release.md` 的 Pi Agent Windows signing。一般 CI 的 Ubuntu 限制照舊。
