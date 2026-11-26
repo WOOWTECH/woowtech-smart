@@ -173,7 +173,14 @@ test("the daemon creates, stages and deletes only the brand's skill folders", as
   const home = mkdtempSync(path.join(tmpdir(), "woowtech-skills-"));
   try {
     const targets = resolveSkillTargets(home);
-    const roots = [targets.agentsDir, targets.claudeDir, targets.codexDir];
+    const roots = [...targets.installDirs, targets.codexDir];
+    assert.deepEqual(
+      roots,
+      [".agents/skills", ".claude/skills", ".gemini/config/skills", ".codex/skills"].map(
+        (relative) => path.join(home, relative),
+      ),
+      "all active and legacy skill roots stay inside the temporary home",
+    );
     for (const root of roots) {
       for (const skill of official) {
         mkdirSync(path.join(root, skill), { recursive: true });
@@ -189,16 +196,21 @@ test("the daemon creates, stages and deletes only the brand's skill folders", as
       "names the daemon may create, replace or delete",
     );
     await installSkills(targets, { mode: "all" });
-    for (const root of roots) {
+    for (const root of targets.installDirs) {
       assert.deepEqual(readdirSync(root).sort(), [...official, ...OUR_SKILLS].sort(), root);
     }
+    assert.deepEqual(
+      readdirSync(targets.codexDir).sort(),
+      official,
+      "Codex uses the shared skills root",
+    );
     const transaction = await beginSkillsTransaction(
       targets,
       { mode: "all" },
       { mode: "custom", skills: [COMMAND] },
       [{ kind: "delete", name: `${COMMAND}-advisor` }],
     );
-    const staged = readdirSync(path.dirname(targets.agentsDir)).filter((entry) =>
+    const staged = readdirSync(path.dirname(targets.installDirs[0])).filter((entry) =>
       entry.includes("-skills-"),
     );
     await transaction.rollback();
@@ -232,7 +244,7 @@ test("the rewriter keeps upstream's services and API but renames skill invocatio
     port: "6770",
     productName: "woowtech smart",
     relayHost: "relay.woowtech.io",
-    upstreamSkills: ["paseo", "paseo-help", "paseo-plugin"],
+    upstreamSkills: ["paseo", "paseo-advisor", "paseo-help", "paseo-plugin"],
   });
   assert.equal(
     rewriter.rewrite(
@@ -241,5 +253,13 @@ test("the rewriter keeps upstream's services and API but renames skill invocatio
       "Run `/paseo` or /paseo-help. Paseo Hub and the Paseo SDK stay upstream's; Paseo is ours. Keep `/paseo-plugin.json`.",
     ),
     "Run `/woowtech-smart` or /woowtech-smart-help. Paseo Hub and the Paseo SDK stay upstream's; woowtech smart is ours. Keep `/paseo-plugin.json`.",
+  );
+  assert.equal(
+    rewriter.rewrite(
+      "paseo-advisor",
+      "SKILL.md",
+      "`/skill:paseo-advisor /skill:unslop` and `$paseo-advisor $unslop`. Keep usePaseo(), { paseo }, requirements.paseo, @getpaseo/plugin, `/skill:paseo-plugin.json` and `$paseo-unknown`.",
+    ),
+    "`/skill:woowtech-smart-advisor /skill:unslop` and `$woowtech-smart-advisor $unslop`. Keep usePaseo(), { paseo }, requirements.paseo, @getpaseo/plugin, `/skill:paseo-plugin.json` and `$paseo-unknown`.",
   );
 });

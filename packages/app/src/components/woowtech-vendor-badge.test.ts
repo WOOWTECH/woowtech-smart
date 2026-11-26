@@ -1,6 +1,8 @@
+/** @vitest-environment jsdom */
+import { cleanup, renderHook } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { SvgXml } from "react-native-svg";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { ACP_PROVIDER_ICON_SVGS } from "@/assets/acp-provider-icons";
 import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
 import {
@@ -12,9 +14,11 @@ import {
   vendorMonogram,
 } from "@/components/icons/vendor-badge";
 import { createVendorBadgeIcon } from "@/components/icons/vendor-badge-icon";
+import { KiroIcon } from "@/components/icons/kiro-icon";
 import { ICON_SIZE, darkTheme, lightTheme } from "@/styles/theme";
-import { replaceProviderSnapshotIcons, resolveProviderIconName } from "./provider-icon-name";
-import { getProviderIcon } from "./provider-icons";
+import { replaceProviderSnapshotIcons } from "@/data/provider-icons";
+import { resolveProviderIconName } from "./provider-icon-name";
+import { useProviderIcon } from "./provider-icons";
 
 interface DrawnShape {
   d?: string;
@@ -71,6 +75,10 @@ describe("vendor monograms", () => {
       pi: vendorMonogram("pi"),
       vscode: vendorMonogram("vscode"),
       zed: vendorMonogram("zed"),
+      devin: vendorMonogram("devin"),
+      fx: vendorMonogram("fx"),
+      hermes: vendorMonogram("hermes"),
+      hoplite: vendorMonogram("hoplite"),
     }).toEqual({
       claude: "C",
       "claude-acp": "C",
@@ -84,6 +92,10 @@ describe("vendor monograms", () => {
       pi: "Pi",
       vscode: "Vs",
       zed: "Z",
+      devin: "De",
+      fx: "Fx",
+      hermes: "He",
+      hoplite: "Ho",
     });
     for (const monogram of ALL_MONOGRAMS) {
       expect(monogram).toMatch(/^[A-Z][a-z]?$/);
@@ -232,18 +244,20 @@ describe("vendor icons across the app", () => {
   const color = darkTheme.colors.foreground;
 
   function render(provider: string) {
-    const Icon = getProviderIcon(provider, "server-1") as IconComponent;
+    const Icon = renderHook(() => useProviderIcon(provider, "server-1")).result
+      .current as IconComponent;
     return Icon({ size: 16, color }) as ReactElement<{ xml: string }>;
   }
 
   it("draws an ACP catalog provider's own icon, never the SVG a host sends for it", () => {
-    const withIcons = ACP_PROVIDER_CATALOG.filter((entry) => entry.iconSvg);
+    // Kiro also appears in the catalog, but its built-in badge takes precedence.
+    const withIcons = ACP_PROVIDER_CATALOG.filter((entry) => entry.iconSvg && entry.id !== "kiro");
     replaceProviderSnapshotIcons(
       "server-1",
       withIcons.map((entry) => ({ provider: entry.id, iconSvg: HOST_SVG })),
     );
     for (const entry of withIcons) {
-      expect(resolveProviderIconName(entry.id, "server-1")).toEqual({
+      expect(resolveProviderIconName(entry.id, HOST_SVG)).toEqual({
         kind: "catalog",
         id: entry.id,
       });
@@ -251,6 +265,30 @@ describe("vendor icons across the app", () => {
         type: SvgXml,
         props: { xml: entry.iconSvg, width: 16, height: 16, color },
       });
+    }
+  });
+
+  it("keeps Kiro's built-in badge ahead of its catalog icon and a host's SVG", () => {
+    expect(ACP_PROVIDER_CATALOG.find((entry) => entry.id === "kiro")?.iconSvg).toBe(
+      ACP_PROVIDER_ICON_SVGS.kiro,
+    );
+    replaceProviderSnapshotIcons("server-1", [{ provider: "kiro", iconSvg: HOST_SVG }]);
+    expect(resolveProviderIconName("kiro", HOST_SVG)).toEqual({ kind: "builtin", id: "kiro" });
+    const Icon = renderHook(() => useProviderIcon("kiro", "server-1")).result.current;
+    expect(Icon).toBe(KiroIcon);
+    expect(draw(Icon, 16, color)).toEqual(draw(createVendorBadgeIcon("kiro"), 16, color));
+  });
+
+  it("draws newly curated ACP providers as badges even when a host supplies an SVG", () => {
+    const providers = ["devin", "fx", "hermes", "hoplite"];
+    replaceProviderSnapshotIcons(
+      "server-1",
+      providers.map((provider) => ({ provider, iconSvg: HOST_SVG })),
+    );
+    for (const provider of providers) {
+      const icon = render(provider);
+      expect(icon.props.xml).toBe(vendorBadgeSvg(provider));
+      expect(icon.props.xml).not.toContain("M4 4h16v16H4z");
     }
   });
 
@@ -274,3 +312,5 @@ describe("vendor icons across the app", () => {
     expect(uncurated).toEqual([]);
   });
 });
+
+afterEach(cleanup);

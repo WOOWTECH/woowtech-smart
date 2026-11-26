@@ -1,3 +1,6 @@
+import path from "node:path";
+import { cliCommandFileName } from "@getpaseo/protocol/brand-cli";
+
 export function resolveCliInstallSourcePath(input: {
   platform: NodeJS.Platform;
   isPackaged: boolean;
@@ -26,4 +29,20 @@ export function resolveCliInstallSourcePath(input: {
   }
 
   return input.executablePath;
+}
+
+export function resolveCliShimPath(input: {
+  platform: NodeJS.Platform;
+  isPackaged: boolean;
+  executablePath: string;
+  resolveWorkspaceCli: () => string;
+}): string {
+  if (!input.isPackaged) return input.resolveWorkspaceCli();
+
+  const filename = cliCommandFileName(input.platform);
+  if (input.platform === "darwin") {
+    const bundle = input.executablePath.replace(/\/Contents\/MacOS\/.+$/, "");
+    return path.join(bundle, "Contents", "Resources", "bin", filename);
+  }
+  return path.join(path.dirname(input.executablePath), "resources", "bin", filename);
 }

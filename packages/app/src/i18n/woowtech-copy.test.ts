@@ -141,6 +141,7 @@ describe("woowtech smart's own text", () => {
     if (!i18n.isInitialized) {
       await i18n.init();
     }
+    await i18n.loadLanguages(["ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN", "zh-TW"]);
   });
 
   it("loads under the woowtech key", () => {

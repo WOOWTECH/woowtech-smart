@@ -1,0 +1,920 @@
+/**
+ * The block details panel (https://github.com/RoundRedDot/better-paseo/blob/f2ab453297c4ccb88a08e2129af0cb3528c4e628/docs/prototypes/block-details-sheet.md): the open
+ * block's preview drawn as a bottom drawer (phone), a floating bottom panel
+ * (tablet) or a right-hand side panel (wide windows), chosen by the window.
+ *
+ * The content is the same tree the hover preview draws, the row's own
+ * `render()`, here inside the details chrome (`PreviewChromeContext`), with
+ * the shell's window actions, line wrap and remount memory
+ * (`PreviewActionsContext`), and the header's controls (`DetailsShellContext`).
+ *
+ * iOS and Android draw every form inside React Native's own `Modal`, the only
+ * layer a plugin can raise above the timeline; web draws a non-modal popover
+ * over the window (`web-layer.ts`).
+ *
+ * A form change keeps the block, its scroll and its wrap: the old form fades
+ * out over 120 ms and the new one in over 160 ms. A lease handover (the row
+ * drawing the shell scrolled out of the list) brings the panel back as it
+ * was, without an entrance.
+ */
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  Modal,
+  Platform,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type ViewStyle,
+} from "react-native";
+import { useRpc } from "@getpaseo/plugin/client";
+import { Icon, useToast } from "@getpaseo/plugin/client/ui";
+import type { ExtendedThemeTokens } from "../../components/theme-tokens";
+import {
+  DetailsShellContext,
+  type BlockEntry,
+  type Detent,
+  type DetailsForm,
+  type DetailsShellValue,
+  type DetailsZoom,
+} from "../contracts";
+import { TranslationSettingsParentCloseContext } from "../../translation/navigation";
+import { useBlock, useBlockList } from "../block-registry";
+import { closeDetailsIfCurrent, detailsApi, useDetails } from "../details-store";
+import { DETAILS_BREAKPOINTS, floatingWidth } from "../layout-model";
+import { SWIPE_DISTANCE_RATIO, swipeDecision } from "../gesture-model";
+import {
+  HoverPreviewContext,
+  PreviewActionsContext,
+  PreviewChromeContext,
+  usePanelWrap,
+  type PreviewActions,
+} from "../../ui/hover-preview";
+import { PathContext, usePathContextValue } from "../../ui/path-text";
+import { TimelineProseContext } from "../../components/markdown/markdown-view";
+import { TextZoomContext } from "../../ui/text-zoom";
+import {
+  getEnhancerPreferences,
+  updateEnhancerPreferences,
+  useEnhancerPreferences,
+} from "../../preferences";
+import {
+  forgetPreview,
+  holdPreview,
+  recallPreview,
+  rememberPreview,
+  PREVIEW_HANDOVER_MS,
+  type PreviewMemory,
+} from "../../ui/preview-memory";
+import { useInputCapabilities } from "../../ui/use-input-capabilities";
+import { useReducedMotion } from "../../ui/use-reduced-motion";
+import { holdHostGestures } from "../../ui/hold-host-gestures";
+import { useListScrollLock } from "../../ui/scroll-anchor";
+import { revealPathRpc } from "../../../shared/file-rpc";
+import { revealWithSetting } from "../../i18n/file-open-error";
+import { DETAILS_MOTION, animate } from "./motion";
+import { OVERDRAG, panelResponder, type DragTarget } from "./gestures";
+import { useSafeInsets } from "./safe-area";
+import { useDetailsLayout } from "./use-details-layout";
+import {
+  bindDetailsLayer,
+  bindTimelineSpace,
+  bindWorkOutsideClick,
+  keepOffWindowDrag,
+  layerTakesKey,
+  webBodyAtTop,
+} from "./web-layer";
+import { bindDetailsKeys, registerDetailsKeyboardActions } from "../keyboard";
+import { useCopy } from "../../ui/use-copy";
+import {
+  canProbeOlder,
+  noteNavigation,
+  stepDetails,
+  syncTimeline,
+  useHostList,
+} from "./timeline-sync";
+import { DetailsBodyContext, createBodyScroll } from "./body-handover";
+import { createZoomControls } from "./zoom-controls";
+import { BottomDrawer } from "./bottom-drawer";
+import { FloatingPanel } from "./floating-panel";
+import { SidePanel, sideWidth } from "./side-panel";
+import type { Entrance } from "./bottom-panel";
+import {
+  clampDetailsFontSize,
+  DETAILS_FONT_SIZE_DEFAULT,
+} from "../../../shared/preferences-settings";
+
+/** Where the open block sits among the navigable blocks: 1-based, 0 when it is not one. */
+export function navigationOf(
+  list: readonly BlockEntry[],
+  id: string,
+): { index: number; count: number; first: string | null } {
+  const navigable = list.filter((entry) => entry.navigable && entry.hasBody);
+  const at = navigable.findIndex((entry) => entry.id === id);
+  return { index: at + 1, count: navigable.length, first: navigable[0]?.id ?? null };
+}
+
+// The block each agent's shell draws, and until when a handover may take it over without an entrance.
+const shown = new Map<string, { id: string; until: number | null }>();
+
+function takesOver(agentId: string, id: string): boolean {
+  const last = shown.get(agentId);
+  return Boolean(last && last.id === id && (last.until === null || Date.now() <= last.until));
+}
+
+// The open panel's ‹ › with their slide, per agent, for keys and other callers.
+const steppers = new Map<string, (direction: -1 | 1) => void>();
+
+/**
+ * Steps the agent's open panel to the previous or next block, with the
+ * panel's slide when one is drawn (web keys, slice E). Without a drawn panel
+ * it steps the store, probing for older rows at the oldest known block.
+ */
+export function stepOpenDetails(agentId: string, direction: -1 | 1): void {
+  const step = steppers.get(agentId);
+  if (step) step(direction);
+  else void stepDetails(agentId, direction);
+}
+
+/** Draws the agent's open block, and plays the panel out after it closes. */
+export function DetailsShell({
+  agentId,
+  tokens,
+}: {
+  agentId: string;
+  tokens: ExtendedThemeTokens;
+}) {
+  const state = useDetails(agentId);
+  // The block drawn while the exit plays, after the store has let go of it.
+  const [lastId, setLastId] = useState<string | null>(state.openId);
+  if (state.openId !== null && state.openId !== lastId) setLastId(state.openId);
+  const shownId = state.openId ?? lastId;
+  const entry = useBlock(agentId, shownId);
+  const onExited = useCallback(() => {
+    shown.delete(agentId);
+    setLastId(null);
+  }, [agentId]);
+  if (!shownId || !entry) return null;
+  return (
+    <OpenShell
+      agentId={agentId}
+      tokens={tokens}
+      entry={entry}
+      openId={state.openId}
+      detent={state.detent}
+      fullscreen={state.fullscreen}
+      storeForm={state.form}
+      docked={state.docked === true}
+      onExited={onExited}
+    />
+  );
+}
+
+function OpenShell({
+  agentId,
+  tokens,
+  entry,
+  openId,
+  detent,
+  fullscreen,
+  storeForm,
+  docked,
+  onExited,
+}: {
+  agentId: string;
+  tokens: ExtendedThemeTokens;
+  entry: BlockEntry;
+  /** The store's open block; null once closed, while the exit plays. */
+  openId: string | null;
+  detent: Detent;
+  fullscreen: boolean;
+  storeForm: DetailsForm;
+  docked: boolean;
+  onExited(): void;
+}) {
+  const leaving = openId === null;
+  const capabilities = useInputCapabilities();
+  const pointer = capabilities.hover;
+  const reduced = useReducedMotion();
+  const layerRef = useRef<View>(null);
+  const paneRef = useRef<View>(null);
+  const anchor = useCallback(() => paneRef.current, []);
+  const host = useHostList(agentId, anchor);
+  // "Open in panel" asks for the side: make room in the timeline as work details do.
+  const reserveTimeline = entry.reserveTimeline === true || docked;
+  const layout = useDetailsLayout(pointer, host, reserveTimeline);
+  const [insets, insetProbe] = useSafeInsets();
+  const lockList = useListScrollLock();
+  const revealPath = useRpc(revealPathRpc);
+  const toast = useToast();
+  const cwd = useRef<string | undefined>(undefined);
+  const reveal = useCallback(
+    (path: string) => {
+      revealWithSetting(revealPath, toast, cwd.current ?? "", path);
+    },
+    [revealPath, toast],
+  );
+  const paths = usePathContextValue(agentId, reveal);
+  cwd.current = paths.cwd;
+
+  // A handover takes the panel over as the last holder left it: no entrance, the same scroll and wrap.
+  const [quiet] = useState(() => takesOver(agentId, entry.id));
+  const [remembered, setRemembered] = useState<{ id: string; memory: PreviewMemory | null }>(
+    () => ({
+      id: entry.id,
+      memory: quiet ? recallPreview(entry.id) : null,
+    }),
+  );
+  const memory = remembered.id === entry.id ? remembered.memory : null;
+  const [wrapOn, toggleWrap] = usePanelWrap(memory?.wrap ?? null);
+  const openIdRef = useRef(openId);
+  openIdRef.current = openId;
+  useEffect(() => {
+    const id = entry.id;
+    shown.set(agentId, { id, until: null });
+    const release = holdPreview(id);
+    return () => {
+      release();
+      // Stepped away or closed: nothing to take over. Unmounted while open: a handover may.
+      if (openIdRef.current !== id) forgetPreview(id);
+      else if (shown.get(agentId)?.id === id)
+        shown.set(agentId, { id, until: Date.now() + PREVIEW_HANDOVER_MS });
+    };
+  }, [agentId, entry.id]);
+  useEffect(() => {
+    rememberPreview(entry.id, { wrap: wrapOn });
+  }, [entry.id, wrapOn]);
+
+  // The form drawn, which trails the layout's by the form change's fade.
+  const [form, setForm] = useState<DetailsForm>(layout.form);
+  const shownPanel = useRef(false);
+  const [entrance, setEntrance] = useState<Entrance>(quiet ? "none" : "slide");
+  const formFade = useRef(new Animated.Value(1)).current;
+  const panelTop = useRef<number | null>(null);
+  const latest = useRef({ entry, detent, fullscreen, reduced, form, leaving });
+  latest.current = { entry, detent, fullscreen, reduced, form, leaving };
+  useEffect(() => {
+    if (layout.form === form) return;
+    const next = layout.form;
+    if (!shownPanel.current) {
+      setForm(next);
+      return;
+    }
+    const animation = animate(
+      formFade,
+      0,
+      latest.current.reduced ? DETAILS_MOTION.reducedMs : DETAILS_MOTION.formOutMs,
+      () => {
+        const now = latest.current;
+        // Full screen does not carry into or out of the side panel: it opens at its initial size.
+        if (next === "side" || now.form === "side") {
+          if (now.detent === "full") detailsApi.setDetent(agentId, "fit");
+          if (now.fullscreen) detailsApi.setFullscreen(agentId, false);
+        }
+        setRemembered({ id: now.entry.id, memory: recallPreview(now.entry.id) });
+        panelTop.current = null;
+        setEntrance("fade");
+        formFade.setValue(1);
+        setForm(next);
+      },
+    );
+    return () => animation.stop();
+  }, [agentId, layout.form, form, formFade]);
+  useEffect(() => {
+    if (storeForm !== form) detailsApi.setForm(agentId, form);
+  }, [agentId, storeForm, form]);
+
+  const close = useCallback(() => detailsApi.close(agentId), [agentId]);
+  useEffect(() => {
+    if (form !== "side" || openId !== entry.id) return;
+    return bindWorkOutsideClick(layerRef.current, entry.id, () =>
+      closeDetailsIfCurrent(agentId, entry.id),
+    );
+  }, [agentId, entry.id, form, openId]);
+
+  // ‹ › and the header swipe.
+  const list = useBlockList(agentId);
+  const nav = useMemo(() => navigationOf(list, entry.id), [list, entry.id]);
+  useEffect(() => {
+    noteNavigation(agentId, nav.first, openId);
+  }, [agentId, nav.first, openId]);
+  const canStep = useMemo(
+    () => ({
+      previous: nav.index > 1 || (nav.index === 1 && canProbeOlder(agentId, entry.id)),
+      next: nav.index > 0 && nav.index < nav.count,
+    }),
+    [agentId, entry.id, nav.index, nav.count],
+  );
+  const slide = useRef(new Animated.Value(0)).current;
+  const slideOpacity = useRef(new Animated.Value(1)).current;
+  const previousHint = useRef(new Animated.Value(0)).current;
+  const nextHint = useRef(new Animated.Value(0)).current;
+  const previousShadow = useRef(new Animated.Value(0)).current;
+  const nextShadow = useRef(new Animated.Value(0)).current;
+  const panelWidth =
+    form === "side"
+      ? sideWidth(layout.stage, fullscreen)
+      : form === "floating"
+        ? floatingWidth(layout.stage.width)
+        : layout.stage.width;
+  const timelineSpace = useRef<ReturnType<typeof bindTimelineSpace> | null>(null);
+  useLayoutEffect(() => {
+    if (
+      Platform.OS !== "web" ||
+      !pointer ||
+      !reserveTimeline ||
+      form !== "side" ||
+      leaving ||
+      !layout.ready
+    )
+      return;
+    const reservation = bindTimelineSpace(paneRef.current);
+    timelineSpace.current = reservation;
+    reservation.setWidth(panelWidth);
+    return () => {
+      timelineSpace.current = null;
+      reservation.release();
+    };
+  }, [reserveTimeline, form, leaving, layout.ready, pointer]);
+  useLayoutEffect(() => {
+    timelineSpace.current?.setWidth(panelWidth);
+  }, [panelWidth]);
+  const navRef = useRef({ nav, canStep, panelWidth });
+  navRef.current = { nav, canStep, panelWidth };
+  const slideTo = useCallback(
+    (direction: -1 | 1) => {
+      const still = latest.current.reduced;
+      const half = still ? DETAILS_MOTION.reducedMs / 2 : DETAILS_MOTION.swipeOutMs;
+      if (!still)
+        animate(slide, -direction * navRef.current.panelWidth * DETAILS_MOTION.swipeOut, half);
+      animate(slideOpacity, 0, half, () => {
+        void stepDetails(agentId, direction);
+        const rest = still
+          ? DETAILS_MOTION.reducedMs / 2
+          : DETAILS_MOTION.swipeMs - DETAILS_MOTION.swipeOutMs;
+        slide.setValue(still ? 0 : direction * DETAILS_MOTION.swipeShift);
+        animate(slide, 0, rest);
+        animate(slideOpacity, 1, rest);
+      });
+    },
+    [agentId, slide, slideOpacity],
+  );
+  const step = useCallback(
+    (direction: -1 | 1) => {
+      const { nav: now, canStep: can } = navRef.current;
+      if (!(direction === 1 ? can.next : can.previous)) return;
+      // The oldest known block: the probe scrolls for older rows, and the step lands when one mounts.
+      if (direction === -1 && now.index === 1) {
+        void stepDetails(agentId, -1);
+        return;
+      }
+      slideTo(direction);
+    },
+    [agentId, slideTo],
+  );
+  useEffect(() => {
+    steppers.set(agentId, step);
+    return () => {
+      if (steppers.get(agentId) === step) steppers.delete(agentId);
+    };
+  }, [agentId, step]);
+  const swipe = useMemo<DragTarget>(() => {
+    const has = (travel: number) =>
+      travel < 0 ? navRef.current.canStep.next : navRef.current.canStep.previous;
+    const clearHint = () => {
+      previousHint.setValue(0);
+      nextHint.setValue(0);
+      previousShadow.setValue(0);
+      nextShadow.setValue(0);
+    };
+    const back = () => {
+      clearHint();
+      animate(slide, 0, DETAILS_MOTION.swipeMs);
+    };
+    return {
+      begin() {},
+      move(travel) {
+        const progress =
+          has(travel) && (travel < 0 || navRef.current.nav.index > 1)
+            ? Math.min(2, Math.abs(travel) / (navRef.current.panelWidth * SWIPE_DISTANCE_RATIO))
+            : 0;
+        previousHint.setValue(travel > 0 ? Math.min(1, progress) : 0);
+        nextHint.setValue(travel < 0 ? Math.min(1, progress) : 0);
+        previousShadow.setValue(travel > 0 ? Math.max(0, progress - 1) : 0);
+        nextShadow.setValue(travel < 0 ? Math.max(0, progress - 1) : 0);
+        if (latest.current.reduced) return;
+        slide.setValue(has(travel) ? travel : travel * OVERDRAG);
+      },
+      end(travel, velocity) {
+        clearHint();
+        const direction = swipeDecision(travel, velocity, navRef.current.panelWidth, has(travel));
+        if (direction === 0) {
+          back();
+          return;
+        }
+        if (direction === -1 && navRef.current.nav.index === 1) {
+          back();
+          void stepDetails(agentId, -1);
+          return;
+        }
+        slideTo(direction);
+      },
+      cancel: back,
+    };
+  }, [agentId, slide, slideTo, previousHint, nextHint, previousShadow, nextShadow]);
+
+  // The vertical drag of a drawer or floating panel, which its frame fills.
+  const dragRef = useRef<DragTarget | null>(null);
+  const hold = useCallback(() => {
+    const release = holdHostGestures(layerRef.current);
+    lockList(true);
+    return () => {
+      release();
+      lockList(false);
+    };
+  }, [lockList]);
+  // Taken as the touch starts where no button inside takes it: the Modal's
+  // root would take it otherwise, and never offer its moves to the header.
+  const headerPan = useMemo(
+    () =>
+      panelResponder({
+        vertical: () => (latest.current.form === "side" ? null : dragRef.current),
+        horizontal: () => swipe,
+        hold,
+        claimAtStart: () => Platform.OS !== "web",
+      }),
+    [swipe, hold],
+  );
+  const touch = capabilities.touch;
+
+  const setDetent = useCallback(
+    (next: Detent) => {
+      detailsApi.setDetent(agentId, next);
+      detailsApi.setFullscreen(agentId, next === "full");
+    },
+    [agentId],
+  );
+  // Every block can go full screen, short ones too; the side panel widens instead.
+  const toggleFullscreen = useCallback(() => {
+    const now = latest.current;
+    if (now.form === "side") detailsApi.setFullscreen(agentId, !now.fullscreen);
+    else setDetent(now.detent === "full" ? "fit" : "full");
+  }, [agentId, setDetent]);
+  const fullscreenOn = form === "side" ? fullscreen : detent === "full";
+
+  // Keep the phone timeline still while stepping through the drawer.
+  const pendingSync = useRef(true);
+  const syncedEntry = useRef(entry.id);
+  const runSync = useCallback(() => {
+    pendingSync.current = false;
+    const target = latest.current.entry;
+    if (!target.mounted || !target.measure) return;
+    void target
+      .measure()
+      .then((rect) => {
+        const now = latest.current;
+        if (!rect || now.entry.id !== target.id || now.leaving) return;
+        void syncTimeline(
+          agentId,
+          rect,
+          now.form === "side" ? null : panelTop.current,
+          now.reduced,
+        );
+      })
+      .catch(() => {});
+  }, [agentId]);
+  useEffect(() => {
+    if (leaving) return;
+    const switched = syncedEntry.current !== entry.id;
+    syncedEntry.current = entry.id;
+    if (Platform.OS !== "web" && form === "drawer" && switched) {
+      pendingSync.current = false;
+      return;
+    }
+    if (latest.current.form === "side" || panelTop.current !== null) runSync();
+    else pendingSync.current = true;
+  }, [entry.id, leaving, form, runSync]);
+  const onTop = useCallback(
+    (top: number) => {
+      panelTop.current = top;
+      if (pendingSync.current) runSync();
+    },
+    [runSync],
+  );
+
+  const bodyScroll = useMemo(() => createBodyScroll(), []);
+  const zoomControls = useMemo(() => createZoomControls(), []);
+
+  // Phones keep the timeline's body size; tablets use a denser 7/8 ratio.
+  // The saved pinch value scales either relative to the host's content size.
+  const { detailsFontSize } = useEnhancerPreferences();
+  const [liveZoom, setLiveZoom] = useState<number | null>(null);
+  const zooms = Platform.OS !== "web";
+  const window = useWindowDimensions();
+  const proseScale =
+    Math.min(window.width, window.height) < DETAILS_BREAKPOINTS.drawerEnter ? 1 : 7 / 8;
+  const textSize = liveZoom ?? detailsFontSize;
+  const textZoom = useMemo(
+    () =>
+      zooms
+        ? Math.round(
+            (tokens.typography.content.size * proseScale * textSize) / DETAILS_FONT_SIZE_DEFAULT,
+          )
+        : textSize === DETAILS_FONT_SIZE_DEFAULT
+          ? 0
+          : { scale: textSize / DETAILS_FONT_SIZE_DEFAULT },
+    [zooms, tokens.typography.content.size, proseScale, textSize],
+  );
+  const zoomRef = useRef(textSize);
+  zoomRef.current = textSize;
+  const zoom = useMemo<DetailsZoom>(
+    () => ({
+      base: DETAILS_FONT_SIZE_DEFAULT,
+      current: () => zoomRef.current,
+      preview(next) {
+        zoomRef.current = next;
+        setLiveZoom(next);
+      },
+      commit(next) {
+        zoomRef.current = next;
+        if (getEnhancerPreferences().detailsFontSize !== next)
+          updateEnhancerPreferences({ detailsFontSize: next });
+        setLiveZoom(null);
+      },
+    }),
+    [],
+  );
+
+  // Web keys while the panel is open (`keyboard.ts`): only this lease holder's
+  // layer, and only while its pane is shown. ← → take the panel's own step.
+  const { copy } = useCopy();
+  const keys = useRef({ step, toggleWrap, toggleFullscreen, copy, zoom });
+  keys.current = { step, toggleWrap, toggleFullscreen, copy, zoom };
+  useEffect(() => {
+    if (Platform.OS !== "web" || leaving) return;
+    const unregister = registerDetailsKeyboardActions(agentId, {
+      step: (direction) => keys.current.step(direction),
+      toggleWrap: () => keys.current.toggleWrap(),
+      toggleFullscreen: () => keys.current.toggleFullscreen(),
+      changeFontSize: (change) => {
+        const zoom = keys.current.zoom;
+        zoom.commit(change === 0 ? zoom.base : clampDetailsFontSize(zoom.current() + change));
+      },
+      copyPrimary: () => {
+        const primary = latest.current.entry.copies()[0];
+        if (primary?.text) void keys.current.copy(primary.text, { label: primary.label });
+      },
+    });
+    const unbind = bindDetailsKeys(agentId, (event) => layerTakesKey(layerRef.current, event));
+    return () => {
+      unbind();
+      unregister();
+    };
+  }, [agentId, leaving]);
+  const bodyAtTop = useCallback(
+    () => (Platform.OS === "web" ? webBodyAtTop(layerRef.current) : bodyScroll.atTop()),
+    [bodyScroll],
+  );
+
+  const shellValue = useMemo<DetailsShellValue>(
+    () => ({
+      agentId,
+      entry,
+      form,
+      detent,
+      fullscreen: fullscreenOn,
+      pointer,
+      index: nav.index,
+      count: nav.count,
+      canStep,
+      step,
+      close,
+      toggleFullscreen,
+      headerHandlers: touch
+        ? (headerPan.panHandlers as unknown as Record<string, unknown>)
+        : undefined,
+      zoom,
+      zoomControls,
+    }),
+    [
+      agentId,
+      entry,
+      form,
+      detent,
+      fullscreenOn,
+      pointer,
+      nav.index,
+      nav.count,
+      canStep,
+      step,
+      close,
+      toggleFullscreen,
+      touch,
+      headerPan,
+      zoom,
+      zoomControls,
+    ],
+  );
+  const actions = useMemo<PreviewActions>(
+    () => ({
+      maximizable: true,
+      maximized: fullscreenOn,
+      maximize: toggleFullscreen,
+      close,
+      popped: false,
+      memoryKey: entry.id,
+      remembered: memory,
+      fill: true,
+      wrap: { on: wrapOn, toggle: toggleWrap, tokens },
+    }),
+    [toggleFullscreen, fullscreenOn, close, entry.id, memory, wrapOn, toggleWrap, tokens],
+  );
+
+  const content = (
+    <TranslationSettingsParentCloseContext.Provider value={close}>
+      <DetailsShellContext.Provider value={shellValue}>
+        <PreviewChromeContext.Provider value="details">
+          <HoverPreviewContext.Provider value>
+            <PathContext.Provider value={paths}>
+              <PreviewActionsContext.Provider value={actions}>
+                <DetailsBodyContext.Provider value={bodyScroll}>
+                  <TimelineProseContext.Provider value={zooms || form === "drawer"}>
+                    <TextZoomContext.Provider value={textZoom}>
+                      <View style={styles.content}>
+                        <Animated.View
+                          testID="details-content"
+                          style={
+                            [
+                              styles.content,
+                              { opacity: slideOpacity, transform: [{ translateX: slide }] },
+                            ] as never
+                          }
+                        >
+                          {entry.render()}
+                        </Animated.View>
+                        {form === "drawer" || touch ? (
+                          <>
+                            <Animated.View
+                              testID="details-swipe-previous"
+                              pointerEvents="none"
+                              accessibilityElementsHidden
+                              importantForAccessibility="no-hide-descendants"
+                              style={[
+                                styles.swipeHint,
+                                styles.swipePrevious,
+                                {
+                                  opacity: previousHint,
+                                  transform: [
+                                    {
+                                      scale: previousHint.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0.55, 1],
+                                        extrapolate: "clamp",
+                                      }),
+                                    },
+                                  ],
+                                },
+                              ]}
+                            >
+                              <View
+                                style={[styles.swipeIcon, { backgroundColor: tokens.v2.surface1 }]}
+                              >
+                                <Animated.View
+                                  testID="details-swipe-previous-shadow"
+                                  style={[
+                                    styles.swipeShadow,
+                                    {
+                                      backgroundColor: tokens.v2.surface1,
+                                      boxShadow: tokens.isDark
+                                        ? "0px 3px 12px rgba(0, 0, 0, 0.5)"
+                                        : "0px 3px 12px rgba(0, 0, 0, 0.3)",
+                                      opacity: previousShadow,
+                                    },
+                                  ]}
+                                />
+                                <Icon name="ChevronLeft" size={20} color={tokens.foregroundMuted} />
+                              </View>
+                            </Animated.View>
+                            <Animated.View
+                              testID="details-swipe-next"
+                              pointerEvents="none"
+                              accessibilityElementsHidden
+                              importantForAccessibility="no-hide-descendants"
+                              style={[
+                                styles.swipeHint,
+                                styles.swipeNext,
+                                {
+                                  opacity: nextHint,
+                                  transform: [
+                                    {
+                                      scale: nextHint.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0.55, 1],
+                                        extrapolate: "clamp",
+                                      }),
+                                    },
+                                  ],
+                                },
+                              ]}
+                            >
+                              <View
+                                style={[styles.swipeIcon, { backgroundColor: tokens.v2.surface1 }]}
+                              >
+                                <Animated.View
+                                  testID="details-swipe-next-shadow"
+                                  style={[
+                                    styles.swipeShadow,
+                                    {
+                                      backgroundColor: tokens.v2.surface1,
+                                      boxShadow: tokens.isDark
+                                        ? "0px 3px 12px rgba(0, 0, 0, 0.5)"
+                                        : "0px 3px 12px rgba(0, 0, 0, 0.3)",
+                                      opacity: nextShadow,
+                                    },
+                                  ]}
+                                />
+                                <Icon
+                                  name="ChevronRight"
+                                  size={20}
+                                  color={tokens.foregroundMuted}
+                                />
+                              </View>
+                            </Animated.View>
+                          </>
+                        ) : null}
+                      </View>
+                    </TextZoomContext.Provider>
+                  </TimelineProseContext.Provider>
+                </DetailsBodyContext.Provider>
+              </PreviewActionsContext.Provider>
+            </PathContext.Provider>
+          </HoverPreviewContext.Provider>
+        </PreviewChromeContext.Provider>
+      </DetailsShellContext.Provider>
+    </TranslationSettingsParentCloseContext.Provider>
+  );
+
+  const ready = layout.ready && (shownPanel.current || form === layout.form);
+  if (ready && insets !== null) shownPanel.current = true;
+  const Panel = form === "drawer" ? BottomDrawer : FloatingPanel;
+  const frame =
+    insets === null || !ready ? null : form === "side" ? (
+      <SidePanel
+        key="side"
+        tokens={tokens}
+        stage={layout.stage}
+        insets={insets}
+        reduced={reduced}
+        entrance={entrance}
+        leaving={leaving}
+        onExited={onExited}
+        wide={fullscreen}
+        resizable={(pointer && Platform.OS === "web") || (Platform.OS === "ios" && Platform.isPad)}
+        onResizeStart={() => {
+          if (fullscreen) detailsApi.setFullscreen(agentId, false);
+        }}
+        onWidthChange={(width) => timelineSpace.current?.setWidth(width)}
+        onOutside={close}
+      >
+        {content}
+      </SidePanel>
+    ) : (
+      <Panel
+        key={form}
+        blockId={entry.id}
+        body={bodyScroll}
+        tokens={tokens}
+        stage={layout.stage}
+        insets={insets}
+        detent={detent}
+        reduced={reduced}
+        entrance={entrance}
+        leaving={leaving}
+        onExited={onExited}
+        onDetent={setDetent}
+        onClose={close}
+        onTop={onTop}
+        dragRef={dragRef}
+        hold={hold}
+        bodyAtTop={bodyAtTop}
+        onOutside={close}
+      >
+        {content}
+      </Panel>
+    );
+
+  const stage = (
+    <Animated.View
+      testID="details-stage"
+      pointerEvents="box-none"
+      style={
+        [
+          StyleSheet.absoluteFill,
+          { left: layout.left, width: layout.stage.width, opacity: formFade },
+        ] as never
+      }
+    >
+      {frame}
+    </Animated.View>
+  );
+  if (Platform.OS === "web") {
+    return (
+      <>
+        <View
+          ref={paneRef}
+          testID="details-pane-probe"
+          onLayout={layout.measure}
+          style={styles.paneProbe}
+        />
+        <WebLayer layerRef={layerRef} catches={form === "drawer"}>
+          {stage}
+        </WebLayer>
+      </>
+    );
+  }
+  return (
+    <>
+      <View
+        ref={paneRef}
+        testID="details-pane-probe"
+        onLayout={layout.measure}
+        style={styles.paneProbe}
+      />
+      <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={close}>
+        <View
+          ref={layerRef}
+          testID="details-layer"
+          pointerEvents="box-none"
+          style={StyleSheet.absoluteFill}
+        >
+          {insetProbe}
+          {stage}
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+/**
+ * The web layer: raised to the top layer over the window on mount. It lets
+ * the pointer through outside the panel, except for the drawer's scrim.
+ */
+function WebLayer({
+  layerRef,
+  catches,
+  children,
+}: {
+  layerRef: React.RefObject<View | null>;
+  catches: boolean;
+  children: React.ReactNode;
+}) {
+  useLayoutEffect(() => bindDetailsLayer(layerRef.current), [layerRef]);
+  // The drawer's scrim catches the whole window, title bar included; the other forms let it through.
+  useLayoutEffect(
+    () => (catches ? keepOffWindowDrag(layerRef.current) : undefined),
+    [layerRef, catches],
+  );
+  return (
+    <View
+      ref={layerRef}
+      testID="details-layer"
+      pointerEvents={catches ? "auto" : "box-none"}
+      style={styles.webLayer}
+    >
+      {children}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  paneProbe: { width: "100%", height: 0 },
+  content: { flexGrow: 1, flexShrink: 1, minHeight: 0 },
+  swipeHint: { position: "absolute", top: 0, bottom: 0, justifyContent: "center" },
+  swipePrevious: { left: 8 },
+  swipeNext: { right: 8 },
+  swipeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  swipeShadow: { position: "absolute", top: 0, left: 0, width: 36, height: 36, borderRadius: 18 },
+  // The popover's own UA box (margin, border, padding, background) cleared, over the whole window.
+  webLayer: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+    maxWidth: "none",
+    maxHeight: "none",
+    margin: 0,
+    padding: 0,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    overflow: "hidden",
+  } as unknown as ViewStyle,
+});

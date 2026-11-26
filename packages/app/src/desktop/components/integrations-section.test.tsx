@@ -18,14 +18,15 @@ vi.mock("@/desktop/hooks/use-install-status", () => ({
   useCliInstall: () => ({
     status: { installed: cli.installed },
     isLoading: false,
-    isInstalling: false,
+    available: true,
+    isWorking: false,
     error: null,
-    install: () => {},
+    setInstalled: async () => true,
     refresh: () => {},
   }),
 }));
 
-vi.mock("@react-navigation/native", () => ({
+vi.mock("expo-router/react-navigation", () => ({
   useFocusEffect: () => {},
 }));
 
@@ -54,8 +55,8 @@ describe("the command line row in Settings > Integrations", () => {
       render(<IntegrationsSection />);
 
       expect(screen.getByText("Command line")).toBeTruthy();
-      expect(screen.getByText(installed ? "Installed" : "Install")).toBeTruthy();
-      expect(screen.getByText(CLI_COMMAND)).toBeTruthy();
+      expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(String(installed));
+      expect(screen.getByText((text) => text.includes(CLI_COMMAND))).toBeTruthy();
       expect(screen.queryByText(/\bpaseo\b/)).toBeNull();
       cleanup();
     }

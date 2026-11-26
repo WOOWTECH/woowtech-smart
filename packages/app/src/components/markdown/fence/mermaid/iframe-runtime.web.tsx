@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DiagramColorScheme, MermaidRenderRequest } from "./render-model";
-import { mermaidRuntimeHtml } from "./runtime/html.gen";
+import { createMermaidRuntimeWebLoader, type MermaidRuntimeHtmlResult } from "./runtime-loader.web";
 import { parseMermaidRuntimeMessage, type MermaidRuntimeRenderMessage } from "./runtime/messages";
 import { MermaidRuntimeRequestDriver } from "./runtime/request-driver";
+
+// Keep the generated runtime behind a literal import() so Metro can split the web bundle.
+const loadRuntimeHtml = createMermaidRuntimeWebLoader(() =>
+  import("./runtime/html.gen").then((runtime) => runtime.mermaidRuntimeHtml),
+);
 
 export interface MermaidRenderedMessage {
   revision: number;
@@ -27,6 +32,7 @@ export function MermaidIframeRuntime({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const driverRef = useRef<MermaidRuntimeRequestDriver | null>(null);
   driverRef.current ??= new MermaidRuntimeRequestDriver();
+  const [runtimeHtml, setRuntimeHtml] = useState<MermaidRuntimeHtmlResult | null>(null);
 
   const sendRequest = useCallback((current: MermaidRenderRequest | null) => {
     const target = iframeRef.current?.contentWindow;
@@ -66,6 +72,16 @@ export function MermaidIframeRuntime({
     return () => window.removeEventListener("message", receiveMessage);
   }, [onRenderFailed, onRendered, sendRequest]);
 
+  useEffect(() => loadRuntimeHtml(setRuntimeHtml), []);
+
+  // Fail the current revision, including updates received while the chunk was loading.
+  const failedRevision = runtimeHtml?.status === "failed" ? request?.revision : undefined;
+  useEffect(() => {
+    if (failedRevision !== undefined) onRenderFailed(failedRevision);
+  }, [failedRevision, onRenderFailed]);
+
+  if (runtimeHtml?.status !== "ready") return null;
+
   // `inert` (not just tabIndex) because the Modal focus trap focuses descendants
   // programmatically; a focused iframe swallows every keystroke, including Escape.
   return (
@@ -75,7 +91,7 @@ export function MermaidIframeRuntime({
       aria-hidden
       inert
       sandbox="allow-scripts"
-      srcDoc={mermaidRuntimeHtml}
+      srcDoc={runtimeHtml.html}
       tabIndex={-1}
       style={iframeStyle}
     />

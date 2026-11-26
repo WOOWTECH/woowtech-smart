@@ -1,15 +1,11 @@
-import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
+import { spawnProcess as spawnCli, execCommand as execCli } from "@getpaseo/plugin/server";
+import { createExternalCommandProcessEnv, type ProcessEnvRecord } from "../server/paseo-env.js";
+import { execFile, spawn } from "node:child_process";
 import { extname } from "node:path";
 import { promisify } from "node:util";
-
-import { createExternalCommandProcessEnv, type ProcessEnvRecord } from "../server/paseo-env.js";
-import {
-  isWindowsCommandScript,
-  quoteWindowsArgument,
-  quoteWindowsCommand,
-} from "./windows-command.js";
+import { isWindowsCommandScript } from "./windows-command.js";
 import { planDirectWindowsSpawn, type DirectWindowsSpawn } from "./woowtech-windows-spawn.js";
-
 const execFileAsync = promisify(execFile);
 
 interface ExternalEnvOptions {
@@ -68,12 +64,6 @@ export function spawnProcess(
 ): ChildProcess {
   const { baseEnv, env, envOverlay, ...spawnOptions } = options ?? {};
   const resolvedBaseEnv = env ?? baseEnv ?? process.env;
-  const isWindows = process.platform === "win32";
-  const shell = shouldUseWindowsShell(command, args, spawnOptions.shell);
-
-  const shouldQuoteForShell = isWindows && shell !== false;
-  const resolvedCommand = shouldQuoteForShell ? quoteWindowsCommand(command) : command;
-  const resolvedArgs = shouldQuoteForShell ? args.map(quoteWindowsArgument) : args;
   const childEnv =
     options?.envMode === "internal"
       ? ({ ...resolvedBaseEnv, ...envOverlay } as NodeJS.ProcessEnv)
@@ -101,12 +91,11 @@ export function spawnProcess(
     });
   }
 
-  return spawn(resolvedCommand, resolvedArgs, {
+  return spawnCli(command, args, {
     ...spawnOptions,
+    shell: shouldUseWindowsShell(command, args, spawnOptions.shell),
     env: childEnv,
-    shell,
     signal: options?.signal,
-    windowsHide: true,
   });
 }
 
@@ -117,11 +106,6 @@ export async function execCommand(
 ): Promise<ExecCommandResult> {
   const { baseEnv, env, envOverlay } = options ?? {};
   const resolvedBaseEnv = env ?? baseEnv ?? process.env;
-  const isWindows = process.platform === "win32";
-  const shell = shouldUseWindowsShell(command, args, options?.shell);
-  const shouldQuoteForShell = isWindows && shell !== false;
-  const resolvedCommand = shouldQuoteForShell ? quoteWindowsCommand(command) : command;
-  const resolvedArgs = shouldQuoteForShell ? args.map(quoteWindowsArgument) : args;
   const childEnv =
     options?.envMode === "internal"
       ? ({ ...resolvedBaseEnv, ...envOverlay } as NodeJS.ProcessEnv)
@@ -142,15 +126,15 @@ export async function execCommand(
     return execWindowsPlan({ plan: windowsPlan, env: childEnv, options });
   }
 
-  return execFileAsync(resolvedCommand, resolvedArgs, {
+  return execCli(command, args, {
     cwd: options?.cwd,
     env: childEnv,
+    shell: shouldUseWindowsShell(command, args, options?.shell),
     encoding: options?.encoding ?? "utf8",
+    signal: options?.signal,
     killSignal: options?.killSignal,
     timeout: options?.timeout,
     maxBuffer: options?.maxBuffer,
-    shell,
-    windowsHide: true,
   }) as Promise<ExecCommandResult>;
 }
 
@@ -168,6 +152,7 @@ function execWindowsPlan(input: WindowsPlanExec): Promise<ExecCommandResult> {
     env,
     encoding: options?.encoding ?? "utf8",
     killSignal: options?.killSignal,
+    signal: options?.signal,
     timeout: options?.timeout,
     maxBuffer: options?.maxBuffer,
     shell: false,

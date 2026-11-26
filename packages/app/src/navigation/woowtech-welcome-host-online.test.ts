@@ -4,6 +4,7 @@ import {
   readOpenParamLikeWorkspaceRoute,
   welcomeEffectLikeUpstream,
   WORKSPACE_ROUTE_NAME,
+  AGENT_ROUTE_NAME,
   type NavigationScenario,
   type OpenedTab,
   type WelcomeEffectModel,
@@ -48,9 +49,9 @@ function pairFirstHostThroughLink(app: NavigationScenario): void {
 
 // In the background the daemon drops the app's connection; the agent then asks for a permission
 // in a new workspace, and the notification is tapped while the host is still offline.
-function tapPermissionNotificationAfterBackground(app: NavigationScenario): void {
+async function tapPermissionNotificationAfterBackground(app: NavigationScenario): Promise<void> {
   app.setAnyOnlineHost(null);
-  app.tapNotification({
+  await app.tapNotification({
     serverId: SERVER_ID,
     workspaceId: WORKSPACE_ID,
     agentId: AGENT_ID,
@@ -73,41 +74,50 @@ const NOTIFIED_AGENT_TAB: OpenedTab = {
 };
 
 describe("the first notification tap after pairing through a link", () => {
-  it("opens the notified agent while the host comes back online", () => {
+  it("opens the notified agent when the host directory comes back online", async () => {
     const app = openFreshApp();
     pairFirstHostThroughLink(app);
     expect(app.rootStack()).toEqual(["welcome", "*open-project"]);
 
-    tapPermissionNotificationAfterBackground(app);
-    expect(app.rootStack()).toEqual(["welcome", "*h/[serverId]"]);
-    expect(focusedWorkspaceId(app)).toBe(WORKSPACE_ID);
+    await tapPermissionNotificationAfterBackground(app);
+    // An uncached agent enters via NAVIGATE, retaining Open Project beneath the host route.
+    // The old workspace POP_TO handoff replaced it when the host was not mounted yet.
+    expect(app.rootStack()).toEqual(["welcome", "open-project", "*h/[serverId]"]);
+    expect(focusedWorkspaceId(app)).toBe(AGENT_ROUTE_NAME);
 
     app.setAnyOnlineHost(SERVER_ID);
-    expect(focusedWorkspaceId(app)).toBe(WORKSPACE_ID);
+    expect(focusedWorkspaceId(app)).toBe(AGENT_ROUTE_NAME);
+    expect(app.openedTabs).toEqual([]);
 
-    app.directoryArrives([WORKSPACE_ID]);
+    app.directoryArrives([WORKSPACE_ID], [{ id: AGENT_ID, workspaceId: WORKSPACE_ID }]);
+    expect(app.rootStack()).toEqual(["welcome", "open-project", "*h/[serverId]"]);
+    expect(focusedWorkspaceId(app)).toBe(WORKSPACE_ID);
+    expect(app.lastWorkspaceId()).toBe(WORKSPACE_ID);
     expect(app.openedTabs).toEqual([NOTIFIED_AGENT_TAB]);
   });
 
-  // Checks the harness against the Android run: with upstream's welcome effect, the run's steps
-  // end in the navigation state logs/integ0929-real-android-tap-probe.txt recorded. The root stack
-  // is [welcome, open-project, *open-project], the notified workspace is the remembered one, and
-  // the agent tab never opens.
-  it("witness: upstream's welcome effect replaces the workspace route, as on the device", () => {
+  // Regression witness for the old unfocused welcome effect seen in the Android run. With the
+  // current agent-only notification target, it steals the pending agent route before the directory
+  // can resolve its workspace, so no workspace is remembered and the agent tab never opens.
+  it("witness: an unfocused welcome effect replaces the pending agent route", async () => {
     const app = openFreshApp(welcomeEffectLikeUpstream);
     pairFirstHostThroughLink(app);
     // Before the run the tester opened Settings from the sidebar and left it with the back arrow:
     // with no remembered workspace, returnFromSettings replaces Settings with /open-project.
     app.push("/settings");
     app.replace("/open-project");
-    tapPermissionNotificationAfterBackground(app);
-    expect(app.rootStack()).toEqual(["welcome", "open-project", "*h/[serverId]"]);
+    await tapPermissionNotificationAfterBackground(app);
+    expect(app.rootStack()).toEqual(["welcome", "open-project", "open-project", "*h/[serverId]"]);
+    expect(focusedWorkspaceId(app)).toBe(AGENT_ROUTE_NAME);
+    expect(app.openedTabs).toEqual([]);
 
     app.setAnyOnlineHost(SERVER_ID);
-    app.directoryArrives([WORKSPACE_ID]);
+    expect(app.focusedRoute().route.name).toBe("open-project");
+    app.directoryArrives([WORKSPACE_ID], [{ id: AGENT_ID, workspaceId: WORKSPACE_ID }]);
 
-    expect(app.rootStack()).toEqual(["welcome", "open-project", "*open-project"]);
-    expect(app.lastWorkspaceId()).toBe(WORKSPACE_ID);
+    expect(app.rootStack()).toEqual(["welcome", "open-project", "open-project", "*open-project"]);
+    expect(app.focusedRoute().route.name).toBe("open-project");
+    expect(app.lastWorkspaceId()).toBeNull();
     expect(app.openedTabs).toEqual([]);
   });
 });

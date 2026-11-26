@@ -25,7 +25,7 @@ vi.mock("electron", () => ({
 
 vi.mock("electron-log/main", () => ({ default: { info: vi.fn(), warn: vi.fn() } }));
 
-import { getCliInstallStatus, installCli } from "./install";
+import { getCliInstallStatus, installCli, uninstallCli } from "./install";
 
 // The official Paseo app installs ~/.local/bin/paseo. woowtech smart installs its
 // own command beside it and must never take over, remove or claim Paseo's.
@@ -113,6 +113,29 @@ describe.skipIf(process.platform === "win32")(
       await installCli();
 
       expect(await readdir(localBin)).toEqual([BRAND.cliCommand]);
+    });
+
+    it("uninstalls its own command while preserving the official CLI and shell PATH", async () => {
+      await mkdir(localBin, { recursive: true });
+      await symlink(officialPaseoCli, path.join(localBin, "paseo"));
+      await installCli();
+      const shellRc = await readFile(path.join(home, ".zshrc"), "utf8");
+
+      expect(await uninstallCli()).toEqual({ installed: false });
+
+      expect(await readdir(localBin)).toEqual(["paseo"]);
+      expect(await readlink(path.join(localBin, "paseo"))).toBe(officialPaseoCli);
+      expect(await readFile(path.join(home, ".zshrc"), "utf8")).toBe(shellRc);
+    });
+
+    it("leaves a command installed by someone else at its branded path", async () => {
+      await mkdir(localBin, { recursive: true });
+      const targetPath = path.join(localBin, BRAND.cliCommand);
+      await symlink(officialPaseoCli, targetPath);
+
+      expect(await uninstallCli()).toEqual({ installed: false });
+
+      expect(await readlink(targetPath)).toBe(officialPaseoCli);
     });
 
     it("counts only a link into this app as installed", async () => {

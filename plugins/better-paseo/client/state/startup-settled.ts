@@ -1,0 +1,118 @@
+import { loadMark } from "../debug/load-marks";
+
+/**
+ * "The chat has drawn": work nobody is looking at yet waits for it, so it
+ * does not compete with the first chat rows for the JS thread at startup.
+ *
+ * The first plugin row to mount reports itself (`noteTimelineRowShown`).
+ * `afterStartup` then runs its callback `AFTER_ROW_MS` later, or
+ * `MAX_WAIT_MS` after it was asked when no row shows (no chat open), and in
+ * both cases once the JS thread is idle (`afterIdle`). It is a scheduling
+ * choice, not a promise that the chat has finished drawing.
+ *
+ * No extra wait after the row: on a Release iOS simulator (Paseo 0.12) the
+ * interactions already held the callback about 100 ms past the first row, and the Tasks
+ * chunk then takes about 45 ms, so its counts land some 230 ms later than
+ * when the chunk ran before the chat (a one-second wait put them a second
+ * late), while the first row still comes about 45 ms sooner.
+ */
+export const AFTER_ROW_MS = 0;
+export const MAX_WAIT_MS = 4_000;
+
+let rowShownAt: number | null = null;
+const rowListeners = new Set<() => void>();
+
+/** The first chat row this plugin draws has mounted. */
+export function noteTimelineRowShown(): void {
+  if (rowShownAt !== null) return;
+  rowShownAt = Date.now();
+  loadMark("row.first", rowShownAt);
+  for (const listener of [...rowListeners]) listener();
+}
+
+export interface StartupTimers {
+  setTimeout(run: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+  afterInteractions(run: () => void): { cancel(): void };
+}
+
+/** The longest an idle callback may be held when the thread never idles. */
+export const IDLE_TIMEOUT_MS = 500;
+
+interface IdleGlobals {
+  requestIdleCallback?: (run: () => void, options?: { timeout: number }) => unknown;
+  cancelIdleCallback?: (handle: unknown) => void;
+}
+
+/**
+ * Runs `run` when the JS thread is idle, which is what RN recommends in place
+ * of the deprecated `InteractionManager.runAfterInteractions` (in RN 0.86
+ * a stub that only defers to `setImmediate`). Paseo's native runtime and
+ * Chromium have `requestIdleCallback`; Safari does not, so a zero timeout
+ * stands in there.
+ */
+export function afterIdle(
+  run: () => void,
+  scope: IdleGlobals = globalThis as IdleGlobals,
+): { cancel(): void } {
+  const request = scope.requestIdleCallback;
+  const cancelIdle = scope.cancelIdleCallback;
+  if (typeof request === "function") {
+    const handle = request.call(scope, () => run(), { timeout: IDLE_TIMEOUT_MS });
+    return {
+      cancel: () => {
+        if (typeof cancelIdle === "function") cancelIdle.call(scope, handle);
+      },
+    };
+  }
+  const handle = setTimeout(run, 0);
+  return { cancel: () => clearTimeout(handle) };
+}
+
+const defaultTimers: StartupTimers = {
+  setTimeout: (run, ms) => setTimeout(run, ms),
+  clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  afterInteractions: (run) => afterIdle(run),
+};
+
+/** Runs `run` once startup has settled (see above); returns a cancel. */
+export function afterStartup(run: () => void, timers: StartupTimers = defaultTimers): () => void {
+  let done = false;
+  let handle: unknown = null;
+  let interaction: { cancel(): void } | null = null;
+  const fire = () => {
+    if (done) return;
+    done = true;
+    stop();
+    interaction = timers.afterInteractions(run);
+  };
+  const wait = (ms: number) => {
+    if (handle !== null) timers.clearTimeout(handle);
+    handle = timers.setTimeout(fire, Math.max(0, ms));
+  };
+  const onRow = () =>
+    wait(rowShownAt === null ? AFTER_ROW_MS : rowShownAt + AFTER_ROW_MS - Date.now());
+  const stop = () => {
+    rowListeners.delete(onRow);
+    if (handle !== null) timers.clearTimeout(handle);
+    handle = null;
+  };
+  if (rowShownAt !== null) onRow();
+  else {
+    rowListeners.add(onRow);
+    wait(MAX_WAIT_MS);
+  }
+  return () => {
+    if (!done) {
+      done = true;
+      stop();
+    }
+    interaction?.cancel();
+  };
+}
+
+/** Forgets the first row (tests). */
+export function resetStartupSettled(): void {
+  rowShownAt = null;
+  rowListeners.clear();
+}

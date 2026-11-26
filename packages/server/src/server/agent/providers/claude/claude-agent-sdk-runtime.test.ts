@@ -14,6 +14,7 @@ import {
   type ClaudeAgentSdkModule,
   loadClaudeAgentSdk,
   CLAUDE_AGENT_SDK_INTEGRITY,
+  CLAUDE_AGENT_SDK_VERSION,
 } from "./claude-agent-sdk-runtime.js";
 
 let runtimeDir: string;
@@ -73,7 +74,7 @@ describe("loadClaudeAgentSdk", () => {
         integrity: tarball.integrity,
       });
       expect(urls).toEqual([
-        "https://mirror.invalid/npm/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.246.tgz",
+        `https://mirror.invalid/npm/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-${CLAUDE_AGENT_SDK_VERSION}.tgz`,
       ]);
     },
   );
@@ -200,7 +201,7 @@ test("a mirror cannot replace the pinned integrity with its own bytes", async ()
     expected: CLAUDE_AGENT_SDK_INTEGRITY,
   });
   expect(urls).toEqual([
-    "https://mirror.invalid/repository/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.246.tgz",
+    `https://mirror.invalid/repository/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-${CLAUDE_AGENT_SDK_VERSION}.tgz`,
   ]);
 });
 
@@ -254,13 +255,19 @@ test.each(["non-2xx", "disconnect", "slow-body", "wrong-sha512"])(
       const sdk = await loadClaudeAgentSdk(options);
       expect((sdk as unknown as { source: string }).source).toBe("loopback mirror");
       expect(paths).toEqual(
-        Array(2).fill("/mirror/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.246.tgz"),
+        Array(2).fill(
+          `/mirror/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-${CLAUDE_AGENT_SDK_VERSION}.tgz`,
+        ),
       );
-      const pointerName = "claude-agent-sdk-0.3.246.json";
+      const pointerName = `claude-agent-sdk-${CLAUDE_AGENT_SDK_VERSION}.json`;
       const generation: unknown = JSON.parse(
         await readFile(path.join(runtimeDir, pointerName), "utf8"),
       );
-      expect(generation).toMatch(/^claude-agent-sdk-0\.3\.246\.generation-[0-9a-f-]{36}$/);
+      expect(generation).toMatch(
+        new RegExp(
+          `^claude-agent-sdk-${CLAUDE_AGENT_SDK_VERSION.replaceAll(".", "\\.")}\\.generation-[0-9a-f-]{36}$`,
+        ),
+      );
       expect(await readdir(runtimeDir)).toEqual([generation, pointerName]);
     } finally {
       for (const socket of sockets) socket.destroy();

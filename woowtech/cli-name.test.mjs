@@ -100,6 +100,19 @@ test("the app shows the brand's command in every language", async () => {
   if (!i18n.isInitialized) {
     await i18n.init();
   }
+  // 0.17.4 loads translations on demand. Load every selectable locale before scanning the store.
+  const { LANGUAGE_OPTIONS } = requireSource("packages/app/src/i18n/locales.ts");
+  const languages = [
+    ...LANGUAGE_OPTIONS.map(({ value }) => value).filter((value) => value !== "system"),
+    "zh-CN", // Still loadable for existing settings, though the picker offers Traditional Chinese.
+  ];
+  await i18n.loadLanguages(languages);
+  for (const language of languages) {
+    assert.ok(
+      i18n.hasResourceBundle(language, "translation"),
+      `${language}: translation not loaded`,
+    );
+  }
   const showingPaseo = Object.keys(i18n.store.data).flatMap((language) =>
     allStrings(i18n.getResourceBundle(language, "translation"))
       .filter((text) => UPSTREAM_COMMAND.test(text))
@@ -107,10 +120,47 @@ test("the app shows the brand's command in every language", async () => {
   );
 
   assert.deepEqual(showingPaseo, []);
+  for (const language of Object.keys(i18n.store.data)) {
+    const keptForeign = i18n.t("desktop.integrations.cli.keptForeign", { lng: language });
+    assert.ok(keptForeign.includes(COMMAND), `${language}: ${keptForeign}`);
+    assert.doesNotMatch(keptForeign, /\bpaseo\b/, language);
+  }
   assert.equal(
     i18n.t("desktop.daemon.fullStatus.hint", { lng: "en" }),
     `Runs \`${COMMAND} daemon status\` and shows the output`,
   );
+});
+
+test("bare CLI copy is branded without rewriting identifiers or interpolated project names", () => {
+  const { rebrandResources } = requireSource("packages/app/src/i18n/brand.ts");
+  const resources = rebrandResources({
+    en: {
+      translation: {
+        desktop: {
+          integrations: {
+            cli: {
+              keptForeign: "Kept a paseo command that Paseo didn't install.",
+            },
+          },
+        },
+        project: "paseo",
+        path: "~/.paseo/paseo.json",
+        environment: "PASEO_HOOK_CLI",
+        package: "@getpaseo/client",
+        projectMessage: "Project {{projectName}}",
+      },
+    },
+  });
+  const copy = resources.en.translation;
+  assert.equal(
+    copy.desktop.integrations.cli.keptForeign,
+    `Kept a ${COMMAND} command that ${APP_NAME} didn't install.`,
+  );
+  assert.equal(copy.project, "paseo");
+  assert.equal(copy.path, "~/.paseo/paseo.json");
+  assert.equal(copy.environment, "PASEO_HOOK_CLI");
+  assert.equal(copy.package, "@getpaseo/client");
+  assert.equal(copy.projectMessage, "Project {{projectName}}");
 });
 
 /** A macOS app bundle in `root` whose Resources/bin holds `clis`. */

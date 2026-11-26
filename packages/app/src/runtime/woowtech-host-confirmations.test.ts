@@ -348,12 +348,15 @@ describe("a connection a saved host has, with another host id", () => {
     const overLan = host("srv_old", "Studio Mac", [direct("lan:6770")]);
     const onThisComputer = host("srv_old", "My Mac", [direct("localhost:6770")]);
     const overSsh = host("srv_old", "Mac mini", [SSH_HOST]);
+    const routed: HostConnection = { id: "routed:hub", type: "routed", originServerId: "hub" };
+    const throughHub = host("srv_old", "Remote host", [routed]);
     const cases: Array<[HostProfile, HostConnection, boolean]> = [
       [overLan, direct("lan:6770"), true],
       [overLan, direct("lan:6770"), false],
       [onThisComputer, direct("localhost:6770"), true],
       [onThisComputer, direct("localhost:6770"), false],
       [overSsh, SSH_HOST, false],
+      [throughHub, routed, false],
     ];
     for (const [saved, connection, browser] of cases) {
       const { asked, answer } = await questionOf(

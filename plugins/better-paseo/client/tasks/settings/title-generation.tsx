@@ -1,0 +1,496 @@
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { View } from "react-native";
+import { useRpc, useSettings } from "@getpaseo/plugin/client";
+import type { output as ZodOutput } from "zod";
+import { space } from "../../components/theme-tokens";
+import { ModelSettingsControls } from "../../model-settings-controls";
+import { modelSelection } from "../../../shared/model-catalog";
+import {
+  DEFAULT_TITLE_PROMPT,
+  TITLE_GENERATION_SETTINGS,
+  titleGenerationSettingsSchema,
+  titleModelsRpc,
+} from "../../../shared/title-generation";
+import {
+  PlainButton,
+  ResetRow,
+  RowNotice,
+  Section,
+  SectionFooter,
+  SectionNote,
+  SettingsTips,
+  SettingRow,
+  Toggle,
+  type PageLook,
+} from "../../settings-controls";
+import { PromptEditorModal } from "../../settings-prompt-editor";
+import { useTasksLanguage } from "../i18n";
+
+const WORDS = {
+  en: {
+    afterFirstReply: "Optimize new task titles automatically",
+    afterFirstReplyHint: "Automatically refine the title from what you send.",
+    disableThinking: "Disable title thinking",
+    thinkingHint:
+      "Use off or the lowest supported level. Otherwise follow the agent or custom level.",
+    automaticThinking: "Off or lowest supported level",
+    customModel: "Custom automatic title model",
+    followSource:
+      "Off: follow the card agent's provider, model and thinking level. Saved settings sync across this host's clients.",
+    title: "Automatic titles",
+    prompt: "Prompt",
+    promptHint:
+      "Instructions the model follows when generating titles. Open the editor to view or change them.",
+    tips: [
+      {
+        label: "Generation",
+        text: "Title generation sends conversation excerpts and the title prompt to a helper agent. It uses the card agent’s provider and model by default, or the selected model when customized. Manual generation also sends them.",
+      },
+      {
+        label: "Recommended models",
+        text: "Oh My Pi / DeepSeek Flash (deepseek/deepseek-flash), thinking low;\nClaude / Haiku 5.5 (claude-haiku-5-5), thinking off. Choose a model available on this host.",
+      },
+      {
+        label: "Background tasks",
+        text: "Title tasks stay off the board and are cleaned up after use when possible; they may trigger host notifications.",
+      },
+    ],
+    resetTitle: "Reset automatic title settings",
+    resetHint: "Only settings in this section will be restored.",
+    resetConfirmHint: "This restores only automatic title settings to their defaults.",
+    loading: "Loading…",
+    retry: "Retry",
+    loadError: "Could not load title settings.",
+    saveError: "Settings changed elsewhere or could not be saved. Reloaded the latest.",
+    editPrompt: "Edit prompt",
+    save: "Save",
+    cancel: "Cancel",
+    resetPrompt: "Reset",
+  },
+  zh: {
+    afterFirstReply: "自动优化新任务标题",
+    afterFirstReplyHint: "自动根据发送的内容优化标题。",
+    disableThinking: "关闭标题生成思考模式",
+    thinkingHint: "关闭思考或使用最低支持等级；关闭此开关则跟随 agent 或自定义等级。",
+    automaticThinking: "关闭或最低支持等级",
+    customModel: "自定义自动标题模型",
+    followSource: "关闭时跟随卡片所属 agent 的 Provider、模型和思考等级；保存后同步至主机各端。",
+    title: "自动更新标题",
+    prompt: "Prompt",
+    promptHint: "生成标题时遵循的指令，打开编辑器即可查看或修改。",
+    tips: [
+      {
+        label: "生成方式",
+        text: "生成标题时，对话摘录和标题提示词会发送给辅助 Agent。默认使用卡片的 Provider 和模型；开启自定义后使用所选模型。手动生成标题时同样会发送。",
+      },
+      {
+        label: "推荐模型",
+        text: "Oh My Pi / DeepSeek Flash（deepseek/deepseek-flash），思考等级 low；\nClaude / Haiku 5.5（claude-haiku-5-5），思考等级 off。请选择主机可用的模型。",
+      },
+      { label: "后台任务", text: "后台任务不进入看板，使用后会尝试删除，可能触发宿主通知。" },
+    ],
+    resetTitle: "恢复「自动标题」默认设置",
+    resetHint: "只恢复本组设置，不影响其他组。",
+    resetConfirmHint: "这只会把自动标题设置恢复为默认值。",
+    loading: "正在加载…",
+    retry: "重试",
+    loadError: "标题设置加载失败。",
+    saveError: "设置已在别处更改或保存失败，已重新加载最新内容。",
+    editPrompt: "编辑 Prompt",
+    save: "保存",
+    cancel: "取消",
+    resetPrompt: "重置",
+  },
+
+  "zh-TW": {
+    afterFirstReply: "自動優化新任務標題",
+    afterFirstReplyHint: "自動根據發送的內容優化標題。",
+    disableThinking: "關閉標題生成思考模式",
+    thinkingHint: "關閉思考或使用最低支援等級；關閉此開關則跟隨 agent 或自定義等級。",
+    automaticThinking: "關閉或最低支援等級",
+    customModel: "自定義自動標題模型",
+    followSource: "關閉時跟隨卡片所屬 agent 的 Provider、模型和思考等級；儲存後同步至主機各端。",
+    title: "自動更新標題",
+    prompt: "Prompt",
+    promptHint: "生成標題時遵循的指令，開啟編輯器即可檢視或修改。",
+    tips: [
+      {
+        label: "生成方式",
+        text: "生成標題時，對話摘錄和標題提示詞會發送給輔助 Agent。預設使用卡片的 Provider 和模型；開啓自定義後使用所選模型。手動生成標題時同樣會發送。",
+      },
+      {
+        label: "推薦模型",
+        text: "Oh My Pi / DeepSeek Flash（deepseek/deepseek-flash），思考等級 low；\nClaude / Haiku 5.5（claude-haiku-5-5），思考等級 off。請選擇主機可用的模型。",
+      },
+      { label: "後台任務", text: "後台任務不進入看板，使用後會嘗試刪除，可能觸發宿主通知。" },
+    ],
+    resetTitle: "恢復「自動標題」預設設定",
+    resetHint: "只恢復本組設定，不影響其他組。",
+    resetConfirmHint: "這只會把自動標題設定恢復為預設值。",
+    loading: "正在載入…",
+    retry: "重試",
+    loadError: "標題設定載入失敗。",
+    saveError: "設定已在別處更改或儲存失敗，已重新載入最新內容。",
+    editPrompt: "編輯 Prompt",
+    save: "儲存",
+    cancel: "取消",
+    resetPrompt: "重設",
+  },
+};
+
+type TitleModels = ZodOutput<typeof titleModelsRpc.output>;
+interface TitleCatalog {
+  providers: string[];
+  providerLabels: Record<string, string>;
+  models: TitleModels["models"];
+  loading: boolean;
+  error: string | null;
+}
+
+const NO_CATALOG: TitleCatalog = {
+  providers: [],
+  providerLabels: {},
+  models: [],
+  loading: false,
+  error: null,
+};
+
+// The host's model catalog for automatic titles, by provider: one snapshot
+// per read's start, success and failure. Module-level state is connection-local
+// because Paseo evaluates this client bundle once per serverId/pluginId.
+const titleCatalogs = new Map<string, TitleCatalog>();
+const titleCatalogReads = new Map<string, number>();
+const titleCatalogListeners = new Set<() => void>();
+
+function publishTitleCatalog(provider: string, next: TitleCatalog): void {
+  titleCatalogs.set(provider, next);
+  for (const listener of titleCatalogListeners) listener();
+}
+
+function subscribeTitleCatalogs(listener: () => void): () => void {
+  titleCatalogListeners.add(listener);
+  return () => {
+    titleCatalogListeners.delete(listener);
+  };
+}
+
+/** Reads the catalog again; resolves with the result when it is still the latest read, else null. */
+function readTitleCatalog(
+  provider: string,
+  load: () => Promise<TitleModels>,
+): Promise<TitleModels | null> {
+  const ticket = (titleCatalogReads.get(provider) ?? 0) + 1;
+  titleCatalogReads.set(provider, ticket);
+  const latest = () => titleCatalogReads.get(provider) === ticket;
+  publishTitleCatalog(provider, {
+    ...(titleCatalogs.get(provider) ?? NO_CATALOG),
+    loading: true,
+    error: null,
+  });
+  return Promise.resolve()
+    .then(load)
+    .then(
+      (result) => {
+        if (!latest()) return null;
+        publishTitleCatalog(provider, {
+          providers: result.providers,
+          providerLabels: result.providerLabels ?? {},
+          models: result.models,
+          loading: false,
+          error: result.error,
+        });
+        return result;
+      },
+      (failure: unknown) => {
+        if (latest())
+          publishTitleCatalog(provider, {
+            ...(titleCatalogs.get(provider) ?? NO_CATALOG),
+            loading: false,
+            error: failure instanceof Error ? failure.message : String(failure),
+          });
+        return null;
+      },
+    );
+}
+
+/** Test seam: forget every catalog. */
+export function resetTitleCatalogs(): void {
+  titleCatalogs.clear();
+  titleCatalogReads.clear();
+}
+
+export function TitleGenerationSettings({ look }: { look: PageLook }) {
+  const language = useTasksLanguage();
+  const words = WORDS[language];
+  const settings = useSettings(TITLE_GENERATION_SETTINGS);
+  const loadCatalog = useRpc(titleModelsRpc);
+  const [draft, setDraft] = useState(() =>
+    settings.status === "ready" ? settings.values : titleGenerationSettingsSchema.parse({}),
+  );
+  const [providerError, setProviderError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [switchingProvider, setSwitchingProvider] = useState(false);
+  const loadedForSwitch = useRef<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const revision = settings.status === "ready" ? settings.revision : null;
+  const catalogShown = revision !== null && draft.customModel;
+  const readCatalog = useCallback(
+    () => (catalogShown ? (titleCatalogs.get(draft.provider) ?? NO_CATALOG) : NO_CATALOG),
+    [catalogShown, draft.provider],
+  );
+  const catalog = useSyncExternalStore(subscribeTitleCatalogs, readCatalog, readCatalog);
+  const { loading, error } = catalog;
+  useEffect(() => {
+    if (settings.status === "ready") setDraft(settings.values);
+    else setConfirmingReset(false);
+  }, [revision]);
+  useEffect(() => {
+    if (
+      settings.status !== "ready" ||
+      settings.saving ||
+      switchingProvider ||
+      loading ||
+      confirmingReset ||
+      (draft.customModel && !draft.provider) ||
+      !draft.prompt.trim() ||
+      JSON.stringify(draft) === JSON.stringify(settings.values)
+    )
+      return;
+    const timer = setTimeout(() => {
+      setSaveError(null);
+      void settings
+        .save(draft, settings.revision)
+        .then(async (saved) => {
+          if (saved) return;
+          await settings.reload();
+          setSaveError(words.saveError);
+        })
+        .catch((failure: unknown) => {
+          setSaveError(failure instanceof Error ? failure.message : String(failure));
+        });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    draft,
+    revision,
+    settings.status,
+    settings.saving,
+    switchingProvider,
+    loading,
+    confirmingReset,
+  ]);
+  useEffect(() => {
+    if (!catalogShown) return;
+    let live = true;
+    const provider = draft.provider;
+    if (loadedForSwitch.current === provider) {
+      loadedForSwitch.current = null;
+      return;
+    }
+    void readTitleCatalog(provider, () => loadCatalog({ provider })).then((result) => {
+      if (!live || !result || result.error) return;
+      const firstProvider = [...result.providers].sort(
+        (a, b) => Number(a === "cursor") - Number(b === "cursor"),
+      )[0];
+      const firstModel = result.models[0];
+      setDraft((current) => {
+        if (!current.customModel || current.provider !== provider) return current;
+        if (!current.provider && firstProvider)
+          return { ...current, provider: firstProvider, model: "", thinkingOptionId: "" };
+        if (current.provider && !current.model && firstModel)
+          return { ...current, ...modelSelection(firstModel, current.thinkingOptionId) };
+        return current;
+      });
+    });
+    return () => {
+      live = false;
+    };
+  }, [loadCatalog, catalogShown, draft.provider, refresh]);
+
+  const selectProvider = async (provider: string) => {
+    if (provider === draft.provider || switchingProvider) return;
+    setSwitchingProvider(true);
+    setProviderError(null);
+    try {
+      const result = await readTitleCatalog(provider, () => loadCatalog({ provider }));
+      if (!result || result.error) {
+        setProviderError(result?.error || titleCatalogs.get(provider)?.error || words.loadError);
+        return;
+      }
+      loadedForSwitch.current = provider;
+      setDraft((current) =>
+        !current.customModel || current.provider !== draft.provider
+          ? current
+          : { ...current, provider, ...modelSelection(result.models[0], current.thinkingOptionId) },
+      );
+    } finally {
+      setSwitchingProvider(false);
+    }
+  };
+  if (settings.status !== "ready") {
+    return (
+      <View style={{ gap: space.sm }}>
+        <Section title={words.title} look={look}>
+          <View style={{ padding: space.lg }}>
+            <PlainButton label={words.retry} look={look} onPress={() => void settings.reload()} />
+          </View>
+        </Section>
+        <SectionNote
+          text={settings.status === "loading" ? words.loading : words.loadError}
+          look={look}
+        />
+      </View>
+    );
+  }
+  const reset = async () => {
+    setSaveError(null);
+    if (!(await settings.reset())) return;
+    setDraft(titleGenerationSettingsSchema.parse({}));
+  };
+  const modelError = providerError || error;
+  const writeError = saveError || settings.saveError;
+  return (
+    <>
+      <Section title={words.title} look={look}>
+        <SettingRow
+          title={words.afterFirstReply}
+          description={words.afterFirstReplyHint}
+          look={look}
+          first
+          disabled={settings.saving}
+          control={
+            <Toggle
+              value={draft.afterFirstReply}
+              label={words.afterFirstReply}
+              look={look}
+              onChange={(afterFirstReply) => setDraft({ ...draft, afterFirstReply })}
+            />
+          }
+        />
+        <SettingRow
+          title={words.customModel}
+          description={words.followSource}
+          look={look}
+          disabled={settings.saving}
+          control={
+            <Toggle
+              value={draft.customModel}
+              label={words.customModel}
+              look={look}
+              onChange={(customModel) => {
+                setProviderError(null);
+                setDraft({ ...draft, customModel });
+              }}
+            />
+          }
+        />
+        {draft.customModel ? (
+          <>
+            <ModelSettingsControls
+              look={look}
+              language={language}
+              provider={draft.provider}
+              model={draft.model}
+              thinkingOptionId={draft.thinkingOptionId}
+              disableThinking={draft.disableThinking}
+              disabledThinkingLabel={words.automaticThinking}
+              disabled={settings.saving || switchingProvider}
+              loading={loading}
+              providers={catalog.providers}
+              providerLabels={catalog.providerLabels}
+              models={catalog.models}
+              onProvider={(provider) => void selectProvider(provider)}
+              onModel={(model) =>
+                setDraft((current) => ({
+                  ...current,
+                  ...modelSelection(
+                    catalog.models.find((item) => item.id === model),
+                    current.thinkingOptionId,
+                  ),
+                }))
+              }
+              onThinking={(thinkingOptionId) =>
+                setDraft((current) => ({ ...current, thinkingOptionId }))
+              }
+              onRefresh={() => {
+                setProviderError(null);
+                setRefresh((value) => value + 1);
+              }}
+            />
+            {modelError ? (
+              <View style={{ paddingHorizontal: space.lg, paddingBottom: space.sm }}>
+                <RowNotice look={look} tone="danger" alert text={modelError} />
+              </View>
+            ) : null}
+          </>
+        ) : null}
+        <SettingRow
+          title={words.disableThinking}
+          description={words.thinkingHint}
+          look={look}
+          disabled={settings.saving}
+          control={
+            <Toggle
+              value={draft.disableThinking}
+              label={words.disableThinking}
+              look={look}
+              onChange={(disableThinking) => {
+                setDraft({ ...draft, disableThinking });
+              }}
+            />
+          }
+        />
+        <SettingRow
+          title={words.prompt}
+          description={words.promptHint}
+          look={look}
+          wrapControl
+          disabled={settings.saving}
+          control={
+            <PlainButton
+              label={words.editPrompt}
+              look={look}
+              disabled={settings.saving}
+              onPress={() => setPromptOpen(true)}
+            />
+          }
+        />
+        <ResetRow
+          look={look}
+          title={words.resetTitle}
+          description={words.resetHint}
+          confirmDescription={words.resetConfirmHint}
+          disabled={settings.saving}
+          onReset={reset}
+          onArmedChange={setConfirmingReset}
+        />
+        {writeError ? (
+          <View style={{ paddingHorizontal: space.lg, paddingBottom: space.sm }}>
+            <RowNotice look={look} tone="warning" alert text={writeError} />
+          </View>
+        ) : null}
+        <SectionFooter look={look}>
+          <SettingsTips items={words.tips} look={look} />
+        </SectionFooter>
+      </Section>
+      {promptOpen ? (
+        <PromptEditorModal
+          look={look}
+          title={words.editPrompt}
+          label={words.prompt}
+          value={draft.prompt}
+          defaultValue={DEFAULT_TITLE_PROMPT}
+          testID="title-prompt-edit-input"
+          maxLength={8000}
+          reset={words.resetPrompt}
+          cancel={words.cancel}
+          save={words.save}
+          onClose={() => setPromptOpen(false)}
+          onSave={(prompt) => setDraft((current) => ({ ...current, prompt }))}
+        />
+      ) : null}
+    </>
+  );
+}

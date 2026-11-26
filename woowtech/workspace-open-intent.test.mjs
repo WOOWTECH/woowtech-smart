@@ -35,148 +35,202 @@ function variable(scope, name, tree) {
   return matches[0];
 }
 
-test("the workspace route reads the open intent from its own route params", () => {
+function call(scope, name, tree) {
+  const matches = findAll(
+    scope,
+    (node) => ts.isCallExpression(node) && node.expression.getText(tree) === name,
+  );
+  assert.equal(matches.length, 1, `expected one call to ${name}`);
+  return matches[0];
+}
+function fn(tree, name) {
+  const matches = findAll(
+    tree,
+    (node) => ts.isFunctionDeclaration(node) && node.name?.text === name,
+  );
+  assert.equal(matches.length, 1, `expected one function ${name}`);
+  return matches[0];
+}
+function property(object, name, tree) {
+  assert.ok(ts.isObjectLiteralExpression(object));
+  const matches = object.properties.filter((node) => node.name?.getText(tree) === name);
+  assert.equal(matches.length, 1, `expected one property ${name}`);
+  const node = matches[0];
+  return ts.isShorthandPropertyAssignment(node) ? node.name : node.initializer;
+}
+
+test("legacy open links read only the matched workspace's local params", () => {
   const tree = source(routeFile);
-  // expo-router copies ?open onto the h/[serverId] route when a notification enters the workspace
-  // from outside the host stack. useGlobalSearchParams merges that copy back in after every later
-  // workspace switch, and the route reopens the agent there (the Android S3 failure).
+  // A retained host route can keep an old ?open. Global params would replay it into another
+  // workspace (Android S3); the current compatibility boundary reads the matched leaf instead.
   assert.equal(
     findAll(tree, (node) => ts.isIdentifier(node) && node.text === "useGlobalSearchParams").length,
     0,
-    "the workspace route must not read useGlobalSearchParams",
+    "the workspace route must not read merged global params",
   );
-  const imports = findAll(
-    tree,
-    (node) =>
-      ts.isImportDeclaration(node) &&
-      node.moduleSpecifier.text === "@/navigation/woowtech-workspace-open-intent",
-  );
-  assert.equal(imports.length, 1);
-  assert.match(imports[0].importClause.getText(tree), /\breadWorkspaceRouteOpenParam\b/);
-
-  const [content] = findAll(
-    tree,
-    (node) => ts.isFunctionDeclaration(node) && node.name?.text === "HostWorkspaceRouteContent",
-  );
-  assert.ok(content, "HostWorkspaceRouteContent not found");
-  const openValue = variable(content, "openValue", tree).initializer;
-  assert.ok(openValue && ts.isCallExpression(openValue));
-  assert.equal(openValue.expression.getText(tree), "readWorkspaceRouteOpenParam");
-  assert.equal(openValue.arguments.length, 1);
-  const paramsName = openValue.arguments[0].getText(tree);
-  const params = variable(content, paramsName, tree).initializer;
+  const content = fn(tree, "HostWorkspaceRouteContent");
+  const params = variable(content, "params", tree).initializer;
   assert.ok(params && ts.isCallExpression(params));
-  assert.equal(
-    params.expression.getText(tree),
-    "useLocalSearchParams",
-    `${paramsName} must be the route's own params`,
-  );
-});
-
-test("an agent intent waits only while the store does not know its workspace (RC-I-21c)", () => {
-  const tree = source(routeFile);
-  const imports = findAll(
-    tree,
-    (node) =>
-      ts.isImportDeclaration(node) &&
-      node.moduleSpecifier.text === "@/navigation/woowtech-workspace-open-intent",
-  );
-  assert.match(imports[0].importClause.getText(tree), /\bisAgentOpenIntentWaitingForWorkspace\b/);
-
-  const [content] = findAll(
-    tree,
-    (node) => ts.isFunctionDeclaration(node) && node.name?.text === "HostWorkspaceRouteContent",
-  );
-  assert.ok(content, "HostWorkspaceRouteContent not found");
-  // Waiting for the live directory (hasHydratedWorkspaces) kept the remembered agent on screen
-  // after a cold-start tap, though the cached directory already knew the workspace. The vitest
-  // harnesses call isAgentOpenIntentWaitingForWorkspace the way this line does, so putting the
-  // upstream line back turns this guard red.
-  const waiting = variable(content, "isOpenIntentWaitingForWorkspace", tree).initializer;
-  assert.ok(waiting && ts.isCallExpression(waiting));
-  assert.equal(waiting.expression.getText(tree), "isAgentOpenIntentWaitingForWorkspace");
-  assert.equal(waiting.arguments.length, 1);
-  const [argument] = waiting.arguments;
-  assert.ok(ts.isObjectLiteralExpression(argument));
+  assert.equal(params.expression.getText(tree), "useLocalSearchParams");
+  const open = variable(content, "openValue", tree).initializer;
+  assert.ok(open && ts.isCallExpression(open));
+  assert.equal(open.expression.getText(tree), "getParamValue");
   assert.deepEqual(
-    argument.properties.map((property) => property.getText(tree)),
-    ["openIntent", "workspaceExists"],
+    open.arguments.map((arg) => arg.getText(tree)),
+    ["params.open"],
   );
-  const workspaceExists = variable(content, "workspaceExists", tree).initializer;
-  assert.equal(
-    workspaceExists?.getText(tree),
-    "useWorkspaceExists(serverId, workspaceId)",
-    "workspaceExists must be the store's answer, cached directory included",
+  assert.deepEqual(
+    call(content, "useDirectoryDemand", tree).arguments.map((arg) => arg.getText(tree)),
+    ["serverId"],
   );
-  // hasHydratedWorkspaces only feeds the recovery latch below, never the wait.
-  const latchCalls = new Set(["shouldLatchWorkspaceRecovery", "isWorkspaceRecoveryLatchHeld"]);
-  for (const use of findAll(
-    content,
-    (node) => ts.isIdentifier(node) && node.text === "hasHydratedWorkspaces",
-  )) {
-    if (ts.isVariableDeclaration(use.parent) && use.parent.name === use) continue;
-    if (ts.isArrayLiteralExpression(use.parent)) continue; // an effect's dependency list
-    let ancestor = use.parent;
-    while (ancestor && !ts.isCallExpression(ancestor)) ancestor = ancestor.parent;
-    assert.ok(
-      ancestor && latchCalls.has(ancestor.expression.getText(tree)),
-      `the route must not wait for the live directory: ${use.parent.getText(tree)}`,
-    );
-  }
 });
 
-test("an agent intent consumed before the live directory keeps recovery requested (RC-I-21c)", () => {
+test("legacy open links seed the layout model before clearing their own query parameter", () => {
   const tree = source(routeFile);
-  const imports = findAll(
+  const content = fn(tree, "HostWorkspaceRouteContent");
+  const prepare = call(content, "prepareWorkspaceTab", tree);
+  assert.equal(property(prepare.arguments[0], "serverId", tree).getText(tree), "serverId");
+  assert.equal(property(prepare.arguments[0], "workspaceId", tree).getText(tree), "workspaceId");
+  assert.equal(
+    property(prepare.arguments[0], "target", tree).getText(tree),
+    "getOpenIntentTarget(openIntent)",
+  );
+  assert.equal(
+    property(prepare.arguments[0], "pin", tree).getText(tree),
+    'openIntent.kind === "agent"',
+  );
+  assert.equal(
+    property(prepare.arguments[1], "openTab", tree).getText(tree),
+    "useWorkspaceLayoutStore.getState().deferOpenTab",
+  );
+  const effect = call(content, "useLayoutEffect", tree);
+  assert.ok(findAll(effect, (node) => node === prepare).length === 1);
+  const clear = call(effect, "clearConsumedOpenIntent", tree);
+  assert.ok(prepare.pos < clear.pos, "save the target before removing the legacy query");
+  assert.match(property(clear.arguments[0], "navigation", tree).getText(tree), /^navigation\b/);
+  const clearBody = fn(tree, "clearConsumedOpenIntent");
+  assert.equal(
+    call(clearBody, "input.navigation.setParams", tree).arguments[0].getText(tree),
+    "{ open: undefined }",
+  );
+  assert.match(
+    clearBody.getText(tree),
+    /window\.setTimeout\(stripOpenSearchParamFromBrowserUrl, 0\)/,
+    "the browser URL must also lose the consumed query after Expo commits it",
+  );
+});
+
+test("known workspace targets open after layout hydration; unknown targets stay in the model", () => {
+  const tree = source("packages/app/src/stores/navigation-active-workspace-store/navigation.ts");
+  const navigate = fn(tree, "navigateToWorkspace");
+  // RC-I-21c: cached workspace knowledge may open directly once layout hydration is complete.
+  // Otherwise model state survives startup and can later drive missing-workspace recovery.
+  assert.equal(
+    variable(navigate, "workspaces", tree).initializer.getText(tree),
+    "deps.getSessionWorkspaces(input.serverId)",
+  );
+  assert.equal(
+    variable(navigate, "shouldDeferOpen", tree).initializer.getText(tree),
+    "!resolvedWorkspaceId || !deps.isWorkspaceLayoutHydrated()",
+  );
+  const open = variable(navigate, "openTab", tree).initializer;
+  assert.match(open.getText(tree), /if \(shouldDeferOpen\) return deps\.deferOpenTab\(request\)/);
+  assert.equal(call(open, "deps.openTab", tree).arguments[0].getText(tree), "request");
+  assert.equal(
+    property(call(navigate, "prepareWorkspaceTab", tree).arguments[1], "openTab", tree).getText(
+      tree,
+    ),
+    "openTab",
+  );
+  assert.deepEqual(
+    call(navigate, "buildHostWorkspaceRoute", tree).arguments.map((arg) => arg.getText(tree)),
+    ["input.serverId", "input.workspaceId"],
+    "internal navigation must not serialize another ?open handoff",
+  );
+});
+
+test("a pending open belongs to one workspace and is consumed after directory and layout hydration", () => {
+  const tree = source("packages/app/src/stores/workspace-layout-store.ts");
+  const hook = fn(tree, "usePendingWorkspaceOpen");
+  assert.equal(
+    variable(hook, "workspaceReady", tree).initializer.getText(tree),
+    "hasHydratedWorkspaces && workspaceExists",
+  );
+  assert.match(
+    variable(hook, "pending", tree).initializer.getText(tree),
+    /workspaceKey \? state\.pendingOpenByWorkspace\[workspaceKey\] : undefined/,
+  );
+  assert.equal(
+    variable(hook, "layoutHydrated", tree).initializer.getText(tree),
+    "useWorkspaceLayoutStoreHydrated()",
+  );
+  const consume = call(hook, "useWorkspaceLayoutStore.getState().consumePendingOpen", tree);
+  assert.equal(consume.arguments[0].getText(tree), "workspaceKey");
+  let condition = consume.parent;
+  while (condition && !ts.isIfStatement(condition)) condition = condition.parent;
+  assert.ok(condition, "pending consumption must be gated");
+  assert.equal(
+    condition.expression.getText(tree),
+    "workspaceKey && workspaceReady && layoutHydrated && pending",
+  );
+  assert.match(
+    hook.getText(tree),
+    /return pending \? pending\.target : null;/,
+    "the pending target remains available for recovery while consumption is blocked",
+  );
+  const consumers = findAll(
     tree,
-    (node) =>
-      ts.isImportDeclaration(node) &&
-      node.moduleSpecifier.text === "@/navigation/woowtech-workspace-open-intent",
+    (node) => ts.isPropertyAssignment(node) && node.name.getText(tree) === "consumePendingOpen",
   );
-  const imported = imports[0].importClause.getText(tree);
-  assert.match(imported, /\bshouldLatchWorkspaceRecovery\b/);
-  assert.match(imported, /\bisWorkspaceRecoveryLatchHeld\b/);
+  assert.equal(consumers.length, 1);
+  const consumer = consumers[0].initializer;
+  assert.match(
+    consumer.getText(tree),
+    /const \{ \[workspaceKey\]: _pending, \.\.\.pendingOpenByWorkspace \}/,
+  );
+  const remove = call(consumer, "set", tree);
+  const open = call(consumer, "get().openTab", tree);
+  assert.ok(remove.pos < open.pos, "remove this workspace's pending target before opening it once");
+  assert.equal(open.arguments[0].getText(tree), "pending");
+});
 
-  const [content] = findAll(
-    tree,
-    (node) => ts.isFunctionDeclaration(node) && node.name?.text === "HostWorkspaceRouteContent",
+test("missing-workspace recovery uses the same pending agent and this connection's directory", () => {
+  const tree = source("packages/app/src/screens/workspace/workspace-screen.tsx");
+  const pending = variable(tree, "pendingOpenTarget", tree).initializer;
+  assert.ok(ts.isCallExpression(pending));
+  assert.equal(pending.expression.getText(tree), "usePendingWorkspaceOpen");
+  const readiness = pending.arguments[0];
+  assert.equal(property(readiness, "workspaceKey", tree).getText(tree), "persistenceKey");
+  assert.equal(
+    property(readiness, "workspaceExists", tree).getText(tree),
+    "workspaceDescriptor !== null",
   );
-  assert.ok(content, "HostWorkspaceRouteContent not found");
-  // Upstream #2002 requested recovery while ?open=agent waited for the live directory. The intent
-  // is now consumed against the cached directory, so without the latch a workspace archived while
-  // the app was killed showed 「Workspace unavailable」 instead of Restore.
-  const held = variable(content, "isRecoveryLatchHeld", tree).initializer;
-  assert.ok(held && ts.isCallExpression(held));
-  assert.equal(held.expression.getText(tree), "isWorkspaceRecoveryLatchHeld");
-
-  const latches = findAll(
-    content,
-    (node) =>
-      ts.isCallExpression(node) && node.expression.getText(tree) === "shouldLatchWorkspaceRecovery",
+  assert.equal(
+    property(readiness, "hasHydratedWorkspaces", tree).getText(tree),
+    "hasHydratedWorkspaces",
   );
-  assert.equal(latches.length, 1);
-  const latch = latches[0];
-  assert.ok(ts.isIfStatement(latch.parent), "the latch is set where the intent is consumed");
-  assert.match(latch.parent.thenStatement.getText(tree), /\bsetRecoveryLatchKey\(/);
-  let effect = latch.parent;
-  while (
-    effect &&
-    !(ts.isCallExpression(effect) && effect.expression.getText(tree) === "useEffect")
-  ) {
-    effect = effect.parent;
-  }
-  assert.ok(effect, "the latch is set in the open-intent effect");
-  assert.match(effect.getText(tree), /\bprepareWorkspaceTab\(/);
-
-  const decks = findAll(
-    content,
-    (node) =>
-      (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
-      node.tagName.getText(tree) === "WorkspaceDeck",
+  assert.equal(property(readiness, "onOpened", tree).getText(tree), "revealWorkspaceTab");
+  const recovery = call(tree, "useWorkspaceRecovery", tree);
+  const enabled = property(recovery.arguments[0], "enabled", tree);
+  assert.ok(ts.isCallExpression(enabled));
+  assert.equal(enabled.expression.getText(tree), "shouldInspectWorkspaceRecovery");
+  assert.deepEqual(
+    enabled.arguments.map((arg) => arg.getText(tree)),
+    ["hasSettledWorkspaces", "workspaceDescriptor", "pendingOpenTarget"],
   );
-  assert.equal(decks.length, 1);
-  const requested = decks[0].attributes.properties.find(
-    (attribute) => attribute.name?.getText(tree) === "recoveryRequested",
+  const settled = variable(tree, "hasSettledWorkspaces", tree).initializer;
+  assert.equal(settled.expression.getText(tree), "hasSettledWorkspaceDirectory");
+  assert.equal(
+    property(settled.arguments[0], "directoryRefreshSettled", tree).getText(tree),
+    "directoryRefreshSettled",
   );
-  assert.equal(requested?.initializer?.getText(tree), "{isAgentOpenIntent || isRecoveryLatchHeld}");
+  assert.equal(
+    variable(tree, "directoryRefreshSettled", tree).initializer.getText(tree),
+    "useDirectoryRefreshSettled(normalizedServerId)",
+  );
+  const decision = fn(tree, "shouldInspectWorkspaceRecovery");
+  assert.match(
+    decision.getText(tree),
+    /return pendingOpenTarget\?\.kind === "agent" && hasHydratedWorkspaces && workspace === null;/,
+  );
 });

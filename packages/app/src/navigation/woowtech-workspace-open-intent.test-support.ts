@@ -1,16 +1,12 @@
-// Drives the app's notification and workspace navigation without rendering. Real: the app's
-// navigation code, React Navigation's StackRouter, and expo-router's route tree built from the
-// src/app file names. Transcribed from expo-router 6.0.23, because its routing modules import
-// react-native and cannot load in the unit project: the action router.navigate,
-// router.dismissTo and router.replace dispatch, and the merged params useGlobalSearchParams
-// returns. Modeled: React Navigation starting a nested navigator from its parent's
-// `screen`/`params`, the workspace route's open-intent effect, and the welcome screen's
-// host-online effect. The witnesses in the tests check the transcription against the navigation
-// state the Android runs recorded (woowtech-smart logs/ultra-device-s3b.txt,
-// logs/integ0929-real-android-tap-probe.txt).
+// Drives production notification/workspace navigation, agent resolution and layout state without
+// rendering. Uses React Navigation's StackRouter and Expo's route tree from src/app file names.
+// The stack adapter models link actions and nested screen/params initialization; route and welcome
+// effects are driven explicitly. Historical Android scenarios supply regression fixtures, not
+// device/E2E proof that this adapter matches every Expo linking behavior.
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { NavigationContainerRefWithCurrent } from "@react-navigation/native";
+import type { NavigationContainerRefWithCurrent } from "expo-router/react-navigation";
+// Expo's public navigation barrel loads native UI; this is its same pure router implementation.
 import {
   CommonActions,
   StackActions,
@@ -20,13 +16,12 @@ import {
   type ParamListBase,
   type PartialState,
   type StackNavigationState,
-} from "@react-navigation/routers";
+} from "expo-router/build/react-navigation/routers";
 import { getRoutes } from "expo-router/build/getRoutes";
 import type { RouteNode } from "expo-router/build/Route";
 import type { RequireContext } from "expo-router/build/types";
 import { shouldWelcomeMoveOnToHost } from "@/navigation/woowtech-welcome-host-online";
 import {
-  isAgentOpenIntentWaitingForWorkspace,
   readWorkspaceRouteOpenParam,
   type WorkspaceRouteOpenParams,
 } from "@/navigation/woowtech-workspace-open-intent";
@@ -46,7 +41,9 @@ import {
   type WorkspaceOpenIntent,
 } from "@/utils/host-routes";
 import { resolveNavigateToAgent } from "@/utils/navigate-to-agent/resolve";
-import { buildNotificationRoute, resolveNotificationTarget } from "@/utils/notification-routing";
+import { createNotificationOpenRouter, type NotificationTap } from "@/notification-open";
+import { resolveAgentRoute } from "@/navigation/agent-route-resolution";
+import { createWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { prepareWorkspaceTab } from "@/utils/prepare-workspace-tab";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 
@@ -63,6 +60,7 @@ interface ActionRoute {
 const ROOT_SLOT_NAME = "__root";
 const HOST_ROUTE_NAME = "h/[serverId]";
 const WELCOME_ROUTE_NAME = "welcome";
+export const AGENT_ROUTE_NAME = "agent/[agentId]";
 export const WORKSPACE_ROUTE_NAME = "workspace/[workspaceId]/index";
 
 // The root-level screens the scenarios visit, by path.
@@ -152,6 +150,29 @@ function hydrate(
 // focused route (the device's workspace route had both serverId and workspaceId), and ?open.
 function actionStateFor(href: string): ActionRoute {
   const [pathname, search = ""] = href.split("?");
+  const agentPath = /^\/h\/([^/]+)\/agent\/([^/]+)$/.exec(pathname);
+  if (agentPath) {
+    const serverId = decodeURIComponent(agentPath[1]);
+    return {
+      name: ROOT_SLOT_NAME,
+      state: {
+        routes: [
+          {
+            name: HOST_ROUTE_NAME,
+            params: { serverId },
+            state: {
+              routes: [
+                {
+                  name: AGENT_ROUTE_NAME,
+                  params: { serverId, agentId: decodeURIComponent(agentPath[2]) },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+  }
   const selection = parseHostWorkspaceRouteFromPathname(pathname);
   if (!selection) {
     const leafName = ROOT_LEAF_ROUTE_NAMES[pathname];
@@ -413,10 +434,10 @@ export const welcomeEffectLikeWelcomeScreen: WelcomeEffectModel = {
 
 export interface NavigationScenario {
   readonly openedTabs: readonly OpenedTab[];
-  /** A tapped push notification, as _layout.tsx's PushNotificationRouter handles it. */
-  tapNotification(data: Record<string, string>): void;
+  /** Uses the production notification router, then settles its asynchronous handoff. */
+  tapNotification(data: Record<string, string>): Promise<void>;
   /** The host's workspace directory arrives, as after T1's directory demand. */
-  directoryArrives(workspaceIds: string[]): void;
+  directoryArrives(workspaceIds: string[], agents?: { id: string; workspaceId: string }[]): void;
   /** A workspace row in the sidebar. */
   openWorkspaceFromSidebar(workspaceId: string): void;
   /** A link the app is opened with while it runs: expo-router's linking navigates to its path. */
@@ -452,6 +473,13 @@ export function createNavigationScenario(input: {
     routes: [actionStateFor(input.startAt)],
   } as unknown as PartialState<NavigationState>);
   const knownWorkspaceIds = new Set<string>();
+  const agentWorkspaces = new Map<string, string>();
+  let directoryHydrated = false;
+  const layoutStore = createWorkspaceLayoutStore(undefined, {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  });
   const openedTabs: OpenedTab[] = [];
   let lastWorkspaceId: string | null = null;
   let anyOnlineServerId: string | null = null;
@@ -494,11 +522,13 @@ export function createNavigationScenario(input: {
   const workspaceDeps: NavigateToWorkspaceDeps = {
     getSessionWorkspaces: () =>
       new Map(Array.from(knownWorkspaceIds, (id) => [id, { id } as WorkspaceDescriptor] as const)),
-    getSessionAgents: () => [],
+    deferOpenTab: (tabInput) => layoutStore.getState().deferOpenTab(tabInput),
+    revealTab: () => {},
+    revealWorkspace: (workspaceKey) => layoutStore.getState().focusWorkspace(workspaceKey),
     isWorkspaceLayoutHydrated: () => true,
     openTab: ({ workspaceKey, target, pin = false }) => {
       openedTabs.push({ workspaceKey, target, pin });
-      return null;
+      return layoutStore.getState().openTab({ workspaceKey, target, pin, intent: "reveal" });
     },
     rememberLastWorkspace: (selection) => {
       lastWorkspaceId = selection.workspaceId;
@@ -568,13 +598,7 @@ export function createNavigationScenario(input: {
     const workspaceId = decodeWorkspaceIdFromPathSegment(workspaceValue) ?? "";
     const openValue = readOpenParam({ container, route });
     const openIntent = parseWorkspaceOpenIntent(openValue);
-    const waitingForWorkspace = isAgentOpenIntentWaitingForWorkspace({
-      openIntent,
-      workspaceExists: knownWorkspaceIds.has(workspaceId),
-    });
-    if (!openValue || waitingForWorkspace) {
-      return false;
-    }
+    if (!openValue) return false;
     const consumptionKey = `${paramValue(params.serverId)}:${workspaceId}:${openValue}`;
     if (consumedIntentByRouteKey.get(route.key) !== consumptionKey) {
       consumedIntentByRouteKey.set(route.key, consumptionKey);
@@ -586,7 +610,7 @@ export function createNavigationScenario(input: {
             target: openIntentTarget(openIntent),
             pin: openIntent.kind === "agent",
           },
-          workspaceDeps,
+          { openTab: workspaceDeps.deferOpenTab },
         );
       }
     }
@@ -599,44 +623,108 @@ export function createNavigationScenario(input: {
     return true;
   }
 
+  function navigateAgent(target: { serverId: string; agentId: string }) {
+    resolveNavigateToAgent(
+      { ...target, pin: true },
+      {
+        readAgentNavTarget: ({ agentId }) => ({ agentWorkspaceId: agentWorkspaces.get(agentId) }),
+        navigateToHostAgent: (route) => linkTo("NAVIGATE", route),
+        navigateToWorkspace: (navigationInput) =>
+          navigateToWorkspace(navigationInput, workspaceDeps),
+      },
+    );
+  }
+
+  function runAgentRouteEffect(): boolean {
+    const { route } = focusedRouteIn(container);
+    if (route.name !== AGENT_ROUTE_NAME) return false;
+    const agentId = paramValue((route.params as Params | undefined)?.agentId);
+    const resolution = resolveAgentRoute({
+      serverId,
+      agentId,
+      cachedWorkspaceId: agentWorkspaces.get(agentId),
+      connectionStatus: anyOnlineServerId ? "online" : "offline",
+      lookup: { kind: "idle" },
+      hasHydratedWorkspaces: directoryHydrated,
+      hasHydratedLayout: true,
+    });
+    if (resolution.kind !== "resolved") return false;
+    navigateAgent({ serverId, agentId });
+    return true;
+  }
+
+  // usePendingWorkspaceOpen consumes model state after the directory and layout are ready.
+  function consumePendingWorkspaceOpen(): void {
+    const { route } = focusedRouteIn(container);
+    if (route.name !== WORKSPACE_ROUTE_NAME || !directoryHydrated) return;
+    const workspaceId = decodeWorkspaceIdFromPathSegment(
+      paramValue((route.params as Params)?.workspaceId),
+    );
+    if (!workspaceId || !knownWorkspaceIds.has(workspaceId)) return;
+    const workspaceKey = `${serverId}:${workspaceId}`;
+    const pending = layoutStore.getState().pendingOpenByWorkspace[workspaceKey];
+    if (!pending) return;
+    layoutStore.getState().consumePendingOpen(workspaceKey);
+    openedTabs.push({ workspaceKey, target: pending.target, pin: pending.pin === true });
+  }
+
   function render(): void {
     for (let pass = 0; pass < 5; pass += 1) {
-      if (!runWelcomeEffects() && !runWorkspaceRouteEffect()) {
+      if (!runWelcomeEffects() && !runAgentRouteEffect() && !runWorkspaceRouteEffect()) {
+        consumePendingWorkspaceOpen();
         return;
       }
     }
     throw new Error("the screens' effects did not settle");
   }
 
+  let receiveTap: ((tap: NotificationTap) => void) | null = null;
+  let nextTapId = 0;
+  const notifications = createNotificationOpenRouter({
+    source: {
+      subscribe: (listener) => {
+        receiveTap = listener;
+        return () => {
+          receiveTap = null;
+        };
+      },
+      takeLaunchTap: async () => null,
+      acknowledge: () => {},
+    },
+    whenReadyToNavigate: () => Promise.resolve(),
+    openAgent: (target) => {
+      navigateAgent(target);
+      render();
+    },
+    openTerminal: ({ serverId: targetServerId, workspaceId, terminalId }) => {
+      navigateToWorkspace(
+        { serverId: targetServerId, workspaceId, target: { kind: "terminal", terminalId } },
+        workspaceDeps,
+      );
+      render();
+    },
+    openRoute: (route) => {
+      linkTo("NAVIGATE", route);
+      render();
+    },
+  });
+  const stopNotifications = notifications.start();
   render();
 
   return {
     openedTabs,
-    tapNotification(data) {
-      const target = resolveNotificationTarget(data);
-      if (target.serverId && target.workspaceId && target.agentId) {
-        resolveNavigateToAgent(
-          {
-            serverId: target.serverId,
-            workspaceId: target.workspaceId,
-            agentId: target.agentId,
-            pin: true,
-          },
-          {
-            readAgentNavTarget: () => ({ agentWorkspaceId: null }),
-            navigateToHostAgent: (route) => linkTo("NAVIGATE", route),
-            navigateToWorkspace: (navigation) => navigateToWorkspace(navigation, workspaceDeps),
-          },
-        );
-      } else {
-        linkTo("NAVIGATE", buildNotificationRoute(data));
-      }
+    async tapNotification(data) {
+      receiveTap?.({ id: `tap:${++nextTapId}`, data });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
       render();
     },
-    directoryArrives(workspaceIds) {
-      for (const workspaceId of workspaceIds) {
-        knownWorkspaceIds.add(workspaceId);
-      }
+    directoryArrives(workspaceIds, agents = []) {
+      knownWorkspaceIds.clear();
+      for (const workspaceId of workspaceIds) knownWorkspaceIds.add(workspaceId);
+      agentWorkspaces.clear();
+      for (const agent of agents) agentWorkspaces.set(agent.id, agent.workspaceId);
+      directoryHydrated = true;
+      anyOnlineServerId = serverId;
       render();
     },
     openWorkspaceFromSidebar(workspaceId) {
@@ -675,6 +763,9 @@ export function createNavigationScenario(input: {
       return rootStack?.routes.find((route) => route.name === HOST_ROUTE_NAME)?.params;
     },
     lastWorkspaceId: () => lastWorkspaceId,
-    dispose: unregister,
+    dispose() {
+      stopNotifications();
+      unregister();
+    },
   };
 }

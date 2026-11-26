@@ -36,6 +36,7 @@ function ready(auth: ProviderAuthEntry["auth"]): ProviderAuthEntry {
 
 beforeAll(async () => {
   if (!i18n.isInitialized) await i18n.init();
+  await i18n.loadLanguages(["en", "zh-TW"]);
 });
 
 describe.each([

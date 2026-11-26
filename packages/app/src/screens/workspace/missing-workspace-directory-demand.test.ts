@@ -14,7 +14,6 @@ import {
   workspace,
 } from "./missing-workspace-directory-demand.test-support";
 
-import { parseWorkspaceOpenIntent } from "@/utils/host-routes";
 import {
   acquireMissingWorkspaceDirectoryDemand,
   type MissingWorkspaceDirectoryDemandInput,
@@ -54,10 +53,16 @@ function routeState(f: Awaited<ReturnType<typeof fixture>>, id = workspaceId) {
 function navigation(f: Awaited<ReturnType<typeof fixture>>) {
   const routes: string[] = [];
   const tabs: Parameters<NavigateToWorkspaceDeps["openTab"]>[0][] = [];
+  const deferredTabs: Parameters<NavigateToWorkspaceDeps["deferOpenTab"]>[0][] = [];
   const deps: NavigateToWorkspaceDeps = {
     getSessionWorkspaces: () => f.session()?.workspaces ?? null,
-    getSessionAgents: () => [],
     isWorkspaceLayoutHydrated: () => true,
+    deferOpenTab: (input) => {
+      deferredTabs.push(input);
+      return null;
+    },
+    revealTab: () => {},
+    revealWorkspace: () => {},
     openTab: (input) => {
       tabs.push(input);
       return "t1-agent";
@@ -72,7 +77,7 @@ function navigation(f: Awaited<ReturnType<typeof fixture>>) {
       { serverId, workspaceId, target: { kind: "agent", agentId: "t1-agent" } },
       deps,
     );
-  return { routes, tabs, navigate };
+  return { routes, tabs, deferredTabs, navigate };
 }
 
 const missingInput = { serverId, workspaceId, isRouteFocused: true, hasWorkspaceDescriptor: false };
@@ -119,6 +124,7 @@ async function expectSecondWorkspaceRefreshed(f: Fixture) {
 // Real timeline owner. Its timeline ports throw: only its directory demand is under test.
 function directoryOnlyTimeline(f: Fixture) {
   return f.runtime.createViewedTimelineOwner(serverId, {
+    canCheckFreshness: () => false,
     observe: () => {
       throw new Error("Timeline is not connected in this directory handoff test");
     },
@@ -131,9 +137,6 @@ function directoryOnlyTimeline(f: Fixture) {
     },
     reportError: (error) => {
       throw error;
-    },
-    schedule: () => {
-      throw new Error("Unexpected timeline retry");
     },
   });
 }
@@ -216,10 +219,8 @@ describe("missing workspace directory demand", () => {
     const epoch = f.runtime.getSnapshot(serverId)?.connectionEpoch;
     const nav = navigation(f);
     nav.navigate();
-    const intent = parseWorkspaceOpenIntent(
-      new URL(nav.routes[0]!, "https://test.invalid").searchParams.get("open"),
-    );
-    expect(intent).toEqual({ kind: "agent", agentId: "t1-agent" });
+    expect(nav.deferredTabs).toHaveLength(1);
+    expect(nav.deferredTabs[0]?.target).toEqual({ kind: "agent", agentId: "t1-agent" });
     expect(nav.tabs).toEqual([]);
     f.transport.disconnect();
     const release = acquireMissingWorkspaceDirectoryDemand(f.runtime, missingInput);
@@ -247,6 +248,7 @@ describe("missing workspace directory demand", () => {
         pin: false,
         intent: "reveal",
         placement: undefined,
+        asTab: undefined,
       },
     ]);
     const timeline = directoryOnlyTimeline(f);
@@ -291,7 +293,8 @@ describe("missing workspace directory demand", () => {
     const nav = navigation(f);
     nav.navigate();
     expect(nav.tabs).toEqual([]);
-    expect(nav.routes).toEqual(["/h/t1-host/workspace/t1-workspace?open=agent%3At1-agent"]);
+    expect(nav.routes).toEqual(["/h/t1-host/workspace/t1-workspace"]);
+    expect(nav.deferredTabs[0]?.target).toEqual({ kind: "agent", agentId: "t1-agent" });
     expect(
       selectVisibleAgentIds({ layout: null, tabs: [], routeFocused: true, focusedPaneOnly: false }),
     ).toEqual([]);

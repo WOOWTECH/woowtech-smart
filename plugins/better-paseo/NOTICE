@@ -1,0 +1,18 @@
+Better Paseo 1.7.0
+Copyright (c) 2026 ABorakati
+Licensed under the MIT License; the complete notice is in LICENSE.
+
+Source: https://github.com/RoundRedDot/better-paseo
+Commit: e9ac5216185988ce99574b3e2f04f178020204f1
+Original file hashes and archive checksum: upstream-source.json
+The file hashes describe the original upstream snapshot, not the current working
+files. Integration edits and repository formatting intentionally change them.
+
+Woowtech/Apporo Smart modifications: built-in packaging, pinned offline runtime,
+product-managed updates, Traditional Chinese (zh-TW) translations, and native
+chat presentation by default. The task board retains its upstream
+enabled-by-default setting; Better Paseo chat can be enabled in its settings.
+
+Upstream Marked and Pinky notices remain in client/vendor/marked.LICENSE and
+assets/tool-marks/pinky-LICENSE.txt. The build collects bundled npm dependency
+licenses into THIRD_PARTY_NOTICES.txt, which must ship with the plugin.

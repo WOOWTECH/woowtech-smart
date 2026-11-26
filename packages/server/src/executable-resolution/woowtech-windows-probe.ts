@@ -7,16 +7,21 @@ import { isWindowsCommandScript } from "../utils/windows-command.js";
 
 export const WINDOWS_MIN_PROBE_TIMEOUT_MS = 10_000;
 
-export type ExecutableProbe = (executablePath: string, timeoutMs: number) => Promise<boolean>;
+export type ExecutableProbe = (
+  executablePath: string,
+  timeoutMs: number,
+  env?: NodeJS.ProcessEnv,
+) => Promise<boolean>;
 
 export interface WindowsProbeOptions {
   minTimeoutMs: number;
 }
 
 export function createWindowsProbe(options: WindowsProbeOptions): ExecutableProbe {
-  return async (executablePath, timeoutMs) => {
+  return async (executablePath, timeoutMs, env) => {
     try {
       await execCommand(executablePath, ["--version"], {
+        baseEnv: env,
         timeout: Math.max(timeoutMs, options.minTimeoutMs),
         killSignal: "SIGKILL",
         maxBuffer: 64 * 1024,

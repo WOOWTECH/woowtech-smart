@@ -2,11 +2,10 @@ import { type ChildProcess, type ChildProcessWithoutNullStreams } from "node:chi
 import type { Options, Query, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
 
 import {
-  createProviderEnv,
   createProviderEnvSpec,
   type ProviderRuntimeSettings,
 } from "../../provider-launch-config.js";
-import { buildSelfNodeCommand } from "../../../paseo-env.js";
+import { buildSelfNodeCommand, createExternalProcessEnv } from "../../../paseo-env.js";
 import { spawnProcess } from "../../../../utils/spawn.js";
 import {
   type ClaudeAgentSdkModule,
@@ -91,13 +90,10 @@ function applyRuntimeSettingsToClaudeOptions(
         runtimeSettings,
         overlays: [launchEnv],
       });
-      const providerEnv = createProviderEnv({
-        baseEnv: spawnOptions.env,
-        runtimeSettings,
-        overlays: [launchEnv],
-      });
-      // buildSelfNodeCommand starts again from the daemon's own environment, so
-      // unset the parent Claude Code session's variables there too.
+      // Session-open hooks may explicitly supply a client identity. Keep inherited
+      // SDK/parent identities cleared while honoring this launch-only contribution.
+      providerEnvSpec.envOverlay.CLAUDE_CODE_ENTRYPOINT = launchEnv?.CLAUDE_CODE_ENTRYPOINT;
+      const providerEnv = createExternalProcessEnv(spawnOptions.env, providerEnvSpec.envOverlay);
       const selfNodeCommand = isDefaultRuntime
         ? buildSelfNodeCommand(resolved.args, { ...providerEnv, ...providerEnvSpec.envOverlay })
         : null;

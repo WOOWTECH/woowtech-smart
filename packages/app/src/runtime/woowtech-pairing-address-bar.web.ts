@@ -8,7 +8,7 @@ export function clearPairingLinkFromAddressBar(): void {
   // The unit tests resolve .web files too, and run without a window.
   if (typeof window === "undefined") return;
   const { location, history } = window;
-  if (!location.hash.includes("offer=")) return;
+  if (!location.hash.includes("offer=") && !location.hash.includes("connect=")) return;
   // expo-router keeps its own entry state ({ id }) in history.state.
   history.replaceState(history.state, "", `${location.pathname}${location.search}`);
 }

@@ -7,8 +7,8 @@ import {
   type ReactElement,
 } from "react";
 import { ScrollView, Text, View } from "react-native";
-import { useIsFocused } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
+import { useIsFocused } from "expo-router/react-navigation";
 import { CalendarClock, Plus } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
@@ -291,7 +291,6 @@ function SchedulesScreenBody({
             />
           ) : null}
           <SegmentedControl
-            size="sm"
             value={statusFilter}
             onValueChange={onStatusFilterChange}
             options={statusFilterOptions}

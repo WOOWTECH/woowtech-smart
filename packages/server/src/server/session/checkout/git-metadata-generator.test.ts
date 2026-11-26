@@ -7,6 +7,7 @@ import type { CheckoutDiffCompare, CheckoutDiffResult } from "../../../utils/che
 import type { WorkspaceGitService } from "../../workspace-git-service.js";
 import {
   createGitMetadataGenerator,
+  type GitMetadataGenerator,
   type StructuredTextGeneration,
   type StructuredTextGenerationRequest,
 } from "./git-metadata-generator.js";
@@ -38,6 +39,18 @@ function createGeneration(handler: (request: StructuredTextGenerationRequest<unk
   return { generation, generateCalls };
 }
 
+function createLogger() {
+  const errors: Array<{ obj: object; msg?: string }> = [];
+  return {
+    errors,
+    logger: { error: (obj: object, msg?: string) => errors.push({ obj, msg }) },
+  };
+}
+
+const MANUAL_MODEL_FAILURE = new StructuredAgentFallbackError([
+  { provider: "local-llm", model: "qwen-local", available: true, error: "connection refused" },
+]);
+
 const DIFF_WITH_ONE_FILE: CheckoutDiffResult = {
   diff: "diff --git a/src/foo.ts b/src/foo.ts\n+added\n",
   structured: [
@@ -60,9 +73,10 @@ describe("createGitMetadataGenerator", () => {
       message: "Fix the flaky retry test",
     }));
     const generator = createGitMetadataGenerator({
+      isGenerationEnabled: () => true,
       workspaceGitService: diffSource,
       generation,
-      isGenerationEnabled: () => true,
+      logger: createLogger().logger,
     });
 
     const message = await generator.generateCommitMessage("/repo");
@@ -87,9 +101,10 @@ describe("createGitMetadataGenerator", () => {
       throw new StructuredAgentFallbackError([]);
     });
     const generator = createGitMetadataGenerator({
+      isGenerationEnabled: () => true,
       workspaceGitService: diffSource,
       generation,
-      isGenerationEnabled: () => true,
+      logger: createLogger().logger,
     });
 
     await expect(generator.generateCommitMessage("/repo")).resolves.toBe("Update files");
@@ -104,9 +119,10 @@ describe("createGitMetadataGenerator", () => {
       });
     });
     const generator = createGitMetadataGenerator({
+      isGenerationEnabled: () => true,
       workspaceGitService: diffSource,
       generation,
-      isGenerationEnabled: () => true,
+      logger: createLogger().logger,
     });
 
     await expect(generator.generateCommitMessage("/repo")).resolves.toBe("Update files");
@@ -118,9 +134,10 @@ describe("createGitMetadataGenerator", () => {
       throw new Error("network down");
     });
     const generator = createGitMetadataGenerator({
+      isGenerationEnabled: () => true,
       workspaceGitService: diffSource,
       generation,
-      isGenerationEnabled: () => true,
+      logger: createLogger().logger,
     });
 
     await expect(generator.generateCommitMessage("/repo")).rejects.toThrow("network down");
@@ -133,9 +150,10 @@ describe("createGitMetadataGenerator", () => {
       body: "Retries transient failures up to twice.",
     }));
     const generator = createGitMetadataGenerator({
+      isGenerationEnabled: () => true,
       workspaceGitService: diffSource,
       generation,
-      isGenerationEnabled: () => true,
+      logger: createLogger().logger,
     });
 
     const result = await generator.generatePullRequestText("/repo", "main");
@@ -161,14 +179,61 @@ describe("createGitMetadataGenerator", () => {
       throw new StructuredAgentFallbackError([]);
     });
     const generator = createGitMetadataGenerator({
+      isGenerationEnabled: () => true,
       workspaceGitService: diffSource,
       generation,
-      isGenerationEnabled: () => true,
+      logger: createLogger().logger,
     });
 
     await expect(generator.generatePullRequestText("/repo")).resolves.toEqual({
       title: "Update changes",
       body: "",
     });
+  });
+
+  it.each([
+    [
+      "generateCommitMessage",
+      "CommitMessage",
+      (generator: GitMetadataGenerator) => generator.generateCommitMessage("/repo"),
+    ],
+    [
+      "generatePullRequestText",
+      "PullRequest",
+      (generator: GitMetadataGenerator) => generator.generatePullRequestText("/repo", "main"),
+    ],
+  ] as const)("%s logs the failed provider, model and error", async (_name, schemaName, run) => {
+    const { diffSource } = createDiffSource(DIFF_WITH_ONE_FILE);
+    const { generation } = createGeneration(() => {
+      throw MANUAL_MODEL_FAILURE;
+    });
+    const { logger, errors } = createLogger();
+    const generator = createGitMetadataGenerator({
+      isGenerationEnabled: () => true,
+      workspaceGitService: diffSource,
+      generation,
+      logger,
+    });
+
+    await run(generator);
+
+    expect(errors).toEqual([
+      {
+        obj: {
+          err: MANUAL_MODEL_FAILURE,
+          cwd: "/repo",
+          schemaName,
+          attempts: [
+            {
+              provider: "local-llm",
+              model: "qwen-local",
+              available: true,
+              error: "connection refused",
+            },
+          ],
+        },
+        msg: "Structured git metadata generation failed",
+      },
+    ]);
   });
 });

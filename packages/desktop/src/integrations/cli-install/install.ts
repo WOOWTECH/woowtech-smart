@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import { app } from "electron";
 import log from "electron-log/main";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { commandRunsCli } from "./ownership.js";
 import { resolveCliInstallSourcePath } from "./path.js";
 import { getBundledCliShimPath, getCliTargetPath, getLocalBinDir } from "./paths.js";
@@ -34,15 +35,12 @@ function resolveInstallSourcePath(): string {
 export async function installCli(): Promise<InstallStatus> {
   const targetPath = getCliTargetPath();
   const shimPath = getBundledCliShimPath();
-  const installSourcePath = resolveInstallSourcePath();
-  const binDir = getLocalBinDir();
 
-  await fs.mkdir(binDir, { recursive: true });
-
+  await fs.mkdir(getLocalBinDir(), { recursive: true });
+  if (await pathOrSymlinkExists(targetPath)) {
+    await fs.unlink(targetPath);
+  }
   if (process.platform === "win32") {
-    if (await pathOrSymlinkExists(targetPath)) {
-      await fs.unlink(targetPath);
-    }
     // Generate a thin .cmd trampoline that delegates to the bundled shim.
     // Only the app install path is baked in — internal details (asar layout,
     // entrypoint scripts) live in the bundled shim and update with the app.
@@ -56,10 +54,7 @@ export async function installCli(): Promise<InstallStatus> {
       log.info("[integrations] Added .local\\bin to the user PATH");
     }
   } else {
-    if (await pathOrSymlinkExists(targetPath)) {
-      await fs.unlink(targetPath);
-    }
-    await fs.symlink(installSourcePath, targetPath);
+    await fs.symlink(resolveInstallSourcePath(), targetPath);
   }
 
   const { shellUpdated } = await ensurePathInShellRc();
@@ -68,6 +63,33 @@ export async function installCli(): Promise<InstallStatus> {
   }
 
   return getCliInstallStatus();
+}
+
+/**
+ * Removes the CLI only when the file at the target is the one this app installs, so a command the
+ * user put there some other way survives. The shell rc PATH line stays: it is harmless and other
+ * tools in ~/.local/bin rely on it.
+ */
+export async function uninstallCli(): Promise<InstallStatus> {
+  const targetPath = getCliTargetPath();
+  if (await isOwnInstall(targetPath)) {
+    await fs.unlink(targetPath);
+  } else if (await pathOrSymlinkExists(targetPath)) {
+    log.warn(`[integrations] Left a ${CLI_COMMAND} CLI this app did not install`, { targetPath });
+  }
+  return getCliInstallStatus();
+}
+
+async function isOwnInstall(targetPath: string): Promise<boolean> {
+  const shimPath = getBundledCliShimPath();
+  try {
+    if (process.platform === "win32") {
+      return (await fs.readFile(targetPath, "utf-8")) === renderWindowsCliTrampoline({ shimPath });
+    }
+    return (await fs.readlink(targetPath)) === resolveInstallSourcePath();
+  } catch {
+    return false;
+  }
 }
 
 export async function getCliInstallStatus(): Promise<InstallStatus> {

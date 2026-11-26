@@ -241,6 +241,7 @@ describe("the upload failure message", () => {
     if (!i18n.isInitialized) {
       await i18n.init();
     }
+    await i18n.loadLanguages("zh-TW");
   });
 
   it("says in Traditional Chinese that the connection to the host was lost", () => {

@@ -11,11 +11,17 @@
 // On an iPhone-width layout, settings pages are pushed one over another. A wider layout replaces one
 // settings page with the next (settings-screen.tsx handleSelectSection), where an animation would
 // slide on every section change, so it keeps none.
-import type { NativeStackNavigationOptions } from "@react-navigation/native-stack";
+import type { Stack } from "expo-router";
+import type { ComponentProps } from "react";
 import { Platform, useWindowDimensions } from "react-native";
 
+type NativeStackNavigationOptions = Exclude<
+  NonNullable<ComponentProps<typeof Stack>["screenOptions"]>,
+  (...args: never[]) => unknown
+>;
+
 /** Widths under the md breakpoint (styles/unistyles.ts) are compact, as in useIsCompactFormFactor. */
-export const SETTINGS_SWIPE_BACK_MAX_WIDTH = 720;
+export const SETTINGS_SWIPE_BACK_MAX_WIDTH = 600;
 
 /** How far from the left edge a swipe back may start, in points. */
 export const SETTINGS_SWIPE_BACK_EDGE_WIDTH = 50;

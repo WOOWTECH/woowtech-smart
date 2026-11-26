@@ -68,7 +68,6 @@ export function DesktopNotificationsSection() {
     () => (
       <Button
         variant="ghost"
-        size="sm"
         leftIcon={refreshIcon}
         onPress={handleRefreshPress}
         disabled={isPermissionBusy}
@@ -133,7 +132,6 @@ export function DesktopNotificationsSection() {
           </View>
           <Button
             variant="outline"
-            size="sm"
             onPress={handleSendTestNotification}
             disabled={!notificationsTestable || isPermissionBusy || isSendingTestNotification}
           >
@@ -145,6 +143,7 @@ export function DesktopNotificationsSection() {
       </View>
       {testNotificationState.status === "success" ? (
         <Alert
+          size="sm"
           variant="success"
           title={t("woowtech.desktopNotifications.successTitle")}
           description={t("woowtech.desktopNotifications.successDescription")}
@@ -161,6 +160,7 @@ export function DesktopNotificationsSection() {
       ) : null}
       {testNotificationState.status === "error" ? (
         <Alert
+          size="sm"
           variant="error"
           title={t("woowtech.desktopNotifications.failedTitle")}
           description={testNotificationState.message}

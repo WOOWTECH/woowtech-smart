@@ -42,6 +42,7 @@ function metadataFixture() {
     },
   });
   const adapter = createAgentStructuredTextGeneration({
+    logger: pino({ level: "silent" }),
     agentManager: new AgentManager({
       logger: pino({ level: "silent" }),
       clients: {},
@@ -69,6 +70,7 @@ function metadataFixture() {
     },
   };
   const deps = {
+    logger: pino({ level: "silent" }),
     workspaceGitService,
     generation,
     buildMetadataPrompt: async () => {
@@ -105,6 +107,7 @@ describe("woowtech git metadata OFF", () => {
   it("also blocks the production instructions builder before repository lookup", async () => {
     const f = metadataFixture();
     const generator = createGitMetadataGenerator({
+      logger: pino({ level: "silent" }),
       workspaceGitService: f.deps.workspaceGitService,
       generation: f.deps.generation,
     });

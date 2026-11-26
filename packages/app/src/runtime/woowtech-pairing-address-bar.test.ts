@@ -25,14 +25,17 @@ describe("the web app's address bar after a pairing link", () => {
     }).toEqual({ hash: "", pathname: "/settings/general", search: "?a=1", state: { id: "x" } });
   });
 
-  it("drops a fragment that carries offer= after another #, which is never imported", () => {
-    window.history.replaceState({ id: "y" }, "", "/#x#offer=abc");
+  it.each(["#x#offer=abc", "#connect=relay-credentials", "#x#connect=relay-credentials"])(
+    "drops any fragment carrying pairing credentials (%s)",
+    (fragment) => {
+      window.history.replaceState({ id: "y" }, "", `/${fragment}`);
 
-    clearPairingLinkFromAddressBar();
+      clearPairingLinkFromAddressBar();
 
-    expect(window.location.hash).toBe("");
-    expect(window.history.state).toEqual({ id: "y" });
-  });
+      expect(window.location.hash).toBe("");
+      expect(window.history.state).toEqual({ id: "y" });
+    },
+  );
 
   it("leaves other fragments alone", () => {
     window.history.replaceState({ id: "z" }, "", "/settings#other");

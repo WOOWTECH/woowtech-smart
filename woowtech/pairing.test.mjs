@@ -170,24 +170,32 @@ test("app links on older QR codes still open the app at its start screen", async
 // QR codes. Upstream's own pairing links only ever reach its web app, so a merge that limits
 // OfferLinkListener to the web, or makes it parse links with the URL class, would stop older QR
 // codes pairing through the phone's camera without failing anything else.
-test("the app hands every link it is opened with to handlePairingLink, on every platform", () => {
-  const layoutPath = "packages/app/src/app/_layout.tsx";
-  const layout = readFileSync(path.join(repoRoot, layoutPath), "utf8");
-
+function assertOfferLinkListener(layout) {
   const mounts = layout.split("\n").filter((line) => line.includes("<OfferLinkListener"));
-  assert.equal(mounts.length, 1, `${layoutPath} mounts OfferLinkListener ${mounts.length} times`);
+  assert.equal(mounts.length, 1, `the app mounts OfferLinkListener ${mounts.length} times`);
   assert.match(
     mounts[0],
-    /^\s*<OfferLinkListener\b[^{}]*=\{\w+\}\s*\/>$/,
+    /^\s*<OfferLinkListener\s*\/>$/,
     `OfferLinkListener is mounted under a condition: ${mounts[0].trim()}`,
+  );
+  const wrapper = /^function ProvidersWrapper\([\s\S]*?^\}$/m.exec(layout)?.[0];
+  assert.ok(
+    wrapper?.includes("<OfferLinkListener />"),
+    "the listener must mount with the providers",
+  );
+  assert.doesNotMatch(
+    wrapper,
+    /\bif\s*\(|&&|\?|Platform\.|\bisWeb\b|\bisNative\b|\bgetIsElectron\b/,
+    "the provider wrapper must not conditionally mount the listener",
   );
 
   const listener = /^function OfferLinkListener\([\s\S]*?^\}$/m.exec(layout)?.[0];
-  assert.ok(listener, `OfferLinkListener is gone from ${layoutPath}`);
+  assert.ok(listener, "OfferLinkListener is gone from the app layout");
   for (const call of [
     "Linking.getInitialURL()",
     'Linking.addEventListener("url"',
     "handlePairingLink(",
+    "subscription.remove()",
   ]) {
     assert.ok(listener.includes(call), `OfferLinkListener no longer calls ${call}`);
   }
@@ -198,7 +206,26 @@ test("the app hands every link it is opened with to handlePairingLink, on every 
   );
   assert.ok(
     layout.includes('import { handlePairingLink } from "@/runtime/woowtech-pairing-link";'),
-    `${layoutPath} does not import handlePairingLink`,
+    "the app layout does not import handlePairingLink",
+  );
+}
+
+test("the app hands every link it is opened with to handlePairingLink, on every platform", () => {
+  const layout = readFileSync(path.join(repoRoot, "packages/app/src/app/_layout.tsx"), "utf8");
+  assertOfferLinkListener(layout);
+  const mount = "<OfferLinkListener />";
+  for (const replacement of [
+    "",
+    `${mount}${mount}`,
+    `{isWeb && (${mount})}`,
+    `{isNative && (\n        ${mount}\n        )}`,
+  ]) {
+    assert.throws(() => assertOfferLinkListener(layout.replace(mount, replacement)));
+  }
+  assert.throws(() =>
+    assertOfferLinkListener(
+      layout.replace("void handlePairingLink(url, {", "void ignoreLink(url, {"),
+    ),
   );
 });
 
@@ -346,20 +373,46 @@ test("the daemon's fixed CORS origins leave the hosted web app out", async () =>
   assert.doesNotMatch(fixed, /BRAND_WEB_APP/);
 });
 
-test("host labels use normal server_info with hydration and generation guards", () => {
+function assertHostLabelClientLifetime(runtime) {
+  const attach = /  private attachActiveClient\([\s\S]*?^  \}/m.exec(runtime)?.[0] ?? "";
+  assert.match(
+    attach,
+    /const unobserve = observeHostLabelServerInfo\(\{\s*client,\s*isCurrent: \(\) => this.activeClient === client,\s*receive: this.onServerInfo,/,
+  );
+  assert.match(
+    attach,
+    /this.unsubscribeClientHandlers = \(\) => \{\s*unobserve\(\);\s*unmount\?\.\(\);/,
+  );
+  // A replacement can be probed while the old client remains active. Label delivery belongs
+  // to the active socket, not the version of a pending switch; retirement removes its listener.
+  const dispose =
+    /  private async disposePreviousActiveClient\([\s\S]*?^  \}/m.exec(runtime)?.[0] ?? "";
+  assert.match(
+    dispose,
+    /this.unsubscribeClientHandlers\(\);[\s\S]*this.activeClient = null;[\s\S]*await previousClient.close\(\)/,
+  );
+}
+
+test("host labels use normal server_info with hydration and active-client guards", () => {
   const runtime = readFileSync(
     path.join(repoRoot, "packages/app/src/runtime/host-runtime.ts"),
     "utf8",
   );
   assert.match(runtime, /onServerInfo: \(info\) => this.fillHostLabel\(controller, info\)/);
-  assert.match(runtime, /const unobserve = observeHostLabelServerInfo\(\{/);
-  assert.match(
-    runtime,
-    /isCurrent: \(\) =>\s*this.isCurrentSwitchRequest\(requestVersion\) && this.activeClient === client/,
+  assertHostLabelClientLifetime(runtime);
+  assert.throws(() =>
+    assertHostLabelClientLifetime(
+      runtime.replace("isCurrent: () => this.activeClient === client", "isCurrent: () => true"),
+    ),
+  );
+  assert.throws(() => assertHostLabelClientLifetime(runtime.replace("unobserve();", "")));
+  const observer = readFileSync(
+    path.join(repoRoot, "packages/app/src/runtime/woowtech-host-label.ts"),
+    "utf8",
   );
   assert.match(
-    runtime,
-    /this.unsubscribeClientHandlers = \(\) => \{\s*unobserve\(\);\s*unmount\?\.\(\);/,
+    observer,
+    /if \(!info \|\| !input.isCurrent\(\) \|\| input.client.getConnectionState\(\).status !== "connected"\)\s*return;\s*input.receive\(info\)/,
   );
   assert.match(
     runtime,

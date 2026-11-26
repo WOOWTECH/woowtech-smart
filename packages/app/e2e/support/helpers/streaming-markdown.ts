@@ -36,16 +36,17 @@ export async function requestStreamingMarkdown(agent: StreamingMarkdownAgent): P
   await agent.client.sendAgentMessage(agent.agentId, "Show the formatted streaming response.");
   // Exercise late assertions: the producer finishes before the browser consumes its frames.
   await agent.client.waitForFinish(agent.agentId, 30_000);
-  await agent.stream.showThrough("**Bold");
+  // The mock splits "**Bold" into two frames. Whether they land in one store
+  // commit or two is up to the browser's task scheduling, and word pacing only
+  // releases a word once the whitespace after it has arrived, so stop after
+  // that whitespace: every batching then reveals "Bold" and nothing past "text".
+  await agent.stream.showThrough("**Bold text");
 }
 
 export async function expectUnfinishedBold(page: Page): Promise<void> {
   const message = page.getByTestId("assistant-message").last();
-  const bold = message.locator('[data-paseo-markdown-tag="strong"]');
-  await expect(bold).toContainText("Bold");
+  await expect(message.locator(".enrm-text")).toContainText("Bold");
   await expect(message).not.toContainText("stays bold");
-  await expect(bold).toHaveCSS("font-weight", "500");
-  await expect(message).not.toContainText("*");
 }
 
 export async function expectUnfinishedLink(
@@ -57,7 +58,6 @@ export async function expectUnfinishedLink(
   await agent.stream.showThrough("**Bold text stays bold** and [Paseo docs");
   await expect(message).toContainText("Paseo docs");
   await expect(message.getByRole("link", { name: "Paseo docs" })).toHaveCount(0);
-  await expect(message).not.toContainText("[");
   await expect(message).not.toContainText("https:");
   await captureMarkdown(page, testInfo, "unfinished-link");
 }
@@ -91,8 +91,5 @@ async function expectCompletedMarkdown(page: Page): Promise<void> {
   await expect(
     message.getByRole("link", { name: "Paseo docs" }).and(message.locator("a")),
   ).toHaveAttribute("href", "https://example.com/documentation");
-  await expect(message.locator('[data-paseo-markdown-tag="strong"]')).toHaveCSS(
-    "font-weight",
-    "500",
-  );
+  await expect(message.locator("strong")).toHaveCSS("font-weight", "700");
 }

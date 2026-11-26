@@ -6,14 +6,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import ts from "typescript";
 
-function source(file) {
-  return ts.createSourceFile(
-    file,
-    readFileSync(new URL(`../${file}`, import.meta.url), "utf8"),
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX,
-  );
+function source(file, contents = readFileSync(new URL(`../${file}`, import.meta.url), "utf8")) {
+  return ts.createSourceFile(file, contents, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 }
 function findAll(node, predicate) {
   const found = [];
@@ -138,9 +132,8 @@ test("hook returns its directory cleanup and tracks identity, focus and descript
 });
 
 // The race fix lives in an upstream file (woowtech/README.md, 16 T1). A merge that takes upstream's
-// requestDemandRefresh or releaseSubscriptions drops it without a conflict, so pin its four parts.
-test("directory sync never lets a refresh that outlived its subscriptions satisfy the connection", () => {
-  const tree = source("packages/app/src/runtime/directory-sync/index.ts");
+// requestDemandRefresh or releaseSubscriptions drops it without a conflict, so pin its lifecycle.
+function assertDirectoryRefreshLifetime(tree) {
   const text = (node) => node.getText(tree).replace(/\s+/g, " ");
   const method = (name) => {
     const found = findAll(
@@ -159,11 +152,18 @@ test("directory sync never lets a refresh that outlived its subscriptions satisf
     ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
       node.operator === ts.SyntaxKind.PlusPlusToken &&
       isGeneration(node.operand));
+  const release = method("releaseSubscriptions");
   assert.ok(
-    method("releaseSubscriptions").body.statements.some(
+    release.body.statements.some(
       (statement) => ts.isExpressionStatement(statement) && bumps(statement.expression),
     ),
     "releaseSubscriptions must count every drop: this.subscriptionGeneration += 1",
+  );
+  assert.ok(
+    release.body.statements.some(
+      (statement) => text(statement) === "this.satisfiedDemandSource = null;",
+    ),
+    "releasing subscriptions must clear an already satisfied connection",
   );
 
   const refresh = method("requestDemandRefresh");
@@ -183,10 +183,31 @@ test("directory sync never lets a refresh that outlived its subscriptions satisf
   assert.ok(check >= 0 && start > check, "satisfied check or refresh start not found");
   const between = new Set(statements.slice(check + 1, start).map(text));
   assert.ok(
-    between.has("this.satisfiedDemandSource = null;") &&
-      between.has("const generation = this.subscriptionGeneration;"),
-    "after the satisfied check, clear the mark and capture the generation before the refresh starts",
+    between.has("this.satisfiedDemandSource = null;"),
+    "after the satisfied check, clear the mark before the refresh starts",
   );
+  // Capturing before the satisfied check is safe too: neither that check nor the clear awaits.
+  // Follow the captured binding rather than requiring its old name or its exact statement order.
+  const captures = statements
+    .slice(0, start)
+    .flatMap((statement) =>
+      ts.isVariableStatement(statement) && statement.declarationList.flags & ts.NodeFlags.Const
+        ? statement.declarationList.declarations.filter(
+            (declaration) => declaration.initializer && isGeneration(declaration.initializer),
+          )
+        : [],
+    );
+  assert.equal(
+    captures.length,
+    1,
+    "capture the subscription generation before starting the refresh",
+  );
+  const generation = text(captures[0].name);
+  const generationComparison = (node, operator) =>
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === operator &&
+    ((isGeneration(node.left) && text(node.right) === generation) ||
+      (text(node.left) === generation && isGeneration(node.right)));
 
   const satisfies = findAll(
     tree,
@@ -203,11 +224,11 @@ test("directory sync never lets a refresh that outlived its subscriptions satisf
       guarded =
         ts.isIfStatement(child.parent) &&
         child.parent.thenStatement === child &&
-        text(child.parent.expression) === "generation === this.subscriptionGeneration";
+        generationComparison(child.parent.expression, ts.SyntaxKind.EqualsEqualsEqualsToken);
     }
     assert.ok(
       guarded,
-      `${text(node)} must sit under if (generation === this.subscriptionGeneration)`,
+      `${text(node)} must compare the captured and current subscription generations`,
     );
   }
 
@@ -219,14 +240,99 @@ test("directory sync never lets a refresh that outlived its subscriptions satisf
       node.expression.name.text === "finally",
   );
   assert.equal(finallies.length, 1, "demand refresh must keep one finally");
+  const finalizer = finallies[0].arguments[0];
+  const bindings = new Map(
+    finalizer.body.statements.flatMap((statement) =>
+      ts.isVariableStatement(statement)
+        ? statement.declarationList.declarations.map((declaration) => [
+            text(declaration.name),
+            declaration.initializer,
+          ])
+        : [],
+    ),
+  );
+  assert.equal(text(bindings.get("current")), "this.connection.source");
+  assert.equal(
+    text(bindings.get("sourceChanged")),
+    "current.clientGeneration !== source.clientGeneration || current.connectionEpoch !== source.connectionEpoch",
+    "a changed client generation or reconnect epoch must request a fresh directory",
+  );
+  assert.ok(
+    generationComparison(
+      bindings.get("subscriptionsReleased"),
+      ts.SyntaxKind.ExclamationEqualsEqualsToken,
+    ),
+    "the retry condition must detect subscriptions released during this refresh",
+  );
+  assert.equal(
+    text(finalizer.body.statements[0]),
+    "this.demandRefresh = null;",
+    "clear the in-flight refresh before retrying",
+  );
   const retries = findAll(
-    finallies[0].arguments[0],
+    finalizer,
     (node) =>
       ts.isIfStatement(node) &&
-      text(node.expression).includes("generation !== this.subscriptionGeneration") &&
-      text(node.thenStatement).includes("this.requestDemandRefresh()"),
+      text(node.expression) === "this.hasDemand() && (sourceChanged || subscriptionsReleased)" &&
+      findAll(
+        node.thenStatement,
+        (child) =>
+          ts.isCallExpression(child) && text(child.expression) === "this.requestDemandRefresh",
+      ).length === 1,
   );
-  assert.equal(retries.length, 1, "finally must refresh again when subscriptions were dropped");
+  assert.equal(
+    retries.length,
+    1,
+    "finally must retry current demand after a source change or subscription release",
+  );
+}
+
+const directoryFile = "packages/app/src/runtime/directory-sync/index.ts";
+test("directory sync never lets a refresh that outlived its subscriptions satisfy the connection", () => {
+  assertDirectoryRefreshLifetime(source(directoryFile));
+});
+
+test("the directory lifetime guard rejects dropped release, completion and retry protections", () => {
+  const contents = readFileSync(new URL(`../${directoryFile}`, import.meta.url), "utf8");
+  const mutations = [
+    ["release generation", "this.subscriptionGeneration += 1;", ""],
+    ["release satisfaction", "this.satisfiedDemandSource = null;", ""],
+    [
+      "refresh satisfaction",
+      "this.satisfiedDemandSource = null;\n    const refresh =",
+      "const refresh =",
+    ],
+    [
+      "generation capture",
+      "const subscriptionGeneration = this.subscriptionGeneration;",
+      "const subscriptionGeneration = 0;",
+    ],
+    [
+      "stale completion",
+      "if (this.subscriptionGeneration === subscriptionGeneration)",
+      "if (true)",
+    ],
+    [
+      "released-subscription retry",
+      "const subscriptionsReleased = this.subscriptionGeneration !== subscriptionGeneration;",
+      "const subscriptionsReleased = false;",
+    ],
+    ["new-epoch retry", "current.connectionEpoch !== source.connectionEpoch", "false"],
+    [
+      "retry dispatch",
+      "if (this.hasDemand() && (sourceChanged || subscriptionsReleased))",
+      "if (this.hasDemand() && sourceChanged)",
+    ],
+  ];
+  for (const [name, before, after] of mutations) {
+    const changed = contents.replace(before, after);
+    assert.notEqual(changed, contents, `${name}: mutation did not match`);
+    assert.throws(
+      () => assertDirectoryRefreshLifetime(source(directoryFile, changed)),
+      { code: "ERR_ASSERTION" },
+      `${name}: the guard accepted the regression`,
+    );
+  }
 });
 
 // While the missing-workspace owner holds demand, opening the sidebar is not the host's first

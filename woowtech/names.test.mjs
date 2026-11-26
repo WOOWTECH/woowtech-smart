@@ -22,6 +22,63 @@ function read(relativePath) {
   return readFileSync(new URL(relativePath, repoRoot), "utf8");
 }
 
+// These names identify upstream works or protocols, not the product. Scope each exception to
+// its owning file and exact message shape so new public copy in that file still fails the guard.
+const PRESERVED_UPSTREAM_TEXT = {
+  "packages/app/src/screens/settings/woowtech-better-paseo-license.ts": [
+    /^export const BETTER_PASEO_NAME = "Better Paseo \/ Beautiful Chat";$/,
+  ],
+  // Agent-only update attachments and instruction snapshots retain their upstream vocabulary.
+  "packages/server/src/server/agent/change-request-watches/index.ts": [
+    /^\s*prompt: \[`Paseo change request update for \$\{url\}`, \.\.\.events\]\.join\("\\n"\),$/,
+  ],
+  "packages/server/src/server/agent/providers/codex/instruction-snapshot.ts": [
+    /^\s*"This is the complete current set of Paseo-supplied instructions\.[^"]*<paseo_instruction_snapshot>" \+$/,
+  ],
+  // Provider-side bridge errors name the stable Paseo tool/RPC protocol. The shared plugin is
+  // installed into OpenCode independently of this workspace and has no product-brand import.
+  "packages/server/src/server/agent/providers/opencode/bridge.ts": [
+    /^\s*throw new Error\(`OpenCode session \$\{input.sessionId\} is already bound to a Paseo agent`\);$/,
+    /^\s*throw new OpenCodeBridgeClientError\(404, `Paseo tool not found: \$\{input.toolName\}`\);$/,
+  ],
+  "packages/server/src/server/agent/providers/opencode/v2/shared-bridge-plugin.mjs": [
+    /^\s*const message = payload\?\.error \?\? `Paseo tool bridge returned HTTP \$\{response.status\}`;$/,
+    /^\s*if \(inUse.has\(name\)\) throw new Error\(`Conflicting Paseo tool definition: \$\{name\}`\);$/,
+    /^\s*throw new Error\("Invalid Paseo bridge binding"\);$/,
+    /^\s*return \{ error: "OpenCode session is already bound to another Paseo bridge" \};$/,
+  ],
+  // The upstream gallery counts installs through this HTTP header; it is not display text.
+  "packages/server/src/server/plugins/managed-source/registry.ts": [
+    /^\s*if \(install\) headers\["X-Paseo-Install"\] = "1";$/,
+  ],
+};
+
+function isPreservedUpstreamText(file, line) {
+  return PRESERVED_UPSTREAM_TEXT[file]?.some((pattern) => pattern.test(line)) ?? false;
+}
+
+function publicNameHits(patterns, options) {
+  return findInShippedSources(patterns, options).filter((hit) => {
+    const separator = hit.lastIndexOf(":");
+    const file = hit.slice(0, separator);
+    const line = read(file).split("\n")[Number(hit.slice(separator + 1)) - 1];
+    return !isPreservedUpstreamText(file, line);
+  });
+}
+
+test("upstream legal and protocol names are allowed only in their owning files", () => {
+  for (const [file, patterns] of Object.entries(PRESERVED_UPSTREAM_TEXT)) {
+    const lines = read(file).split("\n");
+    for (const pattern of patterns) {
+      const line = lines.find((candidate) => pattern.test(candidate));
+      assert.ok(line, `${file}: stale exception ${pattern}`);
+      assert.equal(isPreservedUpstreamText(file, line), true);
+      assert.equal(isPreservedUpstreamText("packages/app/src/new-screen.tsx", line), false);
+    }
+    assert.equal(isPreservedUpstreamText(file, 'throw new Error("Paseo is unavailable");'), false);
+  }
+});
+
 // The config plugins prebuild runs (expo/config-plugins, as the app resolves it).
 const { AndroidConfig } = createRequire(new URL("../packages/app/package.json", import.meta.url))(
   "expo/config-plugins",
@@ -96,7 +153,7 @@ test("installers are named after the brand and the app links to the dmg the mac 
 });
 
 test("app text outside the translations names the brand, not Paseo", () => {
-  const naming = findInShippedSources([/\bPaseo\b/], {
+  const naming = publicNameHits([/\bPaseo\b/], {
     dirs: ["packages/app/src", "packages/app/public"],
     fileTypes: /\.(?:[cm]?[jt]sx?|json|html)$/,
     skipPaths: [
@@ -105,6 +162,8 @@ test("app text outside the translations names the brand, not Paseo", () => {
       "packages/app/src/i18n/brand.ts",
       // The license texts of the dependencies, reproduced as they are. Paseo's own is one of them.
       "packages/app/src/screens/settings/mobile-third-party-licenses.json",
+      // Imported only by client-state's snapshots/source-retention/source.browser tests.
+      "packages/app/src/plugins/client-state/fixtures.ts",
     ],
     skipComments: true,
     allowLines: [
@@ -148,7 +207,7 @@ test("the daemon's messages name the brand, not Paseo", () => {
   // Errors and upgrade prompts the app and the CLI show, the diagnostics report
   // people send us, and the text of pull requests the daemon opens on GitHub. They
   // name the product with PRODUCT_NAME (packages/protocol/src/brand-name.ts).
-  const naming = findInShippedSources([/\bPaseo\b/], {
+  const naming = publicNameHits([/\bPaseo\b/], {
     dirs: ["packages/server/src"],
     skipComments: true,
     skipPaths: [
@@ -159,6 +218,8 @@ test("the daemon's messages name the brand, not Paseo", () => {
       // Voice-mode instructions for the agent. Voice mode needs local speech, which
       // woowtech smart does not ship.
       "packages/server/src/server/voice-config.ts",
+      // Recorded QA evidence read only by rpiv-ask-user-question/index.test.ts.
+      "packages/server/src/server/agent/providers/pi/extensions/rpiv-ask-user-question/fixtures/cancel-result.json",
     ],
     allowLines: [
       // Upstream's plugin API: its name, and the Paseo versions plugins are written for.

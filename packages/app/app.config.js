@@ -2,17 +2,21 @@ const fs = require("node:fs");
 const path = require("node:path");
 const pkg = require("./package.json");
 const withAndroidAsyncStorageSize = require("./plugins/with-android-async-storage-size");
+const withAndroidOptionalCamera = require("./plugins/with-android-optional-camera");
 const withAndroidProfileable = require("./plugins/with-android-profileable");
 const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const withWoowtechPush = require("./plugins/with-woowtech-push");
 const { iosGoogleServiceInfoPlist } = require("./plugins/woowtech-ios-firebase");
+const withAndroidScroll = require("./modules/paseo-scroll/app.plugin");
+const withAndroidDisplayMetrics = require("./modules/paseo-display-metrics/app.plugin");
 const { getNativeReleaseVersion } = require("./native-release-version");
 // The brand this checkout builds (woowtech/brands): woowtech smart unless a release tree applied
 // another one with woowtech/tools/apply-brand.mjs.
 const brand = require("../../woowtech/brands/index.cjs").appliedBrand();
 const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
+const isWatchdogBuild = process.env.PASEO_WATCHDOG_BUILD === "1";
 const isProfileBuild = process.env.PASEO_PROFILE_BUILD === "1";
 
 // Keep CFBundleName independent of Expo's sanitized PRODUCT_NAME. The home-screen
@@ -161,7 +165,7 @@ export default {
     name: variant.name,
     slug: "voice-mobile",
     version: nativeReleaseVersion.appVersion,
-    orientation: "portrait",
+    orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: brand.scheme,
     // Chinese launchers show the Chinese name.
@@ -244,10 +248,14 @@ export default {
       searchPaths: ["../../node_modules", "./node_modules"],
     },
     plugins: [
+      "./modules/paseo-hardware-keyboard/app.plugin",
       "expo-router",
       withPasteInput,
+      withAndroidScroll,
+      withAndroidDisplayMetrics,
       [withAndroidAsyncStorageSize, 64],
       ...buildProfile.cameraPlugins,
+      withAndroidOptionalCamera,
       [
         "expo-splash-screen",
         {
@@ -285,6 +293,7 @@ export default {
             usesCleartextTraffic: true,
           },
           ios: {
+            enableSceneSupport: true,
             // woowtech push: the Firebase SDK comes from CocoaPods (disableSPM above) as static
             // frameworks. Expo 54's precompiled React Native keeps some pods as static libraries,
             // which rules out dynamic frameworks; RNFirebase's pods are listed with them.
@@ -296,7 +305,7 @@ export default {
         },
       ],
       ...buildProfile.fdroidPlugins,
-      ...(isProfileBuild ? [withAndroidProfileable] : []),
+      ...(isProfileBuild || isWatchdogBuild ? [withAndroidProfileable] : []),
     ],
     experiments: {
       typedRoutes: true,
@@ -307,6 +316,9 @@ export default {
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       aiContentReportUrl: process.env.WOOWTECH_AI_CONTENT_REPORT_URL?.trim() || undefined,
+      watchdogBuild: isWatchdogBuild,
+      diagnosticRevision: process.env.PASEO_DIAGNOSTIC_REVISION,
+      diagnosticBuildTime: process.env.PASEO_DIAGNOSTIC_BUILD_TIME,
       router: {},
       eas: {
         projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
