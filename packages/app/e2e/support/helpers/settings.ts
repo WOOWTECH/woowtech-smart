@@ -237,7 +237,7 @@ export async function selectHostConnectionType(
 
 export async function addDirectHostFromSettings(
   page: Page,
-  input: { host: string; port: number; password?: string },
+  input: { host: string; port: number; password?: string; confirmSavedHost?: true },
 ): Promise<void> {
   await openAddHostFlow(page);
   await selectHostConnectionType(page, "direct");
@@ -247,6 +247,9 @@ export async function addDirectHostFromSettings(
     await page.getByTestId("direct-password-input").fill(input.password);
   }
   await page.getByTestId("direct-host-submit").click();
+  if (input.confirmSavedHost) {
+    await page.getByTestId("host-confirmation-connect").click();
+  }
   await expect(page.getByTestId("add-host-modal")).toHaveCount(0, { timeout: 30_000 });
 }
 

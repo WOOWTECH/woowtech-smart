@@ -392,7 +392,11 @@ test("sidebar Add host completes without navigating", async ({ page }) => {
 test("Settings Add host opens the saved host Overview", async ({ page }) => {
   await gotoAppShell(page);
   await openSettings(page);
-  await addDirectHostFromSettings(page, { host: "127.0.0.1", port: Number(getE2EDaemonPort()) });
+  await addDirectHostFromSettings(page, {
+    host: "127.0.0.1",
+    port: Number(getE2EDaemonPort()),
+    confirmSavedHost: true,
+  });
   await expectSettingsHeader(page, "Overview");
   await expect(page).toHaveURL(new RegExp(`/settings/hosts/${getServerId()}/host$`));
 });
