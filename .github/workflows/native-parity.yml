@@ -22,7 +22,7 @@ env:
 jobs:
   desktop:
     name: ${{ matrix.brand }} desktop (${{ matrix.os }})
-    if: ${{ inputs.target != 'mobile' }}
+    if: ${{ inputs.target != 'mobile' && inputs.target != 'android-native' }}
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -102,5 +102,44 @@ jobs:
         with:
           name: native-${{ matrix.brand }}-mobile-bundles-${{ github.sha }}
           path: artifacts/native-parity
+          if-no-files-found: error
+          retention-days: 7
+
+  android-native:
+    name: ${{ matrix.brand }} Android ARM64 APK
+    if: ${{ inputs.target == 'all' || inputs.target == 'android-native' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        brand: [woowtech, apporo]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply candidate brand
+        run: node woowtech/tools/apply-brand.mjs "$PARITY_BRAND"
+        env:
+          PARITY_BRAND: ${{ matrix.brand }}
+      - name: Build diagnostic release APK
+        run: npm run build:apk:arm64
+      - name: Verify APK identity and architecture
+        run: node woowtech/tools/native-parity.mjs verify-android
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: native-${{ matrix.brand }}-android-arm64-${{ github.sha }}
+          path: |
+            artifacts/paseo-dogfood-arm64.apk
+            artifacts/native-parity
           if-no-files-found: error
           retention-days: 7

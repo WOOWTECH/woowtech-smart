@@ -537,12 +537,23 @@ source commit, brand, architecture, version and archive SHA256. Artifacts expire
 after seven days; this workflow does not update release channels or publish tags.
 Use `native_parity_target` to repeat only a failing platform after a fix.
 `macos` runs both Mac architectures; `macos-intel` repeats just the Intel job.
+Desktop candidate checks also open Tasks through the command center, reload its
+built-in settings and cancel shortcut recording without leaving settings. On a
+host requiring software rendering, pass Chromium flags through
+`PASEO_DESKTOP_SMOKE_ELECTRON_FLAGS`; keep that environment-specific workaround out
+of production defaults.
 
 The mobile jobs export iOS and Android separately and verify their bundle hashes
 and Expo identities. These are Metro/Hermes checks, not native compilation or device
 acceptance. Before shipping mobile builds, also verify installation, pairing,
 notifications, microphone/camera permissions and the affected interactions on each
 native platform. A narrow browser viewport cannot replace those checks.
+
+`android-native` builds each brand's ARM64 diagnostic release APK with the local
+Gradle toolchain and checks the compiled package ID, version and ABI with `aapt`.
+These test-key artifacts are separate from store signing and retain the dogfood
+diagnostics described in [Android](android.md). iOS native compilation and device
+checks still need a prepared Xcode environment.
 
 Keep signed installer and upgrade acceptance separate from candidate receipts.
 The macOS candidate disables the installation prompt, and the desktop tests use

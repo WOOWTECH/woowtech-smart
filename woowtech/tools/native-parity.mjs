@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -80,7 +87,7 @@ switch (process.argv[2]) {
       "Built-in Tasks payload is missing",
     );
     const { smokePackagedDesktopApp } = require("../../packages/desktop/e2e/packaged-app-smoke.js");
-    await smokePackagedDesktopApp({ appPath: app });
+    await smokePackagedDesktopApp({ appPath: app, verifyWebParity: true });
     receipt("desktop", {
       app: path.relative(root, app),
       archiveSha256: await digest(archive),
@@ -91,6 +98,9 @@ switch (process.argv[2]) {
         "built-in plugin catalog",
         "CLI",
         "real PTY",
+        "Open Tasks command and board",
+        "built-in settings and reload",
+        "shortcut cancellation keeps settings open",
       ],
       signed: false,
       published: false,
@@ -125,6 +135,39 @@ switch (process.argv[2]) {
     });
     break;
   }
+  case "verify-android": {
+    const apk = path.join(root, "artifacts/paseo-dogfood-arm64.apk");
+    const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
+    assert.ok(sdk, "ANDROID_HOME must point to an installed Android SDK");
+    const buildTools = path.join(sdk, "build-tools");
+    const aapt = readdirSync(buildTools)
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+      .map((directory) => path.join(buildTools, directory, "aapt"))
+      .find((file) => existsSync(file));
+    assert.ok(aapt, "Android SDK build-tools must provide aapt");
+    const metadata = execFileSync(aapt, ["dump", "badging", apk], { encoding: "utf8" });
+    const { getNativeReleaseVersion } = require("../../packages/app/native-release-version.js");
+    const nativeVersion = getNativeReleaseVersion(version);
+    assert.equal(/^package: name='([^']+)'/m.exec(metadata)?.[1], brand.mobileAppId);
+    assert.equal(/versionName='([^']+)'/.exec(metadata)?.[1], nativeVersion.appVersion);
+    assert.equal(
+      /versionCode='([^']+)'/.exec(metadata)?.[1],
+      String(nativeVersion.androidVersionCode),
+    );
+    assert.equal(/^native-code: (.+)$/m.exec(metadata)?.[1], "'arm64-v8a'");
+    receipt("android-apk", {
+      appId: brand.mobileAppId,
+      apk: path.relative(root, apk),
+      sha256: await digest(apk),
+      validation:
+        "Native ARM64 diagnostic APK compiled; installation and device acceptance pending",
+      releaseSigned: false,
+      published: false,
+    });
+    break;
+  }
   default:
-    throw new Error("Usage: native-parity.mjs prepare-desktop|verify-desktop|verify-mobile");
+    throw new Error(
+      "Usage: native-parity.mjs prepare-desktop|verify-desktop|verify-mobile|verify-android",
+    );
 }

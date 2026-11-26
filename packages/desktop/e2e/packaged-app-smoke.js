@@ -165,7 +165,12 @@ function createIsolatedDesktopEnv({ home, listen, userData, cdpPort }) {
     PASEO_HOME: home,
     PASEO_LISTEN: listen,
     PASEO_ELECTRON_USER_DATA_DIR: userData,
-    PASEO_ELECTRON_FLAGS: `--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdpPort}`,
+    PASEO_ELECTRON_FLAGS: [
+      process.env.PASEO_DESKTOP_SMOKE_ELECTRON_FLAGS,
+      `--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdpPort}`,
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -823,6 +828,45 @@ async function openSmokeWorkspace({ appPath, env, page, daemonHome }) {
   console.log(`Packaged desktop smoke: renderer opened workspace ${workspace.workspaceId}`);
 }
 
+async function assertWebParityInteractions(page) {
+  page.setDefaultTimeout(30_000);
+  page.setDefaultNavigationTimeout(30_000);
+  // Exercise the built-in settings and command routing in the actual packaged
+  // renderer, using the same user actions as the Web regression scenario.
+  await page.evaluate(() =>
+    localStorage.setItem("@paseo:onboarding", JSON.stringify({ completedAt: "1970-01-01" })),
+  );
+  await page.goto(new URL("/new", page.url()).href);
+  await page.getByTestId("sidebar-search").click();
+  const commands = page.getByTestId("command-center-panel");
+  await commands.getByTestId("command-center-input").fill("Open Tasks");
+  await commands.getByText("Open Tasks", { exact: true }).click();
+  await page.waitForURL(/\/h\/[^/]+\/plugin\/better-paseo\/surface\/tasks/);
+  await page.getByTestId("lane-header-done").waitFor({ state: "visible" });
+  const host = new URL(page.url()).pathname.split("/")[2];
+  await page.goto(
+    new URL(`/settings/hosts/${host}/plugins/better-paseo/chat-presentation`, page.url()).href,
+  );
+  await page.getByRole("radio", { name: "Chat presentation", exact: true }).waitFor();
+  await page.getByRole("radio", { name: "Tasks board", exact: true }).click();
+  const settings = page.getByTestId("tasks-settings-panel");
+  await settings.waitFor({ state: "visible" });
+  assert.equal(await page.getByTestId("plugin-update").count(), 0);
+  assert.equal(await page.getByRole("switch", { name: /Better Paseo:.*[Dd]isable/ }).count(), 0);
+
+  const settingsUrl = page.url();
+  await page.getByRole("button", { name: "Change shortcut", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Change shortcut", exact: true }).waitFor();
+  assert.equal(page.url(), settingsUrl, "Cancelling shortcut recording must keep settings open");
+  await settings.waitFor({ state: "visible" });
+  await page.reload();
+  await settings.waitFor({ state: "visible" });
+  console.log(
+    "Packaged desktop parity: Open Tasks command, built-in settings, shortcut cancellation and settings reload passed",
+  );
+}
+
 async function assertSandboxState({ browser, page, expectedSandbox, stdout, stderr }) {
   const diagnostics = await page.evaluate(() =>
     window.paseoDesktop.invoke("desktop_sandbox_diagnostics"),
@@ -881,6 +925,7 @@ async function smokePackagedDesktopApp({
   executablePath = getExecutablePath(appPath),
   launchArgs = [],
   expectedSandbox,
+  verifyWebParity = false,
 }) {
   assertExecutable(executablePath, "Packaged app executable");
   assertLinuxDesktopIdentity(appPath);
@@ -961,6 +1006,9 @@ async function smokePackagedDesktopApp({
     console.log("Packaged desktop smoke: every built-in plugin started");
     await smokeCliShim({ appPath, env });
     await smokeCliTerminal({ appPath, env });
+    if (verifyWebParity) {
+      await assertWebParityInteractions(page);
+    }
     if (expectedSandbox !== undefined) {
       await assertSandboxState({ browser, page, expectedSandbox, stdout, stderr });
       await openSmokeWorkspace({ appPath, env, page, daemonHome });
