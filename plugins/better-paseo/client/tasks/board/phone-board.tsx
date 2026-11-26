@@ -775,6 +775,7 @@ export function PhoneBoard(props: {
                 key={id}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
+                aria-selected={on}
                 accessibilityLabel={`${strings.lanes[id]} ${count}${!on && unseenLanes.has(id) ? `, ${strings.newTasksIn(strings.lanes[id])}` : ""}`}
                 onPress={() => (id === lane ? scrollToTop.current?.() : select(id))}
                 onLayout={(event: LayoutChangeEvent) =>
