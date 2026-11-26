@@ -11,6 +11,10 @@ on:
         type: choice
         default: all
         options: [all, woowtech, apporo]
+      android_apk_run_id:
+        description: Optional previous run containing emulator APKs to retest; both sources are recorded
+        type: string
+        default: ""
   workflow_call:
     inputs:
       platform:
@@ -19,6 +23,9 @@ on:
       brand:
         type: string
         default: all
+      android_apk_run_id:
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -73,6 +80,28 @@ jobs:
           printf '%s\n' "$WOOWTECH_BRAND" > "$EVIDENCE/brand.txt"
       - run: npm run build:app-deps
       - run: npm run build:server
+      - name: Resolve existing Android candidate provenance
+        id: candidate
+        if: matrix.platform == 'android' && inputs.android_apk_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.android_apk_run_id }}
+        run: |
+          [[ "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]]
+          CANDIDATE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq .head_sha)
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+          echo "NATIVE_CANDIDATE_SHA=$CANDIDATE_SHA" >> "$GITHUB_ENV"
+          printf '%s\n' "$CANDIDATE_SHA" > "$EVIDENCE/apk-source.txt"
+          printf '%s\n' "$CANDIDATE_RUN_ID" > "$EVIDENCE/apk-run.txt"
+      - name: Download the existing Android candidate
+        if: matrix.platform == 'android' && inputs.android_apk_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.android_apk_run_id }}
+          name: emulator-apk-${{ matrix.brand }}-${{ steps.candidate.outputs.sha }}
+          path: ${{ runner.temp }}/native-apk
       - name: Install pinned Maestro CLI
         run: |
           curl -fL --retry 3 https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.1/maestro.zip -o "$RUNNER_TEMP/maestro.zip"
@@ -84,12 +113,12 @@ jobs:
           unzip -q maestro.zip -d maestro-cli
           echo "$RUNNER_TEMP/maestro-cli/maestro/bin" >> "$GITHUB_PATH"
       - name: Generate Android project
-        if: matrix.platform == 'android'
+        if: matrix.platform == 'android' && inputs.android_apk_run_id == ''
         working-directory: packages/app
         run: npx expo prebuild --platform android --no-install
       - name: Build embedded Android candidate
         id: android_build
-        if: matrix.platform == 'android'
+        if: matrix.platform == 'android' && inputs.android_apk_run_id == ''
         working-directory: packages/app/android
         run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=2 -Dorg.gradle.parallel=false
       - name: Enable KVM on isolated runner
@@ -100,23 +129,35 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Exercise installed Android candidate
         if: matrix.platform == 'android'
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.android_apk_run_id }}
         run: |
-          sdkmanager 'system-images;android-35;google_apis;x86_64'
-          echo no | avdmanager create avd --force --name native-parity --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
+          export ANDROID_USER_HOME="$RUNNER_TEMP/native-android-home"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          timeout 600 sdkmanager 'system-images;android-35;google_apis;x86_64'
+          echo no | avdmanager create avd --force --name native-parity --path "$ANDROID_AVD_HOME/native-parity.avd" --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
+          test -f "$ANDROID_AVD_HOME/native-parity.ini"
           "$ANDROID_HOME/emulator/emulator" -avd native-parity -no-window -no-snapshot -no-audio -gpu swiftshader_indirect > "$EVIDENCE/emulator.log" 2>&1 &
           EMULATOR_PID=$!
-          trap 'adb logcat -d > "$EVIDENCE/android-logcat.txt" 2>&1; kill "$EMULATOR_PID" || true' EXIT
+          trap 'timeout 15 adb logcat -d > "$EVIDENCE/android-logcat.txt" 2>&1 || true; kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
+          sleep 3
+          if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then cat "$EVIDENCE/emulator.log"; exit 1; fi
           timeout 180 adb wait-for-device
-          for attempt in $(seq 1 120); do
-            if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then break; fi
+          BOOT_DEADLINE=$((SECONDS + 240))
+          until [[ "$(timeout 10 adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; do
+            kill -0 "$EMULATOR_PID"
+            if ((SECONDS >= BOOT_DEADLINE)); then cat "$EVIDENCE/emulator.log"; exit 1; fi
             sleep 2
           done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-          adb install packages/app/android/app/build/outputs/apk/release/app-release.apk
-          adb logcat -c
+          timeout 15 adb shell settings put global window_animation_scale 0
+          timeout 15 adb shell settings put global transition_animation_scale 0
+          timeout 15 adb shell settings put global animator_duration_scale 0
+          APK_PATH=packages/app/android/app/build/outputs/apk/release/app-release.apk
+          if [[ -n "$CANDIDATE_RUN_ID" ]]; then APK_PATH="$RUNNER_TEMP/native-apk/app-release.apk"; fi
+          timeout 120 adb install "$APK_PATH"
+          timeout 15 adb logcat -c
           node --import tsx packages/app/maestro/ci/run-native.mjs android
       - name: Generate iOS simulator project
         if: matrix.platform == 'ios'

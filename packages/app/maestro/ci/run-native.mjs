@@ -52,12 +52,13 @@ try {
     path.join(evidence, "result.json"),
     JSON.stringify(
       {
-        source: process.env.GITHUB_SHA,
+        source: process.env.NATIVE_CANDIDATE_SHA ?? process.env.GITHUB_SHA,
+        testSource: process.env.GITHUB_SHA,
         brand: process.env.WOOWTECH_BRAND,
         platform,
         appId,
         passed,
-        hostVersion: "same source as client",
+        hostSource: process.env.GITHUB_SHA,
       },
       null,
       2,
