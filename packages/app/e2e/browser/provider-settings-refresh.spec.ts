@@ -136,9 +136,9 @@ test.describe("provider settings overlay stack", () => {
       await openAgentRoute(page, session);
       await expectComposerVisible(page);
       await openProviderSettingsFromModelSelector(page);
-      await expect(
-        page.getByTestId("provider-settings-sheet").getByText(/Checked just now$/),
-      ).toBeVisible({
+      // On mobile this sheet testID labels its header; the body is its sibling.
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await expect(page.getByText(/Checked just now$/)).toBeVisible({
         timeout: 30_000,
       });
     } finally {

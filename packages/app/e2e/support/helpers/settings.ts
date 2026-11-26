@@ -247,7 +247,6 @@ export async function addDirectHostFromSettings(
     await page.getByTestId("direct-password-input").fill(input.password);
   }
   await page.getByTestId("direct-host-submit").click();
-  await page.getByTestId("host-confirmation-connect").click();
   await expect(page.getByTestId("add-host-modal")).toHaveCount(0, { timeout: 30_000 });
 }
 

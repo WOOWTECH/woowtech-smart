@@ -186,6 +186,7 @@ test.describe("Sidebar items in Appearance settings", () => {
       { key: "history", visible: false },
       { key: "search", visible: false },
       { key: "schedules", visible: false },
+      { key: "plugin:better-paseo:tasks", visible: false },
     ]);
     await gotoAppShell(page);
 
@@ -197,6 +198,9 @@ test.describe("Sidebar items in Appearance settings", () => {
     await expectSidebarItemHidden(page, "history");
     await expectSidebarItemHidden(page, "search");
     await expectSidebarItemHidden(page, "schedules");
+    await expect(
+      page.getByTestId("plugin-sidebar-better-paseo-tasks").filter({ visible: true }),
+    ).toHaveCount(0);
     // Nothing is left above the Workspaces section: no drag strip, no empty divider.
     await expect(page.locator('[data-testid="sidebar-nav-drag-strip"]:visible')).toHaveCount(0);
     await expect(page.locator('[data-testid="sidebar-nav-separator"]:visible')).toHaveCount(0);

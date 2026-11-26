@@ -1,3 +1,4 @@
+import { ChunkedTransport } from "@getpaseo/protocol/chunked-transport";
 import { existsSync } from "node:fs";
 import overviewCorpus from "../../../protocol/tests/fixtures/plugin-overview.json";
 import { pluginRequirements } from "../support/helpers/plugin-fixture";
@@ -144,23 +145,24 @@ async function advertisePluginCapabilities(
   });
 }
 
-function observePluginCatalog(page: Page) {
+async function observePluginCatalog(page: Page) {
   let responses = 0;
+  // Catalog bundles can exceed the negotiated frame budget. Observe logical
+  // messages after the same reassembly the real client uses.
   page.on("websocket", (socket) => {
-    socket.on("framereceived", ({ payload }) => {
-      try {
-        const envelope = JSON.parse(
-          typeof payload === "string" ? payload : payload.toString("utf8"),
-        ) as {
-          type?: unknown;
-          message?: { type?: unknown };
-        };
-        const message = envelope.type === "session" ? envelope.message : envelope;
-        if (message?.type === "plugin.catalog.get.response") responses += 1;
-      } catch {
-        return;
-      }
+    const decoder = new ChunkedTransport({
+      frameBytes: 32 * 1024 * 1024,
+      send: () => {},
+      deliver: (frame) => {
+        if (typeof frame !== "string") return;
+        const envelope = JSON.parse(frame) as { type?: unknown; message?: { type?: unknown } };
+        const payload = envelope.type === "session" ? envelope.message : envelope;
+        if (payload?.type === "plugin.catalog.get.response") responses += 1;
+      },
     });
+    decoder.enabled = true;
+    socket.on("framereceived", ({ payload }) => decoder.receive(payload));
+    socket.on("close", () => decoder.close());
   });
   return {
     waitForInitialFetch: async () => {
@@ -499,7 +501,7 @@ async function installLocalPluginWithStatusExamples(
   await client.disablePlugin("disabled-preview-plugin-with-a-long-name");
   await installFailedPlugin(client, failedDirectory);
 
-  const catalog = observePluginCatalog(page);
+  const catalog = await observePluginCatalog(page);
   await gotoAppShell(page);
   await openPluginSettings(page);
   await catalog.waitForInitialFetch();

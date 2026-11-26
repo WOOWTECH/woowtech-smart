@@ -73,7 +73,7 @@ test("a new user is walked through setup once", async ({ page }, testInfo) => {
 
     await test.step("a provider's detail and Add provider cover the setup card and lead back to it", async () => {
       await setupModal(page)
-        .getByRole("button", { name: "Claude provider details", exact: true })
+        .getByRole("button", { name: /^Claude provider details(?:,|$)/ })
         .click();
       const detail = setupSheet(page, "provider-settings-sheet");
       await expectSheetCoversSetupCard(page, detail);

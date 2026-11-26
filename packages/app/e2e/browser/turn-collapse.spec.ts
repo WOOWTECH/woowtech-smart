@@ -279,7 +279,7 @@ test("received messages show their sender and open that agent", async ({ page })
     const labelColor = await attribution
       .getByText("Sent by Reviewer", { exact: true })
       .evaluate((element) => getComputedStyle(element).color);
-    await expect(attribution.locator("svg")).toHaveCSS("stroke", labelColor);
+    await expect(attribution.locator("svg path").first()).toHaveCSS("stroke", labelColor);
     await expectSenderAlignedWithBubble(attribution);
     await attribution.scrollIntoViewIfNeeded();
     await page.screenshot({ path: "/tmp/sender-attribution.png" });

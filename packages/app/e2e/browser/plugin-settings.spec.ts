@@ -1,7 +1,9 @@
-import { expect } from "../support/fixtures";
+import { expect, test as builtinTest } from "../support/fixtures";
+import { openMobileAgentSidebar } from "../support/helpers/sidebar";
+import { connectNewWorkspaceDaemonClient } from "../support/helpers/new-workspace";
 import { gotoAppShell } from "../support/helpers/app";
 import { pluginPageRoute } from "../support/helpers/plugin-gallery";
-import { openCommandCenterWithShortcut } from "../support/helpers/command-center";
+import { openCommandCenter } from "../support/helpers/command-center";
 import {
   test,
   openDisplaySettings,
@@ -116,41 +118,49 @@ for (const { width, boardReadyTestId } of [
   { width: 1440, boardReadyTestId: "lane-header-done" },
   { width: 390, boardReadyTestId: "phone-stat-done" },
 ]) {
-  test.describe(`built-in plugin settings at ${width}px`, () => {
-    test.setTimeout(120_000);
-    test.use({ viewport: { width, height: 900 } });
-    test("opens runtime settings without exposing installation controls", async ({
-      page,
-      settingsPlugin,
-    }) => {
-      expect((await settingsPlugin.listPlugins()).map((plugin) => plugin.id)).not.toContain(
-        "better-paseo",
-      );
-      expect((await settingsPlugin.getPluginCatalog()).map((plugin) => plugin.id)).toContain(
-        "better-paseo",
-      );
-      await gotoAppShell(page);
-      await page.goto(`${pluginPageRoute("better-paseo")}/chat-presentation`);
-      await expect(
-        page.getByRole("radio", { name: "Chat presentation", exact: true }),
-      ).toBeVisible();
-      await expect(page.getByRole("radio", { name: "Tasks board", exact: true })).toBeVisible();
-      await expect(page.getByRole("radio", { name: /^Version(?:,|$)/ })).toBeVisible();
-      await page.getByRole("radio", { name: "Tasks board", exact: true }).click();
-      await expect(page.getByTestId("tasks-settings-panel")).toBeVisible();
-      await expect(page.getByTestId("plugin-update")).toHaveCount(0);
-      await expect(page.getByRole("switch", { name: /Better Paseo:.*[Dd]isable/ })).toHaveCount(0);
-      await page.reload();
-      await expect(
-        page.getByRole("radio", { name: "Chat presentation", exact: true }),
-      ).toBeVisible();
-      await page.goto("/new");
-      await openCommandCenterWithShortcut(page);
-      const panel = page.getByTestId("command-center-panel");
-      await panel.getByTestId("command-center-input").fill("Open Tasks");
-      await panel.getByText("Open Tasks", { exact: true }).click();
-      await expect(page).toHaveURL(/\/plugin\/better-paseo\/surface\/tasks/);
-      await expect(page.getByTestId(boardReadyTestId)).toBeVisible();
-    });
+  builtinTest.describe(`built-in plugin settings at ${width}px`, () => {
+    builtinTest.setTimeout(120_000);
+    builtinTest.use({ viewport: { width, height: 900 } });
+    builtinTest(
+      "opens runtime settings without exposing installation controls",
+      async ({ page }) => {
+        const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
+        try {
+          expect((await client.listPlugins()).map((plugin) => plugin.id)).not.toContain(
+            "better-paseo",
+          );
+          expect((await client.getPluginCatalog()).map((plugin) => plugin.id)).toContain(
+            "better-paseo",
+          );
+        } finally {
+          await client.close();
+        }
+        await gotoAppShell(page);
+        await page.goto(`${pluginPageRoute("better-paseo")}/chat-presentation`);
+        await expect(
+          page.getByRole("radio", { name: "Chat presentation", exact: true }),
+        ).toBeVisible();
+        await expect(page.getByRole("radio", { name: "Tasks board", exact: true })).toBeVisible();
+        await expect(page.getByRole("radio", { name: /^Version(?:,|$)/ })).toBeVisible();
+        await page.getByRole("radio", { name: "Tasks board", exact: true }).click();
+        await expect(page.getByTestId("tasks-settings-panel")).toBeVisible();
+        await expect(page.getByTestId("plugin-update")).toHaveCount(0);
+        await expect(page.getByRole("switch", { name: /Better Paseo:.*[Dd]isable/ })).toHaveCount(
+          0,
+        );
+        await page.reload();
+        await expect(
+          page.getByRole("radio", { name: "Chat presentation", exact: true }),
+        ).toBeVisible();
+        await page.goto("/new");
+        if (width === 390) await openMobileAgentSidebar(page);
+        await openCommandCenter(page);
+        const panel = page.getByTestId("command-center-panel");
+        await panel.getByTestId("command-center-input").fill("Open Tasks");
+        await panel.getByText("Open Tasks", { exact: true }).click();
+        await expect(page).toHaveURL(/\/plugin\/better-paseo\/surface\/tasks/);
+        await expect(page.getByTestId(boardReadyTestId)).toBeVisible();
+      },
+    );
   });
 }
