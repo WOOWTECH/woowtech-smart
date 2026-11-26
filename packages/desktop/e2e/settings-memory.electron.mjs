@@ -161,15 +161,15 @@ export async function runShortcutCaptureRegression(page, evaluateMain) {
     await expect.poll(zoomMenuEnabled).toBe(true);
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(tasksOrigin);
 
-    await page.goto(shortcutsUrl);
-    await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
-    await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
+    // Prove cancellation restores native reload before any navigation can reset
+    // the main process capture state. Hard navigation has no settings back stack.
     const restoredOrigin = await page.evaluate(() => performance.timeOrigin);
     const reloaded = page.waitForEvent("domcontentloaded", { timeout: 15_000 });
     await sendKey("R", [modifier]);
     await reloaded;
-    await page.getByRole("button", { name: "Settings", exact: true }).waitFor({ state: "visible" });
     expect(await page.evaluate(() => performance.timeOrigin)).not.toBe(restoredOrigin);
+    await page.goto(new URL("/new", page.url()).href);
+    await page.getByRole("button", { name: "Settings", exact: true }).waitFor({ state: "visible" });
     return {
       baselineMenuReload: true,
       recorded: ["reload", "new-window", "zoom-out"],
