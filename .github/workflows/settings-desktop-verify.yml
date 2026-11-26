@@ -1,0 +1,56 @@
+name: Settings desktop verification
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  electron:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-26]
+        brand: [woowtech, apporo]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      WOOWTECH_BRAND: ${{ matrix.brand }}
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR: ${{ runner.temp }}/native-evidence
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Apply brand in isolated runner checkout
+        run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+      - run: npm run build:server
+      - run: npm run build:app-deps
+      - name: Verify brand and native distribution boundaries
+        run: node --test --test-concurrency=1 woowtech/brand-layer.test.mjs woowtech/desktop-notification-launch.test.mjs woowtech/desktop-fuses.test.mjs
+      - name: Exercise real Electron settings, browser, plugins and workspace routing
+        run: npm run test:e2e:browser-tabs --workspace=@getpaseo/desktop
+      - name: Build unsigned candidate without publishing
+        run: npm run build:desktop -- --dir --publish never
+      - name: Upload desktop evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-desktop-${{ matrix.brand }}-${{ matrix.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/native-evidence
+          if-no-files-found: warn
+          retention-days: 14

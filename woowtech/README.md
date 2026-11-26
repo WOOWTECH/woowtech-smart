@@ -1091,6 +1091,8 @@ node --test woowtech/*.test.mjs
 
 ### 18. GitHub Actions：只跑 Ubuntu 上的 CI 測試
 
+本機功能對齊網頁版時，另外手動執行 `settings-desktop-verify.yml` 與 `settings-android-emulator.yml`。兩者以同一個 commit 分別套用 woowtech／Apporo 品牌，在隔離 runner 建置並操作 macOS、Windows、iOS Simulator、Android Emulator。只有 `workflow_dispatch`／`workflow_call`，權限唯讀，不帶簽章或部署憑證、不發佈。桌面驗證使用真正 Electron，手機驗證使用內嵌 bundle 的 Release 組態與 development app ID；APK 只有模擬器的 x86_64，不能當手機發行包。畫面、日誌及測試結果保存在帶有品牌、平台、commit 的 Actions artifact。一般 CI 的 Ubuntu 設定照舊。
+
 2026-11-14 owner 授權 Pi Agent 共用 eSigner 簽章：新增 `pi-agent-signing.yml`，只有 `workflow_call`，由 Desktop Release 的手動 `platform=pi-agent`、`publish=false` 呼叫。它不會因 push／PR 自動簽章，不發佈 release；使用方式見 `docs/release.md` 的 Pi Agent Windows signing。一般 CI 的 Ubuntu 限制照舊。
 
 - owner 的決定：只跑 CI 的測試，只用 Ubuntu；Windows 不在 v1；不部署、不發佈。Playwright 的瀏覽器測試只在有人手動觸發並勾選時跑（它有已知的失敗，K-54）。

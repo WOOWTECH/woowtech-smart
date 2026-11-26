@@ -42,6 +42,7 @@ export function TerminalSection() {
             </Text>
           </View>
           <FormTextInput
+            testID="terminal-scrollback-input"
             initialValue={scrollbackValue}
             onChangeText={handleChangeText}
             onBlur={commitScrollback}

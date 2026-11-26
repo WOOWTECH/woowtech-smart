@@ -14,6 +14,7 @@ const SETTINGS_DESTINATIONS = [
   "Terminal",
   "Browser",
   "Editor",
+  "Files",
   "Shortcuts",
   "Integrations",
   "Notifications",
@@ -32,6 +33,29 @@ const SETTINGS_DESTINATIONS = [
   "Terminals",
   "Plugins",
 ];
+
+export async function runSettingsPersistenceRegression(page) {
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openSettingsDestination(page, "Terminal");
+  const scrollback = page.getByTestId("terminal-scrollback-input");
+  const original = await scrollback.inputValue();
+  const value = original === "4321" ? "5432" : "4321";
+  await scrollback.fill(value);
+  await scrollback.blur();
+  await openSettingsDestination(page, "Files");
+  await page.getByTestId("file-panel-settings").waitFor({ state: "visible" });
+  await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
+  await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
+  await page.reload();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openSettingsDestination(page, "Terminal");
+  assert((await scrollback.inputValue()) === value, "Terminal scrollback did not survive reload");
+  await scrollback.fill(original);
+  await scrollback.blur();
+  await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
+  await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
+  return { terminalScrollbackPersisted: true, filesSettingsVisible: true };
+}
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

@@ -18,7 +18,10 @@ import { runAppearanceFontSizeRegression } from "./appearance-font-size.electron
 import { runAdaptiveThemeRegression } from "./appearance-theme.electron.mjs";
 import { runSettingsScrollRegression } from "./settings-scroll.electron.mjs";
 import { buildFillFixture, verifyReactFormFill } from "./browser-fill.electron.mjs";
-import { runSettingsMemoryRegression } from "./settings-memory.electron.mjs";
+import {
+  runSettingsMemoryRegression,
+  runSettingsPersistenceRegression,
+} from "./settings-memory.electron.mjs";
 
 import { seedPluginLinks, runPluginLinksRegression } from "./plugin-links.electron.mjs";
 
@@ -1511,6 +1514,8 @@ async function main() {
       return;
     }
 
+    const settingsPersistence = await runSettingsPersistenceRegression(page);
+
     const adaptiveTheme = await runAdaptiveThemeRegression(artifactDir);
     await runAppearanceFontSizeRegression(page);
 
@@ -1545,6 +1550,7 @@ async function main() {
     writeJson(path.join(artifactDir, "result.json"), {
       ...report,
       settingsMemory,
+      settingsPersistence,
       pluginLinks,
       adaptiveTheme,
       browserHostRouting: "passed",
