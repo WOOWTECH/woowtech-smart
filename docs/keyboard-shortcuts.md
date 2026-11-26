@@ -83,6 +83,11 @@ iOS scene startup installs the observing window after Expo creates its root view
 Keep that integration in the hardware keyboard module's config plugin. Its window
 owns both the press stream and the text-control key commands, including above modals.
 
+Web inline shortcut recorders mark their mounted control with
+`data-paseo-keyboard-capture="true"` for the recording lifetime. The DOM key source
+and the overlay fallback leave those keys to the recorder, including Escape.
+Remove the marker when recording stops so host navigation resumes.
+
 ## Focus scopes
 
 The composer and terminal declare focus with `useKeyboardFocusSurface`. Native

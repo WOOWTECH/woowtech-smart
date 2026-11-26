@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { overlays, type OverlayEntry, type KeyboardInputEvent } from "./overlays";
 import type { OverlayRegistration } from "./overlay-contract";
+import { hasDomKeyboardCapture } from "./dom-keyboard-capture";
 type WebOverlayKeyHandler = (event: KeyboardInputEvent) => boolean;
 
 /** A DOM element, or a component handle that knows how to focus itself (such as a text input). */
@@ -126,6 +127,7 @@ function dispatchOverlayEntry(entry: WebOverlayEntry, event: KeyboardInputEvent)
 }
 
 function handleWebOverlayKeyDown(event: KeyboardEvent): void {
+  if (hasDomKeyboardCapture()) return;
   if (overlays.dispatch(event)) event.stopImmediatePropagation();
 }
 

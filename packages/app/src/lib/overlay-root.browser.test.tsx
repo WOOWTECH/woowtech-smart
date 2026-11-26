@@ -3,7 +3,7 @@ import { useOverlayRegistration } from "@/keyboard";
 import React, { type RefCallback } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hasOpenDomPopover, keyBelongsToDomPopover } from "@/keyboard/internal/dom-popover";
 
 function nextFrame(): Promise<void> {
@@ -196,5 +196,74 @@ it("keeps the opening layer across rerenders and captures a new layer on reopeni
   } finally {
     root.unmount();
     container.remove();
+  }
+});
+
+function ShortcutCaptureOverlay({ onKey }: { onKey(code: string): void }) {
+  useOverlayRegistration({
+    active: true,
+    layer: 1000,
+    keys: ["Escape"],
+    manageFocus: false,
+    onKeyDown(event) {
+      onKey(event.code ?? "");
+      return event.key === "Escape";
+    },
+  });
+  return null;
+}
+
+it("lets an inline shortcut recorder own keys before host shortcuts and overlays", async () => {
+  const { attachDomKeyboardSource } = await import("@/keyboard/internal/sources/dom.web");
+  const container = document.createElement("div");
+  const recorder = document.createElement("div");
+  recorder.dataset.paseoKeyboardCapture = "true";
+  document.body.append(container, recorder);
+  const root = createRoot(container);
+  const overlayKeys = vi.fn();
+  const sourceKeys: string[] = [];
+  const recordedKeys: string[] = [];
+  flushSync(() => root.render(<ShortcutCaptureOverlay onKey={overlayKeys} />));
+  const detach = attachDomKeyboardSource({
+    keyDown: ({ event }) => sourceKeys.push(event.code ?? ""),
+    keyUp() {},
+    blur() {},
+    commandCenterOpen: () => false,
+    subscribeCommandCenter: () => () => {},
+  });
+  const capture = (event: KeyboardEvent) => {
+    if (recorder.dataset.paseoKeyboardCapture !== "true") return;
+    recordedKeys.push(event.code);
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  window.addEventListener("keydown", capture, true);
+  try {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", code: "Escape", cancelable: true }),
+    );
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "k", code: "KeyK", metaKey: true, cancelable: true }),
+    );
+    expect(recordedKeys).toEqual(["Escape", "KeyK"]);
+    expect(overlayKeys).not.toHaveBeenCalled();
+    expect(sourceKeys).toEqual([]);
+    recorder.dataset.paseoKeyboardCapture = "false";
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", code: "Escape", cancelable: true }),
+    );
+    expect(overlayKeys).toHaveBeenCalledTimes(1);
+    expect(overlayKeys).toHaveBeenCalledWith("Escape");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "k", code: "KeyK", metaKey: true, cancelable: true }),
+    );
+    expect(sourceKeys).toEqual(["KeyK"]);
+    expect(recordedKeys).toEqual(["Escape", "KeyK"]);
+  } finally {
+    window.removeEventListener("keydown", capture, true);
+    detach();
+    root.unmount();
+    container.remove();
+    recorder.remove();
   }
 });

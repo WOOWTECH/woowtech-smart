@@ -1,10 +1,16 @@
 import { resolveKeyboardFocusScope } from "../../focus-scope";
 import { setCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
 import { keyBelongsToDomPopover } from "../dom-popover";
+import { hasDomKeyboardCapture } from "../dom-keyboard-capture";
 import type { KeyboardSourceHandlers } from "./contract";
 export function attachDomKeyboardSource(handlers: KeyboardSourceHandlers): () => void {
   const down = (event: KeyboardEvent) => {
-    if (document.visibilityState !== "visible" || keyBelongsToDomPopover(event)) return;
+    if (
+      document.visibilityState !== "visible" ||
+      hasDomKeyboardCapture() ||
+      keyBelongsToDomPopover(event)
+    )
+      return;
     handlers.keyDown({
       event: {
         key: event.key,

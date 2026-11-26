@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useLayoutEffect, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { PlainButton, SettingRow, settingsTextStyle, type PageLook } from "../../settings-controls";
 import { captureTasksShortcut, isShortcutMac } from "../open-shortcut";
@@ -19,7 +19,7 @@ export function OpenTasksShortcut({
   strings: TasksSettingsStrings;
 }) {
   const [recording, setRecording] = useState(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!recording) return;
     const stop = captureTasksShortcut((event) => {
       if (event.repeat) return;

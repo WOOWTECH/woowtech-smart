@@ -83,6 +83,11 @@ export function bindTasksShortcut(store: () => DeviceTasksStore, open: () => voi
 
 /** Recording also works while the board is disabled and has no opening listener. */
 export function captureTasksShortcut(receive: (event: KeyboardEvent) => void): () => void {
+  if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
+  const marker = document.createElement("span");
+  marker.setAttribute("data-paseo-keyboard-capture", "true");
+  marker.hidden = true;
+  document.body.append(marker);
   const shared = runtime();
   shared.capture = receive;
   const target = window;
@@ -95,6 +100,7 @@ export function captureTasksShortcut(receive: (event: KeyboardEvent) => void): (
   return () => {
     target.removeEventListener("keydown", onKey, true);
     if (shared.capture === receive) shared.capture = null;
+    marker.remove();
   };
 }
 
