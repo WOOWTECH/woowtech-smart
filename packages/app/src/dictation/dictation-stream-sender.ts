@@ -68,6 +68,7 @@ export class DictationStreamSender {
 
   private startGeneration = 0;
   private startPromise: Promise<void> | null = null;
+  private cancelPendingStart: (() => void) | null = null;
   private streamError: Error | null = null;
 
   constructor(params: DictationStreamSenderParams) {
@@ -135,6 +136,8 @@ export class DictationStreamSender {
     this.startPromise = null;
     this.streamError = null;
     this.startGeneration += 1;
+    this.cancelPendingStart?.();
+    this.cancelPendingStart = null;
     this.resolveDrainWaiters();
   }
 
@@ -198,6 +201,10 @@ export class DictationStreamSender {
 
     this.startGeneration += 1;
     const generation = this.startGeneration;
+    this.cancelPendingStart?.();
+    const cancelled = new Promise<void>((resolve) => {
+      this.cancelPendingStart = resolve;
+    });
 
     const dictationId = this.createDictationId();
     this.dictationId = dictationId;
@@ -206,7 +213,7 @@ export class DictationStreamSender {
     this.streamReady = false;
     this.streamError = null;
 
-    const start = (async () => {
+    const acknowledgement = (async () => {
       await client.startDictationStream(dictationId, this.format);
       if (this.startGeneration !== generation) {
         return;
@@ -216,23 +223,26 @@ export class DictationStreamSender {
       }
       this.streamReady = true;
       this.flush();
-    })()
-      .catch((error) => {
-        // If starting failed, keep the segments for retry but clear the stream so finish can error cleanly.
-        if (this.startGeneration === generation && this.dictationId === dictationId) {
-          this.dictationId = null;
-          this.sendSeq = 0;
-          this.acknowledgedSeq = -1;
-          this.streamReady = false;
-          this.resolveDrainWaiters();
-        }
-        throw error;
-      })
-      .finally(() => {
-        if (this.startPromise === start) {
-          this.startPromise = null;
-        }
-      });
+    })().catch((error) => {
+      // If starting failed, keep the segments for retry but clear the stream so finish can error cleanly.
+      if (this.startGeneration === generation && this.dictationId === dictationId) {
+        this.dictationId = null;
+        this.sendSeq = 0;
+        this.acknowledgedSeq = -1;
+        this.streamReady = false;
+        this.resolveDrainWaiters();
+      }
+      throw error;
+    });
+
+    // Cancelling must release callers waiting for startup immediately. The SDK's
+    // acknowledgement can arrive or fail later; generation checks keep it stale.
+    const start = Promise.race([acknowledgement, cancelled]).finally(() => {
+      if (this.startPromise === start) {
+        this.startPromise = null;
+        this.cancelPendingStart = null;
+      }
+    });
 
     this.startPromise = start;
     await start;

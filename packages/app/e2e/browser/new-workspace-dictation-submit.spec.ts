@@ -91,7 +91,12 @@ async function installSyntheticMicrophone(page: Page): Promise<void> {
   });
 }
 
-async function installDictationFailureHarness(page: Page) {
+async function installDictationFailureHarness(
+  page: Page,
+  options: { holdInitialStart?: boolean } = {},
+) {
+  let rejectInitialStart: (() => void) | null = null;
+  let audioChunksSeen = 0;
   let resolveAudioChunk!: () => void;
   let resolveCreateRequest!: () => void;
   const audioChunk = new Promise<void>((resolve) => {
@@ -111,6 +116,14 @@ async function installDictationFailureHarness(page: Page) {
       const dictationId = typeof request?.dictationId === "string" ? request.dictationId : null;
 
       if (type === "dictation_stream_start" && dictationId) {
+        if (options.holdInitialStart && !rejectInitialStart) {
+          rejectInitialStart = () =>
+            sendSessionMessage(ws, {
+              type: "dictation_stream_error",
+              payload: { dictationId, error: "Late cancelled start failure", retryable: true },
+            });
+          return;
+        }
         sendSessionMessage(ws, {
           type: "dictation_stream_ack",
           payload: { dictationId, ackSeq: -1 },
@@ -123,6 +136,7 @@ async function installDictationFailureHarness(page: Page) {
           type: "dictation_stream_ack",
           payload: { dictationId, ackSeq: seq },
         });
+        audioChunksSeen += 1;
         resolveAudioChunk();
         return;
       }
@@ -161,6 +175,14 @@ async function installDictationFailureHarness(page: Page) {
   });
 
   return {
+    failInitialStart: () => {
+      if (!rejectInitialStart) throw new Error("No initial dictation start received");
+      rejectInitialStart();
+    },
+    waitForNextAudio: async () => {
+      const before = audioChunksSeen;
+      await expect.poll(() => audioChunksSeen).toBeGreaterThan(before);
+    },
     waitForAudio: () => audioChunk,
     waitForCreateRequest: () => createRequest,
     failWorkspaceCreation: () => {
@@ -211,6 +233,35 @@ test.describe("New Workspace dictation submit", () => {
       await seeded.cleanup();
     }
   });
+});
+
+test("restarts dictation immediately after cancelling an unacknowledged start", async ({
+  page,
+}) => {
+  const agent = await seedMockAgentWorkspace({
+    repoPrefix: "dictation-cancel-restart-",
+    title: "Dictation cancel restart",
+  });
+  await installSyntheticMicrophone(page);
+  const harness = await installDictationFailureHarness(page, { holdInitialStart: true });
+  const start = page.getByRole("button", { name: "Start dictation", exact: true });
+  const cancel = page.getByRole("button", { name: "Cancel dictation", exact: true });
+  try {
+    await openAgentRoute(page, agent);
+    await expectComposerVisible(page);
+    await start.click();
+    await expect(cancel).toBeVisible();
+    await cancel.click();
+    await expect(start).toBeVisible();
+    await start.click();
+    await expect(cancel).toBeVisible({ timeout: 3_000 });
+    harness.failInitialStart();
+    await harness.waitForNextAudio();
+    await page.getByRole("button", { name: "Insert transcription", exact: true }).click();
+    await expect(composerLocator(page)).toHaveValue(TRANSCRIPT);
+  } finally {
+    await agent.cleanup();
+  }
 });
 
 async function startDictationWithShortcut(page: Page): Promise<void> {
