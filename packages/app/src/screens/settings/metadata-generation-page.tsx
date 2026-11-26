@@ -35,8 +35,9 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
   const mode = draftMode ?? savedMode;
 
   useEffect(() => {
-    setDraftMode(null);
-  }, [configuredProvider?.model, configuredProvider?.provider]);
+    // An older Automatic save must not discard a newer Manual selection.
+    setDraftMode((current) => (current === savedMode ? null : current));
+  }, [configuredProvider?.model, configuredProvider?.provider, savedMode]);
 
   const modeOptions = useMemo(
     () => [

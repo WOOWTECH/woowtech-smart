@@ -1,3 +1,4 @@
+import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { getServerId } from "../support/helpers/server-id";
@@ -108,6 +109,50 @@ test("replaces only the first configured metadata model", async ({ page }) => {
       });
     } finally {
       await client.close().catch(() => undefined);
+    }
+  }
+});
+
+test("keeps a newer Manual choice when an older Automatic save completes", async ({ page }) => {
+  const client = await connectNewWorkspaceDaemonClient({ ownProjects: false });
+  const previous = await client.getDaemonConfig();
+  const gate = await installDaemonWebSocketGate(page);
+  let requestHeld = false;
+  try {
+    await client.patchDaemonConfig({
+      metadataGeneration: { providers: [{ provider: "mock", model: "ten-second-stream" }] },
+    });
+    await openMetadataGenerationSettings(page);
+    const manual = page.getByRole("button", { name: "Manual", exact: true });
+    await expect(manual).toHaveAttribute("aria-selected", "true");
+    gate.holdNextClientRequest("set_daemon_config_request");
+    await page.getByRole("button", { name: "Automatic", exact: true }).click();
+    await gate.waitForHeldClientRequest();
+    requestHeld = true;
+    await manual.click();
+    await expect(manual).toHaveAttribute("aria-selected", "true");
+    gate.releaseHeldClientRequest();
+    requestHeld = false;
+    await expect
+      .poll(async () => (await client.getDaemonConfig()).config.metadataGeneration.providers)
+      .toEqual([]);
+    await expect(page.getByRole("button", { name: /Select model/ })).toBeEnabled();
+    await expect(manual).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("button", { name: /Select model/ }).click();
+    await page.getByText("Mock Load Test", { exact: true }).click();
+    await page.getByText("Ten second stream", { exact: true }).click();
+    await expect
+      .poll(async () => (await client.getDaemonConfig()).config.metadataGeneration.providers)
+      .toEqual([{ provider: "mock", model: "ten-second-stream" }]);
+  } finally {
+    if (requestHeld) gate.releaseHeldClientRequest();
+    gate.restore();
+    try {
+      await client.patchDaemonConfig({
+        metadataGeneration: { providers: previous.config.metadataGeneration.providers },
+      });
+    } finally {
+      await client.close();
     }
   }
 });
