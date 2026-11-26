@@ -759,13 +759,7 @@ async function resizeDesktopWindow(inspectorPort, { width, height }) {
   );
 }
 
-async function verifyHiddenBrowserScreenshots({
-  page,
-  client,
-  browserId,
-  artifactDir,
-  inspectorPort,
-}) {
+async function verifyHiddenBrowserScreenshots({ client, browserId, artifactDir, inspectorPort }) {
   const readState = async () => {
     const result = await callBrowserTool(client, "browser_evaluate", {
       browserId,
@@ -814,6 +808,10 @@ async function verifyHiddenBrowserScreenshots({
     measurements.push({ label, frames, start, end, host });
     writeJson(path.join(artifactDir, "hidden-browser-frames.json"), measurements);
     assert(!host.visible, `${label}: hidden host window became visible again`);
+    assert(
+      !host.captured && host.guests.every((guest) => !guest.captured),
+      `${label}: automation still holds a capture owner`,
+    );
     assert(start.visibility === "hidden", `${label}: guest did not become hidden`);
     assert(frames === 0, `${label}: hidden browser produced ${frames} animation frames`);
   };
@@ -834,20 +832,14 @@ async function verifyHiddenBrowserScreenshots({
       path.join(artifactDir, "hidden-browser-viewport.png"),
       Buffer.from(screenshot.data, "base64"),
     );
-    const pixel = await page.evaluate(async (base64) => {
-      const image = new Image();
-      image.src = `data:image/png;base64,${base64}`;
-      await image.decode();
-      const canvas = document.createElement("canvas");
-      canvas.width = image.width;
-      canvas.height = image.height;
-      const context = canvas.getContext("2d");
-      context.drawImage(image, 0, 0);
-      return [
-        ...context.getImageData(Math.floor(image.width / 2), Math.floor(image.height / 2), 1, 1)
-          .data,
-      ];
-    }, screenshot.data);
+    // Decode without reattaching Playwright: its focus emulation keeps pages captured.
+    // The expected green pixel is identical in nativeImage's BGRA and canvas RGBA.
+    const pixel = await evaluateDesktopWindow(
+      inspectorPort,
+      `const image = process.mainModule.require('electron').nativeImage.createFromBuffer(Buffer.from(${JSON.stringify(screenshot.data)}, 'base64'));
+       const { width, height } = image.getSize();
+       return [...image.crop({ x: Math.floor(width / 2), y: Math.floor(height / 2), width: 1, height: 1 }).toBitmap()];`,
+    );
     assert(
       JSON.stringify(pixel) === "[0,255,0,255]",
       `Hidden screenshot returned stale pixels: ${pixel}`,
@@ -921,10 +913,11 @@ async function runRegression({
   typingAgent,
   artifactDir,
   inspectorPort,
+  runWithoutPlaywright,
 }) {
   const failures = [];
   const originalWorkspaceId = workspaceIds[0];
-  const originalWorkspaceRow = page.getByTestId(
+  let originalWorkspaceRow = page.getByTestId(
     `sidebar-workspace-row-${serverId}:${originalWorkspaceId}`,
   );
   await originalWorkspaceRow.waitFor({ state: "visible", timeout: timeoutMs });
@@ -948,7 +941,7 @@ async function runRegression({
   const browserId = created.browserId;
   assert(typeof browserId === "string", "browser_new_tab returned no browserId");
 
-  const originalDeck = page.getByTestId(`workspace-deck-entry-${serverId}:${originalWorkspaceId}`);
+  let originalDeck = page.getByTestId(`workspace-deck-entry-${serverId}:${originalWorkspaceId}`);
   await originalDeck.getByTestId(`workspace-tab-browser_${browserId}`).click();
   await page.waitForFunction(
     (id) => {
@@ -1192,7 +1185,13 @@ async function runRegression({
   const parkedGuest = await readGuest(page, browserId);
   assert(parkedGuest, "Browser guest was not parked after workspace eviction");
 
-  await verifyHiddenBrowserScreenshots({ page, client, browserId, artifactDir, inspectorPort });
+  page = await runWithoutPlaywright(() =>
+    verifyHiddenBrowserScreenshots({ client, browserId, artifactDir, inspectorPort }),
+  );
+  originalWorkspaceRow = page.getByTestId(
+    `sidebar-workspace-row-${serverId}:${originalWorkspaceId}`,
+  );
+  originalDeck = page.getByTestId(`workspace-deck-entry-${serverId}:${originalWorkspaceId}`);
 
   const listed = await callBrowserTool(client, "browser_list_tabs");
   assert(
@@ -1497,7 +1496,21 @@ async function main() {
     await waitForPort(cdpPort, "Electron CDP", desktop);
 
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
-    const page = await waitForAppPage(browser, expoPort);
+    let page = await waitForAppPage(browser, expoPort);
+    const runWithoutPlaywright = async (task) => {
+      // connectOverCDP.close disconnects, leaving Electron and its guests running.
+      // Playwright 1.58 enables focus emulation on each page; Chromium counts that
+      // as capture and keeps rAF running on macOS even while visibility is hidden.
+      await browser.close();
+      browser = null;
+      try {
+        await task();
+      } finally {
+        browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
+        page = await waitForAppPage(browser, expoPort);
+      }
+      return page;
+    };
     await hideDeveloperToasts(page);
     const status = await waitForDesktopStatus(page);
     // The first load waits for Metro's cold bundle; slow runners set E2E_METRO_WARMUP_TIMEOUT_MS.
@@ -1574,6 +1587,7 @@ async function main() {
       callerAgentId,
       typingAgent,
       artifactDir,
+      runWithoutPlaywright,
     });
     const pluginLinks = await checkPluginLinks();
     const routingClient = await connectBrowserToolClient(daemonPort, typingAgent.agentId);
