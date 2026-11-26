@@ -46,6 +46,10 @@ try {
   );
   const { stdout, stderr } = await execute("maestro", args, {
     cwd: evidence,
+    env: {
+      ...process.env,
+      JAVA_TOOL_OPTIONS: `${process.env.JAVA_TOOL_OPTIONS ?? ""} -Xmx1024m`.trim(),
+    },
     timeout: 15 * 60_000,
     maxBuffer: 16 * 1024 * 1024,
   });

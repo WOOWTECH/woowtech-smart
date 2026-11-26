@@ -1,8 +1,8 @@
-# Installed development identity with an embedded Release bundle; no Metro needed.
+# Freshly installed candidate in an isolated emulator/simulator, with an embedded bundle.
 appId: ${APP_ID}
 ---
 - launchApp:
-    clearState: true
+    clearState: false
 - extendedWaitUntil:
     visible:
       id: welcome-open-settings
