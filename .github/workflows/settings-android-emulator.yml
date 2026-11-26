@@ -2,7 +2,23 @@ name: Settings platform verification
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        default: all
+        options: [all, android, ios]
+      brand:
+        type: choice
+        default: all
+        options: [all, woowtech, apporo]
   workflow_call:
+    inputs:
+      platform:
+        type: string
+        default: all
+      brand:
+        type: string
+        default: all
 
 permissions:
   contents: read
@@ -13,14 +29,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [android, ios]
-        brand: [woowtech, apporo]
-        include:
-          - platform: android
-            os: ubuntu-24.04
-          - platform: ios
-            os: macos-26
-    runs-on: ${{ matrix.os }}
+        platform: ${{ fromJSON(inputs.platform == 'android' && '["android"]' || inputs.platform == 'ios' && '["ios"]' || '["android","ios"]') }}
+        brand: ${{ fromJSON(inputs.brand == 'woowtech' && '["woowtech"]' || inputs.brand == 'apporo' && '["apporo"]' || '["woowtech","apporo"]') }}
+    runs-on: ${{ matrix.platform == 'android' && 'ubuntu-24.04' || 'macos-26' }}
     timeout-minutes: 120
     defaults:
       run:
@@ -55,6 +66,7 @@ jobs:
           git rev-parse HEAD > "$EVIDENCE/source.txt"
           printf '%s\n' "$WOOWTECH_BRAND" > "$EVIDENCE/brand.txt"
       - run: npm run build:app-deps
+      - run: npm run build:server
       - name: Install pinned Maestro CLI
         run: |
           curl -fL --retry 3 https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.1/maestro.zip -o "$RUNNER_TEMP/maestro.zip"
@@ -98,8 +110,7 @@ jobs:
           adb shell settings put global animator_duration_scale 0
           adb install packages/app/android/app/build/outputs/apk/release/app-release.apk
           adb logcat -c
-          cd "$EVIDENCE"
-          maestro test -e APP_ID="$APP_ID" --format junit --output results.xml --debug-output debug "$GITHUB_WORKSPACE/packages/app/maestro/ci/settings-native.yaml"
+          node --import tsx packages/app/maestro/ci/run-native.mjs android
       - name: Generate iOS simulator project
         if: matrix.platform == 'ios'
         working-directory: packages/app
@@ -109,7 +120,7 @@ jobs:
         run: |
           xcodebuild -version > "$EVIDENCE/xcode.txt"
           xcrun simctl list devices available -j > "$EVIDENCE/simulators.json"
-          DEVICE_ID=$(node -e 'const fs=require("fs"); const d=Object.values(JSON.parse(fs.readFileSync(process.env.EVIDENCE+"/simulators.json")).devices).flat().find(d=>d.isAvailable && d.name.startsWith("iPhone")); if(!d)throw Error("No available iPhone simulator"); console.log(d.udid)')
+          export DEVICE_ID=$(node -e 'const fs=require("fs"); const d=Object.values(JSON.parse(fs.readFileSync(process.env.EVIDENCE+"/simulators.json")).devices).flat().find(d=>d.isAvailable && d.name.startsWith("iPhone")); if(!d)throw Error("No available iPhone simulator"); console.log(d.udid)')
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
           WORKSPACE=$(find packages/app/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
@@ -119,8 +130,7 @@ jobs:
           APP_PATH=$(find "$RUNNER_TEMP/native-derived-data/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
           test -n "$APP_PATH"
           xcrun simctl install "$DEVICE_ID" "$APP_PATH"
-          cd "$EVIDENCE"
-          maestro --device "$DEVICE_ID" test -e APP_ID="$APP_ID" --format junit --output results.xml --debug-output debug "$GITHUB_WORKSPACE/packages/app/maestro/ci/settings-native.yaml"
+          node --import tsx packages/app/maestro/ci/run-native.mjs ios
       - name: Upload native evidence
         if: always()
         uses: actions/upload-artifact@v4

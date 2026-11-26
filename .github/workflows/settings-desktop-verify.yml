@@ -2,7 +2,23 @@ name: Settings desktop verification
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        default: all
+        options: [all, macos, windows]
+      brand:
+        type: choice
+        default: all
+        options: [all, woowtech, apporo]
   workflow_call:
+    inputs:
+      platform:
+        type: string
+        default: all
+      brand:
+        type: string
+        default: all
 
 permissions:
   contents: read
@@ -13,8 +29,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, macos-26]
-        brand: [woowtech, apporo]
+        os: ${{ fromJSON(inputs.platform == 'windows' && '["windows-2022"]' || inputs.platform == 'macos' && '["macos-26"]' || '["windows-2022","macos-26"]') }}
+        brand: ${{ fromJSON(inputs.brand == 'woowtech' && '["woowtech"]' || inputs.brand == 'apporo' && '["apporo"]' || '["woowtech","apporo"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     defaults:
@@ -42,12 +58,47 @@ jobs:
         run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
       - run: npm run build:server
       - run: npm run build:app-deps
+      - name: Check desktop shortcut capture and reload ownership
+        working-directory: packages/desktop
+        run: npx vitest run src/features/menu.test.ts --bail=1 --maxWorkers=1
+      - name: Check shared client and desktop types
+        run: |
+          npm run typecheck --workspace=@getpaseo/app
+          npm run typecheck --workspace=@getpaseo/desktop
+      - name: Check changed source formatting and lint
+        run: |
+          npm run lint -- packages/desktop/src/features/menu.ts packages/desktop/src/features/menu.test.ts packages/desktop/e2e/settings-memory.electron.mjs packages/desktop/e2e/browser-tabs.e2e.mjs packages/app/src/screens/settings-screen.tsx packages/app/src/screens/settings/terminal/terminal-section.tsx packages/app/src/screens/settings/keyboard-shortcuts-section.tsx packages/app/maestro/ci/run-native.mjs woowtech/tools/apply-brand.mjs woowtech/workflows.test.mjs
+          npm run format:check:files -- .github/workflows/settings-desktop-verify.yml .github/workflows/settings-android-emulator.yml packages/app/maestro/ci/settings-native.yaml packages/app/maestro/ci/run-native.mjs packages/desktop/src/features/menu.ts packages/desktop/src/features/menu.test.ts packages/desktop/e2e/settings-memory.electron.mjs packages/desktop/e2e/browser-tabs.e2e.mjs woowtech/tools/apply-brand.mjs
       - name: Verify brand and native distribution boundaries
         run: node --test --test-concurrency=1 woowtech/brand-layer.test.mjs woowtech/desktop-notification-launch.test.mjs woowtech/desktop-fuses.test.mjs
       - name: Exercise real Electron settings, browser, plugins and workspace routing
         run: npm run test:e2e:browser-tabs --workspace=@getpaseo/desktop
       - name: Build unsigned candidate without publishing
         run: npm run build:desktop -- --dir --publish never
+      - name: Exercise the packaged app and bundled host
+        env:
+          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/native-evidence/packaged
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          const root = path.resolve('packages/desktop/release');
+          const app = process.platform === 'win32'
+            ? path.join(root, 'win-unpacked')
+            : fs.readdirSync(root, {withFileTypes:true}).filter(e => e.isDirectory()).flatMap(e => fs.readdirSync(path.join(root, e.name)).filter(n => n.endsWith('.app')).map(n => path.join(root, e.name, n)))[0];
+          if (!app || !fs.existsSync(app)) throw new Error('Packaged application not found');
+          execFileSync(process.execPath, ['packages/desktop/e2e/packaged-app-smoke.js', '--app', app], {stdio:'inherit'});
+          fs.writeFileSync(path.join(root, 'provenance.json'), JSON.stringify({source:process.env.GITHUB_SHA,brand:process.env.WOOWTECH_BRAND,platform:process.platform,arch:process.arch,signed:false}, null, 2));
+          NODE
+      - name: Archive verified candidate with executable permissions
+        run: tar -czf "$RUNNER_TEMP/native-desktop.tar.gz" -C packages/desktop release
+      - name: Upload verified unsigned candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-candidate-${{ matrix.brand }}-${{ matrix.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/native-desktop.tar.gz
+          retention-days: 14
       - name: Upload desktop evidence
         if: always()
         uses: actions/upload-artifact@v4

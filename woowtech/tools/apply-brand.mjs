@@ -27,12 +27,13 @@ const {
 
 /** Formats `files` the way the pre-commit hook checks them. */
 function format(files) {
-  const oxfmt = path.join(REPO_ROOT, "node_modules", ".bin", "oxfmt");
+  // Run the JS entry through Node: .bin shims are not executable files on Windows.
+  const oxfmt = path.join(REPO_ROOT, "node_modules", "oxfmt", "bin", "oxfmt");
   if (!existsSync(oxfmt)) {
     console.warn(`${oxfmt} is missing (run npm ci); left unformatted: ${files.join(", ")}`);
     return;
   }
-  const result = spawnSync(oxfmt, files, { stdio: "inherit" });
+  const result = spawnSync(process.execPath, [oxfmt, ...files], { stdio: "inherit" });
   if (result.status !== 0) {
     throw new Error(`oxfmt failed on ${files.join(", ")}`);
   }
@@ -62,8 +63,8 @@ writeFileSync(BRAND_VALUES_PATH, renderBrandValues(loadBrand(id)));
 format([BRAND_VALUES_PATH]);
 const files = applyBrandToFiles(REPO_ROOT, loadBrand(current), loadBrand(id));
 const skills = spawnSync(
-  path.join(REPO_ROOT, "node_modules", ".bin", "tsx"),
-  ["woowtech/tools/generate-skills.mjs"],
+  process.execPath,
+  ["--import", "tsx", "woowtech/tools/generate-skills.mjs"],
   { cwd: REPO_ROOT, stdio: "inherit" },
 );
 if (skills.status !== 0) {

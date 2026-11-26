@@ -412,8 +412,8 @@ export function KeyboardShortcutsSection() {
     };
   }, [setCapturingShortcut]);
 
-  // Suppress desktop zoom accelerators while capturing so combos like Cmd+- are
-  // recorded instead of zooming the window. No-op outside Electron.
+  // Keep desktop menu accelerators in the recorder instead of reloading, opening
+  // another window or changing zoom. No-op outside Electron.
   useEffect(() => {
     if (!capturing) return;
     const menu = getDesktopHost()?.menu;

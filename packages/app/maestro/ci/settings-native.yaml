@@ -67,3 +67,64 @@ appId: ${APP_ID}
     id: terminal-scrollback-input
     text: "4321"
 - takeScreenshot: settings-terminal-persisted
+- tapOn:
+    id: header-back-button
+- tapOn:
+    id: header-back-button
+- tapOn:
+    id: welcome-direct-connection
+- extendedWaitUntil:
+    visible:
+      id: direct-host-input
+    timeout: 15000
+- tapOn:
+    id: direct-host-input
+- eraseText
+- inputText: "127.0.0.1"
+- tapOn:
+    id: direct-port-input
+- eraseText
+- inputText: ${HOST_PORT}
+- tapOn:
+    id: direct-host-submit
+- extendedWaitUntil:
+    notVisible:
+      id: welcome-screen
+    timeout: 60000
+- runFlow:
+    when:
+      notVisible:
+        id: sidebar-settings
+    commands:
+      - tapOn:
+          id: menu-button
+- tapOn:
+    id: sidebar-settings
+- scrollUntilVisible:
+    element:
+      id: settings-host-section-devices
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: settings-host-section-devices
+- extendedWaitUntil:
+    visible:
+      id: devices-relay
+    timeout: 30000
+- takeScreenshot: connected-host-devices
+- tapOn:
+    id: header-back-button
+- scrollUntilVisible:
+    element:
+      id: settings-host-section-plugins
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: settings-host-section-plugins
+- extendedWaitUntil:
+    visible:
+      id: plugin-tabs
+    timeout: 30000
+- assertNotVisible:
+    id: plugin-list-loading
+- takeScreenshot: connected-host-plugins

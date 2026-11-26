@@ -1,4 +1,5 @@
 import { createWriteStream } from "node:fs";
+import { expect } from "@playwright/test";
 
 const GC_ATTEMPTS = 6;
 const SETTINGS_PANE_TEST_ID = "settings-detail-pane";
@@ -57,6 +58,58 @@ export async function runSettingsPersistenceRegression(page) {
   await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
   await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
   return { terminalScrollbackPersisted: true, filesSettingsVisible: true };
+}
+
+export async function runShortcutCaptureRegression(page, evaluateMain) {
+  const modifier = process.platform === "darwin" ? "meta" : "control";
+  const sendKey = (keyCode, modifiers) =>
+    evaluateMain(`
+    win.focus();
+    win.webContents.focus();
+    win.webContents.sendInputEvent(${JSON.stringify({ type: "keyDown", keyCode, modifiers })});
+    win.webContents.sendInputEvent(${JSON.stringify({ type: "keyUp", keyCode, modifiers })});
+  `);
+  const zoomMenuEnabled = () =>
+    evaluateMain(`
+    const menu = process.mainModule.require('electron').Menu.getApplicationMenu();
+    return menu.items.find(item => item.label === 'View').submenu.items.find(item => item.label === 'Zoom In').enabled;
+  `);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await openSettingsDestination(page, "Shortcuts");
+  const row = page.getByText("Show keyboard shortcuts", { exact: true }).locator("..");
+  const baseline = await evaluateMain(
+    `return { zoom: win.webContents.getZoomLevel(), count: process.mainModule.require('electron').BrowserWindow.getAllWindows().length };`,
+  );
+  const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+  for (const [key, modifiers] of [
+    ["R", [modifier]],
+    ["N", [modifier, "shift"]],
+    ["-", [modifier]],
+  ]) {
+    await page.getByTestId("shortcut-actions-show-shortcuts").click();
+    await page.getByTestId("shortcut-bind-show-shortcuts").click();
+    await expect(row.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    // The disabled zoom menu confirms the renderer's capture IPC reached the main process.
+    await expect.poll(zoomMenuEnabled).toBe(false);
+    await sendKey(key, modifiers);
+    await expect(row.getByRole("button", { name: "Done", exact: true })).toBeEnabled();
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
+    expect(
+      await evaluateMain(
+        `return { zoom: win.webContents.getZoomLevel(), count: process.mainModule.require('electron').BrowserWindow.getAllWindows().length };`,
+      ),
+    ).toEqual(baseline);
+    await row.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect.poll(zoomMenuEnabled).toBe(true);
+  }
+  await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
+  await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
+  const reloaded = page.waitForEvent("domcontentloaded", { timeout: 15_000 });
+  await sendKey("R", [modifier]);
+  await reloaded;
+  await page.getByRole("button", { name: "Settings", exact: true }).waitFor({ state: "visible" });
+  expect(await page.evaluate(() => performance.timeOrigin)).not.toBe(timeOrigin);
+  return { recorded: ["reload", "new-window", "zoom-out"], menuRestoredAfterCancel: true };
 }
 
 function assert(condition, message) {

@@ -21,6 +21,7 @@ import { buildFillFixture, verifyReactFormFill } from "./browser-fill.electron.m
 import {
   runSettingsMemoryRegression,
   runSettingsPersistenceRegression,
+  runShortcutCaptureRegression,
 } from "./settings-memory.electron.mjs";
 
 import { seedPluginLinks, runPluginLinksRegression } from "./plugin-links.electron.mjs";
@@ -1515,6 +1516,9 @@ async function main() {
     }
 
     const settingsPersistence = await runSettingsPersistenceRegression(page);
+    const shortcutCapture = await runShortcutCaptureRegression(page, (expression) =>
+      evaluateDesktopWindow(inspectorPort, expression),
+    );
 
     const adaptiveTheme = await runAdaptiveThemeRegression(artifactDir);
     await runAppearanceFontSizeRegression(page);
@@ -1551,6 +1555,7 @@ async function main() {
       ...report,
       settingsMemory,
       settingsPersistence,
+      shortcutCapture,
       pluginLinks,
       adaptiveTheme,
       browserHostRouting: "passed",
@@ -1559,6 +1564,19 @@ async function main() {
       `Browser desktop browser E2E passed: WebContents ${report.originalWebContentsId} remained ${report.finalWebContentsId}; viewport, inactive capture, focus continuity, list, snapshot, click, local-page selectors passed.`,
     );
   } catch (error) {
+    const failedPage = browser
+      ?.contexts()
+      .flatMap((context) => context.pages())
+      .find((page) => page.url().includes(`localhost:${expoPort}`));
+    await failedPage
+      ?.screenshot({ path: path.join(artifactDir, "failure.png"), timeout: 5_000 })
+      .catch(() => undefined);
+    writeJson(path.join(artifactDir, "failure.json"), {
+      source: process.env.GITHUB_SHA,
+      brand: process.env.WOOWTECH_BRAND,
+      platform: process.platform,
+      error: String(error),
+    });
     console.error(`Browser desktop browser E2E failed. Artifacts: ${artifactDir}`);
     console.error(error);
     throw error;
