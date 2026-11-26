@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 // The app package is CommonJS; tsx exposes its TypeScript fixture through require.
 const require = createRequire(import.meta.url);
 const { startIsolatedHostDaemon } = require("../../e2e/support/helpers/isolated-host-daemon.ts");
+const { appliedBrand } = require("../../../../woowtech/brands/index.cjs");
 if (typeof startIsolatedHostDaemon !== "function") throw new Error("Host fixture did not load");
 if (process.argv.includes("--check")) {
   console.log("Native test runner and isolated host fixture loaded.");
@@ -34,6 +35,10 @@ try {
     `APP_ID=${appId}`,
     "-e",
     `HOST_PORT=${host.port}`,
+    "-e",
+    `PLUGIN_SETTINGS_URL=${appliedBrand().scheme}:///settings/hosts/${host.serverId}/plugins/better-paseo/chat-presentation`,
+    "-e",
+    `TASKS_URL=${appliedBrand().scheme}:///h/${host.serverId}/plugin/better-paseo/surface/tasks`,
     "--format",
     "junit",
     "--output",
@@ -72,6 +77,16 @@ try {
         platform,
         appId,
         passed,
+        checks: passed
+          ? [
+              "native settings navigation",
+              "terminal preference survives restart",
+              "direct host connection",
+              "devices and plugin gallery",
+              "built-in Tasks settings",
+              "native Tasks lane selection",
+            ]
+          : [],
         hostSource: process.env.GITHUB_SHA,
       },
       null,

@@ -131,3 +131,33 @@ appId: ${APP_ID}
 - assertNotVisible:
     id: plugin-list-loading
 - takeScreenshot: connected-host-plugins
+# Built-ins do not appear in the installed-plugin catalog. Exercise their real
+# settings route and native surface through the app's registered URL scheme.
+- openLink: ${PLUGIN_SETTINGS_URL}
+- tapOn:
+    text: Open
+    optional: true
+- extendedWaitUntil:
+    visible: "Tasks board"
+    timeout: 30000
+- tapOn: "Tasks board"
+- extendedWaitUntil:
+    visible:
+      id: tasks-settings-panel
+    timeout: 30000
+- assertVisible: "Enable the Tasks board"
+- assertNotVisible:
+    id: plugin-update
+- assertNotVisible: "Change shortcut"
+- takeScreenshot: built-in-tasks-settings
+- openLink: ${TASKS_URL}
+- extendedWaitUntil:
+    visible:
+      id: phone-stat-done
+    timeout: 30000
+- tapOn:
+    id: phone-stat-done
+- assertVisible:
+    id: phone-stat-done
+    selected: true
+- takeScreenshot: native-tasks-done-lane
