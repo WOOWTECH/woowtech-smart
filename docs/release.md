@@ -529,12 +529,14 @@ Finder opening, installation and first launch before approving publication.
 
 Run CI on the selected integration branch with `run_native_parity=true` to build
 Woowtech and Apporo from the same source commit. The reusable `native-parity.yml`
-workflow builds unsigned, unpacked desktop candidates on Linux, Windows and macOS.
+workflow builds unsigned, unpacked desktop candidates on Linux, Windows and macOS
+(Apple Silicon and Intel runners).
 Each candidate must start its packaged renderer, preload, daemon, built-in plugins,
 CLI and a real terminal in temporary state directories. The receipt records the
 source commit, brand, architecture, version and archive SHA256. Artifacts expire
 after seven days; this workflow does not update release channels or publish tags.
 Use `native_parity_target` to repeat only a failing platform after a fix.
+`macos` runs both Mac architectures; `macos-intel` repeats just the Intel job.
 
 The mobile jobs export iOS and Android separately and verify their bundle hashes
 and Expo identities. These are Metro/Hermes checks, not native compilation or device

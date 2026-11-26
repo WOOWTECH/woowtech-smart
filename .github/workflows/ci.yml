@@ -22,7 +22,7 @@ on:
         description: "Candidate platforms to verify when run_native_parity is selected"
         type: choice
         default: all
-        options: [all, linux, windows, macos, mobile]
+        options: [all, linux, windows, macos, macos-intel, mobile]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ inputs.run_native_parity && inputs.native_parity_target || 'checks' }}
