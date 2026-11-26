@@ -1,3 +1,4 @@
+import type { PluginLifecycle } from "../plugins/lifecycle/index.js";
 import type { CreatePaseoWorktreeInput } from "../paseo-worktree-service.js";
 import { randomUUID } from "node:crypto";
 import type pino from "pino";
@@ -30,7 +31,8 @@ interface CreateAgentLifecycleDispatchDependencies {
   worktreeManagers?: Pick<PluginWorktreeManagerRuntime, "removeWorktree">;
   workspaceArchiveOperations?: ArchiveDependencies["workspaceArchiveOperations"];
   getWorkspace?: ArchiveDependencies["getWorkspace"];
-  isCheckoutUntrusted?: ArchiveDependencies["isCheckoutUntrusted"];
+  assertWorkspaceAutomationAllowed: ArchiveDependencies["assertWorkspaceAutomationAllowed"];
+  isCheckoutUntrusted: ArchiveDependencies["isCheckoutUntrusted"];
   agentManager: AgentManager;
   agentStorage: AgentStorage;
   github: ForgeService;
@@ -47,6 +49,7 @@ interface CreateAgentLifecycleDispatchDependencies {
   clearWorkspaceArchiving: (workspaceIds: Iterable<string>) => void;
   killTerminalsForWorkspace: (workspaceId: string) => Promise<void>;
   logger: pino.Logger;
+  lifecycle: Pick<PluginLifecycle, "before"> | null;
 }
 
 export interface LifecycleRegistration {
@@ -192,6 +195,7 @@ export class CreateAgentLifecycleDispatch {
 
     await archiveByScope(
       {
+        lifecycle: this.dependencies.lifecycle,
         paseoHome: this.dependencies.paseoHome,
         paseoWorktreesBaseRoot: this.dependencies.worktreesRoot,
         worktreeManagers: this.dependencies.worktreeManagers,
@@ -202,6 +206,7 @@ export class CreateAgentLifecycleDispatch {
         agentStorage: this.dependencies.agentStorage,
         findWorkspaceIdForCwd: this.dependencies.findWorkspaceIdForCwd,
         getWorkspace: this.dependencies.getWorkspace,
+        assertWorkspaceAutomationAllowed: this.dependencies.assertWorkspaceAutomationAllowed,
         isCheckoutUntrusted: this.dependencies.isCheckoutUntrusted,
         listActiveWorkspaces: this.dependencies.listActiveWorkspaces,
         archiveWorkspaceRecord: this.dependencies.archiveWorkspaceRecord,

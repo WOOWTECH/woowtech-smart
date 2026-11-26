@@ -1045,6 +1045,7 @@ export class ProviderSnapshotManager {
           iconSvg: definition.iconSvg,
           docsUrl: definition.docsUrl,
           defaultModeId: definition.defaultModeId ?? null,
+          ...(definition.supportsLaunchWrap ? { launchWrap: true } : {}),
         }),
       });
     }

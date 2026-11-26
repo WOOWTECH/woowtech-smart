@@ -1,93 +1,10 @@
-import type { TFunction } from "i18next";
-import { i18n } from "@/i18n/i18next";
 import {
   isCompleteGitRemote,
   parseGitHubRemoteUrl,
   parseGitRemoteLocation,
 } from "@getpaseo/protocol/git-remote";
-import { shortenPath } from "@/utils/shorten-path";
-import type { AddProjectHost, GithubRepositoryChoice } from "./model";
-
-export type AddProjectMethodId = "directory-search" | "browse" | "github" | "new-directory";
-
-export interface AddProjectMethodOption {
-  id: AddProjectMethodId;
-  label: string;
-  description: string;
-  disabled?: boolean;
-}
-
-export interface AddProjectPathOption {
-  id: string;
-  path: string;
-  displayPath: string;
-  secondaryText: string | null;
-  disabled: boolean;
-}
-
-export function filterAddProjectHosts(hosts: AddProjectHost[], query: string): AddProjectHost[] {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return hosts;
-  return hosts.filter(
-    (host) =>
-      host.label.toLowerCase().includes(normalized) ||
-      host.serverId.toLowerCase().includes(normalized),
-  );
-}
-
-export function buildAddProjectMethods(
-  host: AddProjectHost,
-  t: TFunction = i18n.t,
-): AddProjectMethodOption[] {
-  if (!host.canAddProject) return [];
-  const options: AddProjectMethodOption[] = [];
-  options.push({
-    id: "directory-search",
-    label: t("woowtech.addProject.searchDirectory"),
-    description: t("woowtech.addProject.searchDirectoryDescription", { host: host.label }),
-  });
-  if (host.canBrowse) {
-    options.push({
-      id: "browse",
-      label: t("woowtech.addProject.browse"),
-      description: t("woowtech.addProject.browseDescription"),
-    });
-  }
-  options.push({
-    id: "github",
-    label: t("woowtech.addProject.cloneGithub"),
-    description: githubMethodDescription(host, t),
-    disabled: !host.canCloneGithubRepositories,
-  });
-  options.push({
-    id: "new-directory",
-    label: t("woowtech.addProject.newDirectory"),
-    description: host.canCreateDirectory
-      ? t("woowtech.addProject.newDirectoryDescription", { host: host.label })
-      : t("woowtech.addProject.upgradeForCreate"),
-    disabled: !host.canCreateDirectory,
-  });
-  return options;
-}
-
-export function addProjectMethodEmptyText(
-  host: AddProjectHost | null,
-  t: TFunction = i18n.t,
-): string {
-  return host?.canAddProject === false
-    ? t("woowtech.addProject.upgradeForAdd")
-    : t("woowtech.addProject.noMatches");
-}
-
-function githubMethodDescription(host: AddProjectHost, t: TFunction): string {
-  if (!host.canCloneGithubRepositories) {
-    return t("woowtech.addProject.upgradeForClone");
-  }
-  if (host.canSearchGithubRepositories) {
-    return t("woowtech.addProject.cloneGithubDescription");
-  }
-  return t("woowtech.addProject.githubManualHint");
-}
+import type { GithubRepositoryChoice } from "./model";
+import { i18n } from "@/i18n/i18next";
 
 export function pathBaseName(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, "");
@@ -95,10 +12,10 @@ export function pathBaseName(path: string): string {
   return parts[parts.length - 1] ?? trimmed;
 }
 
-export function buildManualGithubRepositoryChoices(
-  query: string,
-  t: TFunction = i18n.t,
-): GithubRepositoryChoice[] {
+/** Starts the id of every choice built from what the user typed. */
+export const MANUAL_CHOICE_PREFIX = "manual:";
+
+export function buildManualGithubRepositoryChoices(query: string): GithubRepositoryChoice[] {
   const repo = query.trim();
   if (!repo) return [];
 
@@ -108,10 +25,10 @@ export function buildManualGithubRepositoryChoices(
     const remoteName = location ? pathBaseName(location.path).replace(/\.git$/u, "") : repo;
     return [
       {
-        id: `manual:${repo}`,
+        id: `${MANUAL_CHOICE_PREFIX}${repo}`,
         nameWithOwner: identity?.repo ?? remoteName,
         cloneUrl: repo,
-        description: t("woowtech.addProject.cloneUrl"),
+        description: i18n.t("woowtech.addProject.cloneUrl"),
         updatedAt: null,
       },
     ];
@@ -121,27 +38,32 @@ export function buildManualGithubRepositoryChoices(
   if (!shorthand) return [];
   const nameWithOwner = `${shorthand[1]}/${shorthand[2]}`;
   return (["https", "ssh"] as const).map((cloneProtocol) => ({
-    id: `manual:${cloneProtocol}:${nameWithOwner}`,
+    id: `${MANUAL_CHOICE_PREFIX}${cloneProtocol}:${nameWithOwner}`,
     nameWithOwner,
     cloneUrl: nameWithOwner,
     cloneProtocol,
-    description: t("woowtech.addProject.cloneProtocol", { protocol: cloneProtocol.toUpperCase() }),
+    description: i18n.t("woowtech.addProject.cloneProtocol", {
+      protocol: cloneProtocol.toUpperCase(),
+    }),
     updatedAt: null,
   }));
 }
 
+/** The folder that holds `path`. A root keeps its separator: `C:\repo` gives `C:\`, not `C:`. */
 export function parentDirectory(path: string): string | null {
   const trimmed = path.replace(/[\\/]+$/, "");
+  // A share root (\\server\share) has no parent folder; `\\server` alone is not a directory.
+  if (/^[\\/]{2}[^\\/]+[\\/][^\\/]+$/u.test(trimmed)) return null;
   const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
   if (index < 0) return null;
-  if (index === 0) return trimmed.slice(0, 1);
-  return trimmed.slice(0, index);
+  const parent = trimmed.slice(0, index);
+  const isRoot = parent === "" || /^[A-Za-z]:$/u.test(parent);
+  return isRoot ? trimmed.slice(0, index + 1) : parent;
 }
 
 export function joinDirectoryPath(parent: string, name: string): string {
-  const trimmedParent = parent.replace(/[\\/]+$/, "");
-  const separator = trimmedParent.includes("\\") && !trimmedParent.includes("/") ? "\\" : "/";
-  return `${trimmedParent}${separator}${name}`;
+  const separator = parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
+  return `${parent.replace(/[\\/]+$/, "")}${separator}${name}`;
 }
 
 export function buildSuggestedParentDirectories(projectPaths: string[]): string[] {
@@ -160,39 +82,31 @@ export function buildSuggestedParentDirectories(projectPaths: string[]): string[
   return [...new Set(values)];
 }
 
-export function buildCloneLocationOptions(
-  input: {
-    parents: string[];
-    repositoryName: string;
-    existingPaths: string[];
-  },
-  t: TFunction = i18n.t,
-): AddProjectPathOption[] {
-  const existing = new Set(input.existingPaths.map(pathIdentity));
-  const seen = new Set<string>();
-  return input.parents.flatMap((parent) => {
-    const path = joinDirectoryPath(parent, input.repositoryName);
-    const identity = pathIdentity(path);
-    if (seen.has(identity)) return [];
-    seen.add(identity);
-    const pathExists = existing.has(identity);
-    return [
-      {
-        id: parent,
-        path: parent,
-        displayPath: path,
-        secondaryText: pathExists
-          ? t("woowtech.addProject.alreadyExists")
-          : t("woowtech.addProject.parentDescription", { path: parent }),
-        disabled: pathExists,
-      },
-    ];
-  });
+/**
+ * Where a new folder or clone goes when the user has not picked a location on this host: the last
+ * one used, else the parent of a recent project, else home. Only folders known to exist qualify;
+ * guesses like `~/dev` stay suggestions in the Location picker.
+ */
+export function defaultProjectLocation(input: {
+  remembered: string | undefined;
+  projectPaths: string[];
+}): string {
+  const projectParent = input.projectPaths
+    .map(parentDirectory)
+    .find((parent): parent is string => parent !== null);
+  return input.remembered ?? projectParent ?? "~";
 }
 
-function pathIdentity(path: string): string {
-  const normalized = shortenPath(path.trim()).replace(/\\/g, "/").replace(/\/+$/u, "");
-  return /^[A-Za-z]:\//u.test(normalized) || normalized.startsWith("//")
-    ? normalized.toLowerCase()
-    : normalized;
+/** The folder a clone of `nameWithOwner` checks out into; the host drops a trailing `.git`. */
+export function checkoutName(nameWithOwner: string): string {
+  return pathBaseName(nameWithOwner).replace(/\.git$/u, "");
+}
+
+export function validateNewFolderName(name: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === "." || trimmed === "..") return "Enter a folder name";
+  if (/[\\/]/.test(trimmed)) return "Use a name without slashes";
+  // The host rejects a drive prefix on every platform.
+  if (/^[A-Za-z]:/u.test(trimmed)) return "Use a name without a drive letter";
+  return null;
 }

@@ -341,7 +341,11 @@ test("Windows installs an update only from a silent restart, never at quit (G37,
     updater,
     /const \{ isSilent, isForceRunAfter \} = updateInstallMode\(\{\s*platform: process.platform,\s*\.\.\.requested,\s*\}\);/,
   );
-  assert.match(updater, /autoUpdater.quitAndInstall\(isSilent, isForceRunAfter\);/);
+  assert.match(
+    updater,
+    /return runElectronQuitAndInstall\(\{\s*platform: process.platform,\s*updater: autoUpdater,[\s\S]*?isSilent,\s*isForceRunAfter,/,
+  );
+  assert.match(updater, /updater.quitAndInstall\(isSilent, isForceRunAfter\);/);
 });
 
 // Run the actual workflow metadata command: RCs must never enter the publishing path.

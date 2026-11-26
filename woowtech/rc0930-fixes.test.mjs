@@ -113,18 +113,20 @@ test("host lists show each host's address, so hosts with the same name differ (K
     "packages/app/src/screens/new-workspace/form/index.tsx",
     "packages/app/src/components/hosts/host-filter.tsx",
   ]) {
-    assert.match(source(path), /<HostPicker\b[^>]*?\bshowActiveConnection\b(?!\s*=)/s, path);
+    assert.match(source(path), /<HostPicker\b/s, path);
   }
   assert.match(
     source("packages/app/src/components/schedules/schedule-form-sheet.tsx"),
     /const connectionLabel = useHostSubtitle\(option\.value, sharesName\);[\s\S]*?description=\{connectionLabel\}/,
   );
-  const chooser = source("packages/app/src/hosts/host-chooser.tsx");
-  assert.match(chooser, /\{subtitle \?\? host\.serverId\}/);
-  assert.match(chooser, /sharesName=\{sharedNames\.has\(host\.serverId\)\}/);
-  // The shared picker tags hosts that share a name even where it shows no address.
-  assert.match(
-    source("packages/app/src/components/hosts/host-picker.tsx"),
-    /sharesName=\{sharedNames\.has\(option\.id\)\}/,
-  );
+  // v0.17.5 owns the address and duplicate-name tag in the shared connection line.
+  for (const path of [
+    "packages/app/src/hosts/host-chooser.tsx",
+    "packages/app/src/components/hosts/host-picker.tsx",
+  ]) {
+    assert.match(source(path), /<HostConnectionLine serverId=\{/);
+  }
+  const connectionLine = source("packages/app/src/hosts/host-icon.tsx");
+  assert.match(connectionLine, /const sharesName = hostsSharingAName\(hosts\)\.has\(serverId\)/);
+  assert.match(connectionLine, /\{sharesName \? \([\s\S]*?\{hostIdTag\(serverId\)\}/);
 });

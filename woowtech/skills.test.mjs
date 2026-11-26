@@ -61,7 +61,7 @@ const UPSTREAM_LEFTOVERS = [
 const UPSTREAM_LINK = /(?<![\w.-])paseo\.sh\b\S*|github\.com\/getpaseo\/\S*/g;
 // The plugin API is upstream's, so the plugin skill keeps its docs and examples.
 const PLUGIN_API_DOCS =
-  /^(?:paseo\.sh\/(?:llms\.txt|docs\/(?:plugins|sdk)\b)|github\.com\/getpaseo\/paseo\/tree\/main\/plugin-examples\/)/;
+  /^(?:paseo\.sh\/(?:llms\.txt|docs\/(?:plugins|sdk)\b)|github\.com\/getpaseo\/paseo\/tree\/main\/plugin-examples(?:\/|[).]*$))/;
 
 test("the committed skills are what the generator makes from upstream's current skills", () => {
   const check = spawnSync("npx", ["tsx", "woowtech/tools/generate-skills.mjs", "--check"], {

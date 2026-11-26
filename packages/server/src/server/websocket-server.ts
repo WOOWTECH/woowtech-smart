@@ -32,6 +32,7 @@ import { MessageReceipts } from "./message-receipts/index.js";
 import { WebSocket, WebSocketServer } from "ws";
 import type { IncomingMessage, Server as HTTPServer } from "http";
 import { join } from "path";
+import { getCachedHostMachineKind } from "./host-machine-kind.js";
 import { getHostName } from "./host-name.js";
 import { randomUUID } from "node:crypto";
 import { monitorEventLoopDelay } from "node:perf_hooks";
@@ -168,6 +169,8 @@ import {
 import { terminalAgentHooksSupported } from "../terminal/agent-hooks/woowtech-hook-platform.js";
 
 const WS_CLOSE_DAEMON_AUTH_FAILED = 4401;
+// Give clients intermediate messages that count as progress during large transfers.
+const DIRECT_WEBSOCKET_FRAME_BYTES = 512 * 1024;
 
 export interface ExternalSocketMetadata {
   transport: "relay" | "hub";
@@ -267,6 +270,8 @@ function createFallbackWorkspaceGitSnapshot(cwd: string): WorkspaceGitRuntimeSna
       behindOfOrigin: null,
       upstreamState: "none",
       hasRemote: false,
+      pullRemote: null,
+      pushRemote: null,
       firstPushRemote: null,
       diffStat: null,
     },
@@ -593,6 +598,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly hostLinks = new Map<WebSocketLike, DaemonLinkEndpoint>();
   private readonly pendingConnections: Map<WebSocketLike, PendingConnection> = new Map();
   private readonly sessions: Map<WebSocketLike, SessionConnection> = new Map();
+  private readonly socketLocalEndpoints = new WeakMap<object, string>();
   private readonly socketIdentities: Map<WebSocketLike, WebSocketConnectionIdentity> = new Map();
   private readonly externalSessionsByKey: Map<string, ReconnectableSessionConnection> = new Map();
   private readonly pluginSocketIds = new WeakMap<WebSocketLike, string>();
@@ -974,7 +980,8 @@ export class VoiceAssistantWebSocketServer {
       },
     });
     wss.on("connection", (ws, request) => {
-      void this.attachAuthenticatedSocket(ws, request, password);
+      const socket = Object.assign(ws, { maxFrameBytes: DIRECT_WEBSOCKET_FRAME_BYTES });
+      void this.attachAuthenticatedSocket(socket, request, password);
     });
     return wss;
   }
@@ -1577,6 +1584,8 @@ export class VoiceAssistantWebSocketServer {
 
     const requestMetadata = extractSocketRequestMetadata(request);
     const identity = createWebSocketConnectionIdentity(requestMetadata, metadata);
+    if (requestMetadata.localEndpoint)
+      this.socketLocalEndpoints.set(ws, requestMetadata.localEndpoint);
     this.socketIdentities.set(ws, identity);
     const connectionLogger = this.logger.child(toConnectionLogFields(identity));
 
@@ -1712,6 +1721,7 @@ export class VoiceAssistantWebSocketServer {
   private createSocketSession(options: SocketSessionOptions): Session {
     return new Session({
       connectedHosts: this.connectedHosts,
+      getSourceLocalEndpoint: (source) => this.socketLocalEndpoints.get(source),
       getConnectedHostBufferedAmount: () => {
         let total = 0;
         for (const socket of this.sessions.keys()) {
@@ -2090,12 +2100,14 @@ export class VoiceAssistantWebSocketServer {
   }
 
   private buildServerInfoStatusPayload(session: Session): ServerInfoStatusPayload {
+    const machineKind = getCachedHostMachineKind();
     return {
       status: "server_info",
       protocolVersion: WS_PROTOCOL_VERSION,
       serverId: this.serverId,
       hostname: getHostName(),
       version: this.daemonVersion,
+      ...(machineKind ? { machineKind } : {}),
       sourceId: session.getHostSourceId(),
       permissions: session.getPermissions(),
       // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
@@ -2164,6 +2176,10 @@ export class VoiceAssistantWebSocketServer {
         ...(this.advertiseDaemonStatusRpc ? { daemonStatusRpc: true } : {}),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: true,
+        // COMPAT(tailscale): added in v0.16.0, remove after 2027-05-25 once daemon floor >= v0.16.0.
+        ...(this.advertiseDaemonStatusRpc && this.daemonRuntimeConfig?.setTailscaleEnabled
+          ? { tailscale: true }
+          : {}),
         // COMPAT(speechSettings): added in v0.12.0, remove gate after 2027-04-18.
         speechSettings: true,
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
@@ -3371,6 +3387,7 @@ export class VoiceAssistantWebSocketServer {
 }
 
 interface SocketRequestMetadata {
+  localEndpoint?: string;
   host?: string;
   origin?: string;
   userAgent?: string;
@@ -3448,6 +3465,8 @@ function extractSocketRequestMetadata(request: unknown): SocketRequestMetadata {
     url?: unknown;
     socket?: {
       remoteAddress?: unknown;
+      localAddress?: unknown;
+      localPort?: unknown;
     };
   };
 
@@ -3459,6 +3478,10 @@ function extractSocketRequestMetadata(request: unknown): SocketRequestMetadata {
     typeof record.socket?.remoteAddress === "string" ? record.socket.remoteAddress : undefined;
 
   return {
+    ...(typeof record.socket?.localAddress === "string" &&
+    typeof record.socket.localPort === "number"
+      ? { localEndpoint: `${record.socket.localAddress}:${record.socket.localPort}` }
+      : {}),
     ...(host ? { host } : {}),
     ...(origin ? { origin } : {}),
     ...(userAgent ? { userAgent } : {}),

@@ -1,5 +1,9 @@
-import type { ChildProcess, SpawnOptions } from "node:child_process";
-import { spawnProcess as spawnCli, execCommand as execCli } from "@getpaseo/plugin/server";
+import type { ChildProcess } from "node:child_process";
+import {
+  spawnProcess as spawnCli,
+  execCommand as execCli,
+  type SpawnProcessOptions as CliSpawnOptions,
+} from "@getpaseo/plugin/server";
 import { createExternalCommandProcessEnv, type ProcessEnvRecord } from "../server/paseo-env.js";
 import { execFile, spawn } from "node:child_process";
 import { extname } from "node:path";
@@ -15,7 +19,7 @@ interface ExternalEnvOptions {
   envOverlay?: ProcessEnvRecord;
 }
 
-export type SpawnProcessOptions = Omit<SpawnOptions, "env"> & ExternalEnvOptions;
+export type SpawnProcessOptions = Omit<CliSpawnOptions, "env"> & ExternalEnvOptions;
 
 interface ExecCommandOptions extends ExternalEnvOptions {
   cwd?: string;

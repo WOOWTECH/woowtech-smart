@@ -172,7 +172,8 @@ test("PR routing declares stable behavior ownership", () => {
     sdk: [
       "packages/plugin/**",
       "plugin-examples/**",
-      "public-docs/plugins/v0.8/**",
+      "public-docs/plugins/**",
+      "skills/paseo-plugin/**",
       "packages/client/**",
       "packages/highlight/**",
       "packages/protocol/**",

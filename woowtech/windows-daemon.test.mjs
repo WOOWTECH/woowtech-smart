@@ -122,7 +122,12 @@ test("the Windows daemon never runs an executable a project carries (G28)", () =
   const worktree = read("packages/server/src/utils/worktree.ts");
   assert.match(
     worktree,
-    /execFileAsync\(shellInvocation.shell, shellInvocation.args, \{[\s\S]*?windowsHide: true,/,
+    /execCommand\(shellInvocation.shell, shellInvocation.args, \{[\s\S]*?shell: false,/,
+  );
+  // The shared exec helper owns the hidden-window option since v0.17.5.
+  assert.match(
+    read("packages/plugin/src/server/process.ts"),
+    /export async function execCommand\([\s\S]*?windowsHide: true,/,
   );
 });
 
@@ -166,7 +171,7 @@ test("Windows starts programs without cmd.exe when it can (G17, G30)", () => {
   assert.ok(spawnProcess !== -1 && execCommand > spawnProcess);
   assert.match(
     spawnTs,
-    /import \{ spawnProcess as spawnCli, execCommand as execCli \} from "@getpaseo\/plugin\/server";/,
+    /import \{\s*spawnProcess as spawnCli,\s*execCommand as execCli,[^}]*\} from "@getpaseo\/plugin\/server";/,
   );
   for (const [body, upstreamCall] of [
     [spawnTs.slice(spawnProcess, execCommand), "return spawnCli(command, args"],
@@ -192,7 +197,7 @@ test("Windows starts programs without cmd.exe when it can (G17, G30)", () => {
   assert.match(spawnTs, /windowsVerbatimArguments: plan.windowsVerbatimArguments,/);
   const shared = readFileSync(join(root, "packages/plugin/src/server/process.ts"), "utf8");
   for (const launcher of ["spawn", "execFileAsync"]) {
-    const start = shared.indexOf(`return ${launcher}(resolvedCommand, resolvedArgs,`);
+    const start = shared.indexOf(`return ${launcher}(invocation.command, invocation.args,`);
     assert.notEqual(start, -1, `${launcher}: shared launcher not found`);
     assert.match(callArguments(shared, shared.indexOf("(", start)), /windowsHide: true/);
   }

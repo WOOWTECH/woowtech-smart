@@ -139,6 +139,8 @@ export interface ProviderSnapshotEntry {
   defaultModeId?: string | null;
   /** woowtech smart: display-only login state (woowtech/README.md §3). */
   auth?: ProviderAuthStatus;
+  /** The provider can run a session behind an `agent.open.before` wrap. Absent means it cannot. */
+  launchWrap?: boolean;
 }
 
 export interface AgentFeatureToggle {

@@ -38,6 +38,7 @@ export {
   editPersistedConfig,
   type PersistedConfig,
 } from "./persisted-config.js";
+export { getMainListenAddress } from "./listeners.js";
 
 // Each brand's daemon listens on its own port, apart from an upstream Paseo daemon.
 const DEFAULT_PORT = DEFAULT_DAEMON_PORT;
@@ -479,11 +480,11 @@ function resolveTrustedProxiesConfig(
 }
 
 // PASEO_LISTEN can be:
-// - host:port (TCP)
+// - host:port (TCP), with optional comma-separated extra TCP listeners
 // - /path/to/socket (Unix socket)
 // - unix:///path/to/socket (Unix socket)
 // Default is TCP at 127.0.0.1:6770
-function resolveListenAddress(
+export function resolveListenAddress(
   env: NodeJS.ProcessEnv,
   cli: CliConfigOverrides | undefined,
   persisted: ReturnType<typeof loadPersistedConfig>,

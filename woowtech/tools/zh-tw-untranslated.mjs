@@ -235,6 +235,8 @@ export const UNTRANSLATED = {
 // Daemon), Git commands, diff, tokens, examples and names.
 // Exemptions name individual keys, never a namespace; new prose still needs a translation.
 export const KEEP_ENGLISH = new Set([
+  "settings.host.connectionKinds.tailscale", // Product name
+  "settings.host.connectionKinds.ssh", // Protocol abbreviation
   "workspace.tabs.fallback.agent",
   "workspace.tabs.toasts.agentIdCopiedLabel",
   "settings.hostSections.agents",

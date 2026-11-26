@@ -24,6 +24,8 @@ export interface JsonlRpcLaunch {
   args: string[];
   cwd: string;
   env?: Record<string, string>;
+  /** Start the process as `[...wrap, command, ...args]`. */
+  wrap?: readonly [string, ...string[]];
 }
 
 interface JsonlRpcResponse {
@@ -65,6 +67,7 @@ function assertChildWithPipes(
 
 function spawnJsonlRpcProcess(launch: JsonlRpcLaunch): ChildProcessWithoutNullStreams {
   const child = spawnProcess(launch.command, launch.args, {
+    wrap: launch.wrap,
     cwd: launch.cwd,
     ...createProviderEnvSpec({ overlays: [launch.env] }),
     stdio: ["pipe", "pipe", "pipe"],

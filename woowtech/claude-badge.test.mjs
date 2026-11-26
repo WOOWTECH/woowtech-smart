@@ -121,7 +121,7 @@ const SVG_RENDER_SITES = {
     "the bundled ACP catalog, curated by vendor-marks.mjs; no host artwork",
   "packages/app/src/usage/source-icon.tsx":
     "curated known usage sources and validated custom plugin SVGs",
-  "packages/app/src/desktop/components/pair-device-section.tsx": "the pairing QR code",
+  "packages/app/src/devices/pair-device-section.tsx": "the pairing QR code",
 };
 
 // A string or attribute that starts SVG path data: a moveto with two numbers, then a command.

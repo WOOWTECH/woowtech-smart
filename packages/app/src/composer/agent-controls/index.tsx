@@ -97,6 +97,7 @@ import {
 import {
   useAgentProfileEditor,
   useAgentProfilePicker,
+  type AgentProfile,
   type AgentProfileApplyTarget,
   type AgentProfileEditorControls,
   type AgentProfilePicker,
@@ -128,7 +129,7 @@ interface ControlledAgentControlsProps {
   agentProfiles?: AgentProfilePicker | null;
   onApplyAgentProfile?: (profileId: string) => void;
   onEditAgentProfiles?: () => void;
-  onCreateAgentProfile?: (seed: AgentProfileSeed) => void;
+  onCreateAgentProfile?: (seed: AgentProfileSeed) => Promise<AgentProfile | null> | void;
   onEditAgentProfile?: (profileId: string) => void;
   optionControls?: ComposerOptionControls;
   onDropdownClose?: () => void;
@@ -270,7 +271,7 @@ function useEditAgentProfilesNavigation(
 ): (() => void) | undefined {
   const handleEdit = useCallback(() => {
     if (!serverId) return;
-    router.push(buildSettingsHostSectionRoute(serverId, "agents"));
+    router.push(buildSettingsHostSectionRoute(serverId, "agent-profiles"));
   }, [serverId]);
   return serverId && isSupported ? handleEdit : undefined;
 }
@@ -279,14 +280,14 @@ function resolveAgentProfileEditorActions(
   isSupported: boolean,
   editor: AgentProfileEditorControls,
 ): {
-  create?: (seed: AgentProfileSeed) => void;
+  create?: (seed: AgentProfileSeed) => Promise<AgentProfile | null>;
   edit?: (profileId: string) => void;
 } {
   if (!isSupported) {
     return {};
   }
   return {
-    create: editor.openCreateFromModel,
+    create: editor.quickCreateFromModel,
     edit: editor.openEdit,
   };
 }
@@ -733,7 +734,7 @@ interface AgentControlsContentProps {
   featureItems: ComposerControlItem[];
   onApplyAgentProfile?: (profileId: string) => void;
   onEditAgentProfiles?: () => void;
-  onCreateAgentProfile?: (seed: AgentProfileSeed) => void;
+  onCreateAgentProfile?: (seed: AgentProfileSeed) => Promise<AgentProfile | null> | void;
   onEditAgentProfile?: (profileId: string) => void;
   onDropdownClose?: () => void;
   onModelSelectorOpen?: () => void;
@@ -1215,6 +1216,7 @@ export const AgentControls = memo(function AgentControls({
       ownerKey: agentId,
       provider: agentProvider,
       providerDefinitions: modeProviderDefinitions,
+      profiles: agentProfiles,
       models: {
         providers: agentModelSelectorProviders,
         selectedProvider: agentProvider,
@@ -1232,6 +1234,7 @@ export const AgentControls = memo(function AgentControls({
     [
       activeModelId,
       agentOptionControls,
+      agentProfiles,
       client,
       agentId,
       agentModelSelectorProviders,
@@ -1454,6 +1457,7 @@ export function DraftAgentControls({
       ownerKey: draftId,
       provider: selectedProvider,
       providerDefinitions,
+      profiles: agentProfiles,
       models: {
         providers: modelSelectorProviders,
         selectedProvider,
@@ -1475,6 +1479,7 @@ export function DraftAgentControls({
       draftId,
       selectedProvider,
       providerDefinitions,
+      agentProfiles,
       modelSelectorProviders,
       effectiveModelId,
       onSelectProviderAndModel,

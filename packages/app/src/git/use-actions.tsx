@@ -16,11 +16,13 @@ import {
   isCurrentBranchBase,
   canMergeIntoLocalBase,
   narrowPullRequestState,
+  readSyncRemotes,
   readUpstreamState,
   type BuildGitActionsInput,
   type GitAction,
   type GitActions,
   type GitUpstreamState,
+  type SyncRemotes,
 } from "@/git/policy";
 import { deriveMergeCapability } from "@/git/merge-capability";
 import type { CheckoutPrMergeMethod } from "@getpaseo/protocol/messages";
@@ -126,15 +128,15 @@ interface DeriveGitActionsStateArgs {
   baseRef: string | undefined;
 }
 
-interface DerivedGitActionsState {
+const NO_SYNC_REMOTES: SyncRemotes = { hasPullRemote: false, hasPushRemote: false };
+
+interface DerivedGitActionsState extends SyncRemotes {
   actionsDisabled: boolean;
   aheadCount: number;
   behindBaseCount: number;
   aheadOfOrigin: number | null;
   behindOfOrigin: number | null;
   hasPullRequest: boolean;
-  hasRemote: boolean;
-  hasFirstPushRemote: boolean;
   upstream: GitUpstreamState;
   isPaseoOwnedWorktree: boolean;
   isOnBaseBranch: boolean;
@@ -186,8 +188,7 @@ function deriveGitActionsState(args: DeriveGitActionsStateArgs): DerivedGitActio
     actionsDisabled,
     ...extractGitCommitCounts(gitStatus),
     hasPullRequest: Boolean(prStatus?.url),
-    hasRemote: gitStatus?.hasRemote ?? false,
-    hasFirstPushRemote: (gitStatus?.firstPushRemote ?? null) !== null,
+    ...(gitStatus ? readSyncRemotes(gitStatus) : NO_SYNC_REMOTES),
     upstream: gitStatus ? readUpstreamState(gitStatus) : "unknown",
     isPaseoOwnedWorktree,
     isOnBaseBranch: isCurrentBranchBase(gitStatus?.currentBranch, baseRef),
@@ -676,8 +677,8 @@ export function useGitActions({ serverId, cwd, icons }: UseGitActionsInput): Use
     aheadOfOrigin,
     behindOfOrigin,
     hasPullRequest,
-    hasRemote,
-    hasFirstPushRemote,
+    hasPullRemote,
+    hasPushRemote,
     upstream,
     isPaseoOwnedWorktree,
     isOnBaseBranch,
@@ -709,8 +710,8 @@ export function useGitActions({ serverId, cwd, icons }: UseGitActionsInput): Use
       pullRequestIsMerged: prStatus?.isMerged ?? false,
       pullRequestMergeable: prStatus?.mergeable ?? "UNKNOWN",
       mergeCapability: deriveMergeCapability(prStatus?.forgeSpecific, prStatus?.github),
-      hasRemote,
-      hasFirstPushRemote,
+      hasPullRemote,
+      hasPushRemote,
       upstream,
       isPaseoOwnedWorktree,
       isOnBaseBranch,
@@ -819,8 +820,8 @@ export function useGitActions({ serverId, cwd, icons }: UseGitActionsInput): Use
     };
   }, [
     isGit,
-    hasRemote,
-    hasFirstPushRemote,
+    hasPullRemote,
+    hasPushRemote,
     upstream,
     hasPullRequest,
     prStatus?.url,
