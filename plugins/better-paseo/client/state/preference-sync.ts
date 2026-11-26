@@ -83,6 +83,8 @@ export function createPreferenceSync(deps: PreferenceSyncDeps): PreferenceSync {
   let revision: string | null = null;
   let pending: StoredPreferences | null = null;
   let inFlight = false;
+  let readingRevision = false;
+  let reports = 0;
   let attempts = 0;
   let failed = false;
   let lastSeen: string | null = null;
@@ -138,7 +140,27 @@ export function createPreferenceSync(deps: PreferenceSyncDeps): PreferenceSync {
       );
       return;
     }
-    if (remote.status !== "ready" || revision === null) return;
+    if (remote.status !== "ready") return;
+    if (revision === null) {
+      // A successful no-op can keep the same revision, so the hook need not
+      // render another report. Read before admitting the next queued write.
+      if (!readingRevision) {
+        readingRevision = true;
+        const beforeRead = reports;
+        void act.reload().then(
+          () => {
+            readingRevision = false;
+            // A failed read may settle without a report. Await reconnection
+            // instead of continuously retrying the same unavailable record.
+            if (reports !== beforeRead) flush();
+          },
+          () => {
+            readingRevision = false;
+          },
+        );
+      }
+      return;
+    }
     const values = pending;
     const against = revision;
     inFlight = true;
@@ -171,6 +193,7 @@ export function createPreferenceSync(deps: PreferenceSyncDeps): PreferenceSync {
 
   return {
     report(state, nextActions) {
+      reports++;
       if (nextActions) actions = nextActions;
       const seen =
         state.status === "ready" || state.status === "invalid"

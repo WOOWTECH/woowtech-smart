@@ -92,7 +92,7 @@ let hookCacheStale = false;
 // one reports it; the watcher then reads it at the handoff.
 let changedWhileMounted = false;
 // The watcher's read; null while no watcher runs.
-let readFromDaemon: (() => void) | null = null;
+let readFromDaemon: (() => Promise<void>) | null = null;
 let refreshing = false;
 const refreshListeners = new Set<() => void>();
 function subscribeRefresh(listener: () => void) {
@@ -123,7 +123,7 @@ export function watchPreferenceChanges(
   const read = () => {
     hookCacheStale = true;
     const id = ++latestRead;
-    readRecord(client).then(
+    return readRecord(client).then(
       (state) => {
         if (live && id === latestRead && state) preferenceSync.report(state);
       },
@@ -180,7 +180,12 @@ export function usePreferenceSettings(): SyncStatus {
   const actions = useRef<RemoteActions>({
     save: (values, against) => latest.current.save(values, against),
     reset: () => latest.current.reset(),
-    reload: () => latest.current.reload(),
+    reload: async () => {
+      await latest.current.reload();
+      // Structural sharing can suppress a hook render for an unchanged
+      // revision. Always report the authoritative read when asked to retry.
+      await readFromDaemon?.();
+    },
   }).current;
   const waiting = useSyncExternalStore(subscribeRefresh, isRefreshing, isRefreshing);
   // Declared before the report below, so a stale cached record is never reported.
