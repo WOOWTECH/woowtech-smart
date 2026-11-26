@@ -48,6 +48,41 @@ import {
 } from "../support/helpers/settings";
 
 test.describe("Settings host page", () => {
+  test("append system prompt Reset restores saved text and subsequent edits can be saved", async ({
+    page,
+  }) => {
+    const client = await connectDaemonClient<
+      Pick<DaemonClient, "connect" | "close" | "getDaemonConfig" | "patchDaemonConfig">
+    >({ clientIdPrefix: "system-prompt-reset" });
+    const original = (await client.getDaemonConfig()).config.appendSystemPrompt;
+    try {
+      await client.patchDaemonConfig({ appendSystemPrompt: "QA saved system prompt" });
+      await gotoAppShell(page);
+      await openSettings(page);
+      await openSettingsHost(page, getServerId());
+      await openHostSection(page, getServerId(), "agents");
+      await page.getByTestId("host-page-append-system-prompt-edit").click();
+      const input = page.getByTestId("host-page-append-system-prompt-input");
+      await expect(input).toHaveValue("QA saved system prompt");
+      await input.fill("QA unsaved system prompt");
+      await input.blur();
+      await page.getByTestId("host-page-append-system-prompt-reset").click();
+      await expect(input).toHaveValue("QA saved system prompt");
+      await expect(page.getByTestId("host-page-append-system-prompt-save")).toBeDisabled();
+      await input.fill("QA next saved system prompt");
+      await page.getByTestId("host-page-append-system-prompt-save").click();
+      await expect(page.getByTestId("host-page-append-system-prompt-sheet")).not.toBeVisible();
+      await expect
+        .poll(async () => (await client.getDaemonConfig()).config.appendSystemPrompt)
+        .toBe("QA next saved system prompt");
+      await page.getByTestId("host-page-append-system-prompt-edit").click();
+      await expect(input).toHaveValue("QA next saved system prompt");
+    } finally {
+      await client.patchDaemonConfig({ appendSystemPrompt: original });
+      await client.close();
+    }
+  });
+
   test("visits host settings and opens the label editor", async ({ page }) => {
     const serverId = getServerId();
     const port = getE2EDaemonPort();

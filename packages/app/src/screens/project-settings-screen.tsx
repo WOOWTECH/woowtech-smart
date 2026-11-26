@@ -488,7 +488,7 @@ function ProjectConfigForm({
 
   const [draft, setDraft] = useState<ProjectConfigDraft>(() => configToDraft(baseConfig));
   const [writeError, setWriteError] = useState<ProjectConfigRpcError | null>(null);
-  const [editingScriptId, setEditingScriptId] = useState<string | null>(null);
+  const [editingScript, setEditingScript] = useState<ProjectScriptDraft | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: async (input: {
@@ -578,62 +578,40 @@ function ProjectConfigForm({
   );
 
   const handleEditScript = useCallback((script: ProjectScriptDraft) => {
-    setEditingScriptId(script.id);
+    setEditingScript({ ...script });
   }, []);
 
   const handleAddScript = useCallback(() => {
-    const id = `script-draft-new-${Date.now()}`;
-    updateDraft((d) => ({
-      ...d,
-      scripts: [
-        ...d.scripts,
-        {
-          id,
-          name: "",
-          commandText: "",
-          commandOriginalKind: "missing" satisfies LifecycleOriginalKind,
-          type: "",
-          portText: "",
-          rawEntry: {},
-        },
-      ],
-    }));
-    setEditingScriptId(id);
-  }, [updateDraft]);
-
-  const handleEditingDraftChange = useCallback(
-    (next: ProjectScriptDraft) => {
-      updateDraft((d) => ({
-        ...d,
-        scripts: d.scripts.map((entry) => (entry.id === next.id ? next : entry)),
-      }));
-    },
-    [updateDraft],
-  );
-
-  const handleCancelEditing = useCallback(() => {
-    if (!editingScriptId) {
-      return;
-    }
-    updateDraft((d) => {
-      const entry = d.scripts.find((row) => row.id === editingScriptId);
-      if (!entry) return d;
-      const isEmpty =
-        entry.name.trim().length === 0 &&
-        entry.commandText.trim().length === 0 &&
-        entry.type.trim().length === 0 &&
-        entry.portText.trim().length === 0;
-      if (!isEmpty) return d;
-      return { ...d, scripts: d.scripts.filter((row) => row.id !== editingScriptId) };
+    setEditingScript({
+      id: `script-draft-new-${Date.now()}`,
+      name: "",
+      commandText: "",
+      commandOriginalKind: "missing" satisfies LifecycleOriginalKind,
+      type: "",
+      portText: "",
+      rawEntry: {},
     });
-    setEditingScriptId(null);
-  }, [editingScriptId, updateDraft]);
-
-  const handleSaveEditing = useCallback(() => {
-    setEditingScriptId(null);
   }, []);
 
-  const editingScript = draft.scripts.find((entry) => entry.id === editingScriptId);
+  const handleEditingDraftChange = useCallback((next: ProjectScriptDraft) => {
+    setEditingScript(next);
+  }, []);
+
+  const handleCancelEditing = useCallback(() => {
+    setEditingScript(null);
+  }, []);
+
+  const handleSaveEditing = useCallback(() => {
+    if (!editingScript) return;
+    updateDraft((current) => {
+      const exists = current.scripts.some((entry) => entry.id === editingScript.id);
+      const scripts = exists
+        ? current.scripts.map((entry) => (entry.id === editingScript.id ? editingScript : entry))
+        : [...current.scripts, editingScript];
+      return { ...current, scripts };
+    });
+    setEditingScript(null);
+  }, [editingScript, updateDraft]);
 
   const hasInvalidScripts = useMemo(
     () => draft.scripts.some((script) => validateScript(script, t).hasErrors),

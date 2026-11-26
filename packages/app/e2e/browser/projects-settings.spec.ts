@@ -225,6 +225,54 @@ test.describe("Projects settings", () => {
     }
   });
 
+  test("script editing applies only on Save and discards existing and new drafts on Cancel", async ({
+    page,
+    editableProject,
+  }) => {
+    await openProjects(page);
+    await openProjectSettings(page, editableProject.name);
+    const rows = page
+      .getByTestId("scripts-list")
+      .locator('[data-testid^="script-row-"]:not([data-testid*="-menu-"])');
+    await rows.first().getByText("dev", { exact: true }).click();
+    await page.getByTestId("script-edit-name").fill("cancelled-dev");
+    await page.getByTestId("script-edit-command").fill("echo cancelled");
+    await page.getByTestId("script-edit-service-toggle").click();
+    await page.getByTestId("script-edit-cancel").click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("dev");
+    await expect(rows.first()).not.toContainText("cancelled-dev");
+    await rows.first().getByText("dev", { exact: true }).click();
+    await expect(page.getByTestId("script-edit-name")).toHaveValue("dev");
+    await expect(page.getByTestId("script-edit-command")).toHaveValue("npm run dev");
+    await expect(page.getByTestId("script-edit-service-toggle")).not.toBeChecked();
+    await page.getByTestId("script-edit-cancel").click();
+
+    await page.getByTestId("scripts-add-button").click();
+    await page.getByTestId("script-edit-name").fill("cancelled-new");
+    await page.getByTestId("script-edit-command").fill("echo new");
+    await page.getByTestId("script-edit-cancel").click();
+    await expect(rows).toHaveCount(1);
+    await clickSaveProjectSettings(page);
+    await expect
+      .poll(async () => JSON.parse(await readProjectConfigFile(editableProject)))
+      .toEqual(initialPaseoConfig);
+
+    await rows.first().getByText("dev", { exact: true }).click();
+    await page.getByTestId("script-edit-name").fill("saved-dev");
+    await page.getByTestId("script-edit-command").fill("echo saved");
+    await page.getByTestId("script-edit-save").click();
+    await expect(rows.first()).toContainText("saved-dev");
+    expect(JSON.parse(await readProjectConfigFile(editableProject))).toEqual(initialPaseoConfig);
+    await clickSaveProjectSettings(page);
+    await expect
+      .poll(async () => JSON.parse(await readProjectConfigFile(editableProject)))
+      .toEqual({
+        ...initialPaseoConfig,
+        scripts: { "saved-dev": { ...initialPaseoConfig.scripts.dev, command: "echo saved" } },
+      });
+  });
+
   test("edits worktree setup, navigates within the host, and removes a script", async ({
     page,
     editableProject,
