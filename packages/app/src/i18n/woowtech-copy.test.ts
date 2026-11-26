@@ -40,6 +40,24 @@ const KEPT_AS_WRITTEN = new Set(["thirdPartyNotices.sections.paseo"]);
 
 // Text upstream hardcodes in English, which these files now read from the
 // woowtech.* translations. An upstream merge can bring a literal back.
+// The old single component was split upstream; keep its guard over all new owners.
+const LEGACY_ADD_PROJECT_ENGLISH = [
+  '"Add project"',
+  '"Search for directory"',
+  '"Clone from GitHub"',
+  '"Choose host"',
+  '"No connected hosts"',
+  '"Unable to add project"',
+  '"Unable to clone repository"',
+  '"Search directories or enter a path..."',
+  '"Cloning project..."',
+  '"Creating directory..."',
+  'accessibilityLabel="Back"',
+  'action="Navigate"',
+  'action="Select"',
+  "Loading...",
+];
+
 const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
   "components/hosts/host-picker.tsx": [
     '"Add host"',
@@ -64,22 +82,13 @@ const REPLACED_ENGLISH: Readonly<Record<string, readonly string[]>> = {
   "hosts/host-chooser.tsx": ['placeholder="Search hosts..."', ">No matching hosts<"],
   "components/question-form-card.tsx": ["`Question ${"],
   "components/import-session-sheet.tsx": ["`Filter: ${"],
-  "components/add-project-flow.tsx": [
-    '"Add project"',
-    '"Search for directory"',
-    '"Clone from GitHub"',
-    '"Choose host"',
-    '"No connected hosts"',
-    '"Unable to add project"',
-    '"Unable to clone repository"',
-    '"Search directories or enter a path..."',
-    '"Cloning project..."',
-    '"Creating directory..."',
-    'accessibilityLabel="Back"',
-    'action="Navigate"',
-    'action="Select"',
-    "Loading...",
-  ],
+  "add-project-flow/index.tsx": LEGACY_ADD_PROJECT_ENGLISH,
+  "add-project-flow/clone-tab.tsx": LEGACY_ADD_PROJECT_ENGLISH,
+  "add-project-flow/existing-tab.tsx": LEGACY_ADD_PROJECT_ENGLISH,
+  "add-project-flow/new-folder-tab.tsx": LEGACY_ADD_PROJECT_ENGLISH,
+  "add-project-flow/location-field.tsx": LEGACY_ADD_PROJECT_ENGLISH,
+  "add-project-flow/searches.ts": LEGACY_ADD_PROJECT_ENGLISH,
+  "add-project-flow/use-add-project-actions.ts": LEGACY_ADD_PROJECT_ENGLISH,
   "add-project-flow/options.ts": [
     '"Search for directory"',
     '"Clone from GitHub"',

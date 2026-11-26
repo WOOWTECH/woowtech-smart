@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { createServer } from "node:http";
 import type { FormInfo, ModelInfo, SessionInfo, SessionMessageInfo } from "@opencode/client";
 import { describe, expect, test } from "vitest";
@@ -1349,7 +1350,7 @@ describe("OpenCode v2 session lifecycle", () => {
         cwd: "/tmp/project",
         mcpServers: { custom: { type: "stdio", command: "custom", args: [] } },
       }),
-    ).rejects.toThrow("OpenCode MCP servers require the Paseo tool bridge");
+    ).rejects.toThrow(`OpenCode MCP servers require the ${PRODUCT_NAME} tool bridge`);
     expect(harness.creates).toEqual([]);
   });
 

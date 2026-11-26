@@ -1,4 +1,5 @@
 import { useOverlayRegistration, type KeyboardInputEvent } from "@/keyboard";
+import { useTranslation } from "react-i18next";
 import { useAddHost } from "@/hosts/add-host";
 import { Modal } from "@/components/ui/modal";
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -62,6 +63,7 @@ function matchesHostQuery(host: HostProfile, query: string): boolean {
 }
 
 export function useHostChooser() {
+  const { t } = useTranslation();
   const addHost = useAddHost();
   const hosts = useHosts();
   const localServerId = useLocalDaemonServerId();
@@ -84,13 +86,13 @@ export function useHostChooser() {
       }
 
       open({
-        title: input.title ?? "Choose host",
+        title: input.title ?? t("woowtech.addProject.chooseHost"),
         serverIds: availableHosts.map((host) => host.serverId),
         onChooseHost: input.onChooseHost,
       });
       return true;
     },
-    [hosts, localServerId, open, addHost],
+    [hosts, localServerId, open, addHost, t],
   );
 }
 
@@ -153,6 +155,7 @@ function HostChooserRow({
 }
 
 export function HostChooserModal() {
+  const { t } = useTranslation();
   const { theme } = useUnistyles();
   const hosts = useHosts();
   const request = useHostChooserStore((state) => state.request);
@@ -264,7 +267,7 @@ export function HostChooserModal() {
                 ref={inputRef}
                 initialValue={query}
                 onChangeText={handleQueryChange}
-                placeholder="Search hosts..."
+                placeholder={t("woowtech.addProject.hostPlaceholder")}
                 placeholderTextColor={theme.colors.foregroundMuted}
                 style={styles.input}
                 autoCapitalize="none"
@@ -279,7 +282,7 @@ export function HostChooserModal() {
               showsVerticalScrollIndicator={false}
             >
               {options.length === 0 ? (
-                <Text style={styles.emptyText}>No matching hosts</Text>
+                <Text style={styles.emptyText}>{t("woowtech.interfaceText.noMatchingHosts")}</Text>
               ) : null}
               {options.map((host, index) => (
                 <HostChooserRow

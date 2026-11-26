@@ -1,11 +1,8 @@
-// woowtech smart: runs a .cmd/.bat script through cmd.exe with every argument intact (plan G17).
-// Upstream's spawn path caret-escapes once and also inside quotes, so "fix (wip)" arrives as
-// fix ^(wip^) and an unquoted & reaches the script's own %* parse. This is the in-app terminal's
-// algorithm (terminal.ts escapeCmdExeArgument, qntm.org/cmd), without node-pty: quote with MSVCRT
-// rules, then caret-escape cmd.exe's syntax twice, once for cmd /c and once for the script's %*.
-// cmd.exe cannot carry a line break inside one argument; that is an error here (D18), where the
-// terminal turns it into a space.
+// woowtech smart: runs .cmd/.bat scripts with the SDK dialect also used by in-app terminals.
+// The shared builder quotes paths and escapes arguments according to the script's second parse.
+// Keep /d /v:off and the fork's explicit line-break diagnostic (D18).
 import path from "node:path";
+import { windowsCommandLine } from "@getpaseo/plugin/internal/windows-command";
 
 const CMD_EXE_METACHAR_PATTERN = /([()%!^"`<>&|;, *?])/g;
 
@@ -56,6 +53,5 @@ export function buildCmdShimCommandLine(run: CmdScriptRun): string {
   if (run.args.some(hasLineBreak)) {
     throw new WindowsCommandScriptArgumentError(run.script);
   }
-  const escapedArgs = run.args.map(escapeCmdShimArgument);
-  return `/d /v:off /s /c "${[escapeMetaChars(run.script), ...escapedArgs].join(" ")}"`;
+  return `/d /v:off /s /c ${windowsCommandLine(run.script, run.args, { commandScript: true })}`;
 }

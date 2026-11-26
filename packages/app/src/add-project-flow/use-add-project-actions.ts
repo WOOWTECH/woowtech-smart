@@ -1,3 +1,4 @@
+import { i18n } from "@/i18n/i18next";
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { router } from "expo-router";
 import type { WorkspaceProjectDescriptorPayload } from "@getpaseo/protocol/messages";
@@ -106,9 +107,9 @@ export function useAddProjectActions(input: {
           if (getOpenProjectFailureReason(result) === "directory_not_found") {
             return { ok: false, error: "Folder not found" };
           }
-          return { ok: false, error: result.error ?? "Unable to add project" };
+          return { ok: false, error: result.error ?? i18n.t("woowtech.addProject.addFailed") };
         },
-        "Unable to add project",
+        i18n.t("woowtech.addProject.addFailed"),
       );
     },
     [hostId, openProject, run],

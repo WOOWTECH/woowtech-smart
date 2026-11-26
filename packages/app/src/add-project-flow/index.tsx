@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Folder, FolderPlus, Plus } from "lucide-react-native";
@@ -108,6 +109,7 @@ interface AddProjectFlowProps {
  * component wires it to the host, the searches, and the keys.
  */
 export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
+  const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
   const isMac = getShortcutOs() === "mac";
   const keyboardPresent = useHardwareKeyboardPresent();
@@ -221,7 +223,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const selectableHosts = useMemo(() => selectableAddProjectHosts(state), [state]);
   const header = useMemo(
     () => ({
-      title: "Add project",
+      title: t("woowtech.addProject.title"),
       titleTestID: "add-project-flow-title",
       actions:
         selectableHosts.length > 1 && state.hostId ? (
@@ -233,7 +235,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           />
         ) : undefined,
     }),
-    [selectHost, selectableHosts, state.hostId, submitting],
+    [selectHost, selectableHosts, state.hostId, submitting, t],
   );
 
   // On a pointer layout the failure sits left of the button; compact stacks it above a
@@ -417,6 +419,7 @@ function KeyHints({ canMove }: { canMove: boolean }) {
 }
 
 function NoHosts({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   const addHost = useAddHost();
   const handleAddHost = useCallback(() => {
     // The project sheet must release its window before the add-host sheet opens.
@@ -425,7 +428,7 @@ function NoHosts({ onClose }: { onClose: () => void }) {
   }, [addHost, onClose]);
   return (
     <View style={styles.noHosts}>
-      <Text style={styles.noHostsText}>No connected hosts</Text>
+      <Text style={styles.noHostsText}>{t("woowtech.addProject.noConnectedHosts")}</Text>
       <Button
         variant="secondary"
         leftIcon={Plus}

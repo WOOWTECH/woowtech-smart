@@ -48,7 +48,7 @@ describe("buildCmdShimCommandLine", () => {
   it("runs the script through cmd.exe without AutoRun or delayed expansion", () => {
     expect(
       buildCmdShimCommandLine({ script: "C:\\Program Files\\x\\tool.cmd", args: ["a b"] }),
-    ).toBe('/d /v:off /s /c "C:\\Program^ Files\\x\\tool.cmd ^^^"a^^^ b^^^""');
+    ).toBe('/d /v:off /s /c ""C:\\Program Files\\x\\tool.cmd" ^"a^ b^""');
   });
 
   it("names the script when an argument has a line break", () => {

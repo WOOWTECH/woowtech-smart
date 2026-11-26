@@ -1,3 +1,4 @@
+import { i18n } from "@/i18n/i18next";
 import { useMemo } from "react";
 import { useFetchQuery } from "@/data/query";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -24,7 +25,7 @@ export function useDirectorySearch(input: {
   const search = useFetchQuery({
     queryKey: ["add-project-flow-directories", hostId, debouncedQuery],
     queryFn: async () => {
-      if (!client) throw new Error("Host is unavailable");
+      if (!client) throw new Error(i18n.t("woowtech.addProject.hostUnavailable"));
       const payload = await client.getDirectorySuggestions({
         query: debouncedQuery,
         includeDirectories: true,
@@ -40,7 +41,7 @@ export function useDirectorySearch(input: {
     retry: false,
     staleTimeMs: 15_000,
   });
-  const failed = search.isError ? "Unable to search folders" : null;
+  const failed = search.isError ? i18n.t("woowtech.addProject.directorySearchFailed") : null;
   return useMemo(
     () =>
       resolveSearch({
@@ -69,10 +70,11 @@ export function useGithubRepositorySearch(input: {
   const search = useFetchQuery({
     queryKey: ["add-project-flow-github", hostId, debouncedQuery],
     queryFn: async () => {
-      if (!client) throw new Error("Host is unavailable");
+      if (!client) throw new Error(i18n.t("woowtech.addProject.hostUnavailable"));
       const payload = await client.searchGithubRepositories({ query: debouncedQuery, limit: 30 });
       let error: string | null = payload.error ?? null;
-      if (!error && payload.available === false) error = "GitHub search is unavailable";
+      if (!error && payload.available === false)
+        error = i18n.t("woowtech.addProject.githubSearchUnavailable");
       return {
         hostId,
         query: debouncedQuery,
@@ -85,7 +87,7 @@ export function useGithubRepositorySearch(input: {
     retry: false,
     staleTimeMs: 15_000,
   });
-  const failed = search.isError ? "Unable to search GitHub" : null;
+  const failed = search.isError ? i18n.t("woowtech.addProject.githubSearchFailed") : null;
   return useMemo(
     () =>
       resolveSearch({
