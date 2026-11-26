@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import { buildWaitResult } from "./wait.js";
 
@@ -22,7 +23,7 @@ describe("buildWaitResult", () => {
       expect.objectContaining({
         code: "AGENT_NOT_FOUND",
         message: "Agent not found: does-not-exist",
-        details: "Use `paseo ls` to list available agents",
+        details: `Use \`${CLI_COMMAND} ls\` to list available agents`,
       }),
     );
   });

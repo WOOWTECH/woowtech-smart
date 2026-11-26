@@ -6,11 +6,13 @@ import path from "node:path";
 import pino from "pino";
 import { expect, test, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
+import { savePersistedConfigAsync } from "../persisted-config.js";
 import { HubRelationshipController } from "./relationship-controller.js";
 import { DirectHubRelationshipRemote } from "./relationship-remote.js";
 
 test("a silently lost Hub connection leaves connected state and reconnects when the path recovers", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "paseo-hub-liveness-"));
+  await savePersistedConfigAsync(home, { version: 1, daemon: { hub: { enabled: true } } });
   const hub = createHttpServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;

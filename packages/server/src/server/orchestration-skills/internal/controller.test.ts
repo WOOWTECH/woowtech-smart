@@ -1354,7 +1354,7 @@ describe("skills controller", () => {
 
     const transactionDir = path.join(
       path.dirname(harness.targets.agentsDir),
-      ".paseo-skills-transaction-legacy-codex-index",
+      `.${BRAND.cliCommand}-skills-transaction-legacy-codex-index`,
     );
     const codexBackup = path.join(transactionDir, "backup", "2", "paseo");
     await mkdir(path.join(codexBackup, "notes"), { recursive: true });
@@ -1383,9 +1383,12 @@ describe("skills controller", () => {
 
     await harness.controller.status();
 
-    expect(
-      await readFile(path.join(harness.targets.codexDir, "paseo", "notes", "codex.md"), "utf8"),
-    ).toBe("restored codex note");
+    expect(await readUserFile(harness.targets, "paseo", "notes/codex.md")).toEqual([
+      null,
+      null,
+      "restored codex note",
+      null,
+    ]);
     expect(await backupArtifacts(harness.targets)).toEqual([[], [], [], []]);
   });
 

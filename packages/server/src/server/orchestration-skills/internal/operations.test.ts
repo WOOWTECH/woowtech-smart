@@ -1,4 +1,5 @@
 import { BRAND } from "@getpaseo/protocol/brand-values";
+import { brandSkillName } from "@getpaseo/protocol/brand-skills";
 import { promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
 import os from "node:os";
@@ -315,12 +316,13 @@ describe("getSkillsStatus", () => {
   });
 
   it("emits add + update + delete ops sorted by name when state is mixed", async () => {
+    const retiredSkill = brandSkillName("paseo-chat");
     await writeCurrentBundle(sandbox.targets.sourceDir);
     await writeOnDiskSkill(sandbox.targets.agentsDir, "paseo", { "SKILL.md": "stale" });
     await writeOnDiskSkill(sandbox.targets.claudeDir, "paseo", { "SKILL.md": "paseo-v1" });
     await writeOnDiskSkill(sandbox.targets.codexDir, "paseo", { "SKILL.md": "paseo-v1" });
     await writeOnDiskSkill(sandbox.targets.antigravityDir, "paseo", { "SKILL.md": "paseo-v1" });
-    await writeOnDiskSkill(sandbox.targets.agentsDir, "paseo-chat", { "SKILL.md": "chat-old" });
+    await writeOnDiskSkill(sandbox.targets.agentsDir, retiredSkill, { "SKILL.md": "chat-old" });
 
     const status = await getSkillsStatus(sandbox.targets, ALL_SKILLS);
 
@@ -329,7 +331,7 @@ describe("getSkillsStatus", () => {
       [
         { kind: "update", name: "paseo" },
         { kind: "add", name: "paseo-loop" },
-        { kind: "delete", name: `${BRAND.cliCommand}-chat` },
+        { kind: "delete", name: retiredSkill },
       ].sort((a, b) => a.name.localeCompare(b.name)),
     );
   });
@@ -454,18 +456,14 @@ describe("custom skill selection", () => {
   });
 
   it("still deletes legacy skill names that are not selectable", async () => {
-    await writeOnDiskSkillToAllTargets(sandbox.targets, `${BRAND.cliCommand}-orchestrator`, {
+    const retiredSkill = brandSkillName("paseo-orchestrator");
+    await writeOnDiskSkillToAllTargets(sandbox.targets, retiredSkill, {
       "SKILL.md": "orchestrator-old",
     });
 
     await installSkills(sandbox.targets, only("paseo"));
 
-    expect(await installedIn(sandbox.targets, "paseo-orchestrator")).toEqual([
-      false,
-      false,
-      false,
-      false,
-    ]);
+    expect(await installedIn(sandbox.targets, retiredSkill)).toEqual([false, false, false, false]);
   });
 });
 
@@ -871,6 +869,7 @@ describe("uninstallSkills", () => {
   });
 
   it("cleans up legacy skill names that linger in agents, claude, codex, and antigravity", async () => {
+    const retiredSkill = brandSkillName("paseo-chat");
     await writeCurrentBundle(sandbox.targets.sourceDir);
     for (const dir of [
       sandbox.targets.agentsDir,
@@ -878,12 +877,18 @@ describe("uninstallSkills", () => {
       sandbox.targets.codexDir,
       sandbox.targets.antigravityDir,
     ]) {
-      await writeOnDiskSkill(dir, `${BRAND.cliCommand}-chat`, { "SKILL.md": "chat-old" });
+      await writeOnDiskSkill(dir, retiredSkill, { "SKILL.md": "chat-old" });
+      await writeOnDiskSkill(dir, "paseo-chat", { "SKILL.md": "official-chat" });
     }
 
     const status = await uninstallSkills(sandbox.targets, ALL_SKILLS);
 
     expect(status.state).toBe("not-installed");
-    expect(await installedIn(sandbox.targets, "paseo-chat")).toEqual([false, false, false, false]);
+    expect(await installedIn(sandbox.targets, retiredSkill)).toEqual([false, false, false, false]);
+    for (const dir of [...sandbox.targets.installDirs, sandbox.targets.codexDir]) {
+      expect(await fs.readFile(path.join(dir, "paseo-chat", "SKILL.md"), "utf8")).toBe(
+        "official-chat",
+      );
+    }
   });
 });

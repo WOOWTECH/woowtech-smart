@@ -186,6 +186,7 @@ describe("resolveSpeechConfig", () => {
       paseoHome: "/tmp/paseo-home",
       env: {} as NodeJS.ProcessEnv,
       persisted,
+      isLocalSpeechRuntimeInstalled: () => true,
     });
 
     expect(result.speech.providers.voiceTurnDetection).toEqual({
@@ -208,10 +209,8 @@ describe("resolveSpeechConfig", () => {
       explicit: false,
       enabled: false,
     });
-    // Turn detection is always local, so the local provider config must be
-    // present even when no speech site uses the local provider and no
-    // models directory is configured; otherwise voice mode reports
-    // turn_detection_unavailable.
+    // With the runtime installed, local turn detection needs provider config
+    // even when STT/TTS use OpenAI and no models directory is configured.
     expect(result.speech.local).toEqual({
       modelsDir: path.join("/tmp/paseo-home", "models", "local-speech"),
       models: {
@@ -242,6 +241,7 @@ describe("resolveSpeechConfig", () => {
       paseoHome: "/tmp/paseo-home",
       env: {} as NodeJS.ProcessEnv,
       persisted,
+      isLocalSpeechRuntimeInstalled: () => true,
     });
 
     expect(result.speech.providers.voiceTurnDetection).toEqual({

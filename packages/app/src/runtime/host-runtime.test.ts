@@ -5617,15 +5617,24 @@ describe("readInitialDaemonConnectionHint", () => {
 
 describe("HostRuntimeStore initial connection hint bootstrap", () => {
   it("starts saved remote-host probes while desktop daemon startup is still pending", async () => {
+    // Desktop boot skips the browser's separate localhost bootstrap and owns daemon startup.
+    (globalThis as { window?: unknown }).window = { paseoDesktop: {} };
     const host = makeHost({
       serverId: "srv_remote_saved",
       connections: [
-        { id: "direct:remote.example:6799", type: "directTcp", endpoint: "remote.example:6799" },
+        {
+          id: "direct:remote.example:6799",
+          type: "directTcp",
+          endpoint: "remote.example:6799",
+          useTls: false,
+        },
       ],
     });
     const storage = createMemoryHostRuntimeStorage();
     await storage.setItem("@paseo:daemon-registry", JSON.stringify([host]));
-    let remoteProbeStarted = false;
+    const probedConnections: HostConnection[] = [];
+    let desktopStartStarted = false;
+    let desktopStartFinished = false;
     let finishDesktopStart: (() => void) | undefined;
     const desktopStartPending = new Promise<void>((resolve) => {
       finishDesktopStart = resolve;
@@ -5634,8 +5643,8 @@ describe("HostRuntimeStore initial connection hint bootstrap", () => {
       storage,
       deps: {
         createClient: () => new FakeDaemonClient() as unknown as DaemonClient,
-        connectToDaemon: async () => {
-          remoteProbeStarted = true;
+        connectToDaemon: async ({ connection }) => {
+          probedConnections.push(connection);
           return {
             client: makeConnectedProbeClient(5) as unknown as DaemonClient,
             serverId: host.serverId,
@@ -5650,14 +5659,19 @@ describe("HostRuntimeStore initial connection hint bootstrap", () => {
       shouldStartDaemon: true,
       daemonStartService: {
         startIfEnabled: async () => {
+          desktopStartStarted = true;
           await desktopStartPending;
+          desktopStartFinished = true;
           return { ok: true };
         },
       },
     });
     try {
-      await vi.waitFor(() => expect(remoteProbeStarted).toBe(true), { timeout: 400 });
+      await vi.waitFor(() => expect(probedConnections).toEqual(host.connections), { timeout: 400 });
       expect(store.isHostRegistryLoaded()).toBe(true);
+      expect(desktopStartStarted).toBe(true);
+      expect(desktopStartFinished).toBe(false);
+      expect(store.getPendingHostConfirmation()).toBeNull();
     } finally {
       finishDesktopStart?.();
       await store.boot();

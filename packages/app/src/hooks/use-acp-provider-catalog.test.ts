@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { findSvgIconProblem } from "@getpaseo/plugin";
+import { vendorBadgeSvg } from "@/components/icons/vendor-badge";
 import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
 import { buildAcpProviderConfigPatch, getAcpProviderCatalog } from "./use-acp-provider-catalog";
 
@@ -8,6 +10,13 @@ function findProvider(id: string) {
     throw new Error(`Missing ACP provider catalog entry: ${id}`);
   }
   return entry;
+}
+
+function expectCuratedProviderIcon(id: string) {
+  const svg = findProvider(id).iconSvg;
+  expect(svg).toBe(vendorBadgeSvg(id));
+  expect(svg?.match(/(?:fill|stroke)="[^"]*"/g)).toEqual(['fill="none"', 'stroke="currentColor"']);
+  expect(findSvgIconProblem(svg ?? "")).toBeNull();
 }
 
 describe("ACP provider catalog", () => {
@@ -70,7 +79,7 @@ describe("ACP provider catalog", () => {
     expect(findProvider("minimax-code").iconSvg).toContain("<svg");
   });
 
-  it("offers Hoplite through its local ACP bridge with the Hoplite mark", () => {
+  it("offers Hoplite through its local ACP bridge with the curated Hoplite badge", () => {
     expect(findProvider("hoplite")).toMatchObject({
       title: "Hoplite",
       command: ["hoplite", "acp"],
@@ -84,7 +93,7 @@ describe("ACP provider catalog", () => {
     const ids = getAcpProviderCatalog().map((entry) => entry.id);
     expect(ids.indexOf("hermes")).toBeLessThan(ids.indexOf("hoplite"));
     expect(ids.indexOf("hoplite")).toBeLessThan(ids.indexOf("junie"));
-    expect(findProvider("hoplite").iconSvg).toContain('fill="currentColor"');
+    expectCuratedProviderIcon("hoplite");
   });
 
   it("offers fx as a bundled provider gated on its own host feature", () => {
@@ -92,7 +101,7 @@ describe("ACP provider catalog", () => {
       title: "fx",
       installLink: "https://fx.sh/docs/getting-started/installation",
     });
-    expect(findProvider("fx").iconSvg).toContain('fill="currentColor"');
+    expectCuratedProviderIcon("fx");
     const supported: string[] = [];
     expect(
       buildAcpProviderConfigPatch(findProvider("fx"), (feature) => {

@@ -32,11 +32,6 @@ export type {
 } from "./lifecycle.js";
 
 export { spawnProcess, execCommand, terminateProcess } from "./process.js";
-export {
-  isWindowsCommandScript,
-  quoteWindowsArgument,
-  quoteWindowsCommand,
-} from "./process-internal/windows-command.js";
 
 export { defineAgentTool } from "./agent-tools.js";
 export type { AgentToolDefinition, AgentToolResult, AgentToolContext } from "./agent-tools.js";

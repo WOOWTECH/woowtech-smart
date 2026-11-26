@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { platform } from "node:os";
+import { CLI_COMMAND } from "@getpaseo/protocol/brand-cli";
 import { afterEach, describe, expect, test } from "vitest";
 import { getHostName } from "../host-name.js";
 import { HubRelationshipHarness } from "./test-utils/relationship-harness.js";
@@ -179,7 +180,7 @@ describe("Hub relationship", () => {
     relationship.closeLatestSocket(4403, reason);
     expect(await relationship.status()).toMatchObject({
       state: "reconnecting",
-      lastError: expect.stringContaining("paseo hub permissions"),
+      lastError: expect.stringContaining(`${CLI_COMMAND} hub permissions`),
     });
     await relationship.retry();
     await relationship.revokePermission("hub.execute");

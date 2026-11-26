@@ -1598,7 +1598,7 @@ describe.skipIf(isPlatform("win32"))("worktree POSIX-only", () => {
       expect(ownership.allowed).toBe(false);
       await expect(
         deletePaseoWorktree({ cwd: repoDir, worktreePath: fakeDir, paseoHome }),
-      ).rejects.toThrow(`Refusing to delete worktree not managed by ${PRODUCT_NAME}`);
+      ).rejects.toThrow(`Refusing to delete a worktree not managed by ${PRODUCT_NAME}`);
       expect(existsSync(fakeDir)).toBe(true);
     });
   });

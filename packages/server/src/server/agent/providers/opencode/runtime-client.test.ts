@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { openCodeMajorVersion } from "./runtime-client.js";
 
 test.each([
@@ -33,7 +34,7 @@ test("retries a rejected version probe after the configured binary changes", asy
   try {
     await writeFile(script, 'console.log("opencode v2.0.3")');
     await expect(client.fetchCatalog({ scope: "global", force: true })).rejects.toThrow(
-      "Update OpenCode to 2.0.10 or newer, then refresh the provider in Paseo",
+      `Update OpenCode to 2.0.10 or newer, then refresh the provider in ${PRODUCT_NAME}`,
     );
     await writeFile(script, 'console.log("opencode v3.0.0")');
     await expect(client.fetchCatalog({ scope: "global", force: true })).rejects.toThrow(

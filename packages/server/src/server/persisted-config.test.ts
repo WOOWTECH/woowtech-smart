@@ -974,7 +974,12 @@ describe("speech provider config normalization", () => {
         speed: 1.2,
       });
       expect(
-        resolveSpeechConfig({ paseoHome: home, env: {}, persisted: local }).speech.local?.models,
+        resolveSpeechConfig({
+          paseoHome: home,
+          env: {},
+          persisted: local,
+          isLocalSpeechRuntimeInstalled: () => true,
+        }).speech.local?.models,
       ).toMatchObject({ voiceTtsSpeakerId: 3, voiceTtsSpeed: 1.2 });
       writeFileSync(
         path.join(home, "config.json"),

@@ -2,6 +2,7 @@ import pino from "pino";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, test, vi } from "vitest";
+import { BRAND_LINKS } from "@getpaseo/protocol/brand-links";
 import type {
   ProviderEvent,
   ProviderRegistration,
@@ -240,7 +241,7 @@ describe("ProviderSnapshotManager public surface", () => {
       expect(manager.getSnapshot("/tmp/project").records.map(({ entry }) => entry)).toContainEqual(
         expect.objectContaining({
           provider: "claude",
-          docsUrl: "https://paseo.sh/docs/supported-providers/claude-code",
+          docsUrl: BRAND_LINKS.website,
         }),
       );
     } finally {

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { createTestLogger } from "../../../../../test-utils/test-logger.js";
 import { OpenCodeBridge } from "../bridge.js";
 import { provisionLocalBridge } from "./bridge-provisioning.js";
@@ -68,7 +69,9 @@ test("reports a bridge port change that has not been applied", async () => {
     settings: { env: { PASEO_OPENCODE_BRIDGE_PORT: actual === 1 ? "2" : "1" } },
   });
   try {
-    await expect(runtime.acquire()).rejects.toThrow("restart Paseo to apply the bridge port");
+    await expect(runtime.acquire()).rejects.toThrow(
+      `restart ${PRODUCT_NAME} to apply the bridge port`,
+    );
   } finally {
     await runtime.shutdown();
     await bridge.close();

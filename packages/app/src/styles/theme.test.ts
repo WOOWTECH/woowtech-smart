@@ -85,8 +85,8 @@ describe("Pure black theme", () => {
   });
 });
 
-// Hover and selected are derived from the sidebar color. The values the default themes had when
-// they were picked by eye are the reference: derivation lands within a few RGB units of them.
+// Hover and selected are derived from the sidebar color. Light retains its authored tones;
+// branded Dark follows the fork's neutral Zinc palette (woowtech/README.md section 9).
 describe("Sidebar interaction surfaces", () => {
   function expectWithin(actual: string, expected: string, units: number) {
     const channels = (hex: string) =>
@@ -102,9 +102,13 @@ describe("Sidebar interaction surfaces", () => {
     expectWithin(lightTheme.colors.surfaceSidebarSelected, "#d4d4d8", 3);
   });
 
-  it("keeps Dark hover and selection where they were", () => {
-    expectWithin(darkTheme.colors.surfaceSidebarHover, "#1e2120", 2);
-    expectWithin(darkTheme.colors.surfaceSidebarSelected, "#272a29", 2);
+  it("keeps branded Dark hover and selection aligned with Zinc", () => {
+    expect(darkTheme.colors.surfaceSidebarHover).toBe(darkZincTheme.colors.surfaceSidebarHover);
+    expect(darkTheme.colors.surfaceSidebarSelected).toBe(
+      darkZincTheme.colors.surfaceSidebarSelected,
+    );
+    expectWithin(darkTheme.colors.surfaceSidebarHover, "#1f1f22", 2);
+    expectWithin(darkTheme.colors.surfaceSidebarSelected, "#27272a", 2);
   });
 });
 

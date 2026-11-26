@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir, uptime } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 import { readDaemonInstance, stopDaemonInstance } from "./daemon-instance.js";
 import { acquirePidLock, getPidLockInfo, isLocked, type PidLockInfo } from "./pid-lock.js";
@@ -120,7 +121,7 @@ describe.runIf(process.platform === "linux")("daemon instance identity on Linux"
     expect(await isLocked(paseoHome)).toMatchObject({ locked: true });
     await expect(
       acquirePidLock(paseoHome, null, { ownerPid: process.pid + 10_000 }),
-    ).rejects.toThrow("Another Paseo daemon is already running");
+    ).rejects.toThrow(`Another ${PRODUCT_NAME} daemon is already running`);
   });
 
   test("a lock written during another boot has no running owner", async () => {
