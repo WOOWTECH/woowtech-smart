@@ -645,8 +645,11 @@ async function selectDeviceSize(page, label) {
   await page.locator('[aria-label="Device size"]').click();
   const item = page.getByText(label, { exact: true });
   await item.waitFor({ state: "visible", timeout: timeoutMs });
-  const rect = await item.boundingBox();
-  assert(rect, `Device size menu item ${label} had no bounds`);
+  // The menu can replace its first layout while its opening animation settles.
+  let rect = null;
+  await expect
+    .poll(async () => (rect = await item.boundingBox()), { timeout: timeoutMs })
+    .not.toBeNull();
   const clip = {
     x: Math.max(0, rect.x),
     y: Math.max(0, rect.y),
@@ -660,7 +663,7 @@ async function selectDeviceSize(page, label) {
 
   await page.locator('[aria-label="Device size"]').click();
   await item.waitFor({ state: "visible", timeout: timeoutMs });
-  await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  await item.click();
   await page.keyboard.press("Escape");
   return !openPixels.equals(closedPixels);
 }
@@ -801,6 +804,7 @@ async function verifyHiddenBrowserScreenshots({
         visible: win.isVisible(),
         focused: win.isFocused(),
         throttling: win.webContents.getBackgroundThrottling(),
+        captured: win.webContents.isBeingCaptured(),
         guests: process.mainModule.require('electron').webContents.getAllWebContents()
           .filter(contents => contents.getType() === 'webview')
           .map(contents => ({ id: contents.id, throttling: contents.getBackgroundThrottling(), captured: contents.isBeingCaptured() }))
