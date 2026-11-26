@@ -197,7 +197,9 @@ jobs:
             WORKSPACE=$(find packages/app/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
             test -n "$WORKSPACE"
             SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/native-derived-data" -resultBundlePath "$EVIDENCE/build.xcresult" CODE_SIGNING_ALLOWED=NO build > "$EVIDENCE/build.log" 2>&1
+            # The candidate runs on this runner's simulator; avoid compiling an unused CPU architecture.
+            # Keep the full build log and expose phase/error progress while Xcode runs.
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/native-derived-data" -resultBundlePath "$EVIDENCE/build.xcresult" CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build 2>&1 | tee "$EVIDENCE/build.log" | awk '/PhaseScriptExecution|error:|BUILD SUCCEEDED|BUILD FAILED/ { print; fflush() }'
             APP_PATH=$(find "$RUNNER_TEMP/native-derived-data/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
             test -n "$APP_PATH"
             tar -czf "$RUNNER_TEMP/ios-simulator-app.tar.gz" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
