@@ -62,54 +62,93 @@ export async function runSettingsPersistenceRegression(page) {
 
 export async function runShortcutCaptureRegression(page, evaluateMain) {
   const modifier = process.platform === "darwin" ? "meta" : "control";
-  const sendKey = (keyCode, modifiers) =>
-    evaluateMain(`
-    win.focus();
-    win.webContents.focus();
+  const nativeKeyboard =
+    process.platform === "darwin" ? await page.context().newCDPSession(page) : null;
+  const sendKey = async (keyCode, modifiers) => {
+    await evaluateMain(`win.focus(); win.webContents.focus();`);
+    if (nativeKeyboard) {
+      // macOS menu dispatch requires a native virtual key code. Electron's own
+      // setIgnoreMenuShortcuts tests use CDP for this, rather than sendInputEvent.
+      const [code, windowsVirtualKeyCode, nativeVirtualKeyCode] = {
+        R: ["KeyR", 82, 0x0f],
+        N: ["KeyN", 78, 0x2d],
+        "-": ["Minus", 189, 0x1b],
+      }[keyCode];
+      const key = modifiers.includes("shift") ? keyCode : keyCode.toLowerCase();
+      const event = {
+        key,
+        code,
+        windowsVirtualKeyCode,
+        nativeVirtualKeyCode,
+        modifiers: 4 | (modifiers.includes("shift") ? 8 : 0),
+        text: key,
+        unmodifiedText: keyCode.toLowerCase(),
+      };
+      await nativeKeyboard.send("Input.dispatchKeyEvent", { ...event, type: "rawKeyDown" });
+      await nativeKeyboard.send("Input.dispatchKeyEvent", { ...event, type: "keyUp" });
+      return;
+    }
+    await evaluateMain(`
     win.webContents.sendInputEvent(${JSON.stringify({ type: "keyDown", keyCode, modifiers })});
     win.webContents.sendInputEvent(${JSON.stringify({ type: "keyUp", keyCode, modifiers })});
   `);
-  const zoomMenuEnabled = () =>
-    evaluateMain(`
+  };
+  try {
+    // Prove this platform's input reaches the menu before testing its suppression.
+    await Promise.all([
+      page.waitForEvent("domcontentloaded", { timeout: 15_000 }),
+      sendKey("R", [modifier]),
+    ]);
+    await page.getByRole("button", { name: "Settings", exact: true }).waitFor({ state: "visible" });
+    const zoomMenuEnabled = () =>
+      evaluateMain(`
     const menu = process.mainModule.require('electron').Menu.getApplicationMenu();
     return menu.items.find(item => item.label === 'View').submenu.items.find(item => item.label === 'Zoom In').enabled;
   `);
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await openSettingsDestination(page, "Shortcuts");
-  const row = page.getByText("Show keyboard shortcuts", { exact: true }).locator("..");
-  const baseline = await evaluateMain(
-    `return { zoom: win.webContents.getZoomLevel(), count: process.mainModule.require('electron').BrowserWindow.getAllWindows().length };`,
-  );
-  const timeOrigin = await page.evaluate(() => performance.timeOrigin);
-  for (const [key, modifiers] of [
-    ["R", [modifier]],
-    ["N", [modifier, "shift"]],
-    ["-", [modifier]],
-  ]) {
-    await page.getByTestId("shortcut-actions-show-shortcuts").click();
-    await page.getByTestId("shortcut-bind-show-shortcuts").click();
-    await expect(row.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
-    // The disabled zoom menu confirms the renderer's capture IPC reached the main process.
-    await expect.poll(zoomMenuEnabled).toBe(false);
-    await sendKey(key, modifiers);
-    await expect(row.getByRole("button", { name: "Done", exact: true })).toBeEnabled();
-    expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
-    expect(
-      await evaluateMain(
-        `return { zoom: win.webContents.getZoomLevel(), count: process.mainModule.require('electron').BrowserWindow.getAllWindows().length };`,
-      ),
-    ).toEqual(baseline);
-    await row.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect.poll(zoomMenuEnabled).toBe(true);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await openSettingsDestination(page, "Shortcuts");
+    const row = page.getByText("Show keyboard shortcuts", { exact: true }).locator("..");
+    const baseline = await evaluateMain(
+      `return { zoom: win.webContents.getZoomLevel(), count: process.mainModule.require('electron').BrowserWindow.getAllWindows().length };`,
+    );
+    const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+    for (const [key, modifiers] of [
+      ["R", [modifier]],
+      ["N", [modifier, "shift"]],
+      ["-", [modifier]],
+    ]) {
+      await page.getByTestId("shortcut-actions-show-shortcuts").click();
+      await page.getByTestId("shortcut-bind-show-shortcuts").click();
+      await expect(row.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+      // The disabled zoom menu confirms the renderer's capture IPC reached the main process.
+      await expect.poll(zoomMenuEnabled).toBe(false);
+      await sendKey(key, modifiers);
+      await expect(row.getByRole("button", { name: "Done", exact: true })).toBeEnabled();
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
+      expect(
+        await evaluateMain(
+          `return { zoom: win.webContents.getZoomLevel(), count: process.mainModule.require('electron').BrowserWindow.getAllWindows().length };`,
+        ),
+      ).toEqual(baseline);
+      await row.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect.poll(zoomMenuEnabled).toBe(true);
+    }
+    await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
+    await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
+    const reloaded = page.waitForEvent("domcontentloaded", { timeout: 15_000 });
+    await sendKey("R", [modifier]);
+    await reloaded;
+    await page.getByRole("button", { name: "Settings", exact: true }).waitFor({ state: "visible" });
+    expect(await page.evaluate(() => performance.timeOrigin)).not.toBe(timeOrigin);
+    return {
+      baselineMenuReload: true,
+      recorded: ["reload", "new-window", "zoom-out"],
+      menuRestoredAfterCancel: true,
+      inputMethod: nativeKeyboard ? "cdp-native-macos-keycodes" : "electron-sendInputEvent",
+    };
+  } finally {
+    await nativeKeyboard?.detach();
   }
-  await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
-  await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
-  const reloaded = page.waitForEvent("domcontentloaded", { timeout: 15_000 });
-  await sendKey("R", [modifier]);
-  await reloaded;
-  await page.getByRole("button", { name: "Settings", exact: true }).waitFor({ state: "visible" });
-  expect(await page.evaluate(() => performance.timeOrigin)).not.toBe(timeOrigin);
-  return { recorded: ["reload", "new-window", "zoom-out"], menuRestoredAfterCancel: true };
 }
 
 function assert(condition, message) {
