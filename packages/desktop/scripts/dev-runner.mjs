@@ -18,6 +18,11 @@ const rootDir = path.resolve(desktopDir, "../..");
 const appDir = path.resolve(desktopDir, "../app");
 const require = createRequire(import.meta.url);
 const electron = require("electron");
+const expoCli = path.join(
+  path.dirname(require.resolve("expo/package.json", { paths: [appDir] })),
+  "bin",
+  "cli",
+);
 
 const expoPort = Number(process.env.EXPO_PORT);
 if (!Number.isInteger(expoPort) || expoPort <= 0) {
@@ -136,7 +141,8 @@ function stopAll(signal) {
 
 registerDevRunnerShutdownSignals({ signalSource: process, stop: stopAll });
 
-spawnChild("metro", "npx", ["expo", "start", "--port", String(expoPort)], {
+// npm's command shims cannot be spawned directly on Windows.
+spawnChild("metro", process.execPath, [expoCli, "start", "--port", String(expoPort)], {
   cwd: appDir,
   detached: true,
   env: {

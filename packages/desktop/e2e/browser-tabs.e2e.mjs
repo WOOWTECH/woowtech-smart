@@ -18,7 +18,11 @@ import { runAppearanceFontSizeRegression } from "./appearance-font-size.electron
 import { runAdaptiveThemeRegression } from "./appearance-theme.electron.mjs";
 import { runSettingsScrollRegression } from "./settings-scroll.electron.mjs";
 import { buildFillFixture, verifyReactFormFill } from "./browser-fill.electron.mjs";
-import { runSettingsMemoryRegression } from "./settings-memory.electron.mjs";
+import {
+  runSettingsMemoryRegression,
+  runSettingsPersistenceRegression,
+  runShortcutCaptureRegression,
+} from "./settings-memory.electron.mjs";
 
 import { seedPluginLinks, runPluginLinksRegression } from "./plugin-links.electron.mjs";
 
@@ -759,13 +763,14 @@ async function verifyHiddenBrowserScreenshots({
   artifactDir,
   inspectorPort,
 }) {
-  const readFrames = async () => {
+  const readState = async () => {
     const result = await callBrowserTool(client, "browser_evaluate", {
       browserId,
-      function: "() => window.frameCount",
+      function: "() => ({ frames: window.frameCount, visibility: document.visibilityState })",
     });
     return JSON.parse(result.resultJson);
   };
+  const readFrames = async () => (await readState()).frames;
   const expectAnimation = async () => {
     const start = await readFrames();
     assert(typeof start === "number", "Animation fixture was not loaded");
@@ -778,12 +783,34 @@ async function verifyHiddenBrowserScreenshots({
   };
   const measurements = [];
   const expectIdle = async (label) => {
-    await delay(500); // Let Chromium consume the visibility change before sampling.
-    const start = await readFrames();
+    // Window visibility and guest visibility change asynchronously on macOS.
+    // Wait for the actual signal before measuring the same zero-frame interval.
+    const deadline = Date.now() + 5_000;
+    let start = await readState();
+    while (start.visibility !== "hidden" && Date.now() < deadline) {
+      await delay(100);
+      start = await readState();
+    }
     await delay(1_000); // A fixed sampling interval is the behavior under test.
-    const frames = (await readFrames()) - start;
-    measurements.push({ label, frames });
+    const end = await readState();
+    const frames = end.frames - start.frames;
+    const host = await evaluateDesktopWindow(
+      inspectorPort,
+      `
+      return {
+        visible: win.isVisible(),
+        focused: win.isFocused(),
+        throttling: win.webContents.getBackgroundThrottling(),
+        guests: process.mainModule.require('electron').webContents.getAllWebContents()
+          .filter(contents => contents.getType() === 'webview')
+          .map(contents => ({ id: contents.id, throttling: contents.getBackgroundThrottling(), captured: contents.isBeingCaptured() }))
+      };
+    `,
+    );
+    measurements.push({ label, frames, start, end, host });
     writeJson(path.join(artifactDir, "hidden-browser-frames.json"), measurements);
+    assert(!host.visible, `${label}: hidden host window became visible again`);
+    assert(start.visibility === "hidden", `${label}: guest did not become hidden`);
     assert(frames === 0, `${label}: hidden browser produced ${frames} animation frames`);
   };
   try {
@@ -1511,6 +1538,24 @@ async function main() {
       return;
     }
 
+    const settingsPersistence = await runSettingsPersistenceRegression(page);
+    const shortcutCapture = await runShortcutCaptureRegression(page, (expression) =>
+      evaluateDesktopWindow(inspectorPort, expression),
+    );
+    writeJson(path.join(artifactDir, "settings.json"), {
+      source: process.env.GITHUB_SHA,
+      brand: process.env.WOOWTECH_BRAND,
+      platform: process.platform,
+      settingsScroll,
+      settingsMemory,
+      settingsPersistence,
+      shortcutCapture,
+    });
+    if (process.env.PASEO_DESKTOP_SETTINGS_ONLY === "1") {
+      console.log("Desktop settings, persistence and native shortcut capture passed.");
+      return;
+    }
+
     const adaptiveTheme = await runAdaptiveThemeRegression(artifactDir);
     await runAppearanceFontSizeRegression(page);
 
@@ -1545,6 +1590,8 @@ async function main() {
     writeJson(path.join(artifactDir, "result.json"), {
       ...report,
       settingsMemory,
+      settingsPersistence,
+      shortcutCapture,
       pluginLinks,
       adaptiveTheme,
       browserHostRouting: "passed",
@@ -1553,6 +1600,19 @@ async function main() {
       `Browser desktop browser E2E passed: WebContents ${report.originalWebContentsId} remained ${report.finalWebContentsId}; viewport, inactive capture, focus continuity, list, snapshot, click, local-page selectors passed.`,
     );
   } catch (error) {
+    const failedPage = browser
+      ?.contexts()
+      .flatMap((context) => context.pages())
+      .find((page) => page.url().includes(`localhost:${expoPort}`));
+    await failedPage
+      ?.screenshot({ path: path.join(artifactDir, "failure.png"), timeout: 5_000 })
+      .catch(() => undefined);
+    writeJson(path.join(artifactDir, "failure.json"), {
+      source: process.env.GITHUB_SHA,
+      brand: process.env.WOOWTECH_BRAND,
+      platform: process.platform,
+      error: String(error),
+    });
     console.error(`Browser desktop browser E2E failed. Artifacts: ${artifactDir}`);
     console.error(error);
     throw error;

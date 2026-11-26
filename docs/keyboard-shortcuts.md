@@ -87,6 +87,10 @@ Web inline shortcut recorders mark their mounted control with
 `data-paseo-keyboard-capture="true"` for the recording lifetime. The DOM key source
 and the overlay fallback leave those keys to the recorder, including Escape.
 Remove the marker when recording stops so host navigation resumes.
+Dispatch `paseo:dom-keyboard-capture-change` after adding or removing the marker.
+The desktop key source uses that notification to suppress Electron menu
+accelerators before they reach the DOM. App and inline recorders share a menu
+capture lease, so closing one recorder cannot release another's capture.
 
 ## Focus scopes
 

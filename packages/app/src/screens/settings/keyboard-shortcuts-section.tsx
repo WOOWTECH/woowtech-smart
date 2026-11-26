@@ -38,7 +38,7 @@ import {
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { getShortcutOs } from "@/utils/shortcut-platform";
-import { getDesktopHost } from "@/desktop/host";
+import { acquireDesktopMenuShortcutCapture } from "@/desktop/menu-shortcut-capture";
 
 const EMPTY_CAPTURED_COMBOS: string[] = [];
 
@@ -412,15 +412,11 @@ export function KeyboardShortcutsSection() {
     };
   }, [setCapturingShortcut]);
 
-  // Suppress desktop zoom accelerators while capturing so combos like Cmd+- are
-  // recorded instead of zooming the window. No-op outside Electron.
+  // Keep desktop menu accelerators in the recorder instead of reloading, opening
+  // another window or changing zoom. No-op outside Electron.
   useEffect(() => {
     if (!capturing) return;
-    const menu = getDesktopHost()?.menu;
-    void menu?.setCapturingShortcut?.(true);
-    return () => {
-      void menu?.setCapturingShortcut?.(false);
-    };
+    return acquireDesktopMenuShortcutCapture();
   }, [capturing]);
 
   const handleResetAll = useCallback(() => void resetAll(), [resetAll]);

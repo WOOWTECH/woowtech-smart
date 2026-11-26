@@ -35,7 +35,11 @@ const ENABLED = ["ci.yml"];
 const CALL_ONLY = ["pi-agent-signing.yml", "native-parity.yml"];
 
 // Reviewed artifact verification: manual or reusable, never push/PR triggered.
-const MANUAL_VERIFICATION = ["windows-installed-verify.yml"];
+const MANUAL_VERIFICATION = [
+  "windows-installed-verify.yml",
+  "settings-desktop-verify.yml",
+  "settings-android-emulator.yml",
+];
 
 // Disabled in GitHub: Actions → the workflow → ··· → Disable workflow.
 const DISABLED_IN_UI = {

@@ -1,4 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { acquireDesktopMenuShortcutCapture } from "@/desktop/menu-shortcut-capture";
+
+const menuCapture = vi.hoisted(() => vi.fn());
+vi.mock("@/desktop/host", () => ({
+  getDesktopHost: () => ({ menu: { setCapturingShortcut: menuCapture } }),
+}));
 import {
   attachElectronBrowserSource,
   buildBrowserKeyboardPolicy,
@@ -6,6 +12,22 @@ import {
   shouldPublishBrowserShortcutPolicy,
 } from "./electron-browser";
 import { buildEffectiveBindings, resolveKeyboardShortcut } from "../../keyboard-shortcuts";
+
+it("keeps native menu shortcuts captured until both app and inline recorders release them", () => {
+  menuCapture.mockClear();
+  const releaseSettings = acquireDesktopMenuShortcutCapture();
+  const releasePlugin = acquireDesktopMenuShortcutCapture();
+  expect(menuCapture.mock.calls).toEqual([[true]]);
+  releaseSettings();
+  releaseSettings();
+  expect(menuCapture.mock.calls).toEqual([[true]]);
+  releasePlugin();
+  expect(menuCapture.mock.calls).toEqual([[true], [false]]);
+  const releaseNext = acquireDesktopMenuShortcutCapture();
+  expect(menuCapture).toHaveBeenLastCalledWith(true);
+  releaseNext();
+  expect(menuCapture).toHaveBeenLastCalledWith(false);
+});
 
 describe("buildBrowserKeyboardPolicy", () => {
   it("publishes only chord starts while no browser chord is pending", () => {

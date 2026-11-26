@@ -1,0 +1,130 @@
+# Installed development identity with an embedded Release bundle; no Metro needed.
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: welcome-open-settings
+    timeout: 60000
+- takeScreenshot: welcome
+- tapOn:
+    id: welcome-open-settings
+- extendedWaitUntil:
+    visible:
+      id: settings-section-sidebar
+    timeout: 15000
+- takeScreenshot: settings-menu
+- tapOn:
+    id: settings-section-sidebar
+- assertVisible:
+    id: sidebar-nav-section-header
+- takeScreenshot: settings-sidebar
+- tapOn:
+    id: header-back-button
+- tapOn:
+    id: settings-section-chat
+- assertVisible: "Always expand reasoning"
+- takeScreenshot: settings-chat
+- tapOn:
+    id: header-back-button
+- tapOn:
+    id: settings-section-terminal
+- tapOn:
+    id: terminal-scrollback-input
+- eraseText
+- inputText: "4321"
+- tapOn: "Terminal scrollback"
+- assertVisible:
+    id: terminal-scrollback-input
+    text: "4321"
+- takeScreenshot: settings-terminal-edited
+- tapOn:
+    id: header-back-button
+- tapOn:
+    id: settings-section-files
+- assertVisible:
+    id: file-panel-settings
+- takeScreenshot: settings-files
+- tapOn:
+    id: header-back-button
+- tapOn:
+    id: header-back-button
+- assertVisible:
+    id: welcome-open-settings
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: welcome-open-settings
+    timeout: 60000
+- tapOn:
+    id: welcome-open-settings
+- tapOn:
+    id: settings-section-terminal
+- assertVisible:
+    id: terminal-scrollback-input
+    text: "4321"
+- takeScreenshot: settings-terminal-persisted
+- tapOn:
+    id: header-back-button
+- tapOn:
+    id: header-back-button
+- tapOn:
+    id: welcome-direct-connection
+- extendedWaitUntil:
+    visible:
+      id: direct-host-input
+    timeout: 15000
+- tapOn:
+    id: direct-host-input
+- eraseText
+- inputText: "127.0.0.1"
+- tapOn:
+    id: direct-port-input
+- eraseText
+- inputText: ${HOST_PORT}
+- tapOn:
+    id: direct-host-submit
+- extendedWaitUntil:
+    notVisible:
+      id: welcome-screen
+    timeout: 60000
+- runFlow:
+    when:
+      notVisible:
+        id: sidebar-settings
+    commands:
+      - tapOn:
+          id: menu-button
+- tapOn:
+    id: sidebar-settings
+- scrollUntilVisible:
+    element:
+      id: settings-host-section-devices
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: settings-host-section-devices
+- extendedWaitUntil:
+    visible:
+      id: devices-relay
+    timeout: 30000
+- takeScreenshot: connected-host-devices
+- tapOn:
+    id: header-back-button
+- scrollUntilVisible:
+    element:
+      id: settings-host-section-plugins
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: settings-host-section-plugins
+- extendedWaitUntil:
+    visible:
+      id: plugin-tabs
+    timeout: 30000
+- assertNotVisible:
+    id: plugin-list-loading
+- takeScreenshot: connected-host-plugins
