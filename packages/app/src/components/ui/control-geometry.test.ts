@@ -26,6 +26,7 @@ import {
   toolbarGlyphTone,
   toolbarSlot,
   TOUCH_TARGET,
+  touchHitSlop,
 } from "@/components/ui/control-geometry";
 import type { Theme } from "@/styles/theme";
 
@@ -118,6 +119,17 @@ describe("control sizing gate", () => {
     for (const size of ["xs", "sm", "md", "lg"] as const) {
       expect(iconSizeFor(size).touch).toBeGreaterThan(iconSizeFor(size).pointer);
     }
+  });
+
+  it("grows a smaller drawn control to the touch target only where controls are touch-sized", () => {
+    // The sidebar's 24pt new-workspace control and the 28pt display-preferences trigger.
+    expect(touchHitSlop(24, "touch")).toBe(10);
+    expect(touchHitSlop(28, "touch")).toBe(8);
+    for (const size of [18, 24, 28, 31]) {
+      expect(size + 2 * (touchHitSlop(size, "touch") ?? 0)).toBeGreaterThanOrEqual(TOUCH_TARGET);
+      expect(touchHitSlop(size, "pointer")).toBeUndefined();
+    }
+    expect(touchHitSlop(TOUCH_TARGET, "touch")).toBeUndefined();
   });
 });
 

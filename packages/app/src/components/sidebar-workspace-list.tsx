@@ -165,13 +165,14 @@ import type { HostBadgeModel } from "@/hosts/appearance";
 import { useHostBadges } from "@/hosts/use-host-badges";
 import { useSidebarRowItems } from "@/components/sidebar/display-preferences/model";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
-import { bySizing } from "@/components/ui/control-geometry";
+import { bySizing, controlSizingForLayout, touchHitSlop } from "@/components/ui/control-geometry";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
 const projectViewKeyExtractor = (project: SidebarProjectEntry) => project.viewKey;
 
 const WORKSPACE_STATUS_DOT_WIDTH = 14;
+const PROJECT_ICON_ACTION_SIZE = 24;
 const ThemedExternalLink = withUnistyles(ExternalLink);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedPlus = withUnistyles(Plus);
@@ -746,6 +747,8 @@ function NewWorktreeButton({
 }) {
   const { t } = useTranslation();
   const newWorktreeKeys = useShortcutKeys("new-worktree");
+  const isCompact = useIsCompactFormFactor();
+  const hitSlop = touchHitSlop(PROJECT_ICON_ACTION_SIZE, controlSizingForLayout(isCompact));
 
   const pressableStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -770,6 +773,7 @@ function NewWorktreeButton({
         <TooltipTrigger asChild disabled={!visible}>
           <Pressable
             style={pressableStyle}
+            hitSlop={hitSlop}
             onPress={handlePress}
             disabled={loading}
             accessibilityRole={platformIsWeb ? undefined : "button"}
@@ -2820,8 +2824,8 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
   },
   projectIconActionButton: {
-    width: 24,
-    height: 24,
+    width: PROJECT_ICON_ACTION_SIZE,
+    height: PROJECT_ICON_ACTION_SIZE,
     borderRadius: theme.borderRadius.md,
     alignItems: "center",
     justifyContent: "center",
