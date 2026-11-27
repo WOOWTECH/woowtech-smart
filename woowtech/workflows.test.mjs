@@ -137,7 +137,8 @@ test("native candidates require an explicit manual request and cannot publish", 
   // Intel and Apple Silicon must execute their own packaged binaries; a cross-build
   // on Apple Silicon alone is not Intel runtime evidence.
   assert.match(candidates.jobs.desktop.strategy.matrix.os, /macos-15-intel/);
-  assert.match(candidates.jobs.desktop.strategy.matrix.os, /macos-latest/);
+  assert.match(candidates.jobs.desktop.strategy.matrix.os, /macos-26/);
+  assert.doesNotMatch(candidates.jobs.desktop.strategy.matrix.os, /macos-latest/);
   assert.ok(ci.on.workflow_dispatch.inputs.native_parity_target.options.includes("macos-intel"));
   assert.deepEqual(candidates.jobs["mobile-export"].strategy.matrix.brand, ["woowtech", "apporo"]);
   assert.ok(candidates.jobs.desktop.steps.some(({ run }) => run?.includes("--publish never")));
