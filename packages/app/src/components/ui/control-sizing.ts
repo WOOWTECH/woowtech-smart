@@ -70,12 +70,3 @@ export function mapLayout(value: LayoutValue, map: (height: number) => number): 
 
 /** The smallest touch target, and the size of every touch-sized icon button, row, and bar. */
 export const TOUCH_TARGET = 44;
-
-/**
- * The hit slop that grows a control drawn smaller than `TOUCH_TARGET` to a touch-sized hit region.
- * Pointer layouts keep the drawn size as the hit region, so a dense desktop row stays precise.
- */
-export function touchHitSlop(drawnSize: number, sizing: ControlSizing): number | undefined {
-  if (sizing === "pointer" || drawnSize >= TOUCH_TARGET) return undefined;
-  return Math.ceil((TOUCH_TARGET - drawnSize) / 2);
-}
