@@ -542,6 +542,7 @@ describe("woowtech push subscription", () => {
     const { startSubscription } = createWoowtechPushSubscriptions({
       ...phone.dependencies,
       fcmTokens: createIosFcmTokenSource({
+        isAvailable: () => true,
         loadMessaging: () => rnFirebase,
         loadApnsRegistration: () => async () => undefined,
         warn: () => undefined,
