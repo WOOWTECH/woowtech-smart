@@ -414,18 +414,32 @@ async function writeUiDiagnostics(page, stateDir) {
   await page.screenshot({ path: path.join(stateDir, "ui-diagnostics.png") });
 }
 
-// A profile with no project gets the setup guide over every screen until it is skipped.
+// A profile with no project gets the setup guide over every screen until it is dismissed. Escape closes
+// the sheet in every language; the Skip button's label follows the app language, so it is only the fallback.
+const SKIP_LABEL = /skip|跳過|跳过|スキップ|건너뛰기/i;
+
 async function dismissSetupGuide(page) {
   const guide = page.getByTestId("onboarding-modal");
   if (!(await guide.isVisible().catch(() => false))) return;
-  await guide.getByRole("button", { name: "Skip setup", exact: true }).click({ timeout: 10_000 });
+  await page.keyboard.press("Escape");
+  const closed = await guide
+    .waitFor({ state: "hidden", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (closed) return;
+  await guide.getByRole("button", { name: SKIP_LABEL }).first().click({ timeout: 10_000 });
   await guide.waitFor({ state: "hidden", timeout: 10_000 });
 }
 
 async function readTerminalScrollbackFromUi(page, stateDir) {
   try {
     await dismissSetupGuide(page);
-    await page.goto(new URL("/settings/general", page.url()).href);
+    // Open settings inside the app. Loading the settings URL restarts the app, and its startup restore
+    // can put the open-project screen back before the section list exists.
+    await page
+      .locator('[data-testid="sidebar-settings"]:visible')
+      .first()
+      .click({ timeout: 20_000 });
     await page
       .locator('[data-testid="settings-section-terminal"]:visible')
       .first()
