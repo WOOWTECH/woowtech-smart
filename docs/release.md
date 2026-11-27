@@ -563,9 +563,22 @@ These test-key artifacts are separate from store signing and retain the dogfood
 diagnostics described in [Android](android.md). iOS native compilation and device
 checks still need a prepared Xcode environment.
 
-Keep signed installer and upgrade acceptance separate from candidate receipts.
-The macOS candidate disables the installation prompt, and the desktop tests use
-isolated homes rather than upgrading a user's existing installation.
+A desktop candidate run can also prove that an upgrade keeps the user's data. Set
+`native_parity_upgrade_from` to a published version such as `0.10.2`. On Windows and
+macOS the run installs that build, lets it save data, runs the candidate on the same
+data and compares what it finds: the daemon's server id, keypair and `config.json`, and
+the app's client id, saved hosts and settings
+(`packages/desktop/e2e/upgrade-retention.js`). Target `upgrade` runs the check between
+two published versions without building anything. To test a signed Setup through its
+real installer, give `native_parity_upgrade_run` and `native_parity_upgrade_artifact`
+the run and artifact (such as `desktop-windows`) of a private Desktop Release build.
+GitHub only dispatches workflows it already knows, so the check is reached through this
+entry point until `desktop-upgrade-retention.yml` is on `main`.
+
+The check uses the runner's real data folders; never run it on a machine that holds your
+own data. It does not cover agent history or device behaviour. Keep signed installer and
+upgrade acceptance on real machines separate from candidate receipts: the macOS candidate
+runs unpacked with the installation prompt disabled.
 
 ### macOS first launch installation
 

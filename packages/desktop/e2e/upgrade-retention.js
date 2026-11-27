@@ -400,9 +400,46 @@ function compare({ seed, verify, expectVersion }) {
 }
 
 // The stored value only proves the file survived; the Terminals section proves this build reads it.
-async function readTerminalScrollbackFromUi(page) {
+async function writeUiDiagnostics(page, stateDir) {
+  const seen = await page.evaluate(() => ({
+    testIds: [...document.querySelectorAll("[data-testid]")]
+      .map((element) => element.getAttribute("data-testid"))
+      .slice(0, 150),
+    text: document.body.innerText.slice(0, 600),
+  }));
+  fs.writeFileSync(
+    path.join(stateDir, "ui-diagnostics.json"),
+    `${JSON.stringify({ url: page.url(), ...seen }, null, 2)}\n`,
+  );
+  await page.screenshot({ path: path.join(stateDir, "ui-diagnostics.png") });
+}
+
+// A profile with no project gets the setup guide over every screen until it is dismissed. Escape closes
+// the sheet in every language; the Skip button's label follows the app language, so it is only the fallback.
+const SKIP_LABEL = /skip|跳過|跳过|スキップ|건너뛰기/i;
+
+async function dismissSetupGuide(page) {
+  const guide = page.getByTestId("onboarding-modal");
+  if (!(await guide.isVisible().catch(() => false))) return;
+  await page.keyboard.press("Escape");
+  const closed = await guide
+    .waitFor({ state: "hidden", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (closed) return;
+  await guide.getByRole("button", { name: SKIP_LABEL }).first().click({ timeout: 10_000 });
+  await guide.waitFor({ state: "hidden", timeout: 10_000 });
+}
+
+async function readTerminalScrollbackFromUi(page, stateDir) {
   try {
-    await page.goto(new URL("/settings/general", page.url()).href);
+    await dismissSetupGuide(page);
+    // Open settings inside the app. Loading the settings URL restarts the app, and its startup restore
+    // can put the open-project screen back before the section list exists.
+    await page
+      .locator('[data-testid="sidebar-settings"]:visible')
+      .first()
+      .click({ timeout: 20_000 });
     await page
       .locator('[data-testid="settings-section-terminal"]:visible')
       .first()
@@ -411,6 +448,7 @@ async function readTerminalScrollbackFromUi(page) {
     await input.waitFor({ state: "visible", timeout: 20_000 });
     return await input.inputValue();
   } catch (error) {
+    await writeUiDiagnostics(page, stateDir).catch(() => undefined);
     return `unavailable: ${String(error.message).split("\n")[0]}`;
   }
 }
@@ -475,7 +513,7 @@ async function runPhase(args) {
         verify: taken,
         expectVersion: args["expect-version"],
       });
-      const terminalScrollback = await readTerminalScrollbackFromUi(session.page);
+      const terminalScrollback = await readTerminalScrollbackFromUi(session.page, args.state);
       checks.push({
         name: "the Terminals section shows the seeded scrollback",
         // An older section layout is reported, not failed: the stored value above is the hard check.
