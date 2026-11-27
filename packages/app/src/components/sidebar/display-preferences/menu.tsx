@@ -37,6 +37,8 @@ import {
 } from "@/components/ui/menu";
 import { HostMenuItem } from "@/components/hosts/host-menu-item";
 import { isWeb } from "@/constants/platform";
+import { useIsCompactFormFactor } from "@/constants/layout";
+import { controlSizingForLayout, touchHitSlop } from "@/components/ui/control-geometry";
 import { useHosts } from "@/runtime/host-runtime";
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import { ProjectIconView } from "@/components/project-icon-view";
@@ -72,6 +74,7 @@ const ThemedPluginIconView = withUnistyles(PluginIconView);
 /** Fits the item's 16pt leading slot with a hair of room, matching the trailing check. */
 const OPTION_ICON_SIZE = 14;
 const MENU_WIDTH = 232;
+const TRIGGER_SIZE = 28;
 
 /**
  * Unlabelled's stand-in for a color dot: the same circle at the same size, hollow.
@@ -176,6 +179,8 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
   const openManager = useCallback(() => setManagerOpen(true), []);
   const closeManager = useCallback(() => setManagerOpen(false), []);
 
+  const isCompact = useIsCompactFormFactor();
+  const triggerHitSlop = touchHitSlop(TRIGGER_SIZE, controlSizingForLayout(isCompact));
   const triggerStyle = useCallback(
     ({ hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.trigger,
@@ -302,6 +307,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
       <MenuRoot compactMode="sheet">
         <MenuTrigger
           style={triggerStyle}
+          hitSlop={triggerHitSlop}
           accessibilityRole={isWeb ? undefined : "button"}
           accessibilityLabel={t("sidebar.display.trigger")}
           testID="sidebar-display-preferences-menu"
@@ -830,8 +836,8 @@ function HostFilterPage({
 
 const styles = StyleSheet.create((theme) => ({
   trigger: {
-    width: 28,
-    height: 28,
+    width: TRIGGER_SIZE,
+    height: TRIGGER_SIZE,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.borderRadius.md,
