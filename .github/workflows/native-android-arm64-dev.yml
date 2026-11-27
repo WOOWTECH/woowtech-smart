@@ -1,0 +1,106 @@
+name: Android ARM64 development APK
+
+# Builds the embedded-bundle, development-identity Android app that the emulator workflow installs,
+# for physical ARM64 phones. The app id ends in .debug, so it installs beside the store app and
+# never replaces it. Test candidate only: signed with the generated project's debug key, never published.
+on:
+  workflow_dispatch:
+    inputs:
+      brand:
+        type: choice
+        default: all
+        options: [all, woowtech, apporo]
+  workflow_call:
+    inputs:
+      brand:
+        type: string
+        default: all
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  apk:
+    name: ${{ matrix.brand }} ARM64 development APK
+    strategy:
+      fail-fast: false
+      matrix:
+        brand: ${{ fromJSON(inputs.brand == 'woowtech' && '["woowtech"]' || inputs.brand == 'apporo' && '["apporo"]' || '["woowtech","apporo"]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_VARIANT: development
+      CI: "1"
+      ONNXRUNTIME_NODE_INSTALL: skip
+      WOOWTECH_BRAND: ${{ matrix.brand }}
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply brand
+        run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+      - run: npm run build:app-deps
+      - name: Generate Android project
+        working-directory: packages/app
+        run: npx expo prebuild --platform android --no-install
+      - name: Build embedded ARM64 development APK
+        working-directory: packages/app/android
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 -Dorg.gradle.parallel=false
+      - name: Verify identity and architecture, then write the receipt
+        run: |
+          APK=packages/app/android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt | sort -V | tail -n 1)
+          BADGING=$("$AAPT" dump badging "$APK")
+          export APP_ID=$(node -e 'process.stdout.write(require("./woowtech/brands/index.cjs").appliedBrand().mobileAppIdDebug)')
+          PACKAGE=$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$BADGING")
+          export VERSION=$(sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p" <<< "$BADGING")
+          ABIS=$(sed -n "s/^native-code: //p" <<< "$BADGING")
+          echo "package=$PACKAGE version=$VERSION abis=$ABIS"
+          [[ "$PACKAGE" == "$APP_ID" && "$PACKAGE" == *.debug ]]
+          [[ -n "$VERSION" ]]
+          [[ "$ABIS" == "'arm64-v8a'" ]]
+          mkdir -p "$RUNNER_TEMP/dev-apk"
+          export APK_NAME="$APP_ID-$VERSION-arm64-${GITHUB_SHA::9}.apk"
+          cp "$APK" "$RUNNER_TEMP/dev-apk/$APK_NAME"
+          export APK_SHA256=$(sha256sum "$RUNNER_TEMP/dev-apk/$APK_NAME" | cut -d' ' -f1)
+          node -e '
+            const receipt = {
+              kind: "android-development-apk",
+              brand: process.env.WOOWTECH_BRAND,
+              appId: process.env.APP_ID,
+              versionName: process.env.VERSION,
+              targetArch: "arm64-v8a",
+              sourceCommit: process.env.GITHUB_SHA,
+              run: process.env.GITHUB_RUN_ID,
+              apk: process.env.APK_NAME,
+              sha256: process.env.APK_SHA256,
+              signing: "debug key of the generated project",
+              releaseSigned: false,
+              published: false,
+              validation: "Compiled and identity-checked only; installation and device acceptance pending",
+            };
+            require("fs").writeFileSync(process.env.RUNNER_TEMP + "/dev-apk/receipt.json", JSON.stringify(receipt, null, 2) + "\n");
+          '
+      - name: Upload the ARM64 development APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-dev-arm64-${{ matrix.brand }}-${{ github.sha }}
+          path: ${{ runner.temp }}/dev-apk
+          if-no-files-found: error
+          retention-days: 14
