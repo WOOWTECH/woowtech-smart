@@ -4,11 +4,6 @@ name: Android ARM64 development APK
 # for physical ARM64 phones. The app id ends in .debug, so it installs beside the store app and
 # never replaces it. Test candidate only: signed with the generated project's debug key, never published.
 on:
-  # Temporary: GitHub only lets a manual run address a workflow that already has a run, so the
-  # first run comes from this push. A follow-up commit removes this trigger.
-  push:
-    branches: [native/arm64-dev-apk-20261127]
-    paths: [.github/workflows/native-android-arm64-dev.yml]
   workflow_dispatch:
     inputs:
       brand:
