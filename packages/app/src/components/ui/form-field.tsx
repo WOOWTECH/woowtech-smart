@@ -230,7 +230,8 @@ export const FormTextInput = forwardRef<EditingTextInputHandle, FormTextInputPro
     );
 
     return (
-      <Pressable disabled={isDisabled} style={chromeStyle}>
+      // The chrome must not group away the input's label, value and editing actions on iOS.
+      <Pressable accessible={false} disabled={isDisabled} style={chromeStyle}>
         {leading}
         <AdaptiveTextInput
           ref={setInputRef}
