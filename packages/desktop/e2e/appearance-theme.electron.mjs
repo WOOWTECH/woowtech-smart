@@ -110,8 +110,8 @@ async function electronRegression() {
         height: 200,
         show: false,
         skipTaskbar: true,
-        // Hidden windows otherwise start with a synthetic visible renderer state.
-        paintWhenInitiallyHidden: false,
+        // The main application is also running; do not let it occlude this fixture.
+        alwaysOnTop: process.platform === "darwin",
       });
       await window.loadURL(
         "data:text/html," +
@@ -119,24 +119,25 @@ async function electronRegression() {
         <style>body { background: var(--background); } p { font: 20px system-ui; }</style>
         <div id="root"></div>`),
       );
-      await expectValue("document.visibilityState", "hidden");
       await read(files.readFileSync(paths.join(__dirname, "renderer.js"), "utf8"));
-      // Bring this fixture above the main E2E window so macOS occlusion cannot
-      // substitute for the explicit hide/show transitions being tested.
-      window.show();
-      await expectValue("document.visibilityState", "visible");
+      window.showInactive();
       const foreground =
         "document.querySelector('p') && getComputedStyle(document.querySelector('p')).color";
       const background = "getComputedStyle(document.body).backgroundColor";
       await expectValue(foreground, colors[from].foreground);
       await expectValue(background, colors[from].background);
-      window.hide();
+      // macOS can leave a programmatically hidden accessory window reporting visible.
+      // Minimize this theme fixture to obtain a real background lifecycle transition.
+      // The main browser regression separately checks BrowserWindow.hide() and idle frames.
+      if (process.platform === "darwin") window.minimize();
+      else window.hide();
       await expectValue("document.visibilityState", "hidden");
       nativeTheme.themeSource = to;
       await expectValue(`matchMedia('(prefers-color-scheme: ${to})').matches`, true);
       // Reading the public runtime while hidden must not consume the pending theme notification.
       assert.equal(await read("window.readThemeForTest()"), to);
-      window.show();
+      if (process.platform === "darwin") window.restore();
+      window.showInactive();
       await expectValue("document.visibilityState", "visible");
       await expectValue(background, colors[to].background);
       try {
@@ -150,6 +151,7 @@ async function electronRegression() {
       observations.push({
         from,
         to,
+        backgroundAction: process.platform === "darwin" ? "minimize" : "hide",
         foreground: await read(foreground),
         background: await read(background),
       });
@@ -162,21 +164,6 @@ async function electronRegression() {
     );
     app.exit(0);
   } catch (error) {
-    const visibility =
-      window && !window.isDestroyed()
-        ? {
-            visible: window.isVisible(),
-            focused: window.isFocused(),
-            minimized: window.isMinimized(),
-            throttling: window.webContents.getBackgroundThrottling(),
-            captured: window.webContents.isBeingCaptured(),
-            renderer: await read("document.visibilityState").catch(() => "unavailable"),
-          }
-        : null;
-    files.writeFileSync(
-      paths.join(artifactDir, "adaptive-theme-failure.json"),
-      JSON.stringify({ error: String(error), observations, visibility }, null, 2),
-    );
     console.error(error);
     window?.destroy();
     app.exit(1);

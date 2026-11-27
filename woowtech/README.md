@@ -1111,6 +1111,10 @@ node --test woowtech/*.test.mjs
 
 平台能力差異也要分開判讀：內建 Browser 設定僅桌面可用，Editor 設定依 web renderer 能力顯示，Shortcuts 需要實體鍵盤，手機 Chat 頁不顯示網頁的聊天大綱開關。本輪保留共用來源的這些條件，沒有把缺少相應能力的設定強行顯示在手機上。
 
+iOS 實測另外發現共用 `FormTextInput` 的外層 Pressable 會把輸入欄位合併成單一無障礙元素，遮住內層的識別、數值與編輯操作；Android 的同一流程沒有這個現象。`33a91390d` 把只負責外觀狀態的外層設為 `accessible={false}`，讓真正的輸入元件提供無障礙介面。手機驗證仍以欄位識別操作、修改數值並重開確認保存；修正後須重新建置，不能沿用修正前的候選包當作通過證據。
+
+macOS 主題測試的小型視窗以最小化取得背景狀態，避免 accessory 視窗 `hide()` 後仍回報 visible 的平台差異；真正 App 的 BrowserWindow 隱藏、零影格、截圖像素與恢復動畫仍另行驗證。未簽章的 macOS artifact 不保證可直接啟動；本機補驗曾在獨立副本上使用臨時 ad hoc 簽章，這不代表完成 Developer ID 簽章、公證或正式發佈。
+
 手機若只修改驗證腳本、產品程式沒有變更，可傳 `android_apk_run_id=<前一輪 run ID>` 或 `ios_app_run_id=<前一輪 run ID>`，下載同一個 repo、指定品牌及該 run commit 命名的 APK／simulator app 重驗，省去重編譯。證據另存候選包的來源與 run；`result.json` 的 `source` 是候選包 commit，`testSource`／`hostSource` 是本輪測試與主機的 commit。這種重驗不等同重新編譯本輪 commit，產品程式有變更時應留空該欄重新建置。編譯前先執行 runner 的 `--check`，確認 Node／tsx 能載入隔離主機 fixture。
 
 重驗時先確認待驗分支已推送，再以 `gh workflow run -R WOOWTECH/woowtech-smart settings-desktop-verify.yml --ref <branch> -f platform=all -f brand=all` 與 `gh workflow run -R WOOWTECH/woowtech-smart settings-android-emulator.yml --ref <branch> -f platform=all -f brand=all` 啟動。單平台可選 `macos`／`windows` 或 `ios`／`android`，單品牌可選 `woowtech`／`apporo`。核對 run 的 commit 與 artifact 內的來源，再看每個 matrix job 的結果；編譯成功、可下載 APK 或 simulator app 都不代表操作驗證通過。桌面候選包只在打包後 smoke 通過才上傳；手機編譯成功即保留包供診斷，須另看 Maestro 結果。相機實掃、真正 relay／推播、舊版資料升級、正式簽章和商店安裝仍是獨立驗收項目。
