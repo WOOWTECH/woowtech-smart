@@ -6,15 +6,19 @@ const path = require("node:path");
 const { setTimeout: delay } = require("node:timers/promises");
 const { chromium } = require("playwright");
 const { extractFile } = require("@electron/asar");
-const { appliedBrand } = require("../../../woowtech/brands/index.cjs");
+const { appliedBrand, loadBrand } = require("../../../woowtech/brands/index.cjs");
 const { WebSocket } = require("ws");
 const assert = require("node:assert/strict");
 
 // electron-builder.yml names the app and its executable after the brand (woowtech/brands/apply.mjs),
-// and the app's CLI and renderer scheme follow it as well.
-const EXECUTABLE_NAME = appliedBrand().name;
-const CLI_COMMAND = appliedBrand().cliCommand;
-const APP_SCHEME = appliedBrand().scheme;
+// and the app's CLI and renderer scheme follow it as well. PASEO_SMOKE_BRAND drives another
+// brand's installed app, such as an upgrade check, without re-applying that brand to the checkout.
+const SMOKE_BRAND = process.env.PASEO_SMOKE_BRAND
+  ? loadBrand(process.env.PASEO_SMOKE_BRAND)
+  : appliedBrand();
+const EXECUTABLE_NAME = SMOKE_BRAND.name;
+const CLI_COMMAND = SMOKE_BRAND.cliCommand;
+const APP_SCHEME = SMOKE_BRAND.scheme;
 const SMOKE_TIMEOUT_MS = 60_000;
 const EXIT_TIMEOUT_MS = 10_000;
 const TERMINAL_CAPTURE_ATTEMPTS = 20;
@@ -1064,6 +1068,23 @@ async function smokePackagedDesktopApp({
 
 module.exports = {
   smokePackagedDesktopApp,
+  // The launch and daemon helpers other packaged-app checks, such as the upgrade check, reuse.
+  APP_SCHEME,
+  assertExecutable,
+  assertPackagedRendererLoaded,
+  configureIsolatedDaemonHome,
+  connectToPackagedApp,
+  createIsolatedDesktopEnv,
+  getExecutablePath,
+  getLaunchCommand,
+  isRunning,
+  releaseChildHandles,
+  reserveLocalTcpPort,
+  runCliShimJsonCommand,
+  stopCliDaemon,
+  terminateChild,
+  waitForChildExit,
+  waitForPackagedAppPage,
 };
 
 if (require.main === module) {

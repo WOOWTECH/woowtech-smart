@@ -1,0 +1,152 @@
+name: Verify desktop upgrade retention
+
+# Installs a published desktop build, lets it save data, installs another build over it and checks
+# that the data survived. It runs on disposable runners and builds, signs and publishes nothing.
+# The new build is a published version, or a Setup/unpacked app from a workflow run of this repository.
+
+on:
+  workflow_call:
+    inputs:
+      brand:
+        description: "woowtech or apporo"
+        required: true
+        type: string
+      from_version:
+        description: "Published version users have today"
+        required: true
+        type: string
+      to_version:
+        description: "Version the new build reports (and is downloaded as, when no run is given)"
+        required: true
+        type: string
+      candidate_run:
+        description: "Optional run id of this repository holding the new build"
+        required: false
+        type: string
+        default: ""
+      candidate_artifact:
+        description: "Artifact name in that run"
+        required: false
+        type: string
+        default: ""
+      platforms:
+        description: "all, windows or macos"
+        required: false
+        type: string
+        default: all
+  workflow_dispatch:
+    inputs:
+      brand:
+        description: "Brand whose published builds to use"
+        required: true
+        type: choice
+        options:
+          - woowtech
+          - apporo
+      from_version:
+        description: "Published version users have today, such as 0.10.2"
+        required: true
+        type: string
+      to_version:
+        description: "Version the new build reports (and is downloaded as, when no run is given)"
+        required: true
+        type: string
+      candidate_run:
+        description: "Optional run id of this repository holding the new build"
+        required: false
+        type: string
+        default: ""
+      candidate_artifact:
+        description: "Artifact name in that run"
+        required: false
+        type: string
+        default: ""
+      platforms:
+        description: "Runners to use"
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - windows
+          - macos
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  upgrade:
+    name: ${{ inputs.brand }} ${{ inputs.from_version }} to ${{ inputs.to_version }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.platforms == 'windows' && '["windows-latest"]' || inputs.platforms == 'macos' && '["macos-latest"]' || '["windows-latest","macos-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Read the brand's names and release repository
+        id: brand
+        shell: bash
+        env:
+          BRAND: ${{ inputs.brand }}
+        run: |
+          node -e '
+            const b = require("./woowtech/brands/index.cjs").loadBrand(process.env.BRAND);
+            console.log(`name=${b.name}`);
+            console.log(`repo=${b.links.releasesRepo}`);
+            console.log(`prefix=${b.desktop.artifactPrefix}`);
+          ' >> "$GITHUB_OUTPUT"
+      - name: Install the check's dependencies only
+        shell: bash
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: |
+          npm install --prefix packages/desktop/e2e --workspaces=false --ignore-scripts --no-package-lock --no-audit --no-fund 'playwright@1.58.2' '@electron/asar@3.4.1' 'ws@8.20.0'
+      - name: Upgrade over the previous build and check the data (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRAND: ${{ inputs.brand }}
+          APP_NAME: ${{ steps.brand.outputs.name }}
+          ARTIFACT_PREFIX: ${{ steps.brand.outputs.prefix }}
+          RELEASES_REPO: ${{ steps.brand.outputs.repo }}
+          FROM_VERSION: ${{ inputs.from_version }}
+          TO_VERSION: ${{ inputs.to_version }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run }}
+          CANDIDATE_ARTIFACT: ${{ inputs.candidate_artifact }}
+        run: |
+          & ./packages/desktop/scripts/woowtech-windows-upgrade-retention.ps1 `
+            -Brand $env:BRAND -AppName $env:APP_NAME -ArtifactPrefix $env:ARTIFACT_PREFIX `
+            -ReleasesRepo $env:RELEASES_REPO -FromVersion $env:FROM_VERSION -ToVersion $env:TO_VERSION `
+            -CandidateRun $env:CANDIDATE_RUN -CandidateArtifact $env:CANDIDATE_ARTIFACT `
+            -SourceRoot $env:GITHUB_WORKSPACE -DiagnosticsDir "$env:RUNNER_TEMP/upgrade-diagnostics"
+      - name: Upgrade over the previous build and check the data (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRAND: ${{ inputs.brand }}
+          APP_NAME: ${{ steps.brand.outputs.name }}
+          ARTIFACT_PREFIX: ${{ steps.brand.outputs.prefix }}
+          RELEASES_REPO: ${{ steps.brand.outputs.repo }}
+          FROM_VERSION: ${{ inputs.from_version }}
+          TO_VERSION: ${{ inputs.to_version }}
+          SOURCE_ROOT: ${{ github.workspace }}
+          DIAGNOSTICS_DIR: ${{ runner.temp }}/upgrade-diagnostics
+        run: ./packages/desktop/scripts/woowtech-macos-upgrade-retention.sh
+      - name: Upload the data snapshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upgrade-retention-${{ inputs.brand }}-${{ runner.os }}-${{ inputs.from_version }}-to-${{ inputs.to_version }}
+          path: ${{ runner.temp }}/upgrade-diagnostics
+          if-no-files-found: warn
+          retention-days: 7

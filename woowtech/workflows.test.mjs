@@ -39,6 +39,7 @@ const MANUAL_VERIFICATION = [
   "windows-installed-verify.yml",
   "settings-desktop-verify.yml",
   "settings-android-emulator.yml",
+  "desktop-upgrade-retention.yml",
 ];
 
 // Disabled in GitHub: Actions → the workflow → ··· → Disable workflow.
