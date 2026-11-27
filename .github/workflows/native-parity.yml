@@ -19,6 +19,12 @@ on:
       upgrade_brand:
         type: string
         default: woowtech
+      upgrade_run:
+        type: string
+        default: ""
+      upgrade_artifact:
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -101,6 +107,8 @@ jobs:
       brand: ${{ inputs.upgrade_brand }}
       from_version: ${{ inputs.upgrade_from }}
       to_version: ${{ inputs.upgrade_to }}
+      candidate_run: ${{ inputs.upgrade_run }}
+      candidate_artifact: ${{ inputs.upgrade_artifact }}
 
   mobile-export:
     name: ${{ matrix.brand }} mobile bundles

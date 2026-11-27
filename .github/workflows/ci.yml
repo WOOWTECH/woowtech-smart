@@ -31,6 +31,14 @@ on:
         description: "Published version the upgrade target installs (target upgrade only)"
         type: string
         default: ""
+      native_parity_upgrade_run:
+        description: "Run id of this repository whose artifact holds the build to upgrade to (target upgrade only)"
+        type: string
+        default: ""
+      native_parity_upgrade_artifact:
+        description: "Artifact name in that run, such as desktop-windows (target upgrade only)"
+        type: string
+        default: ""
       native_parity_upgrade_brand:
         description: "Brand for the published-to-published check (target upgrade only)"
         type: choice
@@ -59,6 +67,8 @@ jobs:
       upgrade_from: ${{ inputs.native_parity_upgrade_from }}
       upgrade_to: ${{ inputs.native_parity_upgrade_to }}
       upgrade_brand: ${{ inputs.native_parity_upgrade_brand || 'woowtech' }}
+      upgrade_run: ${{ inputs.native_parity_upgrade_run }}
+      upgrade_artifact: ${{ inputs.native_parity_upgrade_artifact }}
 
   # woowtech smart: Ubuntu jobs pin ubuntu-24.04; ubuntu-latest moves to Ubuntu 26 from
   # 2026-10-19 (woowtech/README.md section 18). Job names keep upstream's "(ubuntu-latest)".
