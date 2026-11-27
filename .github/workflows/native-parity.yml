@@ -109,6 +109,8 @@ jobs:
       to_version: ${{ inputs.upgrade_to }}
       candidate_run: ${{ inputs.upgrade_run }}
       candidate_artifact: ${{ inputs.upgrade_artifact }}
+      # Only Windows can install a Setup taken from a run's artifact.
+      platforms: ${{ inputs.upgrade_run != '' && 'windows' || 'all' }}
 
   mobile-export:
     name: ${{ matrix.brand }} mobile bundles

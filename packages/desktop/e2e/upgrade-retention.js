@@ -400,7 +400,21 @@ function compare({ seed, verify, expectVersion }) {
 }
 
 // The stored value only proves the file survived; the Terminals section proves this build reads it.
-async function readTerminalScrollbackFromUi(page) {
+async function writeUiDiagnostics(page, stateDir) {
+  const seen = await page.evaluate(() => ({
+    testIds: [...document.querySelectorAll("[data-testid]")]
+      .map((element) => element.getAttribute("data-testid"))
+      .slice(0, 150),
+    text: document.body.innerText.slice(0, 600),
+  }));
+  fs.writeFileSync(
+    path.join(stateDir, "ui-diagnostics.json"),
+    `${JSON.stringify({ url: page.url(), ...seen }, null, 2)}\n`,
+  );
+  await page.screenshot({ path: path.join(stateDir, "ui-diagnostics.png") });
+}
+
+async function readTerminalScrollbackFromUi(page, stateDir) {
   try {
     await page.goto(new URL("/settings/general", page.url()).href);
     await page
@@ -411,6 +425,7 @@ async function readTerminalScrollbackFromUi(page) {
     await input.waitFor({ state: "visible", timeout: 20_000 });
     return await input.inputValue();
   } catch (error) {
+    await writeUiDiagnostics(page, stateDir).catch(() => undefined);
     return `unavailable: ${String(error.message).split("\n")[0]}`;
   }
 }
@@ -475,7 +490,7 @@ async function runPhase(args) {
         verify: taken,
         expectVersion: args["expect-version"],
       });
-      const terminalScrollback = await readTerminalScrollbackFromUi(session.page);
+      const terminalScrollback = await readTerminalScrollbackFromUi(session.page, args.state);
       checks.push({
         name: "the Terminals section shows the seeded scrollback",
         // An older section layout is reported, not failed: the stored value above is the hard check.
