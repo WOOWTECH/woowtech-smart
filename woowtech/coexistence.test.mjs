@@ -199,7 +199,6 @@ test("the CLI and packaging scripts find the desktop app under our name", () => 
   const packagingScripts = [
     "packages/desktop/scripts/after-pack.js",
     "packages/desktop/scripts/after-sign.js",
-    "packages/desktop/e2e/packaged-app-smoke.js",
   ];
   // They read the name electron-builder.yml gives the app from the brand's JSON.
   for (const script of packagingScripts) {
@@ -209,6 +208,19 @@ test("the CLI and packaging scripts find the desktop app under our name", () => 
       `EXECUTABLE_NAME in ${script} is not the brand's app name`,
     );
   }
+  // The smoke check does too. It can also drive another brand's installed app, for an upgrade
+  // check, but only when the environment names that brand; otherwise it is the applied brand.
+  const smoke = read("packages/desktop/e2e/packaged-app-smoke.js");
+  assert.match(
+    smoke,
+    /const SMOKE_BRAND = process\.env\.PASEO_SMOKE_BRAND\s*\?\s*loadBrand\(process\.env\.PASEO_SMOKE_BRAND\)\s*:\s*appliedBrand\(\);/,
+    "the smoke check's brand is not the applied brand unless PASEO_SMOKE_BRAND names another",
+  );
+  assert.match(
+    smoke,
+    /^const EXECUTABLE_NAME = SMOKE_BRAND\.name;$/m,
+    "EXECUTABLE_NAME in packages/desktop/e2e/packaged-app-smoke.js is not the brand's app name",
+  );
   assert.ok(
     read("packages/desktop/bin/paseo").includes(
       `Frameworks/${APP_NAME} Helper.app/Contents/MacOS/${APP_NAME} Helper`,

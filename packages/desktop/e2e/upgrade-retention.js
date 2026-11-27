@@ -414,8 +414,17 @@ async function writeUiDiagnostics(page, stateDir) {
   await page.screenshot({ path: path.join(stateDir, "ui-diagnostics.png") });
 }
 
+// A profile with no project gets the setup guide over every screen until it is skipped.
+async function dismissSetupGuide(page) {
+  const guide = page.getByTestId("onboarding-modal");
+  if (!(await guide.isVisible().catch(() => false))) return;
+  await guide.getByRole("button", { name: "Skip setup", exact: true }).click({ timeout: 10_000 });
+  await guide.waitFor({ state: "hidden", timeout: 10_000 });
+}
+
 async function readTerminalScrollbackFromUi(page, stateDir) {
   try {
+    await dismissSetupGuide(page);
     await page.goto(new URL("/settings/general", page.url()).href);
     await page
       .locator('[data-testid="settings-section-terminal"]:visible')
