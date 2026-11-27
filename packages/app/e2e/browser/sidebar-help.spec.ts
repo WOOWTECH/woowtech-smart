@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
-import { openSettingsSection } from "../support/helpers/settings";
+import { openSettingsFromCompactSidebar, openSettingsSection } from "../support/helpers/settings";
 import {
   allChangesToggle,
   hideAllChanges,
@@ -203,7 +203,13 @@ for (const width of [1512, 390]) {
   test(`searches and collapses third-party licenses at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 982 });
     await gotoAppShell(page);
-    await openSettings(page);
+    if (width === 390) {
+      // Compact layout: the sidebar starts closed and Settings opens as a list.
+      await openCompactSidebar(page);
+      await openSettingsFromCompactSidebar(page);
+    } else {
+      await openSettings(page);
+    }
     await openSettingsSection(page, "notices");
     const section = page.getByTestId("mobile-third-party-licenses");
     const search = section.getByTestId("mobile-license-search");
