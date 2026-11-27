@@ -1093,7 +1093,7 @@ node --test woowtech/*.test.mjs
 
 本機功能對齊網頁版時，另外手動執行 `settings-desktop-verify.yml` 與 `settings-android-emulator.yml`。兩者以同一個 commit 分別套用 woowtech／Apporo 品牌，在隔離 runner 建置並操作 macOS、Windows、iOS Simulator、Android Emulator。只有 `workflow_dispatch`／`workflow_call`，權限唯讀，不帶簽章或部署憑證、不發佈。桌面驗證使用真正 Electron，手機驗證使用內嵌 bundle 的 Release 組態與 development app ID；APK 只有模擬器的 x86_64，不能當手機發行包。畫面、日誌及測試結果保存在帶有品牌、平台、commit 的 Actions artifact。一般 CI 的 Ubuntu 設定照舊。
 
-2026-11-27 的本機對齊分支以網頁 PR #20 的 `45b736705` 起始，並合併至 `e5ecfdf5b`（Paseo 0.17.5）。這是候選版本的對齊，不表示已安裝的正式 App 或正式網站已更新。網頁修正與原生驗證的對應如下；「共用」只表示原始碼已包含，不能代替裝置測試結果。
+2026-11-27 的本機對齊分支以網頁 PR #20 的 `45b736705` 起始，並合併至 `77f18127a`（Paseo 0.17.5）。這是候選版本的對齊，不表示已安裝的正式 App 或正式網站已更新。網頁修正與原生驗證的對應如下；「共用」只表示原始碼已包含，不能代替裝置測試結果。
 
 | 網頁更新                                        | 共用修正           | 原生驗證／本機補強                                                                                                                  |
 | ----------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -1108,6 +1108,7 @@ node --test woowtech/*.test.mjs
 | woowtech／Apporo 品牌隔離                       | 品牌設定與共用來源 | 兩品牌分別建置；Windows 品牌工具和桌面 Metro 啟動器改由 Node 啟動專案內 CLI。                                                       |
 | Tasks 目前欄位的無障礙選取狀態                  | `a7bfd65a3`        | 網頁補上 `aria-selected`；原生既有 `accessibilityState.selected` 保留。                                                             |
 | 後設資料生成說明依連線主機政策區分              | `e5ecfdf5b`        | 共用中英文文案同步；完整 Smart 主機仍停用，其他相容主機可能呼叫模型。候選包須核對包含本提交。                                       |
+| 更新紀錄與第三方授權的展開狀態                  | `77f18127a`        | 補上網頁 `aria-expanded`；原生既有 `accessibilityState.expanded` 保留。33a91390d 的八組原生驗證先於此合併，兩者來源須分開記錄。     |
 
 平台能力差異也要分開判讀：內建 Browser 設定僅桌面可用，Editor 設定依 web renderer 能力顯示，Shortcuts 需要實體鍵盤，手機 Chat 頁不顯示網頁的聊天大綱開關。本輪保留共用來源的這些條件，沒有把缺少相應能力的設定強行顯示在手機上。
 

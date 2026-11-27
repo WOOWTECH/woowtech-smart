@@ -28,7 +28,7 @@ jobs:
       max-parallel: 3
       matrix:
         brand: [woowtech, apporo]
-        os: ${{ fromJSON(inputs.target == 'windows' && '["windows-latest"]' || inputs.target == 'macos-intel' && '["macos-15-intel"]' || inputs.target == 'macos' && '["macos-latest","macos-15-intel"]' || inputs.target == 'linux' && '["ubuntu-24.04"]' || '["ubuntu-24.04","windows-latest","macos-latest","macos-15-intel"]') }}
+        os: ${{ fromJSON(inputs.target == 'windows' && '["windows-latest"]' || inputs.target == 'macos-intel' && '["macos-15-intel"]' || inputs.target == 'macos' && '["macos-26","macos-15-intel"]' || inputs.target == 'linux' && '["ubuntu-24.04"]' || '["ubuntu-24.04","windows-latest","macos-26","macos-15-intel"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
     defaults:
