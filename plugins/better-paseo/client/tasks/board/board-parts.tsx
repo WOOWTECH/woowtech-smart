@@ -230,6 +230,7 @@ export function Segments<T extends string>(props: {
             key={window}
             accessibilityRole="radio"
             accessibilityState={{ selected: on }}
+            aria-checked={on}
             accessibilityLabel={mark ? props.label(window) : undefined}
             {...tipProps(mark ? props.label(window) : undefined)}
             onPress={() => props.onChange(window)}
