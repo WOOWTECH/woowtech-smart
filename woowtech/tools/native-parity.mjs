@@ -46,6 +46,15 @@ function receipt(kind, evidence) {
   console.log(JSON.stringify(result));
 }
 
+// Where electron-builder --dir leaves the unpacked app for this platform.
+function desktopApp() {
+  const release = path.join(root, "packages/desktop/release");
+  if (process.platform === "darwin") {
+    return path.join(release, process.arch === "arm64" ? "mac-arm64" : "mac", `${brand.name}.app`);
+  }
+  return path.join(release, process.platform === "win32" ? "win-unpacked" : "linux-unpacked");
+}
+
 switch (process.argv[2]) {
   case "prepare-desktop": {
     // electron-builder resolves this relative to packages/desktop. This file belongs
@@ -60,11 +69,7 @@ switch (process.argv[2]) {
     break;
   }
   case "verify-desktop": {
-    const release = path.join(root, "packages/desktop/release");
-    const app =
-      process.platform === "darwin"
-        ? path.join(release, process.arch === "arm64" ? "mac-arm64" : "mac", `${brand.name}.app`)
-        : path.join(release, process.platform === "win32" ? "win-unpacked" : "linux-unpacked");
+    const app = desktopApp();
     const resources = path.join(
       app,
       ...(process.platform === "darwin" ? ["Contents", "Resources"] : ["resources"]),
@@ -103,6 +108,72 @@ switch (process.argv[2]) {
         "shortcut cancellation keeps settings open",
         "recorded shortcut survives reload",
       ],
+      signed: false,
+      published: false,
+    });
+    break;
+  }
+  case "verify-upgrade": {
+    // The published build users have today saves data, then this candidate runs on the same data.
+    const from = process.env.FROM_VERSION;
+    assert.ok(from, "FROM_VERSION names the published version to upgrade from");
+    const app = desktopApp();
+    const diagnostics = path.join(output, "upgrade");
+    mkdirSync(diagnostics, { recursive: true });
+    const scripts = path.join(root, "packages/desktop/scripts");
+    if (process.platform === "win32") {
+      execFileSync(
+        "pwsh",
+        [
+          "-NoProfile",
+          "-File",
+          path.join(scripts, "woowtech-windows-upgrade-retention.ps1"),
+          "-Brand",
+          brand.id,
+          "-AppName",
+          brand.name,
+          "-ArtifactPrefix",
+          brand.desktop.artifactPrefix,
+          "-ReleasesRepo",
+          brand.links.releasesRepo,
+          "-FromVersion",
+          from,
+          "-ToVersion",
+          version,
+          "-CandidateApp",
+          app,
+          "-SourceRoot",
+          root,
+          "-DiagnosticsDir",
+          diagnostics,
+        ],
+        { stdio: "inherit" },
+      );
+    } else if (process.platform === "darwin") {
+      execFileSync("bash", [path.join(scripts, "woowtech-macos-upgrade-retention.sh")], {
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          BRAND: brand.id,
+          APP_NAME: brand.name,
+          ARTIFACT_PREFIX: brand.desktop.artifactPrefix,
+          RELEASES_REPO: brand.links.releasesRepo,
+          FROM_VERSION: from,
+          TO_VERSION: version,
+          CANDIDATE_APP: app,
+          SOURCE_ROOT: root,
+          DIAGNOSTICS_DIR: diagnostics,
+        },
+      });
+    } else {
+      throw new Error("Only Windows and macOS have published installers to upgrade from");
+    }
+    const report = json(path.join(diagnostics, "report.json"));
+    receipt("upgrade-retention", {
+      from,
+      to: version,
+      app: path.relative(root, app),
+      checks: report.checks.map(({ name, ok }) => ({ name, ok })),
       signed: false,
       published: false,
     });

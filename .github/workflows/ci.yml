@@ -22,7 +22,20 @@ on:
         description: "Candidate platforms to verify when run_native_parity is selected"
         type: choice
         default: all
-        options: [all, linux, windows, macos, macos-intel, mobile, android-native]
+        options: [all, linux, windows, macos, macos-intel, mobile, android-native, upgrade]
+      native_parity_upgrade_from:
+        description: "Published version to upgrade from; desktop candidates also prove that upgrade keeps the user's data"
+        type: string
+        default: ""
+      native_parity_upgrade_to:
+        description: "Published version the upgrade target installs (target upgrade only)"
+        type: string
+        default: ""
+      native_parity_upgrade_brand:
+        description: "Brand for the published-to-published check (target upgrade only)"
+        type: choice
+        default: woowtech
+        options: [woowtech, apporo]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ inputs.run_native_parity && inputs.native_parity_target || 'checks' }}
@@ -43,6 +56,9 @@ jobs:
     uses: ./.github/workflows/native-parity.yml
     with:
       target: ${{ inputs.native_parity_target || 'all' }}
+      upgrade_from: ${{ inputs.native_parity_upgrade_from }}
+      upgrade_to: ${{ inputs.native_parity_upgrade_to }}
+      upgrade_brand: ${{ inputs.native_parity_upgrade_brand || 'woowtech' }}
 
   # woowtech smart: Ubuntu jobs pin ubuntu-24.04; ubuntu-latest moves to Ubuntu 26 from
   # 2026-10-19 (woowtech/README.md section 18). Job names keep upstream's "(ubuntu-latest)".

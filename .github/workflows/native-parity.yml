@@ -8,6 +8,17 @@ on:
       target:
         type: string
         default: all
+      # A desktop candidate also proves that an upgrade from this published version keeps the
+      # user's data. target "upgrade" runs only that check, between two published versions.
+      upgrade_from:
+        type: string
+        default: ""
+      upgrade_to:
+        type: string
+        default: ""
+      upgrade_brand:
+        type: string
+        default: woowtech
 
 permissions:
   contents: read
@@ -22,7 +33,7 @@ env:
 jobs:
   desktop:
     name: ${{ matrix.brand }} desktop (${{ matrix.os }})
-    if: ${{ inputs.target != 'mobile' && inputs.target != 'android-native' }}
+    if: ${{ inputs.target != 'mobile' && inputs.target != 'android-native' && inputs.target != 'upgrade' }}
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -66,6 +77,12 @@ jobs:
         run: node woowtech/tools/native-parity.mjs verify-desktop
         env:
           PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/native-parity/smoke
+      - name: Verify an upgrade from the published build keeps the user's data
+        if: ${{ inputs.upgrade_from != '' && runner.os != 'Linux' }}
+        run: node woowtech/tools/native-parity.mjs verify-upgrade
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM_VERSION: ${{ inputs.upgrade_from }}
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -75,6 +92,15 @@ jobs:
             packages/desktop/release
           if-no-files-found: error
           retention-days: 7
+
+  upgrade-retention:
+    name: ${{ inputs.upgrade_brand }} upgrade from ${{ inputs.upgrade_from }}
+    if: ${{ inputs.target == 'upgrade' }}
+    uses: ./.github/workflows/desktop-upgrade-retention.yml
+    with:
+      brand: ${{ inputs.upgrade_brand }}
+      from_version: ${{ inputs.upgrade_from }}
+      to_version: ${{ inputs.upgrade_to }}
 
   mobile-export:
     name: ${{ matrix.brand }} mobile bundles
