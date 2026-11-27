@@ -172,10 +172,12 @@ test("renders the changelog in the app and links the website", async ({ page }) 
     await expect(latest.getByText("Paseo now shows the tasks an agent is running.")).toBeVisible();
     await expect(latest.getByText("Added a brand new thing")).toHaveCount(0);
     await expect(latest.getByText("Fixed a crash")).toHaveCount(0);
+    await expect(allChangesToggle(latest)).toHaveAttribute("aria-expanded", "false");
   });
 
   await test.step("shows every section on request and tucks them away again", async () => {
     await showAllChanges(latest);
+    await expect(allChangesToggle(latest)).toHaveAttribute("aria-expanded", "true");
     await expect(latest.getByText("Sparkles", { exact: true })).toBeVisible();
     await expect(latest.getByText("Added a brand new thing")).toBeVisible();
     await expect(latest.getByText("Read this before upgrading.")).toBeVisible();
@@ -183,6 +185,7 @@ test("renders the changelog in the app and links the website", async ({ page }) 
     await expect(release(sheet, "0.0.0")).toHaveCount(0);
 
     await hideAllChanges(latest);
+    await expect(allChangesToggle(latest)).toHaveAttribute("aria-expanded", "false");
     await expect(latest.getByText("Added a brand new thing")).toHaveCount(0);
     await expect(latest.getByText("Paseo now shows the tasks an agent is running.")).toBeVisible();
   });
@@ -195,6 +198,59 @@ test("renders the changelog in the app and links the website", async ({ page }) 
   await expectExternalPage(page, "changelog-open-website", CHANGELOG_DESTINATION);
   await closeSheet(page, "changelog-sheet");
 });
+
+for (const width of [1512, 390]) {
+  test(`searches and collapses third-party licenses at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 982 });
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsSection(page, "notices");
+    const section = page.getByTestId("mobile-third-party-licenses");
+    const search = section.getByTestId("mobile-license-search");
+    const show = section.getByRole("button", {
+      name: "Show license: @babel/runtime 7.29.7",
+      exact: true,
+    });
+    const hide = section.getByRole("button", {
+      name: "Hide license: @babel/runtime 7.29.7",
+      exact: true,
+    });
+    const document = section
+      .getByText("@babel/runtime", { exact: true })
+      .locator("..")
+      .getByText(/Copyright \(c\) 2014-present Sebastian McKenzie/);
+
+    await expect(show).toHaveAttribute("aria-expanded", "false");
+    await expect(document).not.toBeVisible();
+    await show.click();
+    await expect(hide).toHaveAttribute("aria-expanded", "true");
+    await expect(document).toBeVisible();
+    await hide.click();
+    await expect(show).toHaveAttribute("aria-expanded", "false");
+    await expect(document).not.toBeVisible();
+
+    await show.click();
+    await section.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(section.getByText("Page 2 of 38", { exact: true })).toBeVisible();
+    await section.getByRole("button", { name: "Previous", exact: true }).click();
+    await expect(section.getByText("Page 1 of 38", { exact: true })).toBeVisible();
+    await expect(show).toHaveAttribute("aria-expanded", "false");
+
+    await section.getByRole("button", { name: "Next", exact: true }).click();
+    await search.fill("@babel/runtime");
+    await expect(show).toBeVisible();
+    await expect(section.getByRole("button", { name: "Next", exact: true })).not.toBeVisible();
+    await show.click();
+    await search.fill("7.29.7");
+    await expect(show).toHaveAttribute("aria-expanded", "false");
+    await search.fill("piqa-no-matching-package");
+    await expect(section.getByText("No packages match your search.")).toBeVisible();
+    await expect(show).not.toBeVisible();
+    await search.fill("");
+    await expect(show).toHaveAttribute("aria-expanded", "false");
+    await expect(section.getByText("Page 1 of 38", { exact: true })).toBeVisible();
+  });
+}
 
 test("searches keyboard shortcuts from the sidebar help menu", async ({ page }) => {
   await page.addInitScript(() => {

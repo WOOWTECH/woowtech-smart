@@ -180,6 +180,7 @@ const ReleaseView = memo(function ReleaseView({ release, isCurrent }: ReleaseVie
           variant="ghost"
           style={styles.allChangesToggle}
           accessibilityState={allChangesState}
+          aria-expanded={showingAllChanges}
           onPress={toggleAllChanges}
         >
           {t(showingAllChanges ? "changelog.hideAllChanges" : "changelog.showAllChanges")}
