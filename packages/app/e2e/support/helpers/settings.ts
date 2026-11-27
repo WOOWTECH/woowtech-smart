@@ -59,6 +59,7 @@ const SECTION_LABELS = {
   permissions: "Permissions",
   diagnostics: "Diagnostics",
   about: "About",
+  notices: "Trademarks and third-party notices",
 } as const;
 
 export type SettingsSection = keyof typeof SECTION_LABELS;
