@@ -105,15 +105,26 @@ async function electronRegression() {
       ["light", "dark"],
     ]) {
       nativeTheme.themeSource = from;
-      window = new BrowserWindow({ width: 600, height: 200, show: false, skipTaskbar: true });
+      window = new BrowserWindow({
+        width: 600,
+        height: 200,
+        show: false,
+        skipTaskbar: true,
+        // Hidden windows otherwise start with a synthetic visible renderer state.
+        paintWhenInitiallyHidden: false,
+      });
       await window.loadURL(
         "data:text/html," +
           encodeURIComponent(`<!doctype html>
         <style>body { background: var(--background); } p { font: 20px system-ui; }</style>
         <div id="root"></div>`),
       );
+      await expectValue("document.visibilityState", "hidden");
       await read(files.readFileSync(paths.join(__dirname, "renderer.js"), "utf8"));
-      window.showInactive();
+      // Bring this fixture above the main E2E window so macOS occlusion cannot
+      // substitute for the explicit hide/show transitions being tested.
+      window.show();
+      await expectValue("document.visibilityState", "visible");
       const foreground =
         "document.querySelector('p') && getComputedStyle(document.querySelector('p')).color";
       const background = "getComputedStyle(document.body).backgroundColor";
@@ -125,7 +136,7 @@ async function electronRegression() {
       await expectValue(`matchMedia('(prefers-color-scheme: ${to})').matches`, true);
       // Reading the public runtime while hidden must not consume the pending theme notification.
       assert.equal(await read("window.readThemeForTest()"), to);
-      window.showInactive();
+      window.show();
       await expectValue("document.visibilityState", "visible");
       await expectValue(background, colors[to].background);
       try {
@@ -151,6 +162,21 @@ async function electronRegression() {
     );
     app.exit(0);
   } catch (error) {
+    const visibility =
+      window && !window.isDestroyed()
+        ? {
+            visible: window.isVisible(),
+            focused: window.isFocused(),
+            minimized: window.isMinimized(),
+            throttling: window.webContents.getBackgroundThrottling(),
+            captured: window.webContents.isBeingCaptured(),
+            renderer: await read("document.visibilityState").catch(() => "unavailable"),
+          }
+        : null;
+    files.writeFileSync(
+      paths.join(artifactDir, "adaptive-theme-failure.json"),
+      JSON.stringify({ error: String(error), observations, visibility }, null, 2),
+    );
     console.error(error);
     window?.destroy();
     app.exit(1);
