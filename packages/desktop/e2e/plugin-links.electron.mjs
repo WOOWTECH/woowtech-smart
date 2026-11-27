@@ -19,9 +19,9 @@ import { ExternalLink } from "@getpaseo/plugin/client/ui";
 function Links({ navigation }) {
   const [result, setResult] = useState("Ready");
   return <View>
-    <Text>{result}</Text>
+    <Text testID="plugin-links-result">{result}</Text>
     <Pressable accessibilityRole="button" onPress={() => { window.open(${JSON.stringify(url)}, "_blank", "noopener,noreferrer"); }}><Text>Old documentation workaround</Text></Pressable>
-    <Pressable accessibilityRole="button" onPress={async () => { try { await openExternalUrl(${JSON.stringify(url)}); setResult("Opened externally"); } catch (error) { setResult(String(error)); } }}><Text>Open externally</Text></Pressable>
+    <Pressable accessibilityRole="button" onPress={async () => { setResult("Opening externally"); try { await openExternalUrl(${JSON.stringify(url)}); setResult("Opened externally"); } catch (error) { setResult(String(error)); } }}><Text>Open externally</Text></Pressable>
     {ExternalLink ? <ExternalLink href={${JSON.stringify(url)}}>Documentation link</ExternalLink> : null}
     <Pressable accessibilityRole="button" onPress={() => navigation.openBrowser({ url: ${JSON.stringify(url)}, workspaceId: ${JSON.stringify(remoteWorkspaceId)}, serverId: "plugin-links-remote" })}><Text>Open remote workspace browser</Text></Pressable>
     <Text>{navigation.openBrowser ? "Browser available" : "Browser unavailable"}</Text>
@@ -76,11 +76,28 @@ export async function runPluginLinksRegression({
   await popup.waitForLoadState();
   await popup.screenshot({ path: path.join(artifactDir, "plugin-old-popup.png") });
   await popup.close();
+  // Closing a child window can leave macOS focus on another application.
+  await page.bringToFront();
+  await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
 
   const popups = [];
   page.on("popup", (openedPopup) => popups.push(openedPopup));
   await page.getByRole("button", { name: "Open externally", exact: true }).click();
-  await expect(page.getByText("Opened externally", { exact: true })).toBeVisible();
+  try {
+    // The OS may need to launch its default browser on a fresh CI desktop.
+    await expect(page.getByTestId("plugin-links-result")).toHaveText("Opened externally", {
+      timeout: 30_000,
+    });
+  } catch (error) {
+    fs.writeFileSync(
+      path.join(artifactDir, "plugin-external-failure.json"),
+      JSON.stringify({
+        result: await page.getByTestId("plugin-links-result").textContent(),
+        focused: await page.evaluate(() => document.hasFocus()),
+      }),
+    );
+    throw error;
+  }
   await page.getByRole("link", { name: "Documentation link", exact: true }).click();
   if (externalOpenLog) {
     await expect
