@@ -41,7 +41,6 @@ export {
   mapLayout,
   resolveControlSizing,
   TOUCH_TARGET,
-  touchHitSlop,
   type ControlSizing,
   type ControlSizingFacts,
   type LayoutValue,

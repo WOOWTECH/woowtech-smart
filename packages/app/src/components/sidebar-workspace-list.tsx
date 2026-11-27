@@ -165,14 +165,13 @@ import type { HostBadgeModel } from "@/hosts/appearance";
 import { useHostBadges } from "@/hosts/use-host-badges";
 import { useSidebarRowItems } from "@/components/sidebar/display-preferences/model";
 import { PullRequestStateIcon } from "@/git/pull-request-state-icon";
-import { bySizing, controlSizingForLayout, touchHitSlop } from "@/components/ui/control-geometry";
+import { bySizing } from "@/components/ui/control-geometry";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
 const projectViewKeyExtractor = (project: SidebarProjectEntry) => project.viewKey;
 
 const WORKSPACE_STATUS_DOT_WIDTH = 14;
-const PROJECT_ICON_ACTION_SIZE = 24;
 const ThemedExternalLink = withUnistyles(ExternalLink);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedPlus = withUnistyles(Plus);
@@ -747,8 +746,6 @@ function NewWorktreeButton({
 }) {
   const { t } = useTranslation();
   const newWorktreeKeys = useShortcutKeys("new-worktree");
-  const isCompact = useIsCompactFormFactor();
-  const hitSlop = touchHitSlop(PROJECT_ICON_ACTION_SIZE, controlSizingForLayout(isCompact));
 
   const pressableStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -773,7 +770,6 @@ function NewWorktreeButton({
         <TooltipTrigger asChild disabled={!visible}>
           <Pressable
             style={pressableStyle}
-            hitSlop={hitSlop}
             onPress={handlePress}
             disabled={loading}
             accessibilityRole={platformIsWeb ? undefined : "button"}
@@ -2824,8 +2820,8 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
   },
   projectIconActionButton: {
-    width: PROJECT_ICON_ACTION_SIZE,
-    height: PROJECT_ICON_ACTION_SIZE,
+    width: bySizing({ touch: 32, pointer: 24 }),
+    height: bySizing({ touch: 32, pointer: 24 }),
     borderRadius: theme.borderRadius.md,
     alignItems: "center",
     justifyContent: "center",
@@ -2865,8 +2861,12 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface2,
   },
   projectTrailingControlSlot: {
-    width: 24,
-    height: 24,
+    // Touch-sized like the kebab beside it. The negative margins keep the 24px pointer box in the
+    // layout, so the plus stays on its rail and the row at its 44px height.
+    width: bySizing({ touch: 32, pointer: 24 }),
+    height: bySizing({ touch: 32, pointer: 24 }),
+    marginHorizontal: bySizing({ touch: -4, pointer: 0 }),
+    marginVertical: bySizing({ touch: -4, pointer: 0 }),
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
