@@ -1,4 +1,8 @@
 import type { ConnectionState, DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  type NotificationPreferences,
+} from "@getpaseo/protocol/notification-preferences";
 import { describe, expect, it } from "vitest";
 import { createAndroidFcmTokenSource, type ExpoPushTokens } from "./fcm-token.android";
 import { createIosFcmTokenSource, type RnFirebaseMessaging } from "./fcm-token.ios";
@@ -18,6 +22,8 @@ type Features = NonNullable<ReturnType<DaemonClient["getLastServerInfoMessage"]>
 // A typed in-memory daemon connection: records what the app registers and revokes.
 class FakeDaemonClient implements PushDaemonClient {
   readonly registered: string[] = [];
+  /** The notification settings each registration carried; undefined when it carried none. */
+  readonly registeredPreferences: (NotificationPreferences | undefined)[] = [];
   readonly revoked: string[] = [];
   /** Registrations and revocations in the order the daemon received them. */
   readonly received: string[] = [];
@@ -57,8 +63,9 @@ class FakeDaemonClient implements PushDaemonClient {
     };
   }
 
-  registerPushToken(token: string): void {
+  registerPushToken(token: string, preferences?: NotificationPreferences): void {
     this.registered.push(token);
+    this.registeredPreferences.push(preferences);
     this.received.push(`register ${token}`);
   }
 
@@ -78,6 +85,11 @@ class FakeDaemonClient implements PushDaemonClient {
 
 const WOOWTECH_DAEMON: Features = { woowtechPush: true, pushTokenRevocation: true };
 const PASEO_DAEMON: Features = { pushTokenRevocation: true };
+const FILTERING_DAEMON: Features = { ...WOOWTECH_DAEMON, pushNotificationPreferences: true };
+const FINISHED_TOO: NotificationPreferences = {
+  ...DEFAULT_NOTIFICATION_PREFERENCES,
+  events: { ...DEFAULT_NOTIFICATION_PREFERENCES.events, agentFinished: true },
+};
 
 function createPhone(options: { permission?: boolean; fcmToken?: string | null } = {}) {
   const storage = new Map<string, string>();
@@ -85,6 +97,8 @@ function createPhone(options: { permission?: boolean; fcmToken?: string | null }
   let fcmToken = options.fcmToken === undefined ? FCM_TOKEN : options.fcmToken;
   let language = "zh-TW";
   const refreshListeners = new Set<(token: string) => void>();
+  let preferences: NotificationPreferences = DEFAULT_NOTIFICATION_PREFERENCES;
+  const settingsListeners = new Set<(preferences: NotificationPreferences) => void>();
   const languageListeners = new Set<(language: string) => void>();
   /** Each set of Android notification channels the app created or renamed. */
   const channelSets: (readonly WoowtechNotificationChannel[])[] = [];
@@ -124,6 +138,13 @@ function createPhone(options: { permission?: boolean; fcmToken?: string | null }
         return () => languageListeners.delete(listener);
       },
     },
+    notificationPreferences: {
+      resolve: async () => preferences,
+      subscribe: (listener) => {
+        settingsListeners.add(listener);
+        return () => settingsListeners.delete(listener);
+      },
+    },
     disableExpoServerRegistration: async () => {
       events.push("disableExpoServerRegistration");
     },
@@ -143,6 +164,11 @@ function createPhone(options: { permission?: boolean; fcmToken?: string | null }
       for (const listener of refreshListeners) listener(token);
     },
     refreshListenerCount: () => refreshListeners.size,
+    /** The app settings change; `next` sets new notification settings, without it others change. */
+    changeSettings(next?: NotificationPreferences) {
+      if (next) preferences = next;
+      for (const listener of settingsListeners) listener(preferences);
+    },
     /** The user picks another language in the app's settings (i18next "languageChanged"). */
     changeLanguage(next: string) {
       language = next;
@@ -457,6 +483,50 @@ describe("woowtech push subscription", () => {
 
     expect(client.revoked).toEqual([]);
     expect(phone.storage.get(CACHE_KEY)).toBe(`wsp1:zh-TW:${FCM_TOKEN}`);
+  });
+
+  it("sends the device's notification settings to a daemon that filters pushes by them", async () => {
+    const phone = createPhone();
+    phone.changeSettings(FINISHED_TOO);
+    const client = new FakeDaemonClient(FILTERING_DAEMON);
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+
+    expect(client.registered).toEqual([`wsp1:zh-TW:${FCM_TOKEN}`]);
+    expect(client.registeredPreferences).toEqual([FINISHED_TOO]);
+  });
+
+  it("sends no settings to an older daemon, which keeps its own filter", async () => {
+    const phone = createPhone();
+    const client = new FakeDaemonClient(WOOWTECH_DAEMON);
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+
+    expect(client.registeredPreferences).toEqual([undefined]);
+  });
+
+  it("moves the registration when the notification settings change, and only then", async () => {
+    const phone = createPhone();
+    const client = new FakeDaemonClient(FILTERING_DAEMON);
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+    // Another app setting changes: the notification part is the same.
+    phone.changeSettings();
+    await settle();
+    phone.changeSettings(FINISHED_TOO);
+    await settle();
+
+    expect(client.registeredPreferences).toEqual([DEFAULT_NOTIFICATION_PREFERENCES, FINISHED_TOO]);
+    expect(client.revoked).toEqual([]);
   });
 
   it("revokes the cached string and forgets it when notifications are not allowed", async () => {
