@@ -35,18 +35,15 @@ appId: ${APP_ID}
     id: terminal-scrollback-input
 - eraseText
 - inputText: "4321"
-- tapOn: "Terminal scrollback"
+# The number pad covers the Terminal section on an iPhone. A tap on a plain title above it lets
+# the scroll view dismiss the keyboard, and the input commits on blur.
+- tapOn: "Detail level"
 - assertVisible:
     id: terminal-scrollback-input
     text: "4321"
 - takeScreenshot: settings-terminal-edited
-- scrollUntilVisible:
-    element:
-      id: file-panel-settings
-    direction: DOWN
-- assertVisible:
-    id: file-panel-settings
-- takeScreenshot: settings-files
+# 0.18 shows the Files section only for file types more than one panel claims; a fresh install
+# has none, so the page ends with Terminal.
 - tapOn:
     id: header-back-button
 # Leaving the settings root opens the workspace picker, not onboarding.
