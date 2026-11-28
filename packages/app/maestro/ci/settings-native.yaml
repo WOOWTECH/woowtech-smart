@@ -26,26 +26,24 @@ appId: ${APP_ID}
     id: settings-section-chat
 - assertVisible: "Always expand reasoning"
 - takeScreenshot: settings-chat
-- tapOn:
-    id: header-back-button
-- tapOn:
-    id: settings-section-terminal
+# Upstream 0.18 shows Terminal and Files on the same "Chat & panes" page, below Chat.
+- scrollUntilVisible:
+    element:
+      id: terminal-scrollback-input
+    direction: DOWN
 - tapOn:
     id: terminal-scrollback-input
 - eraseText
 - inputText: "4321"
-- tapOn: "Terminal scrollback"
+# The number pad covers the Terminal section on an iPhone. A tap on a plain title above it lets
+# the scroll view dismiss the keyboard, and the input commits on blur.
+- tapOn: "Detail level"
 - assertVisible:
     id: terminal-scrollback-input
     text: "4321"
 - takeScreenshot: settings-terminal-edited
-- tapOn:
-    id: header-back-button
-- tapOn:
-    id: settings-section-files
-- assertVisible:
-    id: file-panel-settings
-- takeScreenshot: settings-files
+# 0.18 shows the Files section only for file types more than one panel claims; a fresh install
+# has none, so the page ends with Terminal.
 - tapOn:
     id: header-back-button
 # Leaving the settings root opens the workspace picker, not onboarding.
@@ -60,7 +58,11 @@ appId: ${APP_ID}
 - tapOn:
     id: welcome-open-settings
 - tapOn:
-    id: settings-section-terminal
+    id: settings-section-chat
+- scrollUntilVisible:
+    element:
+      id: terminal-scrollback-input
+    direction: DOWN
 - assertVisible:
     id: terminal-scrollback-input
     text: "4321"
