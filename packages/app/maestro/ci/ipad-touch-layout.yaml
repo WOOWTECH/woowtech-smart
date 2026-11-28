@@ -26,6 +26,32 @@ appId: ${APP_ID}
 - inputText: ${HOST_PORT}
 - tapOn:
     id: direct-host-submit
+# The iPad simulator on a hosted runner is slow, and a first probe can outlast the app's 15 s
+# connection timeout. Retry the same connection twice before failing.
+- extendedWaitUntil:
+    visible:
+      id: open-project-submit
+    timeout: 30000
+    optional: true
+- runFlow:
+    when:
+      visible: "Connection failed"
+    commands:
+      - tapOn: "OK"
+      - tapOn:
+          id: direct-host-submit
+      - extendedWaitUntil:
+          visible:
+            id: open-project-submit
+          timeout: 30000
+          optional: true
+- runFlow:
+    when:
+      visible: "Connection failed"
+    commands:
+      - tapOn: "OK"
+      - tapOn:
+          id: direct-host-submit
 - extendedWaitUntil:
     visible:
       id: open-project-submit
