@@ -65,11 +65,10 @@ test.describe("Settings → Notifications and OS notification filtering", () => 
 
       await test.step("renders Settings → Notifications with expected out-of-the-box defaults", async () => {
         await expectDefaultNotificationSettings(page);
-        await expect(
-          page.getByText("Installed plugins appear here so you can mute them individually", {
-            exact: true,
-          }),
-        ).toBeVisible();
+        // woowtech smart: the daemon ships Better Paseo built in, so the plugin list starts with
+        // it instead of upstream's empty-list hint.
+        await expect(page.getByTestId("notifications-plugins-empty")).toHaveCount(0);
+        await expect(page.getByRole("switch", { name: /^better.?paseo$/i })).toBeChecked();
       });
 
       await test.step("default preferences suppress finished turn notifications while delivering permission and error notifications", async () => {
