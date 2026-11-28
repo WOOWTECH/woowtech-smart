@@ -36,14 +36,17 @@ export const NotificationPreferencesSchema = z.object({
 
 export type NotificationPreferencesInput = z.infer<typeof NotificationPreferencesSchema>;
 
+// woowtech smart (owner 2026-11-28, woowtech/README.md 16): every event notifies by default, as
+// before 0.18. Nobody upgrading from 0.17 has saved preferences, so upstream's off for the finished
+// events would stop those notices without a word. Each device can still turn any of them off.
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   enabled: true,
   events: {
     agentPermission: true,
     agentError: true,
-    agentFinished: false,
+    agentFinished: true,
     terminalNeedsInput: true,
-    terminalFinished: false,
+    terminalFinished: true,
   },
   plugins: {
     enabled: true,

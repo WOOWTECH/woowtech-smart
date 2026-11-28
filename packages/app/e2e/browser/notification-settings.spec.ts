@@ -65,17 +65,17 @@ test.describe("Settings → Notifications and OS notification filtering", () => 
 
       await test.step("renders Settings → Notifications with expected out-of-the-box defaults", async () => {
         await expectDefaultNotificationSettings(page);
-        await expect(
-          page.getByText("Installed plugins appear here so you can mute them individually", {
-            exact: true,
-          }),
-        ).toBeVisible();
+        // woowtech smart: the daemon ships Better Paseo built in, so the plugin list starts with
+        // it instead of upstream's empty-list hint.
+        await expect(page.getByTestId("notifications-plugins-empty")).toHaveCount(0);
+        await expect(page.getByRole("switch", { name: /^better.?paseo$/i })).toBeChecked();
       });
 
-      await test.step("default preferences suppress finished turn notifications while delivering permission and error notifications", async () => {
+      // woowtech smart: every event is on by default (owner 2026-11-28), finished turns included.
+      await test.step("default preferences deliver finished turn, permission and error notifications", async () => {
         await clearRecordedBrowserNotifications(page);
 
-        await runMockAgentTurn(seeded.client, {
+        const finishedAgentId = await runMockAgentTurn(seeded.client, {
           cwd: seeded.repoPath,
           workspaceId: seeded.workspaceId,
           title: "Default finished agent",
@@ -100,31 +100,42 @@ test.describe("Settings → Notifications and OS notification filtering", () => 
         });
 
         await expectRecordedAgentNotifications(page, [
+          { agentId: finishedAgentId, reason: "finished" },
           { agentId: permissionAgentId, reason: "permission" },
           { agentId: errorAgentId, reason: "error" },
         ]);
       });
 
-      await test.step("enabling Agent finished persists across page reload and allows finished notifications", async () => {
-        await setNotificationSwitch(page, "Agent finished", true);
+      await test.step("turning Agent finished off persists across page reload and suppresses finished notifications", async () => {
+        await setNotificationSwitch(page, "Agent finished", false);
         await page.reload();
         await expectNotificationSwitchState(page, "Agent finished", {
-          checked: true,
+          checked: false,
           disabled: false,
         });
 
         await clearRecordedBrowserNotifications(page);
 
-        const finishedAgentId = await runMockAgentTurn(seeded.client, {
+        await runMockAgentTurn(seeded.client, {
           cwd: seeded.repoPath,
           workspaceId: seeded.workspaceId,
-          title: "Enabled finished agent",
+          title: "Disabled finished agent",
           prompt: FAST_FINISHED_PROMPT,
           waitForStatus: "idle",
         });
 
+        // An error notification after the finished turn proves delivery settled and only the
+        // finished one was suppressed.
+        const sentinelErrorAgentId = await runMockAgentTurn(seeded.client, {
+          cwd: seeded.repoPath,
+          workspaceId: seeded.workspaceId,
+          title: "Sentinel error after finished agent",
+          prompt: ERROR_PROMPT,
+          waitForStatus: "error",
+        });
+
         await expectRecordedAgentNotifications(page, [
-          { agentId: finishedAgentId, reason: "finished" },
+          { agentId: sentinelErrorAgentId, reason: "error" },
         ]);
       });
 

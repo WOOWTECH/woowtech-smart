@@ -962,6 +962,11 @@ test("open usage clocks advance without refreshing or reopening", async ({ page 
     const forecast = card.getByText(exhaustionClock);
     await expect(forecast).toBeVisible();
     const forecastTime = (await forecast.innerText()).replace(/^[^0-9]+/, "");
+    // woowtech smart: a usage list still streaming when the clock jumps hits its 60-second
+    // timeout, and the failed list marks the forecast stale (usage/queries.ts). Let it finish.
+    await expect(page.getByRole("button", { name: "Refresh all", exact: true })).toBeEnabled({
+      timeout: 60_000,
+    });
     // The shared minute clock is wall-aligned, and the daemon timestamps use real time.
     // After two browser minutes the latest displayed tick is one or two minutes old.
     await advanceUsageClock(page, 120_000);

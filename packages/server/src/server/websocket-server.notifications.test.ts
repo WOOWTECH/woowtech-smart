@@ -717,8 +717,15 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
           deliveries.push({ tokens, payload });
         },
       });
-      // Phone A: explicit default preferences (permission: true, error: true, finished: false)
-      realPush.renew("ExponentPushToken[phone-default]", DEFAULT_NOTIFICATION_PREFERENCES);
+      // Phone A: permission and error on, finished off (woowtech smart: the defaults turn every
+      // event on, owner 2026-11-28)
+      realPush.renew("ExponentPushToken[phone-default]", {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        events: {
+          ...DEFAULT_NOTIFICATION_PREFERENCES.events,
+          agentFinished: false,
+        },
+      });
       // Phone B: finished enabled, error disabled
       realPush.renew("ExponentPushToken[phone-finished-only]", {
         ...DEFAULT_NOTIFICATION_PREFERENCES,

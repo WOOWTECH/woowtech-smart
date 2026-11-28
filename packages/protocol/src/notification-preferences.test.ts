@@ -8,15 +8,16 @@ import {
 } from "./notification-preferences.js";
 
 describe("notification-preferences", () => {
-  it("defines default preferences with master, permission, error, terminalNeedsInput, and plugins on, and finished events off", () => {
+  // woowtech smart (owner 2026-11-28): every event is on by default, the finished ones included.
+  it("defines default preferences with master, every event, and plugins on", () => {
     expect(DEFAULT_NOTIFICATION_PREFERENCES).toEqual({
       enabled: true,
       events: {
         agentPermission: true,
         agentError: true,
-        agentFinished: false,
+        agentFinished: true,
         terminalNeedsInput: true,
-        terminalFinished: false,
+        terminalFinished: true,
       },
       plugins: {
         enabled: true,
@@ -36,7 +37,7 @@ describe("notification-preferences", () => {
     const normalized = normalizeNotificationPreferences({
       enabled: false,
       events: {
-        agentFinished: true,
+        agentFinished: false,
         agentError: "not-a-bool",
       },
       plugins: {
@@ -49,9 +50,9 @@ describe("notification-preferences", () => {
       events: {
         agentPermission: true,
         agentError: true,
-        agentFinished: true,
+        agentFinished: false,
         terminalNeedsInput: true,
-        terminalFinished: false,
+        terminalFinished: true,
       },
       plugins: {
         enabled: true,
@@ -73,24 +74,24 @@ describe("notification-preferences", () => {
 
   it("returns fresh cloned objects from normalizeNotificationPreferences so callers cannot mutate defaults", () => {
     const first = normalizeNotificationPreferences();
-    first.events.agentFinished = true;
+    first.events.agentFinished = false;
     first.plugins.muted.push("mutated-plugin");
 
-    expect(DEFAULT_NOTIFICATION_PREFERENCES.events.agentFinished).toBe(false);
+    expect(DEFAULT_NOTIFICATION_PREFERENCES.events.agentFinished).toBe(true);
     expect(DEFAULT_NOTIFICATION_PREFERENCES.plugins.muted).toEqual([]);
     expect(normalizeNotificationPreferences()).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
   });
 
-  it("delivers permission, error, terminal needs_input, and unmuted plugins under default preferences while blocking finished events", () => {
+  it("delivers every event and unmuted plugins under default preferences", () => {
     const prefs = DEFAULT_NOTIFICATION_PREFERENCES;
 
     expect(shouldDeliverNotification(prefs, { kind: "agent", reason: "permission" })).toBe(true);
     expect(shouldDeliverNotification(prefs, { kind: "agent", reason: "error" })).toBe(true);
-    expect(shouldDeliverNotification(prefs, { kind: "agent", reason: "finished" })).toBe(false);
+    expect(shouldDeliverNotification(prefs, { kind: "agent", reason: "finished" })).toBe(true);
     expect(shouldDeliverNotification(prefs, { kind: "terminal", reason: "needs_input" })).toBe(
       true,
     );
-    expect(shouldDeliverNotification(prefs, { kind: "terminal", reason: "finished" })).toBe(false);
+    expect(shouldDeliverNotification(prefs, { kind: "terminal", reason: "finished" })).toBe(true);
     expect(shouldDeliverNotification(prefs, { kind: "plugin", pluginId: "review-bot" })).toBe(true);
   });
 

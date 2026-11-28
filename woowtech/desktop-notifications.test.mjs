@@ -138,6 +138,26 @@ test("agent notification caller localizes after existing suppression and dedupli
   assert.match(notifications, /return buildAgentAttentionNotificationPayload\(/);
 });
 
+// woowtech smart (owner 2026-11-28, README section 16): every event notifies by default, as before
+// 0.18. Upstream 0.18 turns agent finished and terminal finished off, and nobody upgrading from 0.17
+// has saved preferences, so those notices would stop without a word.
+test("every notification event is on by default", async () => {
+  const { DEFAULT_NOTIFICATION_PREFERENCES, normalizeNotificationPreferences } = await importSource(
+    "packages/protocol/src/notification-preferences.ts",
+  );
+  const everyEvent = {
+    agentPermission: true,
+    agentError: true,
+    agentFinished: true,
+    terminalNeedsInput: true,
+    terminalFinished: true,
+  };
+  assert.equal(DEFAULT_NOTIFICATION_PREFERENCES.enabled, true);
+  assert.deepEqual(DEFAULT_NOTIFICATION_PREFERENCES.events, everyEvent);
+  assert.deepEqual(normalizeNotificationPreferences(undefined).events, everyEvent);
+  assert.deepEqual(normalizeNotificationPreferences({ events: {} }).events, everyEvent);
+});
+
 test("renderer owns its delivery result union and agrees with Electron without sibling src imports", () => {
   const renderer = source("packages/app/src/desktop/host.ts");
   const desktop = source("packages/desktop/src/features/woowtech-notification-delivery.ts");
