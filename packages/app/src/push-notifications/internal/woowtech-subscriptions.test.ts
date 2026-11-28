@@ -86,9 +86,10 @@ class FakeDaemonClient implements PushDaemonClient {
 const WOOWTECH_DAEMON: Features = { woowtechPush: true, pushTokenRevocation: true };
 const PASEO_DAEMON: Features = { pushTokenRevocation: true };
 const FILTERING_DAEMON: Features = { ...WOOWTECH_DAEMON, pushNotificationPreferences: true };
-const FINISHED_TOO: NotificationPreferences = {
+// The phone's user turned "Agent finished" off in Settings > Notifications.
+const FINISHED_OFF: NotificationPreferences = {
   ...DEFAULT_NOTIFICATION_PREFERENCES,
-  events: { ...DEFAULT_NOTIFICATION_PREFERENCES.events, agentFinished: true },
+  events: { ...DEFAULT_NOTIFICATION_PREFERENCES.events, agentFinished: false },
 };
 
 function createPhone(options: { permission?: boolean; fcmToken?: string | null } = {}) {
@@ -487,7 +488,7 @@ describe("woowtech push subscription", () => {
 
   it("sends the device's notification settings to a daemon that filters pushes by them", async () => {
     const phone = createPhone();
-    phone.changeSettings(FINISHED_TOO);
+    phone.changeSettings(FINISHED_OFF);
     const client = new FakeDaemonClient(FILTERING_DAEMON);
     const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
 
@@ -496,7 +497,33 @@ describe("woowtech push subscription", () => {
     await settle();
 
     expect(client.registered).toEqual([`wsp1:zh-TW:${FCM_TOKEN}`]);
-    expect(client.registeredPreferences).toEqual([FINISHED_TOO]);
+    expect(client.registeredPreferences).toEqual([FINISHED_OFF]);
+  });
+
+  it("registers all five kinds of notification on for a phone whose settings nobody changed", async () => {
+    // woowtech smart keeps pushing every kind it pushed before 0.18 (owner, 2026-11-28); upstream
+    // turns finished agents and terminals off by default.
+    const phone = createPhone();
+    const client = new FakeDaemonClient(FILTERING_DAEMON);
+    const { startSubscription } = createWoowtechPushSubscriptions(phone.dependencies);
+
+    startSubscription({ client, serverId: SERVER_ID });
+    client.connect();
+    await settle();
+
+    expect(client.registeredPreferences).toEqual([
+      {
+        enabled: true,
+        events: {
+          agentPermission: true,
+          agentError: true,
+          agentFinished: true,
+          terminalNeedsInput: true,
+          terminalFinished: true,
+        },
+        plugins: { enabled: true, muted: [] },
+      },
+    ]);
   });
 
   it("sends no settings to an older daemon, which keeps its own filter", async () => {
@@ -522,10 +549,10 @@ describe("woowtech push subscription", () => {
     // Another app setting changes: the notification part is the same.
     phone.changeSettings();
     await settle();
-    phone.changeSettings(FINISHED_TOO);
+    phone.changeSettings(FINISHED_OFF);
     await settle();
 
-    expect(client.registeredPreferences).toEqual([DEFAULT_NOTIFICATION_PREFERENCES, FINISHED_TOO]);
+    expect(client.registeredPreferences).toEqual([DEFAULT_NOTIFICATION_PREFERENCES, FINISHED_OFF]);
     expect(client.revoked).toEqual([]);
   });
 
