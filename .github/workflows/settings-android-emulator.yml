@@ -65,6 +65,8 @@ jobs:
       WOOWTECH_BRAND: ${{ matrix.brand }}
       NODE_OPTIONS: "--max-old-space-size=4096"
       MAESTRO_CLI_NO_ANALYTICS: "1"
+      # The hosted iPad simulator can take minutes to start Maestro's XCUITest driver.
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
     steps:
       - uses: actions/checkout@v4
         with:
