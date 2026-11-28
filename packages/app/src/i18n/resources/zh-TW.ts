@@ -2510,7 +2510,7 @@ export const zhTW: TranslationResources = {
         },
         agentFinished: {
           label: "Agent 已完成",
-          description: "當 Agent 完成一輪迴復時",
+          description: "當 Agent 完成一輪回覆時",
         },
         terminalNeedsInput: {
           label: "終端機等待輸入",

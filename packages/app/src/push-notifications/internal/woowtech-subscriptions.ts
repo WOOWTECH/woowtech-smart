@@ -38,6 +38,12 @@ export type PushDaemonClient = Pick<
   | "unregisterPushToken"
 >;
 
+/** What revoking uses, as upstream's RevokePushNotificationsInput. */
+export type RevokeDaemonClient = Pick<
+  PushDaemonClient,
+  "isConnected" | "getLastServerInfoMessage" | "unregisterPushToken"
+>;
+
 export interface PushTokenStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
@@ -77,7 +83,7 @@ export interface StartWoowtechPushInput {
 }
 
 export interface RevokeWoowtechPushInput {
-  client: PushDaemonClient | null;
+  client: RevokeDaemonClient | null;
   serverId: string;
 }
 
@@ -107,7 +113,7 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
   }
 
   // As upstream: only a connected daemon that supports revocation can revoke.
-  async function revokeFromDaemon(client: PushDaemonClient | null, token: string): Promise<void> {
+  async function revokeFromDaemon(client: RevokeDaemonClient | null, token: string): Promise<void> {
     if (
       !client?.isConnected ||
       client.getLastServerInfoMessage()?.features?.pushTokenRevocation !== true
@@ -121,7 +127,7 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
     }
   }
 
-  async function forgetCachedToken(client: PushDaemonClient | null, key: string): Promise<void> {
+  async function forgetCachedToken(client: RevokeDaemonClient | null, key: string): Promise<void> {
     const cached = await readValidatedString(dependencies.storage, key, CachedTokenSchema);
     if (cached) await revokeFromDaemon(client, cached);
     await dependencies.storage.removeItem(key);
