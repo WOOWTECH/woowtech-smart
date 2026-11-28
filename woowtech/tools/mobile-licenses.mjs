@@ -311,9 +311,11 @@ async function collectMaven(treeFile, cacheDir, repoRoot, out) {
 
 /** The license of the package a development pod comes from, through Podfile.lock's EXTERNAL SOURCES. */
 function podPackageNotice(lock, name, iosDir, repo) {
-  // Ruby's YAML reads the ":path" symbol key as "path"; accept both spellings.
+  // Ruby's YAML reads the ":path" symbol key as "path"; accept both spellings. A pod declared by
+  // its podspec file (":podspec") is found from that file's directory the same way.
   const external = lock["EXTERNAL SOURCES"]?.[name];
-  const source = external?.path ?? external?.[":path"];
+  const source =
+    external?.path ?? external?.[":path"] ?? external?.podspec ?? external?.[":podspec"];
   if (!source) return null;
   for (let dir = path.resolve(iosDir, source); dir.startsWith(repo); dir = path.dirname(dir)) {
     const manifest = path.join(dir, "package.json");
