@@ -57,7 +57,7 @@ describe("session OS notification filtering", () => {
       ...DEFAULT_NOTIFICATION_PREFERENCES,
       events: {
         ...DEFAULT_NOTIFICATION_PREFERENCES.events,
-        agentFinished: true,
+        agentFinished: false,
       },
     };
     populatedClient.setQueryData(APP_SETTINGS_QUERY_KEY, {
@@ -67,10 +67,19 @@ describe("session OS notification filtering", () => {
     expect(getCurrentNotificationPreferences(populatedClient)).toEqual(custom);
   });
 
-  it("with default preferences, notifies on permission, error, and terminalNeedsInput, and skips finished and terminalFinished", () => {
+  // woowtech smart: the finished events are on by default (owner 2026-11-28); this device turns
+  // them off.
+  it("with finished events off, notifies on permission, error, and terminalNeedsInput, and skips finished and terminalFinished", () => {
     const recorder = createNotificationRecorder();
     const attentionNotified = new Map<string, number>();
-    const preferences = DEFAULT_NOTIFICATION_PREFERENCES;
+    const preferences: NotificationPreferences = {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      events: {
+        ...DEFAULT_NOTIFICATION_PREFERENCES.events,
+        agentFinished: false,
+        terminalFinished: false,
+      },
+    };
 
     expect(
       deliverAgentAttentionOsNotification({
