@@ -153,6 +153,22 @@ test("builtin Tasks opens by default in zh-TW with chat enhancement off and surv
       });
     });
 
+    await test.step("Desktop time range exposes exactly one checked segment after each tap", async () => {
+      const segments = page.getByTestId("done-window").locator('[role="radio"]');
+      const count = await segments.count();
+      expect(count).toBeGreaterThan(1);
+      for (let index = 0; index < count; index += 1) {
+        await segments.nth(index).click();
+        await expect(segments.nth(index)).toHaveAttribute("aria-checked", "true");
+        await expect(
+          page.getByTestId("done-window").locator('[role="radio"][aria-checked="true"]'),
+        ).toHaveCount(1);
+        await expect(
+          page.getByTestId("done-window").locator('[role="radio"][aria-checked="false"]'),
+        ).toHaveCount(count - 1);
+      }
+    });
+
     await test.step("Phone tabs expose exactly one selected lane and update after each tap", async () => {
       await page.setViewportSize({ width: 390, height: 900 });
       const tabs = page.locator('[data-testid^="phone-stat-"]');

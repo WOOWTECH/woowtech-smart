@@ -198,6 +198,7 @@ function MenuRow(props: {
     <Pressable
       accessibilityRole={props.accessibilityRole}
       accessibilityState={props.checked === undefined ? undefined : { checked: props.checked }}
+      aria-checked={props.checked}
       accessibilityLabel={props.description ? `${props.title}, ${props.description}` : props.title}
       onPress={props.onPress}
       {...hoverProps}
