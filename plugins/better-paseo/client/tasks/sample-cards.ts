@@ -332,7 +332,7 @@ export function previewSampleCards(now: number = Date.now()): TaskCard[] {
 export function previewTodoItems(language: TasksLanguage): Record<string, TodoSummary> {
   const labels =
     language === "zh-TW"
-      ? ["核對當前狀態", "記錄事件順序", "復核過濾條件", "補充回歸測試", "更新說明"]
+      ? ["核對目前狀態", "記錄事件順序", "復核過濾條件", "補充回歸測試", "更新說明"]
       : language === "zh"
         ? ["核对当前状态", "记录事件顺序", "复核过滤条件", "补充回归测试", "更新说明"]
         : [

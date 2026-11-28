@@ -122,11 +122,10 @@ export interface CopyOverflow {
 export const CopyOverflowContext = createContext<CopyOverflow | null>(null);
 
 /**
- * Buttons under it speak their label in the reader's language too. Toolbar
- * buttons elsewhere keep an English accessibility label and translate only
- * the name they show; the block details header and toolbar, drawn on a
- * phone where nothing is shown on hover, are spoken in Chinese with a
- * Chinese host.
+ * Buttons under it speak their label in the reader's language too, as every
+ * toolbar button does on a device without hover, where no name is shown.
+ * Elsewhere a button keeps an English accessibility label and translates only
+ * the name it shows on hover.
  */
 export const SpokenLabelsContext = createContext(false);
 
@@ -224,8 +223,9 @@ export function ToolbarItem({
   const tooltipRef = useRef<View>(null);
   const [side, setSide] = useState<TooltipPlacement>("below");
   const preferences = useEnhancerPreferences();
-  const spoken = useContext(SpokenLabelsContext);
   const capabilities = useInputCapabilities();
+  // Without hover nothing shows the translated name, so the reader hears it instead.
+  const spoken = useContext(SpokenLabelsContext) || !capabilities.hover;
   const align = alignProp ?? groupAlign;
   // A disabled Pressable suppresses hover; its outer slot still receives it.
   const { hovered, hoverProps } = useHover(disabled ? anchorRef : undefined);
@@ -466,6 +466,7 @@ export function CenteredToolbarDetails({
   width?: number;
   tokens: ExtendedThemeTokens;
 }) {
+  const preferences = useEnhancerPreferences();
   const window = useWindowDimensions();
   const panelRef = useRef<View>(null);
   const [shown, setShown] = useState(Platform.OS === "web");
@@ -483,7 +484,7 @@ export function CenteredToolbarDetails({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Close preview"
+        accessibilityLabel={toolbarLabel("Close preview", preferences.language)}
         onPress={close}
         style={StyleSheet.absoluteFill}
       />
@@ -530,6 +531,7 @@ export function AnchoredToolbarDetails({
   tokens: ExtendedThemeTokens;
   movable?: boolean;
 }) {
+  const preferences = useEnhancerPreferences();
   const stageRef = useRef<View>(null);
   const panelRef = useRef<View>(null);
   const [box, setBox] = useState<PreviewBox | null>(null);
@@ -582,7 +584,7 @@ export function AnchoredToolbarDetails({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Close preview"
+        accessibilityLabel={toolbarLabel("Close preview", preferences.language)}
         onPress={close}
         style={StyleSheet.absoluteFill}
       />

@@ -68,7 +68,7 @@ const labels: Record<TasksLanguage, Record<TaskIssue["code"], string>> = {
     project_unavailable: "專案歸屬不可用",
     title_settings_invalid: "標題生成設定無效",
     provider_unavailable: "Provider 不可用",
-    provider_unrestricted: "該 Provider 無法禁止工具調用，請在設定中更換標題模型",
+    provider_unrestricted: "該 Provider 無法禁止工具呼叫，請在設定中更換標題模型",
     model_unavailable: "標題模型不可用",
   },
 };

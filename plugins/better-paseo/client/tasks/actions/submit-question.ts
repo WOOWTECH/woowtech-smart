@@ -32,7 +32,7 @@ export async function submitQuestion(
   if (!questionDraftSupported(questions!, state.draft, updated.provider, state.permission.name))
     throw new Error(
       language === "zh-TW"
-        ? "Codex 同步多選的自定義回答不能包含逗號：宿主會將其拆分。"
+        ? "Codex 同步多選的自訂回答不能包含逗號：主機會將其拆分。"
         : language === "zh"
           ? "Codex 同步多选的自定义回答不能包含逗号：宿主会将其拆分。"
           : "Custom answers to Codex synchronous multi-select questions cannot contain commas: the host splits them.",
