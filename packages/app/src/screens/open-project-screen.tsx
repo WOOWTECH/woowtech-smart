@@ -22,7 +22,13 @@ import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { PairDeviceModal } from "@/devices";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { WINDOW_CONTENT_DATASET } from "@/components/desktop/titlebar-drag-region";
-import { HOME_TILE_GAP, HOME_TILE_WIDTH, resolveHomeTileWidth } from "@/screens/open-project-tiles";
+import {
+  fitsHomeTilesToRow,
+  HOME_TILE_GAP,
+  HOME_TILE_WIDTH,
+  resolveHomeTileWidth,
+} from "@/screens/open-project-tiles";
+import { controlSizingForLayout } from "@/components/ui/control-geometry";
 
 const HOME_TILES_MAX_WIDTH = 2 * HOME_TILE_WIDTH + HOME_TILE_GAP;
 
@@ -42,7 +48,11 @@ export function OpenProjectScreen() {
   const handleTilesLayout = useCallback((event: LayoutChangeEvent) => {
     setMeasuredTileWidth(resolveHomeTileWidth(event.nativeEvent.layout.width));
   }, []);
-  const tileWidth = isCompactLayout ? undefined : measuredTileWidth;
+  const fitsTilesToRow = fitsHomeTilesToRow(
+    isCompactLayout,
+    controlSizingForLayout(isCompactLayout),
+  );
+  const tileWidth = fitsTilesToRow ? measuredTileWidth : undefined;
 
   useEffect(() => {
     if (!isCompactLayout) {
@@ -81,7 +91,7 @@ export function OpenProjectScreen() {
           {hosts.map((host) => (
             <HostError key={host.serverId} serverId={host.serverId} label={host.label} />
           ))}
-          <View style={styles.tiles} onLayout={handleTilesLayout}>
+          <View style={styles.tiles} onLayout={fitsTilesToRow ? handleTilesLayout : undefined}>
             <HomeTile
               icon={FolderOpen}
               title={t("openProject.tiles.addProject.title")}
