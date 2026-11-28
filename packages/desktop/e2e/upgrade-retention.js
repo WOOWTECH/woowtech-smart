@@ -440,10 +440,13 @@ async function readTerminalScrollbackFromUi(page, stateDir) {
       .locator('[data-testid="sidebar-settings"]:visible')
       .first()
       .click({ timeout: 20_000 });
-    await page
-      .locator('[data-testid="settings-section-terminal"]:visible')
-      .first()
-      .click({ timeout: 20_000 });
+    // Builds before 0.18 have a Terminal section; 0.18 moved its settings onto Chat & panes.
+    const sections = page.locator(
+      '[data-testid="settings-section-terminal"]:visible, [data-testid="settings-section-chat"]:visible',
+    );
+    await sections.first().waitFor({ timeout: 20_000 });
+    const terminal = page.locator('[data-testid="settings-section-terminal"]:visible');
+    await ((await terminal.count()) > 0 ? terminal : sections).first().click({ timeout: 20_000 });
     const input = page.getByTestId("terminal-scrollback-input");
     await input.waitFor({ state: "visible", timeout: 20_000 });
     return await input.inputValue();

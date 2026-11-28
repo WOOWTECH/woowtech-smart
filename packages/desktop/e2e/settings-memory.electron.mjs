@@ -30,25 +30,29 @@ const SETTINGS_DESTINATIONS = [
 
 export async function runSettingsPersistenceRegression(page) {
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await openSettingsDestination(page, "Terminal");
+  // Since 0.18 the terminal and file panel settings sit on the Chat & panes page, below Chat.
+  await openSettingsDestination(page, "Chat & panes");
   const scrollback = page.getByTestId("terminal-scrollback-input");
+  await scrollback.scrollIntoViewIfNeeded();
   const original = await scrollback.inputValue();
   const value = original === "4321" ? "5432" : "4321";
   await scrollback.fill(value);
   await scrollback.blur();
-  await openSettingsDestination(page, "Files");
-  await page.getByTestId("file-panel-settings").waitFor({ state: "visible" });
+  // The file panel settings show only when more than one panel claims a file type, which a
+  // fresh profile does not have, so they are recorded rather than required.
+  const filesSettingsVisible = await page.getByTestId("file-panel-settings").isVisible();
   await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
   await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
   await page.reload();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await openSettingsDestination(page, "Terminal");
+  await openSettingsDestination(page, "Chat & panes");
+  await scrollback.scrollIntoViewIfNeeded();
   assert((await scrollback.inputValue()) === value, "Terminal scrollback did not survive reload");
   await scrollback.fill(original);
   await scrollback.blur();
   await page.locator('[data-testid="settings-back-to-workspace"]:visible').click();
   await page.waitForFunction(() => !location.pathname.startsWith("/settings"));
-  return { terminalScrollbackPersisted: true, filesSettingsVisible: true };
+  return { terminalScrollbackPersisted: true, filesSettingsVisible };
 }
 
 export async function runShortcutCaptureRegression(page, evaluateMain) {
