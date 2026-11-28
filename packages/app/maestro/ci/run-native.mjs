@@ -127,7 +127,17 @@ async function seedProject(port) {
     "export const celsius = (f: number) => ((f - 32) * 5) / 9;\n",
   );
   const cli = fileURLToPath(new URL("../../../cli/bin/paseo", import.meta.url));
-  await execute(process.execPath, [cli, "project", "create", dir, "--host", `127.0.0.1:${port}`]);
+  const args = [cli, "project", "create", dir, "--host", `127.0.0.1:${port}`];
+  // Right after start the daemon answers 503 until its worker is ready; the app connects later.
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await execute(process.execPath, args);
+      return;
+    } catch (error) {
+      if (attempt >= 30 || !String(error.stderr ?? error).includes("503")) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
 }
 
 /** Bounds of the first node whose identifier matches, from Maestro's view hierarchy. */
