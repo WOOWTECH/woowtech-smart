@@ -1,9 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { encodePushToken, isFcmToken, pushLocaleFor } from "@getpaseo/protocol/woowtech-push";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizeNotificationPreferences,
+  type NotificationPreferences,
+} from "@getpaseo/protocol/notification-preferences";
 import type * as ExpoNotifications from "expo-notifications";
 import { Platform } from "react-native";
 import { z } from "zod";
+import { queryClient } from "@/data/query-client";
+import { APP_SETTINGS_QUERY_KEY, type AppSettings } from "@/hooks/use-settings/storage";
 import { i18n } from "@/i18n/i18next";
 import { readValidatedString } from "@/storage/validated-storage";
 import { fcmTokenSource } from "./fcm-token";
@@ -17,7 +24,9 @@ import {
 
 // woowtech smart push (fork-owned; woowtech/README.md, 16). Replaces upstream's subscriptions.ts,
 // which registered an Expo push token with any daemon: the app registers
-// "wsp1:<zh-TW|en>:<FCM token>" only with a daemon that pushes through WoowTech's relay.
+// "wsp1:<zh-TW|en>:<FCM token>" only with a daemon that pushes through WoowTech's relay. Like
+// upstream's, the registration carries the device's notification settings to a daemon that filters
+// pushes by them (v0.18), and moves when they change.
 
 /** The daemon connection a push subscription uses. */
 export type PushDaemonClient = Pick<
@@ -47,6 +56,13 @@ export interface AppLanguage {
   subscribe(listener: (language: string) => void): () => void;
 }
 
+export interface NotificationPreferencesSource {
+  /** The device's notification settings: the cached app settings at once, else from storage. */
+  resolve(): Promise<NotificationPreferences>;
+  /** Called whenever the app settings change, with the notification part of them. */
+  subscribe(listener: (preferences: NotificationPreferences) => void): () => void;
+}
+
 export interface WoowtechPushDependencies {
   storage: PushTokenStorage;
   /** Whether the app may notify. Asks the user only when `mayAsk` and the OS still allows it. */
@@ -55,6 +71,7 @@ export interface WoowtechPushDependencies {
   setNotificationChannels(channels: readonly WoowtechNotificationChannel[]): Promise<void>;
   fcmTokens: FcmTokenSource;
   appLanguage: AppLanguage;
+  notificationPreferences: NotificationPreferencesSource;
   /** Persist disabled Expo registration; iOS requires a non-null native String. */
   disableExpoServerRegistration(): Promise<void>;
   warn(message: string, error?: unknown): void;
@@ -123,6 +140,8 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
     let askedPermission = false;
     let stopFollowingRefreshes: (() => void) | null = null;
     let lastFcmToken: string | null = null;
+    /** The settings the daemon last received, while it filters pushes by them. */
+    let registeredPreferences: string | null = null;
     let queue: Promise<void> = Promise.resolve();
 
     async function sync(): Promise<void> {
@@ -172,8 +191,17 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
       const cached = await readValidatedString(dependencies.storage, key, CachedTokenSchema);
       // One string per phone and daemon, or the phone would get every push twice.
       if (cached && cached !== token) await revokeFromDaemon(client, cached);
+      const preferences = await dependencies.notificationPreferences.resolve();
       if (stopped || !client.isConnected) return;
-      client.registerPushToken(token);
+      // COMPAT(pushNotificationPreferences): added in v0.18.0, remove gate after 2027-06-01.
+      // An older daemon keeps its own filter; its relay pushes include an agent's error.
+      if (client.getLastServerInfoMessage()?.features?.pushNotificationPreferences === true) {
+        client.registerPushToken(token, preferences);
+        registeredPreferences = JSON.stringify(preferences);
+      } else {
+        client.registerPushToken(token);
+        registeredPreferences = null;
+      }
       await dependencies.storage.setItem(key, token);
     }
 
@@ -191,10 +219,17 @@ export function createWoowtechPushSubscriptions(dependencies: WoowtechPushDepend
     });
     // The relay writes in the app's language, so a new language moves the registration.
     const unsubscribeLanguage = dependencies.appLanguage.subscribe(() => scheduleSync());
+    // Other app settings change too; only new notification settings move the registration.
+    const unsubscribePreferences = dependencies.notificationPreferences.subscribe((preferences) => {
+      if (registeredPreferences !== null && JSON.stringify(preferences) !== registeredPreferences) {
+        scheduleSync();
+      }
+    });
     return () => {
       stopped = true;
       unsubscribeConnection();
       unsubscribeLanguage();
+      unsubscribePreferences();
       stopFollowingRefreshes?.();
     };
   }
@@ -218,6 +253,32 @@ function expoNotifications(): typeof ExpoNotifications {
   return require("expo-notifications");
 }
 
+function cachedNotificationPreferences(): NotificationPreferences | null {
+  const cached = queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY);
+  return cached ? normalizeNotificationPreferences(cached.notifications) : null;
+}
+
+// As upstream's subscriptions.ts: the app settings query, or storage before the app has read it.
+const appNotificationPreferences: NotificationPreferencesSource = {
+  async resolve() {
+    const cached = cachedNotificationPreferences();
+    if (cached) return cached;
+    try {
+      const { loadAppSettingsFromStorage } = await import("@/hooks/use-settings");
+      return normalizeNotificationPreferences((await loadAppSettingsFromStorage()).notifications);
+    } catch {
+      return DEFAULT_NOTIFICATION_PREFERENCES;
+    }
+  },
+  subscribe(listener) {
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] !== APP_SETTINGS_QUERY_KEY[0]) return;
+      const preferences = cachedNotificationPreferences();
+      if (preferences) listener(preferences);
+    });
+  },
+};
+
 const nativeDependencies: WoowtechPushDependencies = {
   storage: AsyncStorage,
   // As upstream's subscriptions.ts.
@@ -236,6 +297,7 @@ const nativeDependencies: WoowtechPushDependencies = {
     await setAndroidNotificationChannels(expoNotifications(), channels);
   },
   fcmTokens: fcmTokenSource,
+  notificationPreferences: appNotificationPreferences,
   appLanguage: {
     current: () => i18n.language,
     subscribe(listener) {
