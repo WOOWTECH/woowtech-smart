@@ -38,7 +38,6 @@ import {
 } from "@/stores/session-store";
 import { sendOsNotification } from "@/utils/os-notifications";
 import { handleOsNotificationResult } from "@/utils/woowtech-notification-fallback";
-import { isNative } from "@/constants/platform";
 import { localizeAgentNotification } from "@/utils/woowtech-agent-notification";
 import { getIsAppVisible } from "@/utils/app-visibility";
 import {

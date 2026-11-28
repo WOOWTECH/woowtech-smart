@@ -90,14 +90,16 @@ import type { RegisteredProviderDefinition } from "./provider-registry.js";
 import { runProviderTurn } from "./providers/provider-runner.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
 import { resolveDaemonVersion } from "../daemon-version.js";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 
 let cachedPluginClientInfo: ProviderClientInfo | null = null;
 
 function resolvePluginClientInfo(): ProviderClientInfo {
   if (!cachedPluginClientInfo) {
+    // woowtech smart: plugins see the brand that started them, like ACP agents (acp-agent.ts).
     cachedPluginClientInfo = {
-      name: "paseo",
-      title: "Paseo",
+      name: PRODUCT_NAME,
+      title: PRODUCT_NAME,
       version: resolveDaemonVersion(import.meta.url),
     };
   }

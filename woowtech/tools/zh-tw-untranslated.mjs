@@ -4,6 +4,7 @@
 // upstream translates the string or rewrites its English, so an entry never hides
 // upstream's newer text. Terms follow zh-tw-terms.mjs.
 export const UNTRANSLATED = {
+  "settings.host.agentProfiles.systemPromptLabel": ["System prompt", "系統提示詞"],
   "composer.input.terminalAccessibilityLabel": ["Terminal prompt", "終端機提示詞"],
   "composer.attachments.addFile": ["Upload file", "上傳檔案"],
   "composer.attachments.dropFilesHere": ["Drop files here", "將檔案拖放到這裡"],
@@ -241,6 +242,7 @@ export const KEEP_ENGLISH = new Set([
   "workspace.tabs.toasts.agentIdCopiedLabel",
   "settings.hostSections.agents",
   "desktop.daemon.title",
+  "settings.hostSections.daemon", // The daemon term, like desktop.daemon.title
   "desktop.daemon.status.pid",
   "workspace.git.actions.commit.label",
   "workspace.git.actions.pull.label",

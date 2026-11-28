@@ -3338,7 +3338,7 @@ export const zhTW: TranslationResources = {
         featuresLabel: "功能",
         featureCount: "{{count}} 個功能",
         featureCountOne: "{{count}} 個功能",
-        systemPromptLabel: "System prompt",
+        systemPromptLabel: "系統提示詞",
         systemPromptPlaceholder: "專注於佈局、無障礙和設計 token。",
         systemPromptHint: "僅適用於新 Agent",
         notesLabel: "適用場景",

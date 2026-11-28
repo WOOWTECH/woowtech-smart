@@ -1326,8 +1326,6 @@ export class ProviderSnapshotManager {
             return { kind: "error" as const, message: availability.message };
           }
 
-          // woowtech smart: read beside the catalogue; it never rejects.
-          const reading = readProviderAuthStatus(client, context);
           if (!refresh && refreshMode === "on_demand" && this.catalogCache) {
             const persisted = await this.catalogCache.get(provider, persistedCacheKey);
             if (persisted) {
@@ -1343,12 +1341,15 @@ export class ProviderSnapshotManager {
                 !currentFingerprint ||
                 persisted.binaryFingerprint === currentFingerprint;
               if (fingerprintMatches) {
-                auth = await reading;
+                // woowtech smart: a cached catalogue answers at once; the login state is read
+                // when the catalogue is fetched.
                 return { kind: "hydrated" as const, persisted };
               }
             }
           }
 
+          // woowtech smart: read beside the catalogue; it never rejects.
+          const reading = readProviderAuthStatus(client, context);
           const rawResult = definition.fetchRawCatalog
             ? await definition.fetchRawCatalog(catalogOptions, client, context)
             : {
@@ -1405,7 +1406,6 @@ export class ProviderSnapshotManager {
             models: normalizeAgentModelCatalog(hydratedCatalog.models),
             modes: hydratedCatalog.modes,
             fetchedAt: persisted.fetchedAt,
-            ...(auth ? { auth } : {}),
           },
           { incomplete: false },
         );

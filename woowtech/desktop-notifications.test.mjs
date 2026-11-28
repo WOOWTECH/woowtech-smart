@@ -83,12 +83,15 @@ test("agent notification caller localizes after existing suppression and dedupli
   const start = session.indexOf("const notifyAgentAttention = useCallback(");
   assert.notEqual(start, -1);
   const callback = session.slice(start, session.indexOf("\n  useEffect(", start));
+  // Upstream 0.18 moved suppression and deduplication into deliverAgentAttentionOsNotification;
+  // the localized text is what its sendNotification callback hands to the OS.
+  assert.match(callback, /deliverAgentAttentionOsNotification\(\{/);
   assert.match(
     callback,
-    /sendOsNotification\(\s*localizeAgentNotification\(\{\s*notification,\s*reason: params.reason,\s*t: notificationTranslationRef.current,?\s*\}\)/,
+    /sendNotification: \(notification\) =>\s*sendOsNotification\(\s*localizeAgentNotification\(\{\s*notification,\s*reason: params.reason,\s*t: notificationTranslationRef.current,?\s*\}\)/,
   );
-  assert.match(callback, /\[serverId\]/);
-  assert.doesNotMatch(callback, /\[serverId, t\]/);
+  assert.match(callback, /\[queryClient, serverId\]/);
+  assert.doesNotMatch(callback, /\[queryClient, serverId, t\]|\[serverId, t\]/);
   assert.match(
     session,
     /const \{ t \} = useTranslation\(\);\s*const notificationTranslationRef = useRef\(t\);\s*notificationTranslationRef.current = t;/,
@@ -98,24 +101,41 @@ test("agent notification caller localizes after existing suppression and dedupli
   assert.ok(dependencies, "observeEvents effect dependencies");
   assert.match(dependencies[1], /\bnotifyAgentAttention\b/);
   assert.doesNotMatch(dependencies[1], /\bt\b|notificationTranslationRef/);
-  // An error notifies like the other reasons (owner 2026-11-14); upstream returned before showing it.
-  assert.doesNotMatch(
-    callback,
-    /params\.reason === "error"/,
-    "a computer must show an agent's error",
+
+  const notifications = source("packages/app/src/contexts/session-notifications.ts");
+  const deliverStart = notifications.indexOf(
+    "export function deliverAgentAttentionOsNotification(",
   );
-  assert.match(callback, /if \(!isAwayFromAgent\) \{\s*return;/);
-  assert.match(callback, /if \(lastNotified && lastNotified >= timestampMs\) \{\s*return;/);
-  assert.match(callback, /attentionNotifiedRef.current.set\(params.agentId, timestampMs\)/);
+  assert.notEqual(deliverStart, -1);
+  const deliver = notifications.slice(
+    deliverStart,
+    notifications.indexOf("\nexport function ", deliverStart + 1),
+  );
+  // An error notifies like the other reasons (owner 2026-11-14): no early return for it, only
+  // the device's own preference, which upstream turns on by default.
+  assert.doesNotMatch(deliver, /reason === "error"/, "a computer must show an agent's error");
   assert.match(
-    callback,
-    /resolveAgentAttentionNotification\(\{\s*notification: params.notification,/,
+    deliver,
+    /shouldDeliverNotification\(input\.preferences, \{\s*kind: "agent",\s*reason: input\.params\.reason,?\s*\}\)/,
   );
-  assert.ok(
-    callback.indexOf("localizeAgentNotification(") > callback.indexOf("if (!notification)"),
+  const preferences = source("packages/protocol/src/notification-preferences.ts");
+  assert.match(
+    preferences,
+    /export const DEFAULT_NOTIFICATION_PREFERENCES[\s\S]*?agentError: true,/,
   );
-  assert.match(session, /return input.notification.data.workspaceId \? input.notification : null/);
-  assert.match(session, /return buildAgentAttentionNotificationPayload\(/);
+  assert.match(deliver, /if \(!isAwayFromAgent\) \{\s*return false;/);
+  assert.match(deliver, /if \(lastNotified && lastNotified >= timestampMs\) \{\s*return false;/);
+  assert.match(deliver, /input\.attentionNotified\.set\(input\.params\.agentId, timestampMs\)/);
+  assert.match(
+    deliver,
+    /resolveAgentAttentionNotification\(\{\s*notification: input\.params\.notification,/,
+  );
+  assert.ok(deliver.indexOf("input.sendNotification(") > deliver.indexOf("if (!notification)"));
+  assert.match(
+    notifications,
+    /return input.notification.data.workspaceId \? input.notification : null/,
+  );
+  assert.match(notifications, /return buildAgentAttentionNotificationPayload\(/);
 });
 
 test("renderer owns its delivery result union and agrees with Electron without sibling src imports", () => {

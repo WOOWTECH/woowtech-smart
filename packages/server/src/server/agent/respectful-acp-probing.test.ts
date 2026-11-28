@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { runAcpProvider } from "@getpaseo/plugin/server/acp";
 import type { ProviderRegistration } from "@getpaseo/plugin/server/provider";
+import { PRODUCT_NAME } from "@getpaseo/protocol/brand-name";
 import { BUILTIN_PROVIDER_IDS } from "@getpaseo/protocol/provider-manifest";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -335,10 +336,11 @@ describe("respectful ACP probing", () => {
       const events = await readEvents(logFile);
       expect(acpSpawns(events)).toHaveLength(1);
       const init = events.find((event) => event.kind === "rpc" && event.method === "initialize");
+      // woowtech smart: ACP agents see the brand that started them (acp-agent.ts).
       expect(init?.params).toMatchObject({
         clientInfo: {
-          name: "paseo",
-          title: "Paseo",
+          name: PRODUCT_NAME,
+          title: PRODUCT_NAME,
           version: resolveDaemonVersion(import.meta.url),
         },
       });
