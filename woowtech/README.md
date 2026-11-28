@@ -1092,6 +1092,35 @@ node --test woowtech/*.test.mjs
 
 ### 18. GitHub Actions：只跑 Ubuntu 上的 CI 測試
 
+本機功能對齊網頁版時，另外手動執行 `settings-desktop-verify.yml` 與 `settings-android-emulator.yml`。兩者以同一個 commit 分別套用 woowtech／Apporo 品牌，在隔離 runner 建置並操作 macOS、Windows、iOS Simulator、Android Emulator。只有 `workflow_dispatch`／`workflow_call`，權限唯讀，不帶簽章或部署憑證、不發佈。桌面驗證使用真正 Electron，手機驗證使用內嵌 bundle 的 Release 組態與 development app ID；APK 只有模擬器的 x86_64，不能當手機發行包。畫面、日誌及測試結果保存在帶有品牌、平台、commit 的 Actions artifact。一般 CI 的 Ubuntu 設定照舊。
+
+2026-11-27 的本機對齊分支以網頁 PR #20 的 `45b736705` 起始，並合併至 `77f18127a`（Paseo 0.17.5）。這是候選版本的對齊，不表示已安裝的正式 App 或正式網站已更新。網頁修正與原生驗證的對應如下；「共用」只表示原始碼已包含，不能代替裝置測試結果。
+
+| 網頁更新                                        | 共用修正           | 原生驗證／本機補強                                                                                                                  |
+| ----------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 快捷鍵錄製不誤觸設定關閉或主機動作              | `2b012f9f9`        | Electron 額外抑制錄製視窗的原生選單快捷鍵；以主行程輸入驗證重新整理、開新視窗、縮小與取消後恢復。手機無實體鍵盤時不顯示快捷鍵設定。 |
+| 設定儲存收到相同 revision 後仍可繼續儲存        | `a61efefca`        | 共用外掛狀態修正；桌面及手機另驗 Terminal 設定重開保存，這不等同已測過手機外掛同步競速。                                            |
+| Metadata 快速切換以最後選擇為準                 | `9a5167a64`        | 共用設定頁修正；原生裝置上的快速連點仍須另驗。                                                                                      |
+| 取消語音啟動後可以立即重試                      | `872a0492c`        | 共用 dictation sender；真實麥克風、權限與背景恢復仍須實機驗。                                                                       |
+| Reset 還原文字、取消指令編輯不留下草稿          | `07f6d4666`        | 共用輸入元件與專案設定頁；裝置鍵盤與輸入法仍須另驗。                                                                                |
+| 排程在背景狀態變動後更新可見清單                | `67fc6574a`        | 共用 schedules hook；手機背景／前景切換仍須另驗。                                                                                   |
+| 內建外掛設定與命令入口恢復                      | `64704fb0d`        | 桌面驗外掛及工作區；手機直連隔離主機後驗 Devices 與外掛入口。                                                                       |
+| Sidebar、Chat、Terminal、Files 設定與主機管理頁 | 共用 0.17.5 基線   | 桌面輪巡 27 個設定目的地、檢查捲動與記憶體；手機檢查四個設定頁、重開保存及連線後頁面。                                              |
+| woowtech／Apporo 品牌隔離                       | 品牌設定與共用來源 | 兩品牌分別建置；Windows 品牌工具和桌面 Metro 啟動器改由 Node 啟動專案內 CLI。                                                       |
+| Tasks 目前欄位的無障礙選取狀態                  | `a7bfd65a3`        | 網頁補上 `aria-selected`；原生既有 `accessibilityState.selected` 保留。                                                             |
+| 後設資料生成說明依連線主機政策區分              | `e5ecfdf5b`        | 共用中英文文案同步；完整 Smart 主機仍停用，其他相容主機可能呼叫模型。候選包須核對包含本提交。                                       |
+| 更新紀錄與第三方授權的展開狀態                  | `77f18127a`        | 補上網頁 `aria-expanded`；原生既有 `accessibilityState.expanded` 保留。33a91390d 的八組原生驗證先於此合併，兩者來源須分開記錄。     |
+
+平台能力差異也要分開判讀：內建 Browser 設定僅桌面可用，Editor 設定依 web renderer 能力顯示，Shortcuts 需要實體鍵盤，手機 Chat 頁不顯示網頁的聊天大綱開關。本輪保留共用來源的這些條件，沒有把缺少相應能力的設定強行顯示在手機上。
+
+iOS 實測另外發現共用 `FormTextInput` 的外層 Pressable 會把輸入欄位合併成單一無障礙元素，遮住內層的識別、數值與編輯操作；Android 的同一流程沒有這個現象。`33a91390d` 把只負責外觀狀態的外層設為 `accessible={false}`，讓真正的輸入元件提供無障礙介面。手機驗證仍以欄位識別操作、修改數值並重開確認保存；修正後須重新建置，不能沿用修正前的候選包當作通過證據。
+
+macOS 主題測試的小型視窗以最小化取得背景狀態，避免 accessory 視窗 `hide()` 後仍回報 visible 的平台差異；真正 App 的 BrowserWindow 隱藏、零影格、截圖像素與恢復動畫仍另行驗證。未簽章的 macOS artifact 不保證可直接啟動；本機補驗曾在獨立副本上使用臨時 ad hoc 簽章，這不代表完成 Developer ID 簽章、公證或正式發佈。
+
+手機若只修改驗證腳本、產品程式沒有變更，可傳 `android_apk_run_id=<前一輪 run ID>` 或 `ios_app_run_id=<前一輪 run ID>`，下載同一個 repo、指定品牌及該 run commit 命名的 APK／simulator app 重驗，省去重編譯。證據另存候選包的來源與 run；`result.json` 的 `source` 是候選包 commit，`testSource`／`hostSource` 是本輪測試與主機的 commit。這種重驗不等同重新編譯本輪 commit，產品程式有變更時應留空該欄重新建置。編譯前先執行 runner 的 `--check`，確認 Node／tsx 能載入隔離主機 fixture。
+
+重驗時先確認待驗分支已推送，再以 `gh workflow run -R WOOWTECH/woowtech-smart settings-desktop-verify.yml --ref <branch> -f platform=all -f brand=all` 與 `gh workflow run -R WOOWTECH/woowtech-smart settings-android-emulator.yml --ref <branch> -f platform=all -f brand=all` 啟動。單平台可選 `macos`／`windows` 或 `ios`／`android`，單品牌可選 `woowtech`／`apporo`。核對 run 的 commit 與 artifact 內的來源，再看每個 matrix job 的結果；編譯成功、可下載 APK 或 simulator app 都不代表操作驗證通過。桌面候選包只在打包後 smoke 通過才上傳；手機編譯成功即保留包供診斷，須另看 Maestro 結果。相機實掃、真正 relay／推播、舊版資料升級、正式簽章和商店安裝仍是獨立驗收項目。
+
 2026-11-14 owner 授權 Pi Agent 共用 eSigner 簽章：新增 `pi-agent-signing.yml`，只有 `workflow_call`，由 Desktop Release 的手動 `platform=pi-agent`、`publish=false` 呼叫。它不會因 push／PR 自動簽章，不發佈 release；使用方式見 `docs/release.md` 的 Pi Agent Windows signing。一般 CI 的 Ubuntu 限制照舊。
 
 - owner 的決定：只跑 CI 的測試，只用 Ubuntu；Windows 不在 v1；不部署、不發佈。Playwright 的瀏覽器測試只在有人手動觸發並勾選時跑（它有已知的失敗，K-54）。

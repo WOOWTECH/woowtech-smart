@@ -14,9 +14,39 @@ on:
         description: "Also run the Playwright browser tests (4 long shards)"
         type: boolean
         default: false
+      run_native_parity:
+        description: "Build both brands for desktop and export iOS/Android candidates (no publishing)"
+        type: boolean
+        default: false
+      native_parity_target:
+        description: "Candidate platforms to verify when run_native_parity is selected"
+        type: choice
+        default: all
+        options: [all, linux, windows, macos, macos-intel, mobile, android-native, upgrade]
+      native_parity_upgrade_from:
+        description: "Published version to upgrade from; desktop candidates also prove that upgrade keeps the user's data"
+        type: string
+        default: ""
+      native_parity_upgrade_to:
+        description: "Published version the upgrade target installs (target upgrade only)"
+        type: string
+        default: ""
+      native_parity_upgrade_run:
+        description: "Run id of this repository whose artifact holds the build to upgrade to (target upgrade only)"
+        type: string
+        default: ""
+      native_parity_upgrade_artifact:
+        description: "Artifact name in that run, such as desktop-windows (target upgrade only)"
+        type: string
+        default: ""
+      native_parity_upgrade_brand:
+        description: "Brand for the published-to-published check (target upgrade only)"
+        type: choice
+        default: woowtech
+        options: [woowtech, apporo]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ inputs.run_native_parity && inputs.native_parity_target || 'checks' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -25,6 +55,21 @@ env:
   ONNXRUNTIME_NODE_INSTALL: skip
 
 jobs:
+  native-parity:
+    name: Native parity candidates
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/native-parity.yml
+    with:
+      target: ${{ inputs.native_parity_target || 'all' }}
+      upgrade_from: ${{ inputs.native_parity_upgrade_from }}
+      upgrade_to: ${{ inputs.native_parity_upgrade_to }}
+      upgrade_brand: ${{ inputs.native_parity_upgrade_brand || 'woowtech' }}
+      upgrade_run: ${{ inputs.native_parity_upgrade_run }}
+      upgrade_artifact: ${{ inputs.native_parity_upgrade_artifact }}
+
   # woowtech smart: Ubuntu jobs pin ubuntu-24.04; ubuntu-latest moves to Ubuntu 26 from
   # 2026-10-19 (woowtech/README.md section 18). Job names keep upstream's "(ubuntu-latest)".
   changes:
@@ -34,17 +79,17 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      full: ${{ github.event_name != 'pull_request' || steps.filter.outputs.routing != 'false' || steps.filter.outputs.workspace != 'false' || steps.filter.outputs.ci != 'false' }}
-      format: ${{ steps.filter.outputs.format }}
-      quality: ${{ steps.filter.outputs.quality }}
-      hub: ${{ steps.filter.outputs.hub }}
-      server: ${{ steps.filter.outputs.server }}
-      desktop: ${{ steps.filter.outputs.desktop }}
-      app: ${{ steps.filter.outputs.app }}
-      sdk: ${{ steps.filter.outputs.sdk }}
-      browser: ${{ steps.filter.outputs.browser }}
-      relay: ${{ steps.filter.outputs.relay }}
-      cli: ${{ steps.filter.outputs.cli }}
+      full: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || github.event_name != 'pull_request' || steps.filter.outputs.routing != 'false' || steps.filter.outputs.workspace != 'false' || steps.filter.outputs.ci != 'false' }}
+      format: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.format }}
+      quality: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.quality }}
+      hub: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.hub }}
+      server: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.server }}
+      desktop: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.desktop }}
+      app: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.app }}
+      sdk: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.sdk }}
+      browser: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.browser }}
+      relay: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.relay }}
+      cli: ${{ github.event_name == 'workflow_dispatch' && inputs.run_native_parity && 'false' || steps.filter.outputs.cli }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

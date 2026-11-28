@@ -88,6 +88,7 @@ export function captureTasksShortcut(receive: (event: KeyboardEvent) => void): (
   marker.setAttribute("data-paseo-keyboard-capture", "true");
   marker.hidden = true;
   document.body.append(marker);
+  document.dispatchEvent(new Event("paseo:dom-keyboard-capture-change"));
   const shared = runtime();
   shared.capture = receive;
   const target = window;
@@ -101,6 +102,7 @@ export function captureTasksShortcut(receive: (event: KeyboardEvent) => void): (
     target.removeEventListener("keydown", onKey, true);
     if (shared.capture === receive) shared.capture = null;
     marker.remove();
+    document.dispatchEvent(new Event("paseo:dom-keyboard-capture-change"));
   };
 }
 

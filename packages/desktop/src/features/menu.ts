@@ -228,19 +228,21 @@ export function setupApplicationMenu(options: ApplicationMenuOptions): void {
     contextMenu.popup({ window: win });
   });
 
-  // Disable the zoom accelerators while capturing a shortcut so combos like
-  // Cmd+- / Cmd+= reach the renderer instead of zooming the window.
-  ipcMain.handle("paseo:menu:set-capturing-shortcut", (_event, capturing?: boolean) => {
+  // Recording must receive menu accelerators too: reloading or opening a window
+  // here interrupts capture before the renderer can prevent the action.
+  ipcMain.handle("paseo:menu:set-capturing-shortcut", (event, capturing?: boolean) => {
     capturingShortcut = capturing === true;
+    event.sender.setIgnoreMenuShortcuts(capturingShortcut);
     rebuildApplicationMenu();
   });
 
-  // If the renderer reloads mid-capture (e.g. Cmd+R) the renderer-side effect
+  // If the renderer reloads mid-capture (e.g. developer tooling) the renderer-side effect
   // never gets to send `false`, so reset the flag from the main process when a
   // main window finishes loading. Workspace browser webviews are not
   // BrowserWindows, so they don't trigger this.
   app.on("browser-window-created", (_event, win) => {
     win.webContents.on("did-finish-load", () => {
+      win.webContents.setIgnoreMenuShortcuts(false);
       if (!capturingShortcut) return;
       capturingShortcut = false;
       rebuildApplicationMenu();

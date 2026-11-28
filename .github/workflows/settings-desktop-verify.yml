@@ -1,0 +1,127 @@
+name: Settings desktop verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        default: all
+        options: [all, macos, windows]
+      brand:
+        type: choice
+        default: all
+        options: [all, woowtech, apporo]
+      scope:
+        type: choice
+        default: all
+        options: [all, settings]
+  workflow_call:
+    inputs:
+      platform:
+        type: string
+        default: all
+      brand:
+        type: string
+        default: all
+      scope:
+        type: string
+        default: all
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  electron:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.platform == 'windows' && '["windows-2022"]' || inputs.platform == 'macos' && '["macos-26"]' || '["windows-2022","macos-26"]') }}
+        brand: ${{ fromJSON(inputs.brand == 'woowtech' && '["woowtech"]' || inputs.brand == 'apporo' && '["apporo"]' || '["woowtech","apporo"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      E2E_METRO_WARMUP_TIMEOUT_MS: "600000"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      WOOWTECH_BRAND: ${{ matrix.brand }}
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      WOOWTECH_SKIP_MAC_INSTALL: "1"
+      PASEO_DESKTOP_SETTINGS_ONLY: ${{ inputs.scope == 'settings' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm exec --workspace=@getpaseo/desktop -- install-electron
+      - name: Set evidence directory
+        run: echo "PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR=$RUNNER_TEMP/native-evidence" >> "$GITHUB_ENV"
+      - name: Apply brand in isolated runner checkout
+        run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+      - run: npm run build:server
+      - run: npm run build:app-deps
+      - name: Check desktop shortcut capture and reload ownership
+        working-directory: packages/desktop
+        run: npx vitest run src/features/menu.test.ts --bail=1 --maxWorkers=1
+      - name: Check shared client and desktop types
+        run: |
+          npm run typecheck --workspace=@getpaseo/app
+          npm run typecheck --workspace=@getpaseo/desktop
+      - name: Check changed source formatting and lint
+        run: |
+          npm run lint -- packages/desktop/src/features/menu.ts packages/desktop/src/features/menu.test.ts packages/desktop/scripts/dev-runner.mjs packages/desktop/e2e/settings-memory.electron.mjs packages/desktop/e2e/browser-tabs.e2e.mjs packages/desktop/e2e/appearance-theme.electron.mjs packages/app/src/components/ui/form-field.tsx packages/app/src/screens/settings-screen.tsx packages/app/src/screens/settings/terminal/terminal-section.tsx packages/app/src/screens/settings/keyboard-shortcuts-section.tsx packages/app/maestro/ci/run-native.mjs woowtech/tools/apply-brand.mjs woowtech/workflows.test.mjs
+          npm run format:check:files -- .github/workflows/settings-desktop-verify.yml .github/workflows/settings-android-emulator.yml packages/app/maestro/ci/settings-native.yaml packages/app/maestro/ci/run-native.mjs packages/desktop/src/features/menu.ts packages/desktop/src/features/menu.test.ts packages/desktop/scripts/dev-runner.mjs packages/desktop/e2e/settings-memory.electron.mjs packages/desktop/e2e/browser-tabs.e2e.mjs packages/desktop/e2e/appearance-theme.electron.mjs packages/app/src/components/ui/form-field.tsx woowtech/tools/apply-brand.mjs
+      - name: Verify brand and native distribution boundaries
+        run: node --test --test-concurrency=1 woowtech/brand-layer.test.mjs woowtech/desktop-notification-launch.test.mjs woowtech/desktop-fuses.test.mjs
+      - name: Exercise real Electron settings, browser, plugins and workspace routing
+        run: npm run test:e2e:browser-tabs --workspace=@getpaseo/desktop
+      - name: Export Electron renderer with bounded Metro workers
+        working-directory: packages/app
+        timeout-minutes: 15
+        env:
+          PASEO_WEB_PLATFORM: electron
+        run: npx expo export --platform web --max-workers 1
+      - name: Build unsigned candidate without publishing
+        run: |
+          node woowtech/tools/native-parity.mjs prepare-desktop
+          npm run build --workspace=@getpaseo/desktop -- --dir --publish never --config native-parity-builder.json
+      - name: Exercise the packaged app and bundled host
+        env:
+          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/native-evidence/packaged
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          const root = path.resolve('packages/desktop/release');
+          const app = process.platform === 'win32'
+            ? path.join(root, 'win-unpacked')
+            : fs.readdirSync(root, {withFileTypes:true}).filter(e => e.isDirectory()).flatMap(e => fs.readdirSync(path.join(root, e.name)).filter(n => n.endsWith('.app')).map(n => path.join(root, e.name, n)))[0];
+          if (!app || !fs.existsSync(app)) throw new Error('Packaged application not found');
+          execFileSync(process.execPath, ['packages/desktop/e2e/packaged-app-smoke.js', '--app', app], {stdio:'inherit'});
+          fs.writeFileSync(path.join(root, 'provenance.json'), JSON.stringify({source:process.env.GITHUB_SHA,brand:process.env.WOOWTECH_BRAND,platform:process.platform,arch:process.arch,signed:false}, null, 2));
+          NODE
+      - name: Archive verified candidate with executable permissions
+        # Redirect through the shell so GNU tar does not treat Windows' D: as a remote host.
+        run: tar -czf - -C packages/desktop release > "$RUNNER_TEMP/native-desktop.tar.gz"
+      - name: Upload verified unsigned candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-candidate-${{ matrix.brand }}-${{ matrix.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/native-desktop.tar.gz
+          retention-days: 14
+      - name: Upload desktop evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-desktop-${{ matrix.brand }}-${{ matrix.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/native-evidence
+          if-no-files-found: warn
+          retention-days: 14

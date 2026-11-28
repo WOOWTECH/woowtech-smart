@@ -18,7 +18,11 @@ import { runAppearanceFontSizeRegression } from "./appearance-font-size.electron
 import { runAdaptiveThemeRegression } from "./appearance-theme.electron.mjs";
 import { runSettingsScrollRegression } from "./settings-scroll.electron.mjs";
 import { buildFillFixture, verifyReactFormFill } from "./browser-fill.electron.mjs";
-import { runSettingsMemoryRegression } from "./settings-memory.electron.mjs";
+import {
+  runSettingsMemoryRegression,
+  runSettingsPersistenceRegression,
+  runShortcutCaptureRegression,
+} from "./settings-memory.electron.mjs";
 
 import { seedPluginLinks, runPluginLinksRegression } from "./plugin-links.electron.mjs";
 
@@ -641,8 +645,11 @@ async function selectDeviceSize(page, label) {
   await page.locator('[aria-label="Device size"]').click();
   const item = page.getByText(label, { exact: true });
   await item.waitFor({ state: "visible", timeout: timeoutMs });
-  const rect = await item.boundingBox();
-  assert(rect, `Device size menu item ${label} had no bounds`);
+  // The menu can replace its first layout while its opening animation settles.
+  let rect = null;
+  await expect
+    .poll(async () => (rect = await item.boundingBox()), { timeout: timeoutMs })
+    .not.toBeNull();
   const clip = {
     x: Math.max(0, rect.x),
     y: Math.max(0, rect.y),
@@ -656,7 +663,7 @@ async function selectDeviceSize(page, label) {
 
   await page.locator('[aria-label="Device size"]').click();
   await item.waitFor({ state: "visible", timeout: timeoutMs });
-  await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  await item.click();
   await page.keyboard.press("Escape");
   return !openPixels.equals(closedPixels);
 }
@@ -752,20 +759,15 @@ async function resizeDesktopWindow(inspectorPort, { width, height }) {
   );
 }
 
-async function verifyHiddenBrowserScreenshots({
-  page,
-  client,
-  browserId,
-  artifactDir,
-  inspectorPort,
-}) {
-  const readFrames = async () => {
+async function verifyHiddenBrowserScreenshots({ client, browserId, artifactDir, inspectorPort }) {
+  const readState = async () => {
     const result = await callBrowserTool(client, "browser_evaluate", {
       browserId,
-      function: "() => window.frameCount",
+      function: "() => ({ frames: window.frameCount, visibility: document.visibilityState })",
     });
     return JSON.parse(result.resultJson);
   };
+  const readFrames = async () => (await readState()).frames;
   const expectAnimation = async () => {
     const start = await readFrames();
     assert(typeof start === "number", "Animation fixture was not loaded");
@@ -778,12 +780,39 @@ async function verifyHiddenBrowserScreenshots({
   };
   const measurements = [];
   const expectIdle = async (label) => {
-    await delay(500); // Let Chromium consume the visibility change before sampling.
-    const start = await readFrames();
+    // Window visibility and guest visibility change asynchronously on macOS.
+    // Wait for the actual signal before measuring the same zero-frame interval.
+    const deadline = Date.now() + 5_000;
+    let start = await readState();
+    while (start.visibility !== "hidden" && Date.now() < deadline) {
+      await delay(100);
+      start = await readState();
+    }
     await delay(1_000); // A fixed sampling interval is the behavior under test.
-    const frames = (await readFrames()) - start;
-    measurements.push({ label, frames });
+    const end = await readState();
+    const frames = end.frames - start.frames;
+    const host = await evaluateDesktopWindow(
+      inspectorPort,
+      `
+      return {
+        visible: win.isVisible(),
+        focused: win.isFocused(),
+        throttling: win.webContents.getBackgroundThrottling(),
+        captured: win.webContents.isBeingCaptured(),
+        guests: process.mainModule.require('electron').webContents.getAllWebContents()
+          .filter(contents => contents.getType() === 'webview')
+          .map(contents => ({ id: contents.id, throttling: contents.getBackgroundThrottling(), captured: contents.isBeingCaptured() }))
+      };
+    `,
+    );
+    measurements.push({ label, frames, start, end, host });
     writeJson(path.join(artifactDir, "hidden-browser-frames.json"), measurements);
+    assert(!host.visible, `${label}: hidden host window became visible again`);
+    assert(
+      !host.captured && host.guests.every((guest) => !guest.captured),
+      `${label}: automation still holds a capture owner`,
+    );
+    assert(start.visibility === "hidden", `${label}: guest did not become hidden`);
     assert(frames === 0, `${label}: hidden browser produced ${frames} animation frames`);
   };
   try {
@@ -803,20 +832,14 @@ async function verifyHiddenBrowserScreenshots({
       path.join(artifactDir, "hidden-browser-viewport.png"),
       Buffer.from(screenshot.data, "base64"),
     );
-    const pixel = await page.evaluate(async (base64) => {
-      const image = new Image();
-      image.src = `data:image/png;base64,${base64}`;
-      await image.decode();
-      const canvas = document.createElement("canvas");
-      canvas.width = image.width;
-      canvas.height = image.height;
-      const context = canvas.getContext("2d");
-      context.drawImage(image, 0, 0);
-      return [
-        ...context.getImageData(Math.floor(image.width / 2), Math.floor(image.height / 2), 1, 1)
-          .data,
-      ];
-    }, screenshot.data);
+    // Decode without reattaching Playwright: its focus emulation keeps pages captured.
+    // The expected green pixel is identical in nativeImage's BGRA and canvas RGBA.
+    const pixel = await evaluateDesktopWindow(
+      inspectorPort,
+      `const image = process.mainModule.require('electron').nativeImage.createFromBuffer(Buffer.from(${JSON.stringify(screenshot.data)}, 'base64'));
+       const { width, height } = image.getSize();
+       return [...image.crop({ x: Math.floor(width / 2), y: Math.floor(height / 2), width: 1, height: 1 }).toBitmap()];`,
+    );
     assert(
       JSON.stringify(pixel) === "[0,255,0,255]",
       `Hidden screenshot returned stale pixels: ${pixel}`,
@@ -890,10 +913,11 @@ async function runRegression({
   typingAgent,
   artifactDir,
   inspectorPort,
+  runWithoutPlaywright,
 }) {
   const failures = [];
   const originalWorkspaceId = workspaceIds[0];
-  const originalWorkspaceRow = page.getByTestId(
+  let originalWorkspaceRow = page.getByTestId(
     `sidebar-workspace-row-${serverId}:${originalWorkspaceId}`,
   );
   await originalWorkspaceRow.waitFor({ state: "visible", timeout: timeoutMs });
@@ -917,7 +941,7 @@ async function runRegression({
   const browserId = created.browserId;
   assert(typeof browserId === "string", "browser_new_tab returned no browserId");
 
-  const originalDeck = page.getByTestId(`workspace-deck-entry-${serverId}:${originalWorkspaceId}`);
+  let originalDeck = page.getByTestId(`workspace-deck-entry-${serverId}:${originalWorkspaceId}`);
   await originalDeck.getByTestId(`workspace-tab-browser_${browserId}`).click();
   await page.waitForFunction(
     (id) => {
@@ -1161,7 +1185,13 @@ async function runRegression({
   const parkedGuest = await readGuest(page, browserId);
   assert(parkedGuest, "Browser guest was not parked after workspace eviction");
 
-  await verifyHiddenBrowserScreenshots({ page, client, browserId, artifactDir, inspectorPort });
+  page = await runWithoutPlaywright(() =>
+    verifyHiddenBrowserScreenshots({ client, browserId, artifactDir, inspectorPort }),
+  );
+  originalWorkspaceRow = page.getByTestId(
+    `sidebar-workspace-row-${serverId}:${originalWorkspaceId}`,
+  );
+  originalDeck = page.getByTestId(`workspace-deck-entry-${serverId}:${originalWorkspaceId}`);
 
   const listed = await callBrowserTool(client, "browser_list_tabs");
   assert(
@@ -1466,7 +1496,21 @@ async function main() {
     await waitForPort(cdpPort, "Electron CDP", desktop);
 
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
-    const page = await waitForAppPage(browser, expoPort);
+    let page = await waitForAppPage(browser, expoPort);
+    const runWithoutPlaywright = async (task) => {
+      // connectOverCDP.close disconnects, leaving Electron and its guests running.
+      // Playwright 1.58 enables focus emulation on each page; Chromium counts that
+      // as capture and keeps rAF running on macOS even while visibility is hidden.
+      await browser.close();
+      browser = null;
+      try {
+        await task();
+      } finally {
+        browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
+        page = await waitForAppPage(browser, expoPort);
+      }
+      return page;
+    };
     await hideDeveloperToasts(page);
     const status = await waitForDesktopStatus(page);
     // The first load waits for Metro's cold bundle; slow runners set E2E_METRO_WARMUP_TIMEOUT_MS.
@@ -1511,6 +1555,24 @@ async function main() {
       return;
     }
 
+    const settingsPersistence = await runSettingsPersistenceRegression(page);
+    const shortcutCapture = await runShortcutCaptureRegression(page, (expression) =>
+      evaluateDesktopWindow(inspectorPort, expression),
+    );
+    writeJson(path.join(artifactDir, "settings.json"), {
+      source: process.env.GITHUB_SHA,
+      brand: process.env.WOOWTECH_BRAND,
+      platform: process.platform,
+      settingsScroll,
+      settingsMemory,
+      settingsPersistence,
+      shortcutCapture,
+    });
+    if (process.env.PASEO_DESKTOP_SETTINGS_ONLY === "1") {
+      console.log("Desktop settings, persistence and native shortcut capture passed.");
+      return;
+    }
+
     const adaptiveTheme = await runAdaptiveThemeRegression(artifactDir);
     await runAppearanceFontSizeRegression(page);
 
@@ -1529,6 +1591,7 @@ async function main() {
       callerAgentId,
       typingAgent,
       artifactDir,
+      runWithoutPlaywright,
     });
     const pluginLinks = await checkPluginLinks();
     const routingClient = await connectBrowserToolClient(daemonPort, typingAgent.agentId);
@@ -1545,6 +1608,8 @@ async function main() {
     writeJson(path.join(artifactDir, "result.json"), {
       ...report,
       settingsMemory,
+      settingsPersistence,
+      shortcutCapture,
       pluginLinks,
       adaptiveTheme,
       browserHostRouting: "passed",
@@ -1553,6 +1618,19 @@ async function main() {
       `Browser desktop browser E2E passed: WebContents ${report.originalWebContentsId} remained ${report.finalWebContentsId}; viewport, inactive capture, focus continuity, list, snapshot, click, local-page selectors passed.`,
     );
   } catch (error) {
+    const failedPage = browser
+      ?.contexts()
+      .flatMap((context) => context.pages())
+      .find((page) => page.url().includes(`localhost:${expoPort}`));
+    await failedPage
+      ?.screenshot({ path: path.join(artifactDir, "failure.png"), timeout: 5_000 })
+      .catch(() => undefined);
+    writeJson(path.join(artifactDir, "failure.json"), {
+      source: process.env.GITHUB_SHA,
+      brand: process.env.WOOWTECH_BRAND,
+      platform: process.platform,
+      error: String(error),
+    });
     console.error(`Browser desktop browser E2E failed. Artifacts: ${artifactDir}`);
     console.error(error);
     throw error;

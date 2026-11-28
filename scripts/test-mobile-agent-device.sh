@@ -5,6 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="${PASEO_MOBILE_E2E_STATE_DIR:-${REPO_ROOT}/.dev/agent-device-e2e}"
 ARTIFACTS_DIR="${PASEO_MOBILE_E2E_ARTIFACTS_DIR:-${REPO_ROOT}/.dev/agent-device-artifacts}"
 METRO_PORT="${PASEO_MOBILE_E2E_METRO_PORT:-8081}"
+APP_ID="${PASEO_MOBILE_APP_ID:-$(node -e 'console.log(require(process.argv[1]).appliedBrand().mobileAppIdDebug)' "${REPO_ROOT}/woowtech/brands/index.cjs")}"
 METRO_PID=0
 
 cleanup() {
@@ -43,6 +44,7 @@ AGENT_DEVICE_STATE_DIR="${STATE_DIR}" agent-device prepare ios-runner \
 
 AGENT_DEVICE_STATE_DIR="${STATE_DIR}" agent-device test \
   "${REPO_ROOT}/packages/app/e2e/mobile/agent-device" \
+  -e "APP_ID=${APP_ID}" \
   --metro-port "${METRO_PORT}" \
   --timeout 120000 \
   --fail-fast \

@@ -246,7 +246,9 @@ export const FormTextInput = forwardRef<EditingTextInputHandle, FormTextInputPro
     );
 
     return (
-      <Pressable disabled={isDisabled} style={chromeStyle}>
+      // This wrapper owns hover styling, while the input owns accessibility.
+      // An accessible parent hides the input's value and identifier on iOS.
+      <Pressable accessible={false} disabled={isDisabled} style={chromeStyle}>
         {leading}
         <AdaptiveTextInput
           ref={setInputRef}

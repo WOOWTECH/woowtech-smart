@@ -1,0 +1,209 @@
+name: Physical device development builds
+
+# Builds the embedded-bundle, development-identity app for physical devices: an ARM64 Android APK
+# and an unsigned iOS device app. The app id ends in .debug, so it installs beside the store app and
+# never replaces it. Test candidates only, never published: the APK carries the generated project's
+# debug key, and the iOS app is signed on the tester's Mac with their team's development profile.
+on:
+  workflow_dispatch:
+    inputs:
+      brand:
+        type: choice
+        default: all
+        options: [all, woowtech, apporo]
+      platform:
+        type: choice
+        default: android
+        options: [android, ios, all]
+  workflow_call:
+    inputs:
+      brand:
+        type: string
+        default: all
+      platform:
+        type: string
+        default: android
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  apk:
+    name: ${{ matrix.brand }} ARM64 development APK
+    if: inputs.platform != 'ios'
+    strategy:
+      fail-fast: false
+      matrix:
+        brand: ${{ fromJSON(inputs.brand == 'woowtech' && '["woowtech"]' || inputs.brand == 'apporo' && '["apporo"]' || '["woowtech","apporo"]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_VARIANT: development
+      CI: "1"
+      ONNXRUNTIME_NODE_INSTALL: skip
+      WOOWTECH_BRAND: ${{ matrix.brand }}
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply brand
+        run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+      - run: npm run build:app-deps
+      - name: Generate Android project
+        working-directory: packages/app
+        run: npx expo prebuild --platform android --no-install
+      - name: Build embedded ARM64 development APK
+        working-directory: packages/app/android
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 -Dorg.gradle.parallel=false
+      - name: Verify identity and architecture, then write the receipt
+        run: |
+          APK=packages/app/android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt | sort -V | tail -n 1)
+          BADGING=$("$AAPT" dump badging "$APK")
+          export APP_ID=$(node -e 'process.stdout.write(require("./woowtech/brands/index.cjs").appliedBrand().mobileAppIdDebug)')
+          PACKAGE=$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$BADGING")
+          export VERSION=$(sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p" <<< "$BADGING")
+          ABIS=$(sed -n "s/^native-code: //p" <<< "$BADGING")
+          echo "package=$PACKAGE version=$VERSION abis=$ABIS"
+          [[ "$PACKAGE" == "$APP_ID" && "$PACKAGE" == *.debug ]]
+          [[ -n "$VERSION" ]]
+          [[ "$ABIS" == "'arm64-v8a'" ]]
+          mkdir -p "$RUNNER_TEMP/dev-apk"
+          export APK_NAME="$APP_ID-$VERSION-arm64-${GITHUB_SHA::9}.apk"
+          cp "$APK" "$RUNNER_TEMP/dev-apk/$APK_NAME"
+          export APK_SHA256=$(sha256sum "$RUNNER_TEMP/dev-apk/$APK_NAME" | cut -d' ' -f1)
+          node -e '
+            const receipt = {
+              kind: "android-development-apk",
+              brand: process.env.WOOWTECH_BRAND,
+              appId: process.env.APP_ID,
+              versionName: process.env.VERSION,
+              targetArch: "arm64-v8a",
+              sourceCommit: process.env.GITHUB_SHA,
+              run: process.env.GITHUB_RUN_ID,
+              apk: process.env.APK_NAME,
+              sha256: process.env.APK_SHA256,
+              signing: "debug key of the generated project",
+              releaseSigned: false,
+              published: false,
+              validation: "Compiled and identity-checked only; installation and device acceptance pending",
+            };
+            require("fs").writeFileSync(process.env.RUNNER_TEMP + "/dev-apk/receipt.json", JSON.stringify(receipt, null, 2) + "\n");
+          '
+      - name: Upload the ARM64 development APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-dev-arm64-${{ matrix.brand }}-${{ github.sha }}
+          path: ${{ runner.temp }}/dev-apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    name: ${{ matrix.brand }} iOS device development app (unsigned)
+    if: inputs.platform != 'android'
+    strategy:
+      fail-fast: false
+      matrix:
+        brand: ${{ fromJSON(inputs.brand == 'woowtech' && '["woowtech"]' || inputs.brand == 'apporo' && '["apporo"]' || '["woowtech","apporo"]') }}
+    runs-on: macos-26
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_VARIANT: development
+      CI: "1"
+      ONNXRUNTIME_NODE_INSTALL: skip
+      WOOWTECH_BRAND: ${{ matrix.brand }}
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Require Xcode 26
+        # The app has not adopted the UIScene life cycle, which the iOS 27 SDK requires at launch.
+        run: |
+          xcodebuild -version | tee "$RUNNER_TEMP/xcode.txt"
+          [[ "$(xcodebuild -version | sed -n 's/^Xcode \([0-9]*\).*/\1/p')" == 26 ]]
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply brand
+        run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+      - run: npm run build:app-deps
+      - name: Generate iOS project
+        working-directory: packages/app
+        run: npx expo prebuild --platform ios
+      - name: Build the unsigned device app with the embedded bundle
+        run: |
+          WORKSPACE=$(find packages/app/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          test -n "$WORKSPACE"
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          mkdir -p "$RUNNER_TEMP/device"
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/device-derived-data" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee "$RUNNER_TEMP/device/build.log" | awk '/PhaseScriptExecution|error:|BUILD SUCCEEDED|BUILD FAILED/ { print; fflush() }'
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Verify identity and architecture, then write the receipt
+        run: |
+          APP=$(find "$RUNNER_TEMP/device-derived-data/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP"
+          export APP_ID=$(node -e 'process.stdout.write(require("./woowtech/brands/index.cjs").appliedBrand().mobileAppIdDebug)')
+          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          export VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
+          PLATFORM=$(/usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$APP/Info.plist")
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
+          ARCHS=$(lipo -archs "$APP/$EXECUTABLE")
+          test -f "$APP/main.jsbundle"
+          echo "bundle=$BUNDLE version=$VERSION platform=$PLATFORM archs=$ARCHS"
+          [[ "$BUNDLE" == "$APP_ID" && "$BUNDLE" == *.debug && "$PLATFORM" == iphoneos && "$ARCHS" == arm64 ]]
+          # The re-signing Mac needs the entitlements the project asks for.
+          ENTITLEMENTS=$(find packages/app/ios -maxdepth 2 -name '*.entitlements' -print -quit)
+          test -n "$ENTITLEMENTS"
+          cp "$ENTITLEMENTS" "$RUNNER_TEMP/device/app.entitlements"
+          cp "$RUNNER_TEMP/xcode.txt" "$RUNNER_TEMP/device/xcode.txt"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/device/app.zip"
+          export APP_SHA256=$(shasum -a 256 "$RUNNER_TEMP/device/app.zip" | cut -d' ' -f1)
+          export XCODE=$(head -n 1 "$RUNNER_TEMP/xcode.txt")
+          node -e '
+            const receipt = {
+              kind: "ios-device-development-app",
+              brand: process.env.WOOWTECH_BRAND,
+              appId: process.env.APP_ID,
+              versionName: process.env.VERSION,
+              targetArch: "arm64",
+              xcode: process.env.XCODE,
+              sourceCommit: process.env.GITHUB_SHA,
+              run: process.env.GITHUB_RUN_ID,
+              archive: "app.zip",
+              sha256: process.env.APP_SHA256,
+              signed: false,
+              published: false,
+              validation: "Compiled and identity-checked only; signing, installation and device acceptance pending",
+            };
+            require("fs").writeFileSync(process.env.RUNNER_TEMP + "/device/receipt.json", JSON.stringify(receipt, null, 2) + "\n");
+          '
+      - name: Upload the unsigned iOS device app
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-device-unsigned-${{ matrix.brand }}-${{ github.sha }}
+          path: ${{ runner.temp }}/device
+          if-no-files-found: error
+          retention-days: 14

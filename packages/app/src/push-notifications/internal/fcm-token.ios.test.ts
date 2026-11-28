@@ -69,6 +69,7 @@ type FakeIos = ReturnType<typeof fakeIos>;
 
 function tokenSource(ios: FakeIos, options: Partial<IosFcmTokenSourceOptions<FakeHandle>> = {}) {
   return createIosFcmTokenSource<FakeHandle>({
+    isAvailable: () => true,
     loadMessaging: () => ios.module,
     loadApnsRegistration: () => ios.registerWithApns,
     warn: () => undefined,
@@ -199,24 +200,24 @@ describe("iOS FCM token", () => {
     ]);
   });
 
-  it("loads React Native Firebase only when asked for a token, and gets null without it", async () => {
-    // Without a GoogleService-Info.plist the native module is not linked, and importing
-    // @react-native-firebase/messaging throws ("Native module RNFBAppModule is not registered").
-    const loads: string[] = [];
-    const warnings: string[] = [];
+  it("never imports Firebase or requests APNs when native modules are absent", async () => {
+    const calls: string[] = [];
     const source = createIosFcmTokenSource<FakeHandle>({
+      isAvailable: () => false,
       loadMessaging: () => {
-        loads.push("load");
-        throw new Error("Native module RNFBAppModule is not registered.");
+        calls.push("Firebase import");
+        throw new Error("Metro would report this module initialization as fatal");
       },
-      loadApnsRegistration: () => fakeIos().registerWithApns,
-      warn: (message) => warnings.push(message),
+      loadApnsRegistration: () => {
+        calls.push("APNs import");
+        return fakeIos().registerWithApns;
+      },
+      warn: (message) => calls.push(message),
     });
-    expect(loads).toEqual([]);
-
     await expect(source.getToken()).resolves.toBeNull();
-    expect(loads).toEqual(["load"]);
-    expect(warnings).toEqual(["[PushNotifications] No FCM token on this device (Error)"]);
+    await expect(source.getToken()).resolves.toBeNull();
+    expect(source.onTokenRefresh(() => calls.push("refresh"))()).toBeUndefined();
+    expect(calls).toEqual([]);
   });
 
   it("gets null when Firebase is not configured", async () => {
@@ -273,8 +274,9 @@ describe("iOS FCM token", () => {
     expect(listeners.size).toBe(0);
   });
 
-  it("listens for nothing, without throwing, when React Native Firebase is not linked", () => {
+  it("cleans up safely when a configured Firebase loader fails", () => {
     const source = createIosFcmTokenSource<FakeHandle>({
+      isAvailable: () => true,
       loadMessaging: () => {
         throw new Error("Native module RNFBAppModule is not registered.");
       },

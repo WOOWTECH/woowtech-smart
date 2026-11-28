@@ -25,6 +25,11 @@ Run the Paseo mobile suite:
 npm run test:e2e:mobile
 ```
 
+The runner selects the applied brand's debug app ID and passes it to every replay
+flow. Set `PASEO_MOBILE_APP_ID` to test a specific installed production package.
+For Apporo, use a checkout with its brand applied before building and replaying;
+an installed official Paseo app is not evidence for the branded build.
+
 The runner uses an isolated Agent Device state directory, verifies or starts Metro for this checkout, prewarms the iOS runner, discovers each script's platform from its `context` header, and cleans its sessions, runner lease, daemon, and any Metro process it started. Attempt results, timings, logs, and failure artifacts go under `.dev/agent-device-artifacts`.
 
 Set `PASEO_MOBILE_E2E_METRO_PORT` when this worktree already has Metro on a non-default port:

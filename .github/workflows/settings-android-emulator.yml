@@ -1,0 +1,249 @@
+name: Settings platform verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        default: all
+        options: [all, android, ios]
+      brand:
+        type: choice
+        default: all
+        options: [all, woowtech, apporo]
+      android_apk_run_id:
+        description: Optional previous run containing emulator APKs to retest; both sources are recorded
+        type: string
+        default: ""
+      ios_app_run_id:
+        description: Optional previous run containing simulator apps to retest; both sources are recorded
+        type: string
+        default: ""
+      ios_device:
+        description: iPhone runs the settings flow; iPad runs the docked touch-layout checks
+        type: choice
+        default: iphone
+        options: [iphone, ipad]
+  workflow_call:
+    inputs:
+      platform:
+        type: string
+        default: all
+      brand:
+        type: string
+        default: all
+      android_apk_run_id:
+        type: string
+        default: ""
+      ios_app_run_id:
+        type: string
+        default: ""
+      ios_device:
+        type: string
+        default: iphone
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(inputs.platform == 'android' && '["android"]' || inputs.platform == 'ios' && '["ios"]' || '["android","ios"]') }}
+        brand: ${{ fromJSON(inputs.brand == 'woowtech' && '["woowtech"]' || inputs.brand == 'apporo' && '["apporo"]' || '["woowtech","apporo"]') }}
+    runs-on: ${{ matrix.platform == 'android' && 'ubuntu-24.04' || 'macos-26' }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_VARIANT: development
+      CI: "1"
+      ONNXRUNTIME_NODE_INSTALL: skip
+      WOOWTECH_BRAND: ${{ matrix.brand }}
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      MAESTRO_CLI_NO_ANALYTICS: "1"
+      # The hosted iPad simulator can take minutes to start Maestro's XCUITest driver.
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: npm ci
+      - name: Set evidence directory
+        run: echo "EVIDENCE=$RUNNER_TEMP/native-evidence" >> "$GITHUB_ENV"
+      - name: Expose Android command-line tools
+        if: matrix.platform == 'android'
+        run: |
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+      - name: Apply brand and record candidate identity
+        run: |
+          node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+          mkdir -p "$EVIDENCE"
+          node -e 'const b=require("./woowtech/brands/index.cjs").appliedBrand(); console.log("APP_ID="+b.mobileAppIdDebug)' >> "$GITHUB_ENV"
+          git rev-parse HEAD > "$EVIDENCE/source.txt"
+          printf '%s\n' "$WOOWTECH_BRAND" > "$EVIDENCE/brand.txt"
+      - name: Check the native runner before building
+        run: node --import tsx packages/app/maestro/ci/run-native.mjs --check
+      - run: npm run build:app-deps
+      - run: npm run build:server
+      - name: Resolve existing candidate provenance
+        id: candidate
+        if: (matrix.platform == 'android' && inputs.android_apk_run_id != '') || (matrix.platform == 'ios' && inputs.ios_app_run_id != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ matrix.platform == 'android' && inputs.android_apk_run_id || inputs.ios_app_run_id }}
+        run: |
+          [[ "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]]
+          CANDIDATE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq .head_sha)
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+          echo "NATIVE_CANDIDATE_SHA=$CANDIDATE_SHA" >> "$GITHUB_ENV"
+          printf '%s\n' "$CANDIDATE_SHA" > "$EVIDENCE/candidate-source.txt"
+          printf '%s\n' "$CANDIDATE_RUN_ID" > "$EVIDENCE/candidate-run.txt"
+      - name: Download the existing Android candidate
+        if: matrix.platform == 'android' && inputs.android_apk_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.android_apk_run_id }}
+          name: emulator-apk-${{ matrix.brand }}-${{ steps.candidate.outputs.sha }}
+          path: ${{ runner.temp }}/native-apk
+      - name: Download the existing iOS simulator candidate
+        if: matrix.platform == 'ios' && inputs.ios_app_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.ios_app_run_id }}
+          name: simulator-app-${{ matrix.brand }}-${{ steps.candidate.outputs.sha }}
+          path: ${{ runner.temp }}/native-ios
+      - name: Install pinned Maestro CLI
+        run: |
+          curl -fL --retry 3 https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.1/maestro.zip -o "$RUNNER_TEMP/maestro.zip"
+          curl -fL --retry 3 https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.1/checksums_sha256.txt -o "$RUNNER_TEMP/maestro-checksums.txt"
+          cd "$RUNNER_TEMP"
+          awk '$2 == "maestro.zip" || $2 == "*maestro.zip"' maestro-checksums.txt > maestro.sha256
+          test -s maestro.sha256
+          shasum -a 256 -c maestro.sha256
+          unzip -q maestro.zip -d maestro-cli
+          echo "$RUNNER_TEMP/maestro-cli/maestro/bin" >> "$GITHUB_PATH"
+      - name: Generate Android project
+        if: matrix.platform == 'android' && inputs.android_apk_run_id == ''
+        working-directory: packages/app
+        run: npx expo prebuild --platform android --no-install
+      - name: Build embedded Android candidate
+        id: android_build
+        if: matrix.platform == 'android' && inputs.android_apk_run_id == ''
+        working-directory: packages/app/android
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=2 -Dorg.gradle.parallel=false
+      - name: Enable KVM on isolated runner
+        if: matrix.platform == 'android'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise installed Android candidate
+        if: matrix.platform == 'android'
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.android_apk_run_id }}
+        run: |
+          export ANDROID_USER_HOME="$RUNNER_TEMP/native-android-home"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          timeout 600 sdkmanager 'system-images;android-35;google_apis;x86_64'
+          echo no | avdmanager create avd --force --name native-parity --path "$ANDROID_AVD_HOME/native-parity.avd" --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
+          test -f "$ANDROID_AVD_HOME/native-parity.ini"
+          # Give the emulator and Maestro one running SDK adb server from boot.
+          export ADB_TRACE=transport
+          adb version > "$EVIDENCE/adb-version.txt"
+          adb start-server
+          "$ANDROID_HOME/emulator/emulator" -avd native-parity -no-window -no-snapshot -no-audio -no-boot-anim -memory 3072 -cores 2 -gpu swiftshader_indirect > "$EVIDENCE/emulator.log" 2>&1 &
+          EMULATOR_PID=$!
+          trap 'cp "/tmp/adb.$UID.log" "$EVIDENCE/adb-server.log" 2>/dev/null || true; timeout 15 adb logcat -d > "$EVIDENCE/android-logcat.txt" 2>&1 || true; kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
+          sleep 3
+          if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then cat "$EVIDENCE/emulator.log"; exit 1; fi
+          timeout 180 adb wait-for-device
+          BOOT_DEADLINE=$((SECONDS + 240))
+          until [[ "$(timeout 10 adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; do
+            kill -0 "$EMULATOR_PID"
+            if ((SECONDS >= BOOT_DEADLINE)); then cat "$EVIDENCE/emulator.log"; exit 1; fi
+            sleep 2
+          done
+          timeout 15 adb shell settings put global window_animation_scale 0
+          timeout 15 adb shell settings put global transition_animation_scale 0
+          timeout 15 adb shell settings put global animator_duration_scale 0
+          APK_PATH=packages/app/android/app/build/outputs/apk/release/app-release.apk
+          if [[ -n "$CANDIDATE_RUN_ID" ]]; then APK_PATH="$RUNNER_TEMP/native-apk/app-release.apk"; fi
+          timeout 120 adb install "$APK_PATH"
+          timeout 15 adb logcat -c
+          node --import tsx packages/app/maestro/ci/run-native.mjs android
+      - name: Generate iOS simulator project
+        if: matrix.platform == 'ios' && inputs.ios_app_run_id == ''
+        working-directory: packages/app
+        run: npx expo prebuild --platform ios
+      - name: Build and exercise installed iOS simulator candidate
+        if: matrix.platform == 'ios'
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.ios_app_run_id }}
+        run: |
+          xcodebuild -version > "$EVIDENCE/xcode.txt"
+          xcrun simctl list devices available -j > "$EVIDENCE/simulators.json"
+          export IOS_DEVICE="${{ inputs.ios_device || 'iphone' }}"
+          # An iPad mini leaves a docked pane narrower than two full home tiles, the case the fit covers.
+          export DEVICE_ID=$(node -e 'const fs=require("fs"); const all=Object.values(JSON.parse(fs.readFileSync(process.env.EVIDENCE+"/simulators.json")).devices).flat().filter(d=>d.isAvailable); const ipad=process.env.IOS_DEVICE==="ipad"; const d=ipad ? (all.find(d=>d.name.startsWith("iPad mini"))??all.find(d=>d.name.startsWith("iPad"))) : all.find(d=>d.name.startsWith("iPhone")); if(!d)throw Error("No available "+(ipad?"iPad":"iPhone")+" simulator"); console.log(d.udid)')
+          if [[ "$IOS_DEVICE" == ipad ]]; then export MAESTRO_FLOW=ipad-touch-layout.yaml SEED_PROJECT=1; fi
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          if [[ -n "$CANDIDATE_RUN_ID" ]]; then
+            tar -xzf "$RUNNER_TEMP/native-ios/ios-simulator-app.tar.gz" -C "$RUNNER_TEMP/native-ios"
+            APP_PATH=$(find "$RUNNER_TEMP/native-ios" -maxdepth 1 -name '*.app' -print -quit)
+          else
+            WORKSPACE=$(find packages/app/ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+            test -n "$WORKSPACE"
+            SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+            # The candidate runs on this runner's simulator; avoid compiling an unused CPU architecture.
+            # Keep the full build log and expose phase/error progress while Xcode runs.
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$RUNNER_TEMP/native-derived-data" -resultBundlePath "$EVIDENCE/build.xcresult" CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES build 2>&1 | tee "$EVIDENCE/build.log" | awk '/PhaseScriptExecution|error:|BUILD SUCCEEDED|BUILD FAILED/ { print; fflush() }'
+            APP_PATH=$(find "$RUNNER_TEMP/native-derived-data/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
+            test -n "$APP_PATH"
+            tar -czf "$RUNNER_TEMP/ios-simulator-app.tar.gz" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+          fi
+          test -n "$APP_PATH"
+          xcrun simctl install "$DEVICE_ID" "$APP_PATH"
+          node --import tsx packages/app/maestro/ci/run-native.mjs ios
+      - name: Upload native evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}-${{ matrix.brand }}-${{ github.sha }}
+          path: ${{ runner.temp }}/native-evidence
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload emulator APK
+        if: always() && matrix.platform == 'android' && steps.android_build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-apk-${{ matrix.brand }}-${{ github.sha }}
+          path: packages/app/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+      - name: Upload simulator app when compilation succeeded
+        if: always() && matrix.platform == 'ios' && inputs.ios_app_run_id == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-app-${{ matrix.brand }}-${{ github.sha }}
+          path: ${{ runner.temp }}/ios-simulator-app.tar.gz
+          if-no-files-found: warn
+          retention-days: 14

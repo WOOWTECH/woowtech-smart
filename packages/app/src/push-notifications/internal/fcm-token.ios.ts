@@ -13,6 +13,7 @@ export interface RnFirebaseMessaging<Handle = Messaging> {
 type Warn = (message: string, error?: unknown) => void;
 
 export interface IosFcmTokenSourceOptions<Handle> {
+  isAvailable: () => boolean;
   loadMessaging: () => RnFirebaseMessaging<Handle>;
   /** UIKit's registerForRemoteNotifications, settled once iOS hands over the APNs token. */
   loadApnsRegistration: () => () => Promise<unknown>;
@@ -73,6 +74,7 @@ export function createIosFcmTokenSource<Handle>(
 
   async function fetchToken(): Promise<string | null> {
     try {
+      if (!options.isAvailable()) return null;
       const firebase = options.loadMessaging();
       const messaging = firebase.getMessaging();
       // firebase.json turns APNs auto-registration off, so the app registers before asking.
@@ -105,6 +107,7 @@ export function createIosFcmTokenSource<Handle>(
     },
     onTokenRefresh(listener) {
       try {
+        if (!options.isAvailable()) return () => undefined;
         const firebase = options.loadMessaging();
         const unsubscribe = firebase.onTokenRefresh(firebase.getMessaging(), (token) => {
           if (token.length > 0) listener(token);
@@ -120,9 +123,16 @@ export function createIosFcmTokenSource<Handle>(
   };
 }
 
-// Loaded on first use: in a build without a GoogleService-Info.plist the native module is not
-// linked (react-native.config.js), and importing @react-native-firebase/messaging throws
-// ("Native module RNFBAppModule is not registered"). A static import would crash the app.
+// Builds without a GoogleService-Info.plist deliberately omit these native modules.
+// Check before require: Metro reports module-initialization errors as fatal even
+// when the caller surrounds require with try/catch.
+function hasNativeFirebase(): boolean {
+  const { TurboModuleRegistry }: typeof import("react-native") = require("react-native");
+  return ["NativeRNFBTurboApp", "NativeRNFBTurboUtils", "NativeRNFBTurboMessaging"].every(
+    (name) => TurboModuleRegistry.get(name) !== null,
+  );
+}
+
 function loadRnFirebaseMessaging(): RnFirebaseMessaging {
   const messaging: typeof import("@react-native-firebase/messaging") = require("@react-native-firebase/messaging");
   return messaging;
@@ -135,6 +145,7 @@ function loadApnsRegistration(): () => Promise<unknown> {
 }
 
 export const fcmTokenSource: FcmTokenSource = createIosFcmTokenSource({
+  isAvailable: hasNativeFirebase,
   loadMessaging: loadRnFirebaseMessaging,
   loadApnsRegistration,
 });

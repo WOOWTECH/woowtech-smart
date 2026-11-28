@@ -1,0 +1,190 @@
+name: Native parity candidates
+
+# Called explicitly from CI on a selected source commit. No tags, signing credentials,
+# app-store submissions, stable update manifests, or production host changes.
+on:
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        default: all
+      # A desktop candidate also proves that an upgrade from this published version keeps the
+      # user's data. target "upgrade" runs only that check, between two published versions.
+      upgrade_from:
+        type: string
+        default: ""
+      upgrade_to:
+        type: string
+        default: ""
+      upgrade_brand:
+        type: string
+        default: woowtech
+      upgrade_run:
+        type: string
+        default: ""
+      upgrade_artifact:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  WOOWTECH_SKIP_MAC_INSTALL: "1"
+  CI: "1"
+
+jobs:
+  desktop:
+    name: ${{ matrix.brand }} desktop (${{ matrix.os }})
+    if: ${{ inputs.target != 'mobile' && inputs.target != 'android-native' && inputs.target != 'upgrade' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        brand: [woowtech, apporo]
+        os: ${{ fromJSON(inputs.target == 'windows' && '["windows-latest"]' || inputs.target == 'macos-intel' && '["macos-15-intel"]' || inputs.target == 'macos' && '["macos-26","macos-15-intel"]' || inputs.target == 'linux' && '["ubuntu-24.04"]' || '["ubuntu-24.04","windows-latest","macos-26","macos-15-intel"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply candidate brand
+        run: node woowtech/tools/apply-brand.mjs "$PARITY_BRAND"
+        env:
+          PARITY_BRAND: ${{ matrix.brand }}
+      - name: Install virtual display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
+      - name: Build shared app dependencies
+        run: npm run build:app-deps:clean
+      - name: Export Electron renderer
+        working-directory: packages/app
+        timeout-minutes: 15
+        env:
+          PASEO_WEB_PLATFORM: electron
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npx expo export --platform web --max-workers 1
+      - name: Build unpacked candidate
+        run: |
+          node woowtech/tools/native-parity.mjs prepare-desktop
+          npm run build --workspace=@getpaseo/desktop -- --dir --publish never --config native-parity-builder.json
+      - name: Verify packaged candidate
+        run: node woowtech/tools/native-parity.mjs verify-desktop
+        env:
+          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/native-parity/smoke
+      - name: Verify an upgrade from the published build keeps the user's data
+        if: ${{ inputs.upgrade_from != '' && runner.os != 'Linux' }}
+        run: node woowtech/tools/native-parity.mjs verify-upgrade
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM_VERSION: ${{ inputs.upgrade_from }}
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: native-${{ matrix.brand }}-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: |
+            artifacts/native-parity
+            packages/desktop/release
+          if-no-files-found: error
+          retention-days: 7
+
+  upgrade-retention:
+    name: ${{ inputs.upgrade_brand }} upgrade from ${{ inputs.upgrade_from }}
+    if: ${{ inputs.target == 'upgrade' }}
+    uses: ./.github/workflows/desktop-upgrade-retention.yml
+    with:
+      brand: ${{ inputs.upgrade_brand }}
+      from_version: ${{ inputs.upgrade_from }}
+      to_version: ${{ inputs.upgrade_to }}
+      candidate_run: ${{ inputs.upgrade_run }}
+      candidate_artifact: ${{ inputs.upgrade_artifact }}
+      # Only Windows can install a Setup taken from a run's artifact.
+      platforms: ${{ inputs.upgrade_run != '' && 'windows' || 'all' }}
+
+  mobile-export:
+    name: ${{ matrix.brand }} mobile bundles
+    if: ${{ inputs.target == 'all' || inputs.target == 'mobile' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        brand: [woowtech, apporo]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply candidate brand
+        run: node woowtech/tools/apply-brand.mjs "$PARITY_BRAND"
+        env:
+          PARITY_BRAND: ${{ matrix.brand }}
+      - name: Build shared app dependencies
+        run: npm run build:app-deps:clean
+      - name: Export iOS and Android separately
+        working-directory: packages/app
+        run: |
+          npx expo export --platform ios --max-workers 2 --output-dir ../../artifacts/native-parity/ios
+          npx expo export --platform android --max-workers 2 --output-dir ../../artifacts/native-parity/android
+      - name: Verify native bundle contents and identity
+        run: node woowtech/tools/native-parity.mjs verify-mobile
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: native-${{ matrix.brand }}-mobile-bundles-${{ github.sha }}
+          path: artifacts/native-parity
+          if-no-files-found: error
+          retention-days: 7
+
+  android-native:
+    name: ${{ matrix.brand }} Android ARM64 APK
+    if: ${{ inputs.target == 'all' || inputs.target == 'android-native' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        brand: [woowtech, apporo]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply candidate brand
+        run: node woowtech/tools/apply-brand.mjs "$PARITY_BRAND"
+        env:
+          PARITY_BRAND: ${{ matrix.brand }}
+      - name: Build diagnostic release APK
+        run: npm run build:apk:arm64
+      - name: Verify APK identity and architecture
+        run: node woowtech/tools/native-parity.mjs verify-android
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: native-${{ matrix.brand }}-android-arm64-${{ github.sha }}
+          path: |
+            artifacts/paseo-dogfood-arm64.apk
+            artifacts/native-parity
+          if-no-files-found: error
+          retention-days: 7

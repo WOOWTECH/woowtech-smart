@@ -105,7 +105,14 @@ async function electronRegression() {
       ["light", "dark"],
     ]) {
       nativeTheme.themeSource = from;
-      window = new BrowserWindow({ width: 600, height: 200, show: false, skipTaskbar: true });
+      window = new BrowserWindow({
+        width: 600,
+        height: 200,
+        show: false,
+        skipTaskbar: true,
+        // The main application is also running; do not let it occlude this fixture.
+        alwaysOnTop: process.platform === "darwin",
+      });
       await window.loadURL(
         "data:text/html," +
           encodeURIComponent(`<!doctype html>
@@ -119,12 +126,17 @@ async function electronRegression() {
       const background = "getComputedStyle(document.body).backgroundColor";
       await expectValue(foreground, colors[from].foreground);
       await expectValue(background, colors[from].background);
-      window.hide();
+      // macOS can leave a programmatically hidden accessory window reporting visible.
+      // Minimize this theme fixture to obtain a real background lifecycle transition.
+      // The main browser regression separately checks BrowserWindow.hide() and idle frames.
+      if (process.platform === "darwin") window.minimize();
+      else window.hide();
       await expectValue("document.visibilityState", "hidden");
       nativeTheme.themeSource = to;
       await expectValue(`matchMedia('(prefers-color-scheme: ${to})').matches`, true);
       // Reading the public runtime while hidden must not consume the pending theme notification.
       assert.equal(await read("window.readThemeForTest()"), to);
+      if (process.platform === "darwin") window.restore();
       window.showInactive();
       await expectValue("document.visibilityState", "visible");
       await expectValue(background, colors[to].background);
@@ -139,6 +151,7 @@ async function electronRegression() {
       observations.push({
         from,
         to,
+        backgroundAction: process.platform === "darwin" ? "minimize" : "hide",
         foreground: await read(foreground),
         background: await read(background),
       });

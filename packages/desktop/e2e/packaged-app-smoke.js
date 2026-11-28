@@ -6,15 +6,19 @@ const path = require("node:path");
 const { setTimeout: delay } = require("node:timers/promises");
 const { chromium } = require("playwright");
 const { extractFile } = require("@electron/asar");
-const { appliedBrand } = require("../../../woowtech/brands/index.cjs");
+const { appliedBrand, loadBrand } = require("../../../woowtech/brands/index.cjs");
 const { WebSocket } = require("ws");
 const assert = require("node:assert/strict");
 
 // electron-builder.yml names the app and its executable after the brand (woowtech/brands/apply.mjs),
-// and the app's CLI and renderer scheme follow it as well.
-const EXECUTABLE_NAME = appliedBrand().name;
-const CLI_COMMAND = appliedBrand().cliCommand;
-const APP_SCHEME = appliedBrand().scheme;
+// and the app's CLI and renderer scheme follow it as well. PASEO_SMOKE_BRAND drives another
+// brand's installed app, such as an upgrade check, without re-applying that brand to the checkout.
+const SMOKE_BRAND = process.env.PASEO_SMOKE_BRAND
+  ? loadBrand(process.env.PASEO_SMOKE_BRAND)
+  : appliedBrand();
+const EXECUTABLE_NAME = SMOKE_BRAND.name;
+const CLI_COMMAND = SMOKE_BRAND.cliCommand;
+const APP_SCHEME = SMOKE_BRAND.scheme;
 const SMOKE_TIMEOUT_MS = 60_000;
 const DAEMON_STATUS_CALL_TIMEOUT_MS = 10_000;
 const ARTIFACT_PAGE_TIMEOUT_MS = 5_000;
@@ -167,7 +171,12 @@ function createIsolatedDesktopEnv({ home, listen, userData, cdpPort }) {
     PASEO_HOME: home,
     PASEO_LISTEN: listen,
     PASEO_ELECTRON_USER_DATA_DIR: userData,
-    PASEO_ELECTRON_FLAGS: `--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdpPort}`,
+    PASEO_ELECTRON_FLAGS: [
+      process.env.PASEO_DESKTOP_SMOKE_ELECTRON_FLAGS,
+      `--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdpPort}`,
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -610,7 +619,9 @@ async function assertPackagedRendererLoaded(page, deadline) {
       return root instanceof HTMLElement && root.childElementCount > 0;
     },
     undefined,
-    { timeout: remainingTime(deadline) },
+    // DOM readiness does not require compositor frames. A virtual display can
+    // pause requestAnimationFrame even after the renderer has mounted the app.
+    { timeout: remainingTime(deadline), polling: 100 },
   );
 
   const bridgeKeys = await page.evaluate(() =>
@@ -970,6 +981,62 @@ async function openSmokeWorkspace({ appPath, env, page, daemonHome }) {
   console.log(`Packaged desktop smoke: renderer opened workspace ${workspace.workspaceId}`);
 }
 
+async function assertWebParityInteractions(page) {
+  page.setDefaultTimeout(30_000);
+  page.setDefaultNavigationTimeout(30_000);
+  // Exercise the built-in settings and command routing in the actual packaged
+  // renderer, using the same user actions as the Web regression scenario.
+  await page.evaluate(() =>
+    localStorage.setItem("@paseo:onboarding", JSON.stringify({ completedAt: "1970-01-01" })),
+  );
+  await page.goto(new URL("/new", page.url()).href);
+  await page.getByTestId("sidebar-search").click();
+  const commands = page.getByTestId("command-center-panel");
+  await commands.getByTestId("command-center-input").fill("Open Tasks");
+  await commands.getByText("Open Tasks", { exact: true }).click();
+  await page.waitForURL(/\/h\/[^/]+\/plugin\/better-paseo\/surface\/tasks/);
+  await page.getByTestId("lane-header-done").waitFor({ state: "visible" });
+  const host = new URL(page.url()).pathname.split("/")[2];
+  await page.goto(
+    new URL(`/settings/hosts/${host}/plugins/better-paseo/chat-presentation`, page.url()).href,
+  );
+  await page.getByRole("radio", { name: "Chat presentation", exact: true }).waitFor();
+  await page.getByRole("radio", { name: "Tasks board", exact: true }).click();
+  const settings = page.getByTestId("tasks-settings-panel");
+  await settings.waitFor({ state: "visible" });
+  assert.equal(await page.getByTestId("plugin-update").count(), 0);
+  assert.equal(await page.getByRole("switch", { name: /Better Paseo:.*[Dd]isable/ }).count(), 0);
+
+  const settingsUrl = page.url();
+  await page.getByRole("button", { name: "Change shortcut", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Change shortcut", exact: true }).waitFor();
+  assert.equal(page.url(), settingsUrl, "Cancelling shortcut recording must keep settings open");
+  await settings.waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Change shortcut", exact: true }).click();
+  await page.keyboard.press("ControlOrMeta+Shift+9");
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="tasks-open-shortcut"]')?.textContent?.includes("9"),
+    undefined,
+    { polling: 100 },
+  );
+  const savedShortcut = await page.getByTestId("tasks-open-shortcut").textContent();
+  await page.reload();
+  // Better Paseo's inner tabs live in module state. A reload selects Chat
+  // presentation; reopen Tasks before checking its persisted device preference.
+  await page.getByRole("radio", { name: "Tasks board", exact: true }).click();
+  await settings.waitFor({ state: "visible" });
+  await page.waitForFunction(
+    (expected) =>
+      document.querySelector('[data-testid="tasks-open-shortcut"]')?.textContent === expected,
+    savedShortcut,
+    { polling: 100 },
+  );
+  console.log(
+    "Packaged desktop parity: Open Tasks command, built-in settings, shortcut cancellation and saved shortcut reload passed",
+  );
+}
+
 async function assertSandboxState({ browser, page, expectedSandbox, stdout, stderr }) {
   const diagnostics = await page.evaluate(() =>
     window.paseoDesktop.invoke("desktop_sandbox_diagnostics"),
@@ -1028,6 +1095,7 @@ async function smokePackagedDesktopApp({
   executablePath = getExecutablePath(appPath),
   launchArgs = [],
   expectedSandbox,
+  verifyWebParity = false,
 }) {
   assertExecutable(executablePath, "Packaged app executable");
   assertLinuxDesktopIdentity(appPath);
@@ -1108,6 +1176,9 @@ async function smokePackagedDesktopApp({
     console.log("Packaged desktop smoke: every built-in plugin started");
     await smokeCliShim({ appPath, env });
     await smokeCliTerminal({ appPath, env });
+    if (verifyWebParity) {
+      await assertWebParityInteractions(page);
+    }
     if (expectedSandbox !== undefined) {
       await assertSandboxState({ browser, page, expectedSandbox, stdout, stderr });
       await openSmokeWorkspace({ appPath, env, page, daemonHome });
@@ -1146,6 +1217,23 @@ async function smokePackagedDesktopApp({
 
 module.exports = {
   smokePackagedDesktopApp,
+  // The launch and daemon helpers other packaged-app checks, such as the upgrade check, reuse.
+  APP_SCHEME,
+  assertExecutable,
+  assertPackagedRendererLoaded,
+  configureIsolatedDaemonHome,
+  connectToPackagedApp,
+  createIsolatedDesktopEnv,
+  getExecutablePath,
+  getLaunchCommand,
+  isRunning,
+  releaseChildHandles,
+  reserveLocalTcpPort,
+  runCliShimJsonCommand,
+  stopCliDaemon,
+  terminateChild,
+  waitForChildExit,
+  waitForPackagedAppPage,
 };
 
 if (require.main === module) {

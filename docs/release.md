@@ -550,6 +550,61 @@ wrapper/workflow ran. On a Mac, test the complete wrapper for both brands and
 architectures, then download the finalized DMG with quarantine intact and verify
 Finder opening, installation and first launch before approving publication.
 
+### Native candidates aligned with Web
+
+Run CI on the selected integration branch with `run_native_parity=true` to build
+Woowtech and Apporo from the same source commit. The reusable `native-parity.yml`
+workflow builds unsigned, unpacked desktop candidates on Linux, Windows and macOS
+(Apple Silicon and Intel runners).
+Each candidate must start its packaged renderer, preload, daemon, built-in plugins,
+CLI and a real terminal in temporary state directories. The receipt records the
+source commit, brand, architecture, version and archive SHA256. Artifacts expire
+after seven days; this workflow does not update release channels or publish tags.
+Use `native_parity_target` to repeat only a failing platform after a fix.
+Candidate dispatches run the native jobs and CI policy checks; use a normal CI
+dispatch for the full suite. This keeps platform retries from occupying runners
+with duplicate server/app/CLI suites. Push, PR and merge-queue checks keep their
+normal change-based routing.
+`macos` runs both Mac architectures; `macos-intel` repeats just the Intel job.
+Desktop candidate checks also open Tasks through the command center, reload its
+built-in settings, verify a recorded shortcut survives reload and cancel shortcut
+recording without leaving settings. The plugin's inner tab selection resets on a
+reload, so the replay reopens Tasks before checking the saved preference. On a
+host requiring software rendering, pass Chromium flags through
+`PASEO_DESKTOP_SMOKE_ELECTRON_FLAGS`; keep that environment-specific workaround out
+of production defaults.
+The renderer export uses a 4 GiB Node heap and one Metro worker because the generated
+protocol validator exhausted the default heap on the 7 GiB Apple Silicon runner.
+
+The mobile jobs export iOS and Android separately and verify their bundle hashes
+and Expo identities. These are Metro/Hermes checks, not native compilation or device
+acceptance. Before shipping mobile builds, also verify installation, pairing,
+notifications, microphone/camera permissions and the affected interactions on each
+native platform. A narrow browser viewport cannot replace those checks.
+
+`android-native` builds each brand's ARM64 diagnostic release APK with the local
+Gradle toolchain and checks the compiled package ID, version and ABI with `aapt`.
+These test-key artifacts are separate from store signing and retain the dogfood
+diagnostics described in [Android](android.md). iOS native compilation and device
+checks still need a prepared Xcode environment.
+
+A desktop candidate run can also prove that an upgrade keeps the user's data. Set
+`native_parity_upgrade_from` to a published version such as `0.10.2`. On Windows and
+macOS the run installs that build, lets it save data, runs the candidate on the same
+data and compares what it finds: the daemon's server id, keypair and `config.json`, and
+the app's client id, saved hosts and settings
+(`packages/desktop/e2e/upgrade-retention.js`). Target `upgrade` runs the check between
+two published versions without building anything. To test a signed Setup through its
+real installer, give `native_parity_upgrade_run` and `native_parity_upgrade_artifact`
+the run and artifact (such as `desktop-windows`) of a private Desktop Release build.
+GitHub only dispatches workflows it already knows, so the check is reached through this
+entry point until `desktop-upgrade-retention.yml` is on `main`.
+
+The check uses the runner's real data folders; never run it on a machine that holds your
+own data. It does not cover agent history or device behaviour. Keep signed installer and
+upgrade acceptance on real machines separate from candidate receipts: the macOS candidate
+runs unpacked with the installation prompt disabled.
+
 ### macOS first launch installation
 
 For Smart and Apporo, test the signed DMG and ZIP on a physical Mac before publishing.
