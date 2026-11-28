@@ -103,12 +103,12 @@ const WORDS = {
   },
 
   "zh-TW": {
-    afterFirstReply: "自動優化新任務標題",
-    afterFirstReplyHint: "自動根據發送的內容優化標題。",
+    afterFirstReply: "自動改善新任務標題",
+    afterFirstReplyHint: "自動根據傳送的內容改善標題。",
     disableThinking: "關閉標題生成思考模式",
-    thinkingHint: "關閉思考或使用最低支援等級；關閉此開關則跟隨 agent 或自定義等級。",
+    thinkingHint: "關閉思考或使用最低支援等級；關閉此開關則跟隨 agent 或自訂等級。",
     automaticThinking: "關閉或最低支援等級",
-    customModel: "自定義自動標題模型",
+    customModel: "自訂自動標題模型",
     followSource: "關閉時跟隨卡片所屬 agent 的 Provider、模型和思考等級；儲存後同步至主機各端。",
     title: "自動更新標題",
     prompt: "Prompt",
@@ -116,13 +116,13 @@ const WORDS = {
     tips: [
       {
         label: "生成方式",
-        text: "生成標題時，對話摘錄和標題提示詞會發送給輔助 Agent。預設使用卡片的 Provider 和模型；開啓自定義後使用所選模型。手動生成標題時同樣會發送。",
+        text: "生成標題時，對話摘錄和標題提示詞會傳送給輔助 Agent。預設使用卡片的 Provider 和模型；開啟自訂後使用所選模型。手動生成標題時同樣會傳送。",
       },
       {
         label: "推薦模型",
         text: "Oh My Pi / DeepSeek Flash（deepseek/deepseek-flash），思考等級 low；\nClaude / Haiku 5.5（claude-haiku-5-5），思考等級 off。請選擇主機可用的模型。",
       },
-      { label: "後台任務", text: "後台任務不進入看板，使用後會嘗試刪除，可能觸發宿主通知。" },
+      { label: "後台任務", text: "後台任務不進入看板，使用後會嘗試刪除，可能觸發主機通知。" },
     ],
     resetTitle: "恢復「自動標題」預設設定",
     resetHint: "只恢復本組設定，不影響其他組。",
