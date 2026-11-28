@@ -174,10 +174,11 @@ describe("respectful ACP probing", () => {
       const initializeCall = eventsAfterColdStart.find(
         (event) => event.kind === "rpc" && event.method === "initialize",
       );
+      // woowtech smart: plugin ACP agents see the brand too (plugin-provider.ts).
       expect(initializeCall?.params).toMatchObject({
         clientInfo: {
-          name: "paseo",
-          title: "Paseo",
+          name: PRODUCT_NAME,
+          title: PRODUCT_NAME,
           version: resolveDaemonVersion(import.meta.url),
         },
       });

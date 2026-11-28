@@ -61,7 +61,7 @@ test.describe("Settings host page", () => {
       await gotoAppShell(page);
       await openSettings(page);
       await openSettingsHost(page, getServerId());
-      await openHostSection(page, getServerId(), "agents");
+      await openHostSection(page, getServerId(), "tools");
       await page.getByTestId("host-page-append-system-prompt-edit").click();
       const input = page.getByTestId("host-page-append-system-prompt-input");
       await expect(input).toHaveValue("QA saved system prompt");
