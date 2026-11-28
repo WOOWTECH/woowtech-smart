@@ -474,7 +474,10 @@ export function TaskList({
                 <View style={[styles.slot, styles.slotOpen]}>{mark}</View>
               ) : (
                 <Pressable
-                  accessibilityLabel={toolbarLabel(`Set ${task.title} status`, preferences.language)}
+                  accessibilityLabel={toolbarLabel(
+                    `Set ${task.title} status`,
+                    preferences.language,
+                  )}
                   hitSlop={compact ? 6 : 0}
                   onPress={() => toggleStatus(task)}
                   onLongPress={longPress}

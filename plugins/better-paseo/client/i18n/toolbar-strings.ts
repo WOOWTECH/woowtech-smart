@@ -222,10 +222,6 @@ const ZH: Readonly<Record<string, string>> = {
   "Translation is unavailable for this conversation": "当前对话无法翻译",
   "Set a translation endpoint and model in settings": "请先在设置中填写翻译端点和模型",
   "Translation settings changed. Translate again.": "翻译设置已变更，请重新翻译。",
-  Translate: "翻译",
-  Retry: "重试",
-  Copied: "已复制",
-  Streaming: "正在输出",
   "Clear search": "清除搜索",
   "Copy selected lines": "复制选中的行",
   "Translate selected lines": "翻译选中的行",
@@ -448,10 +444,6 @@ const ZH_TW: Readonly<Record<string, string>> = {
   "Translation is unavailable for this conversation": "目前對話無法翻譯",
   "Set a translation endpoint and model in settings": "請先在設定中填寫翻譯端點和模型",
   "Translation settings changed. Translate again.": "翻譯設定已變更，請重新翻譯。",
-  Translate: "翻譯",
-  Retry: "重試",
-  Copied: "已複製",
-  Streaming: "正在輸出",
   "Clear search": "清除搜尋",
   "Copy selected lines": "複製選取的行",
   "Translate selected lines": "翻譯選取的行",
@@ -467,7 +459,8 @@ export function toolbarLabel(
   if (language === "en") return label;
   // The checklist's status button names its task: "Set Run the tests status".
   const status = /^Set (.+) status$/.exec(label);
-  if (status) return language === "zh-TW" ? `設定「${status[1]}」的狀態` : `设置“${status[1]}”的状态`;
+  if (status)
+    return language === "zh-TW" ? `設定「${status[1]}」的狀態` : `设置“${status[1]}”的状态`;
   const latestCount = /^Back to latest\s*[\u00B7,]\s*(\d+) new lines?$/.exec(label);
   if (latestCount)
     return language === "zh-TW"
