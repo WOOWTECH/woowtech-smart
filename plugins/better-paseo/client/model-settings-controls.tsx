@@ -36,7 +36,7 @@ const WORDS = {
     choose: "請選擇…",
     modelDefault: "模型預設",
     unsupported: "不支援",
-    refresh: "刷新模型",
+    refresh: "重新整理模型",
     notRecommended: "不推薦使用",
   },
 };

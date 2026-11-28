@@ -16,7 +16,7 @@ export function errorAction(
     )
   ) {
     return language === "zh-TW"
-      ? "檢視帳戶用量，等待重設或升級訂閱。"
+      ? "檢視帳號用量，等待重設或升級訂閱。"
       : zh
         ? "查看账户用量，等待重置或升级订阅。"
         : "Check account usage, wait for the reset, or upgrade your subscription.";
@@ -34,7 +34,7 @@ export function errorAction(
     )
   ) {
     return language === "zh-TW"
-      ? "檢查帳戶或組織的支出上限，調整後繼續未完成的工作。"
+      ? "檢查帳號或組織的支出上限，調整後繼續未完成的工作。"
       : zh
         ? "检查账户或组织的支出上限，调整后继续未完成的工作。"
         : "Check the account or organization spending limit before continuing the unfinished work.";
@@ -51,7 +51,7 @@ export function errorAction(
           ? "额度重置后继续未完成的工作。"
           : "Continue the unfinished work after the limit resets.";
     return language === "zh-TW"
-      ? "檢查帳戶用量，額度恢復後繼續。"
+      ? "檢查帳號用量，額度恢復後繼續。"
       : zh
         ? "检查账户用量，额度恢复后继续。"
         : "Check account usage and continue once the limit is restored.";
@@ -80,7 +80,7 @@ export function errorAction(
     )
   ) {
     return language === "zh-TW"
-      ? "縮短輸入或整理上下文，再開啓新會話繼續。"
+      ? "縮短輸入或整理上下文，再開啟新工作階段繼續。"
       : zh
         ? "缩短输入或整理上下文，再开启新会话继续。"
         : "Shorten the input or summarize the context, then continue in a new session.";
@@ -91,7 +91,7 @@ export function errorAction(
     )
   ) {
     return language === "zh-TW"
-      ? "檢查登錄狀態或 API 憑據，修正後重試。"
+      ? "檢查登入狀態或 API 憑據，修正後重試。"
       : zh
         ? "检查登录状态或 API 凭据，修正后重试。"
         : "Check your sign-in or API credentials, correct them, and retry.";
@@ -109,7 +109,7 @@ export function errorAction(
   }
   if (/model_not_found|resource_not_found|model (?:is )?(?:not found|unavailable)/i.test(error)) {
     return language === "zh-TW"
-      ? "檢查模型名稱和帳戶訪問權限，必要時更換模型。"
+      ? "檢查模型名稱和帳號訪問權限，必要時更換模型。"
       : zh
         ? "检查模型名称和账户访问权限，必要时更换模型。"
         : "Check the model name and account access; select another model if needed.";

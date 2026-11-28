@@ -40,6 +40,7 @@ import {
 import { bindPreviewPointer } from "../web";
 import { BlockPlacementContext } from "../details/contracts";
 import { useEnhancerPreferences } from "../preferences";
+import { toolbarLabel } from "../i18n/toolbar-strings";
 import { detailsApi } from "../details/details-store";
 import { RowMenu, type RowMenuAnchor } from "../details/row-menu";
 import { selectionColorProps } from "./text-selection";
@@ -113,7 +114,8 @@ export function TaskList({
   // The host's list is the source of truth and is re-read on every update; a
   // tap only overrides a task until the host reports a new status for it.
   const placement = useContext(BlockPlacementContext);
-  const detailsEnabled = useEnhancerPreferences().blockDetails && placement !== null && !full;
+  const preferences = useEnhancerPreferences();
+  const detailsEnabled = preferences.blockDetails && placement !== null && !full;
   const [listExpanded, setListExpanded] = useState(true);
   const [overrides, setOverrides] = useState<TaskOverrides>(NO_OVERRIDES);
   const tasks = useMemo(() => applyTaskOverrides(data.tasks, overrides), [data.tasks, overrides]);
@@ -472,7 +474,7 @@ export function TaskList({
                 <View style={[styles.slot, styles.slotOpen]}>{mark}</View>
               ) : (
                 <Pressable
-                  accessibilityLabel={`Set ${task.title} status`}
+                  accessibilityLabel={toolbarLabel(`Set ${task.title} status`, preferences.language)}
                   hitSlop={compact ? 6 : 0}
                   onPress={() => toggleStatus(task)}
                   onLongPress={longPress}
