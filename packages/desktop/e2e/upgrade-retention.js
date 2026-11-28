@@ -456,6 +456,40 @@ async function readTerminalScrollbackFromUi(page, stateDir) {
   }
 }
 
+// A build from before 0.18 stored no per-device notification settings, so after the upgrade every event
+// comes from the defaults. Smart keeps them all on; a default turned off would silence that event for
+// everyone who upgrades. Reads the switches on the Notifications page of the settings already open.
+const NOTIFICATION_SWITCHES = [
+  "notifications-master-switch",
+  ...[
+    "agentPermission",
+    "agentError",
+    "agentFinished",
+    "terminalNeedsInput",
+    "terminalFinished",
+  ].map((event) => `notifications-event-${event}-switch`),
+];
+
+async function readNotificationSwitchesFromUi(page, stateDir) {
+  try {
+    const section = page.locator('[data-testid="settings-section-notifications"]:visible').first();
+    if ((await section.count()) === 0) return "unavailable: no Notifications section";
+    await section.click({ timeout: 20_000 });
+    const master = page.getByTestId(NOTIFICATION_SWITCHES[0]);
+    await master.waitFor({ state: "visible", timeout: 20_000 });
+    const shown = {};
+    for (const testId of NOTIFICATION_SWITCHES) {
+      shown[testId] = await page
+        .getByTestId(testId)
+        .getAttribute("aria-checked", { timeout: 5_000 });
+    }
+    return shown;
+  } catch (error) {
+    await writeUiDiagnostics(page, stateDir).catch(() => undefined);
+    return `unavailable: ${String(error.message).split("\n")[0]}`;
+  }
+}
+
 async function runPhase(args) {
   const appPath = path.resolve(args.app);
   const phase = args.phase;
@@ -525,6 +559,16 @@ async function runPhase(args) {
             ? true
             : "unverified",
         detail: { shown: terminalScrollback },
+      });
+      const notifications = await readNotificationSwitchesFromUi(session.page, args.state);
+      checks.push({
+        name: "every notification event is on after the upgrade",
+        // Builds without the per-device page are reported, not failed; a switch that is off fails.
+        ok:
+          typeof notifications === "string"
+            ? "unverified"
+            : Object.values(notifications).every((checked) => checked === "true"),
+        detail: { shown: notifications },
       });
       report = {
         from: meta.label,
