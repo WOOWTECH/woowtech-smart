@@ -19,6 +19,11 @@ on:
         description: Optional previous run containing simulator apps to retest; both sources are recorded
         type: string
         default: ""
+      ios_device:
+        description: iPhone runs the settings flow; iPad runs the docked touch-layout checks
+        type: choice
+        default: iphone
+        options: [iphone, ipad]
   workflow_call:
     inputs:
       platform:
@@ -33,6 +38,9 @@ on:
       ios_app_run_id:
         type: string
         default: ""
+      ios_device:
+        type: string
+        default: iphone
 
 permissions:
   contents: read
@@ -191,7 +199,10 @@ jobs:
         run: |
           xcodebuild -version > "$EVIDENCE/xcode.txt"
           xcrun simctl list devices available -j > "$EVIDENCE/simulators.json"
-          export DEVICE_ID=$(node -e 'const fs=require("fs"); const d=Object.values(JSON.parse(fs.readFileSync(process.env.EVIDENCE+"/simulators.json")).devices).flat().find(d=>d.isAvailable && d.name.startsWith("iPhone")); if(!d)throw Error("No available iPhone simulator"); console.log(d.udid)')
+          export IOS_DEVICE="${{ inputs.ios_device || 'iphone' }}"
+          # An iPad mini leaves a docked pane narrower than two full home tiles, the case the fit covers.
+          export DEVICE_ID=$(node -e 'const fs=require("fs"); const all=Object.values(JSON.parse(fs.readFileSync(process.env.EVIDENCE+"/simulators.json")).devices).flat().filter(d=>d.isAvailable); const ipad=process.env.IOS_DEVICE==="ipad"; const d=ipad ? (all.find(d=>d.name.startsWith("iPad mini"))??all.find(d=>d.name.startsWith("iPad"))) : all.find(d=>d.name.startsWith("iPhone")); if(!d)throw Error("No available "+(ipad?"iPad":"iPhone")+" simulator"); console.log(d.udid)')
+          if [[ "$IOS_DEVICE" == ipad ]]; then export MAESTRO_FLOW=ipad-touch-layout.yaml SEED_PROJECT=1; fi
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
           if [[ -n "$CANDIDATE_RUN_ID" ]]; then
