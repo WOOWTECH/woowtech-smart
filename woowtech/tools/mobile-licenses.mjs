@@ -201,21 +201,26 @@ let localMavenRepositories = [];
 
 function findLocalMavenRepositories(repo) {
   const found = [];
-  const nodeModules = path.join(repo, "node_modules");
-  if (!existsSync(nodeModules)) return found;
-  const consider = (dir) => {
+  const consider = (packageDir) => {
     for (const candidate of [
-      path.join(dir, "local-maven-repo"),
-      path.join(dir, "android", "local-maven-repo"),
+      path.join(packageDir, "local-maven-repo"),
+      path.join(packageDir, "android", "local-maven-repo"),
     ]) {
-      if (existsSync(candidate)) found.push(candidate);
+      if (existsSync(candidate)) found.push({ repository: candidate, packageDir });
     }
   };
-  for (const name of readdirSync(nodeModules)) {
-    const dir = path.join(nodeModules, name);
-    if (!name.startsWith("@")) consider(dir);
-    else if (statSync(dir).isDirectory())
-      for (const scoped of readdirSync(dir)) consider(path.join(dir, scoped));
+  // A package npm could not hoist sits in the workspace's own node_modules (packages/app).
+  const workspaces = existsSync(path.join(repo, "packages"))
+    ? readdirSync(path.join(repo, "packages")).map((name) => path.join(repo, "packages", name))
+    : [];
+  for (const nodeModules of [repo, ...workspaces].map((dir) => path.join(dir, "node_modules"))) {
+    if (!existsSync(nodeModules)) continue;
+    for (const name of readdirSync(nodeModules)) {
+      const dir = path.join(nodeModules, name);
+      if (!name.startsWith("@")) consider(dir);
+      else if (statSync(dir).isDirectory())
+        for (const scoped of readdirSync(dir)) consider(path.join(dir, scoped));
+    }
   }
   return found;
 }
@@ -226,14 +231,20 @@ const MAVEN_REPOSITORIES = [
   "https://www.jitpack.io",
 ];
 
+/** The npm package whose local-maven-repo holds this module, if one does. */
+function localMavenPackage(group, artifact, version) {
+  const relative = `${group.replace(/\./g, "/")}/${artifact}/${version}/${artifact}-${version}.pom`;
+  return localMavenRepositories.find(({ repository }) =>
+    existsSync(path.join(repository, relative)),
+  );
+}
+
 async function readPom(cacheDir, group, artifact, version) {
   const cached = pomPath(cacheDir, group, artifact, version);
   if (cached) return readFileSync(cached, "utf8");
   const relative = `${group.replace(/\./g, "/")}/${artifact}/${version}/${artifact}-${version}.pom`;
-  for (const local of localMavenRepositories) {
-    if (existsSync(path.join(local, relative)))
-      return readFileSync(path.join(local, relative), "utf8");
-  }
+  const local = localMavenPackage(group, artifact, version);
+  if (local) return readFileSync(path.join(local.repository, relative), "utf8");
   for (const repository of MAVEN_REPOSITORIES) {
     const response = await fetch(`${repository}/${relative}`, {
       headers: { "user-agent": "woowtech-license-audit" },
@@ -275,10 +286,23 @@ async function collectMaven(treeFile, cacheDir, repoRoot, out) {
   const coordinates = parseGradleTree(readFileSync(treeFile, "utf8"));
   if (coordinates.length === 0) throw new Error(`no resolved components in ${treeFile}`);
   const components = [];
+  const repo = realpathSync(repoRoot);
   for (const coordinate of coordinates) {
     const [group, artifact, version] = coordinate.split(":");
     const { licenses, source } = await pomLicenses(cacheDir, group, artifact, version);
-    components.push({ name: `${group}:${artifact}`, version, licenses, licenseSource: source });
+    const component = { name: `${group}:${artifact}`, version, licenses, licenseSource: source };
+    // A module an npm package ships carries that package's own license files, copyright included.
+    const local = localMavenPackage(group, artifact, version);
+    if (local) {
+      const pkg = packageEntry(
+        readJson(path.join(local.packageDir, "package.json")),
+        realpathSync(local.packageDir),
+        repo,
+      );
+      component.noticeFrom = `${pkg.name}@${pkg.version}`;
+      component.notices = pkg.licenseFiles.map(({ text }) => text);
+    }
+    components.push(component);
   }
   writeJson(out, { components });
   const missing = components.filter((item) => item.licenses.length === 0).length;
@@ -287,7 +311,9 @@ async function collectMaven(treeFile, cacheDir, repoRoot, out) {
 
 /** The license of the package a development pod comes from, through Podfile.lock's EXTERNAL SOURCES. */
 function podPackageNotice(lock, name, iosDir, repo) {
-  const source = lock["EXTERNAL SOURCES"]?.[name]?.[":path"];
+  // Ruby's YAML reads the ":path" symbol key as "path"; accept both spellings.
+  const external = lock["EXTERNAL SOURCES"]?.[name];
+  const source = external?.path ?? external?.[":path"];
   if (!source) return null;
   for (let dir = path.resolve(iosDir, source); dir.startsWith(repo); dir = path.dirname(dir)) {
     const manifest = path.join(dir, "package.json");
@@ -383,7 +409,8 @@ function mavenEntry(component, ctx) {
   const known = component.licenses.flatMap(
     (license) => ctx.mavenTexts.get((license.url ?? license.name).toLowerCase()) ?? [],
   );
-  let documentIds = [...new Set(known)];
+  const own = (component.notices ?? []).map((text) => ctx.documentFor(text));
+  let documentIds = own.length > 0 ? own : [...new Set(known)];
   if (documentIds.length === 0 && previous) documentIds = previous.documentIds;
   if (documentIds.length === 0)
     ctx.review.push(`${id}: no known license text (${component.licenseSource})`);
