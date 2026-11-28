@@ -414,7 +414,7 @@ export function LineSelectionMenu({
   const copyButton = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Copy selected lines"
+      accessibilityLabel={toolbarLabel("Copy selected lines", language)}
       onPress={() => {
         void copy(text, { feedback: "toast" }).then((ok) => {
           if (ok && mounted.current) dismiss();
@@ -512,7 +512,7 @@ function LineTranslate({
       />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Translate selected lines"
+        accessibilityLabel={toolbarLabel("Translate selected lines", language)}
         accessibilityState={{ busy: loading }}
         onPress={loading ? undefined : start}
         style={({ pressed }) => [

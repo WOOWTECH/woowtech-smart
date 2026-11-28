@@ -571,7 +571,7 @@ export function useStopControl(options: {
       updatePhase(agentId, "stopping");
       const timeoutMessage =
         languageRef.current === "zh-TW"
-          ? "停止請求沒有響應。"
+          ? "停止請求沒有回應。"
           : languageRef.current === "zh"
             ? "停止请求没有响应。"
             : "The stop request did not answer.";
@@ -884,7 +884,7 @@ export function useReadControl(options: {
       setPending(agentId, true);
       const timeoutMessage =
         latest.current.language === "zh-TW"
-          ? "請求沒有響應。"
+          ? "請求沒有回應。"
           : latest.current.language === "zh"
             ? "请求没有响应。"
             : "The request did not answer.";
@@ -998,7 +998,7 @@ export function useUnreadControl(options: {
       setPending(agentId, true);
       const timeoutMessage =
         latest.current.language === "zh-TW"
-          ? "請求沒有響應。"
+          ? "請求沒有回應。"
           : latest.current.language === "zh"
             ? "请求没有响应。"
             : "The request did not answer.";
@@ -1108,7 +1108,7 @@ export function useUnarchiveControl(options: {
         );
       const timeoutMessage =
         latest.current.language === "zh-TW"
-          ? "取消封存請求沒有響應。"
+          ? "取消封存請求沒有回應。"
           : zh
             ? "取消归档请求没有响应。"
             : "The unarchive request did not answer.";
@@ -1217,7 +1217,7 @@ export function useArchiveControl(options: {
         setPending(agentId, true);
         const timeoutMessage =
           latest.current.language === "zh-TW"
-            ? "封存請求沒有響應。"
+            ? "封存請求沒有回應。"
             : zh
               ? "归档请求没有响应。"
               : "The archive request did not answer.";
@@ -1265,7 +1265,7 @@ export function useArchiveControl(options: {
             : "Archive all subtasks?";
       const message =
         latest.current.language === "zh-TW"
-          ? "當前卡片和所有子任務都會封存。執行中的子任務將被中斷。"
+          ? "目前卡片和所有子任務都會封存。執行中的子任務將被中斷。"
           : zh
             ? "当前卡片和所有子任务都会归档。运行中的子任务将被中断。"
             : "This task and all subtasks will be archived. Running subtasks will be interrupted.";

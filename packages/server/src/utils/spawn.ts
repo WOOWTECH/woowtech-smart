@@ -4,13 +4,19 @@ import {
   execCommand as execCli,
   type SpawnProcessOptions as CliSpawnOptions,
 } from "@getpaseo/plugin/server";
-import { createExternalCommandProcessEnv, type ProcessEnvRecord } from "../server/paseo-env.js";
+import {
+  createExternalCommandProcessEnv,
+  stripAppImageRuntimeEnv,
+  type ProcessEnvRecord,
+} from "../server/paseo-env.js";
 import { execFile, spawn } from "node:child_process";
 import { extname } from "node:path";
 import { promisify } from "node:util";
 import { isWindowsCommandScript } from "./windows-command.js";
 import { planDirectWindowsSpawn, type DirectWindowsSpawn } from "./woowtech-windows-spawn.js";
 const execFileAsync = promisify(execFile);
+
+export { stripAppImageRuntimeEnv };
 
 interface ExternalEnvOptions {
   baseEnv?: ProcessEnvRecord;

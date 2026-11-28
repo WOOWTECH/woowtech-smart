@@ -229,11 +229,13 @@ test("Windows detection knows WinGet's Codex name and never trusts a silent prob
   );
   assert.match(
     windowsBranch,
-    /enumeratePathCandidates: \(command\) => enumerateCandidates\(command, env\),/,
+    /enumeratePathCandidates: \(command\) => enumerateCandidates\(command, env, probe\),/,
   );
+  // Upstream 0.18 can resolve without probing; a probing lookup, the default, still uses ours.
+  assert.match(resolution, /probe = true,/);
   assert.match(
     windowsBranch,
-    /probeExecutable: \(command, timeout\) => probeWindowsExecutable\(command, timeout, env\),/,
+    /probeExecutable: probe\s*\? \(command, timeout\) => probeWindowsExecutable\(command, timeout, env\)\s*: checkCandidate,/,
   );
   const windows = readFileSync(
     join(root, "packages/server/src/executable-resolution/windows.ts"),

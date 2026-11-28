@@ -68,6 +68,8 @@ export const TERM_FIXES = [
   { find: "標籤頁", replace: "分頁" },
   { find: "標籤", replace: "分頁", when: aboutTabs },
   { find: "會話", replace: "工作階段" },
+  // OpenCC reads 一轮回复 (a round of replies) as 輪迴 (reincarnation) and 復.
+  { find: "輪迴復", replace: "輪回覆" },
   latin("二維碼", "QR Code"),
   latin("守護程序", "daemon"),
   latin("智慧體", "Agent"),

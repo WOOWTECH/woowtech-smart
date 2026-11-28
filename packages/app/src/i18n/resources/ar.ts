@@ -294,6 +294,7 @@ export const ar: TranslationResources = {
     archived: {
       callout: "تمت أرشفة هذا الوكيل",
       unarchive: "إلغاء الأرشفة",
+      unarchiving: "جارٍ إلغاء الأرشفة...",
     },
   },
   sessions: {
@@ -654,6 +655,24 @@ export const ar: TranslationResources = {
         failedToLoad: "فشل تحميل الصفحة",
         invalidUrl: "متصفح غير صالح URL",
         unsupportedProtocol: "متصفح محظور غير مدعوم URL:{{protocol}}",
+      },
+      routing: {
+        tooltipHost: "التصفح عبر {{hostName}}. انقر للتصفح محلياً.",
+        tooltipLocal: "التصفح محلياً. انقر للتصفح عبر {{hostName}}.",
+        switchToLocal: "تبديل توجيه المتصفح من {{hostName}} إلى محلي",
+        switchToHost: "تبديل توجيه المتصفح من محلي إلى {{hostName}}",
+      },
+      proxy: {
+        connecting: "جارٍ الاتصال بـ {{hostName}}...",
+        reconnecting: "جارٍ إعادة الاتصال بـ {{hostName}}...",
+        updateTitle: "حدّث {{hostName}} للتصفح عبر هذا المضيف",
+        updateDescription: "لا يدعم هذا المضيف وكيل المتصفح بعد.",
+        routedTitle: "وكيل المتصفح غير متاح للمضيفين الموجَّهين",
+        routedDescription: "اتصل مباشرة بهذا المضيف أو تصفح محلياً.",
+        offlineTitle: "{{hostName}} غير متصل",
+        offlineDescription: "انتظر إعادة اتصال المضيف أو تصفح محلياً.",
+        errorTitle: "تعذر الاتصال بوكيل المتصفح",
+        browseLocally: "التصفح محلياً",
       },
     },
     terminal: {
@@ -1891,12 +1910,13 @@ export const ar: TranslationResources = {
     waysToConnect: "طرق الاتصال",
     docs: "الوثائق",
     docsAccessibility: "افتح وثائق الاتصال",
-    recommended: "موصى به",
-    relay: { title: "التتابع", hint: "مشفّر من طرف إلى طرف، امسح رمز QR" },
+    relay: { title: "التتابع", hint: "دون إعداد، مشفّر من طرف إلى طرف، امسح رمز QR" },
     tailscale: {
       hint: "اتصال مباشر عبر شبكة tailnet الخاصة بك، أدخل عنوانًا",
       unavailable: "Tailscale لا يعمل على هذا المضيف",
       install: "احصل على Tailscale",
+      refresh: "تحديث",
+      refreshing: "جارٍ التحديث...",
       waiting: "في انتظار بدء Tailscale على هذا المضيف",
       alwaysOn: "مفعّل دائمًا، لأن هذا المضيف يقبل اتصالات Tailscale بالفعل",
       socket: "متوقف، لأن هذا المضيف يستمع على مقبس محلي",
@@ -2414,7 +2434,7 @@ export const ar: TranslationResources = {
     title: "إعدادات",
     loading: "جارٍ تحميل الإعدادات...",
     groups: {
-      app: "برنامج",
+      app: "هذا الجهاز",
       host: "Host",
     },
     hostPicker: {
@@ -2432,7 +2452,9 @@ export const ar: TranslationResources = {
     groupInfo: "حول{{title}}",
     sections: {
       general: "عام",
+      hosts: "المضيفون",
       chat: "الدردشة",
+      chatAndPanes: "الدردشة والأجزاء",
       appearance: "مظهر",
       sidebar: "الشريط الجانبي",
       terminal: "الطرفية",
@@ -2445,6 +2467,16 @@ export const ar: TranslationResources = {
       permissions: "الأذونات",
       diagnostics: "التشخيص",
       about: "عن",
+    },
+    clientHosts: {
+      title: "المضيفون المحفوظون",
+      info: "المضيفون الذين يتصل بهم هذا الجهاز. الأسماء والأيقونات والشارات والمسارات هنا تؤثر على هذا الجهاز فقط.",
+      backToHosts: "العودة إلى المضيفين",
+      routesTitle: "كيف يتصل هذا الجهاز",
+      routesInfo:
+        "المسارات المحفوظة التي يستخدمها هذا الجهاز للوصول إلى هذا المضيف. يختار Paseo أسرع مسار متاح.",
+      addRoute: "إضافة مسار",
+      activeRoute: "نشط",
     },
     layout: en.settings.layout,
     editor: {
@@ -2462,6 +2494,47 @@ export const ar: TranslationResources = {
     },
     notifications: {
       title: "الإشعارات",
+      enabled: {
+        label: "تفعيل الإشعارات",
+        description: "تلقّي الإشعارات من الوكلاء والطرفيات والإضافات على هذا الجهاز",
+        pausedDescription: "جميع الإشعارات، بما في ذلك الإضافات، متوقفة مؤقتًا على هذا الجهاز",
+      },
+      events: {
+        title: "الأحداث",
+        agentPermission: {
+          label: "الوكيل يحتاج إلى إذن",
+          description: "الموافقات والخطط والأسئلة",
+        },
+        agentError: {
+          label: "تعطّل الوكيل بخطأ",
+          description: "عندما يتوقف الوكيل بسبب خطأ",
+        },
+        agentFinished: {
+          label: "انتهى الوكيل",
+          description: "عندما يكمل الوكيل دورة عمل",
+        },
+        terminalNeedsInput: {
+          label: "الطرفية تنتظر إدخالًا",
+          description: "عندما ينتظر أمر الطرفية إدخالًا",
+        },
+        terminalFinished: {
+          label: "انتهى أمر الطرفية",
+          description: "عندما ينتهي أمر في الطرفية",
+        },
+      },
+      plugins: {
+        title: "الإضافات",
+        enabled: {
+          label: "إشعارات الإضافات",
+          description: "السماح للإضافات المثبتة بإرسال إشعارات",
+        },
+        empty: "تظهر الإضافات المثبتة هنا لكتمها بشكل فردي",
+      },
+      legacyHostTitle: "حدّث المضيف لتفضيلات الإشعارات الفورية",
+      legacyHostHint: "حدّث المضيفين المتصلين لمزامنة تفضيلات الإشعارات المخصصة من هذا الجهاز",
+      desktop: {
+        title: "النظام",
+      },
       permission: "إذن الإشعارات",
       refreshAccessibility: "تحديث إذن الإشعارات",
       playSound: "تشغيل صوت",
@@ -2479,6 +2552,7 @@ export const ar: TranslationResources = {
       projects: "المشاريع",
       connections: "اتصالات",
       agents: "Agents",
+      tools: "الأدوات والتعليمات",
       agentProfiles: "ملفات الوكيل",
       metadata: "البيانات الوصفية",
       voice: "الصوت",
@@ -2488,12 +2562,13 @@ export const ar: TranslationResources = {
       terminals: "Terminals",
       plugins: "Plugins",
       host: "نظرة عامة",
+      daemon: "الخدمة",
     },
     plugins: pluginSettings.ar,
     metadataGeneration: {
       title: "إنشاء البيانات الوصفية",
       description:
-        "اختر النموذج الذي يستخدمه Paseo لعناوين مساحات العمل وأسماء الفروع ورسائل الالتزام ومسودات طلبات السحب",
+        "اختر النموذج والتعليمات التي يستخدمها Paseo لعناوين مساحات العمل وأسماء الفروع ورسائل الالتزام ومسودات طلبات السحب",
       selection: "اختيار النموذج",
       automatic: "تلقائي",
       preferred: "يدوي",
@@ -2501,6 +2576,10 @@ export const ar: TranslationResources = {
       preferredHint: "اختر النموذج الذي يستخدمه Paseo",
       model: "النموذج",
       modelHint: "يُستخدم هذا النموذج فقط. إذا فشل، لا يجرّب Paseo نموذجًا آخر",
+      instructions: "التعليمات",
+      instructionsHint: "تُطبَّق على جميع البيانات الوصفية المنشأة على هذا المضيف",
+      instructionsPlaceholder:
+        "مثال: اكتب باللغة العربية. حافظ على أسلوب متسق بين العناوين ورسائل الالتزام. لا تستخدم الشرطات الطويلة.",
       docs: "الوثائق",
       saveError: "تعذر تحديث إنشاء البيانات الوصفية",
     },
@@ -3025,6 +3104,10 @@ export const ar: TranslationResources = {
           delete: "حذف المهارة",
         },
       },
+      tools: {
+        instructionsTitle: "التعليمات",
+        toolsTitle: "أدوات الوكلاء",
+      },
       orchestration: {
         title: "التنسيق",
         unavailable: "اتصل بهذا المضيف لإدارة التنسيق",
@@ -3091,6 +3174,8 @@ export const ar: TranslationResources = {
       },
       agentProfiles: {
         sectionTitle: "ملفات تعريف الوكيل",
+        sectionDescription:
+          "احفظ إعدادات الوكيل لاختيارها بسرعة ولكي يستخدمها الوكلاء عند تفويض العمل",
         unavailable: "اتصل بهذا المضيف لإدارة ملفات تعريف الوكيل",
         unsupported: "يشغّل هذا المضيف نسخة Daemon لا تدعم ملفات تعريف الوكيل بعد",
         emptyState: "لا توجد ملفات تعريف بعد. أضف واحدًا لبدء الوكلاء من مزود ونموذج محفوظين.",
@@ -3114,6 +3199,9 @@ export const ar: TranslationResources = {
         featuresLabel: "السمات",
         featureCount: "{{count}} سمة",
         featureCountOne: "{{count}} سمة",
+        systemPromptLabel: "موجه النظام",
+        systemPromptPlaceholder: "ركز على التخطيط وإمكانية الوصول ورموز التصميم.",
+        systemPromptHint: "ينطبق على الوكلاء الجدد فقط",
         notesLabel: "متى يُستخدم",
         notesPlaceholder: "استخدمه لعمل الواجهة — المكونات والتخطيط ورموز التصميم.",
         notesHint: "يساعد الوكلاء على اختيار ملف التعريف هذا عند بدء وكيل آخر.",
@@ -3151,6 +3239,7 @@ export const ar: TranslationResources = {
         },
       },
       daemon: {
+        runtimeTitle: "بيئة تشغيل الوكلاء",
         rename: {
           editLabel: "تحرير التسمية",
           title: "إعادة تسمية المضيف",

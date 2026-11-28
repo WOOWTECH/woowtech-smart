@@ -23,7 +23,11 @@ export interface DaemonRuntimeConfig {
   worktreesRoot?: string;
   appBaseUrl?: string;
   desktopManaged?: boolean;
-  getListenStatus?: ReturnType<typeof createDaemonListeners>["status"];
+  getListenStatus?: (
+    localEndpoint?: string,
+  ) =>
+    | ReturnType<ReturnType<typeof createDaemonListeners>["status"]>
+    | Promise<ReturnType<ReturnType<typeof createDaemonListeners>["status"]>>;
   setTailscaleEnabled?: DaemonConfigStore["setTailscaleEnabled"];
   getRelayConfig(): {
     enabled: boolean;
@@ -206,6 +210,7 @@ export class DaemonSession {
       ({ pid, role, reason, detail }) => ({ pid, role, reason, detail }),
     );
     const terminalsUnavailable = this.getTerminalsUnavailable();
+    const listenStatus = await this.daemonRuntimeConfig?.getListenStatus?.(localEndpoint);
     try {
       const pidInfo = await getPidLockInfo(this.paseoHome);
       const availability =
@@ -228,7 +233,7 @@ export class DaemonSession {
           relay: this.daemonRuntimeConfig?.getRelayConfig() ?? null,
           providers,
           terminalCleanupUnconfirmed,
-          ...this.daemonRuntimeConfig?.getListenStatus?.(localEndpoint),
+          ...listenStatus,
           ...(terminalsUnavailable ? { terminalsUnavailable } : {}),
         },
       });
@@ -247,7 +252,7 @@ export class DaemonSession {
           relay: null,
           providers: [],
           terminalCleanupUnconfirmed,
-          ...this.daemonRuntimeConfig?.getListenStatus?.(localEndpoint),
+          ...listenStatus,
           ...(terminalsUnavailable ? { terminalsUnavailable } : {}),
         },
       });

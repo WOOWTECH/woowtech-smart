@@ -434,7 +434,13 @@ function assertNoticesRouting(routes, settings, route, page) {
   );
   assert.match(settings, /default:\s*return item.Content \? <item.Content \/> : null;/);
   assert.match(routes, /return `\/settings\/\$\{section\}` as const;/);
-  assert.match(route, /isSettingsSectionSlug\(rawSection\) \? rawSection : "general"/);
+  // Upstream 0.18 maps retired slugs to their new sections; a current slug such as "notices"
+  // passes through unchanged.
+  assert.match(
+    route,
+    /const normalized = normalizeSettingsSectionSlug\(rawSection\);\s*const section: SettingsSectionSlug = normalized \?\? "general";/,
+  );
+  assert.match(routes, /if \(isSettingsSectionSlug\(value\)\) \{\s*return value;/);
   assert.match(route, /kind: "section" as const, section/);
   assert.match(route, /return <SettingsScreen view=\{view\} \/>/);
   assert.match(page, /export function ThirdPartyNoticesSection\(\)/);
