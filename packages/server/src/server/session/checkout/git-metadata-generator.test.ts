@@ -236,4 +236,35 @@ describe("createGitMetadataGenerator", () => {
       },
     ]);
   });
+
+  it("includes host instructions in both commit message and pull request prompts", async () => {
+    const { diffSource } = createDiffSource(DIFF_WITH_ONE_FILE);
+    const { generation, generateCalls } = createGeneration((request) =>
+      request.schemaName === "CommitMessage"
+        ? { message: "更新重试逻辑" }
+        : { title: "新增重试回退", body: "重试临时失败。" },
+    );
+    const generator = createGitMetadataGenerator({
+      workspaceGitService: diffSource,
+      generation,
+      logger: createLogger().logger,
+      // woowtech smart: generation is off on a full Smart host unless turned on, like the tests above.
+      isGenerationEnabled: () => true,
+      readHostInstructions: () => "  Write in Simplified Chinese. Do not use em dashes.  ",
+    });
+
+    await generator.generateCommitMessage("/repo");
+    await generator.generatePullRequestText("/repo", "main");
+
+    expect(generateCalls[0].prompt).toContain("Concise, imperative mood, no trailing period.");
+    expect(generateCalls[0].prompt).toContain(
+      "Additional instructions:\nWrite in Simplified Chinese. Do not use em dashes.",
+    );
+    expect(generateCalls[1].prompt).toContain(
+      "Clear, descriptive title; body explaining what changed and why.",
+    );
+    expect(generateCalls[1].prompt).toContain(
+      "Additional instructions:\nWrite in Simplified Chinese. Do not use em dashes.",
+    );
+  });
 });

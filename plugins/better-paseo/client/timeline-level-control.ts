@@ -87,14 +87,14 @@ const STRINGS: Readonly<
   "zh-TW": {
     title: "工作過程",
     settings: "聊天設定",
-    chat: "優化對話時間線",
+    chat: "改善對話時間軸",
     levels: { simple: "簡潔", standard: "標準", detailed: "詳細" },
     descriptions: {
       simple: "只看對話和結果",
       standard: "匯總改動，列出失敗",
       detailed: "顯示每一步",
     },
-    command: "切換對話里顯示多少工作過程",
+    command: "切換對話裡顯示多少工作過程",
     hint: "1 簡潔 | 2 標準 | 3 詳細",
     switched: "工作過程：{level}",
   },

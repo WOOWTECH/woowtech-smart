@@ -304,13 +304,13 @@ export function formatCardError(
     );
   if (/credit balance is too low|credit_balance_exhausted/i.test(error))
     return language === "zh-TW"
-      ? "Claude 帳戶餘額不足"
+      ? "Claude 帳號餘額不足"
       : zh
         ? "Claude 账户余额不足"
         : "Claude account balance is too low";
   if (/insufficient_quota/i.test(error))
     return language === "zh-TW"
-      ? "Claude 帳戶額度不足"
+      ? "Claude 帳號額度不足"
       : zh
         ? "Claude 账户额度不足"
         : "Claude account quota is insufficient";
@@ -340,7 +340,7 @@ export function formatCardError(
     )
   )
     return language === "zh-TW"
-      ? "Claude 登錄或 API 憑據有問題"
+      ? "Claude 登入或 API 憑據有問題"
       : zh
         ? "Claude 登录或 API 凭据有问题"
         : "Claude sign-in or API credentials need attention";
@@ -374,7 +374,7 @@ export function formatCardError(
         : "Execution environment error";
   if (/mcp_server_startup_failed/i.test(error))
     return language === "zh-TW"
-      ? "MCP 服務啓動失敗"
+      ? "MCP 服務啟動失敗"
       : zh
         ? "MCP 服务启动失败"
         : "MCP server failed to start";
@@ -414,14 +414,14 @@ function formatProviderError(
     return reset
       ? error
       : language === "zh-TW"
-        ? "帳戶餘額不足"
+        ? "帳號餘額不足"
         : zh
           ? "账户余额不足"
           : "Account balance is too low";
   if (/insufficient_quota|individual quota reached/i.test(error))
     return (
       (language === "zh-TW"
-        ? "帳戶額度不足"
+        ? "帳號額度不足"
         : zh
           ? "账户额度不足"
           : "Account quota is insufficient") + suffix
@@ -433,7 +433,7 @@ function formatProviderError(
   )
     return (
       (language === "zh-TW"
-        ? "帳戶或組織用量已達上限"
+        ? "帳號或組織用量已達上限"
         : zh
           ? "账户或组织用量已达上限"
           : "Account or organization limit reached") + suffix
@@ -445,7 +445,7 @@ function formatProviderError(
   )
     return (
       (language === "zh-TW"
-        ? "帳戶用量已達上限"
+        ? "帳號用量已達上限"
         : zh
           ? "账户用量已达上限"
           : "Account usage limit reached") + suffix
@@ -474,7 +474,7 @@ function formatProviderError(
     )
   )
     return language === "zh-TW"
-      ? "登錄或 API 憑據有問題"
+      ? "登入或 API 憑據有問題"
       : zh
         ? "登录或 API 凭据有问题"
         : "Sign-in or API credentials need attention";
@@ -500,7 +500,7 @@ function formatProviderError(
         : "Execution environment error";
   if (/mcp_server_startup_failed/i.test(error))
     return language === "zh-TW"
-      ? "MCP 服務啓動失敗"
+      ? "MCP 服務啟動失敗"
       : zh
         ? "MCP 服务启动失败"
         : "MCP server failed to start";

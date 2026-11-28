@@ -5427,7 +5427,7 @@ function createStore(api: PaseoApi): TaskStore {
       subscriptionError(
         new Error(
           resolveTasksLanguage() === "zh-TW"
-            ? "刷新任務超時"
+            ? "重新整理任務超時"
             : resolveTasksLanguage() === "zh"
               ? "刷新任务超时"
               : "Refreshing tasks timed out",

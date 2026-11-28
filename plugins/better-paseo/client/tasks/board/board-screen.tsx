@@ -49,7 +49,7 @@ export function TasksBoardScreen(props: PluginScreenProps) {
     if (!navigation) {
       toast.error(
         language === "zh-TW"
-          ? "無法開啟任務：當前客戶端不支援導航"
+          ? "無法開啟任務：目前用戶端不支援導覽"
           : language === "zh"
             ? "无法打开任务：当前客户端不支持导航"
             : "Cannot open task: navigation is unavailable in this client",

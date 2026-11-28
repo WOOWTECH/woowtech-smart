@@ -153,7 +153,7 @@ import { DEFAULT_RELAY_ENDPOINT } from "@getpaseo/protocol/daemon-endpoints";
 import { BRAND_PAIRING } from "@getpaseo/protocol/brand-pairing";
 import { DESKTOP_APP_ORIGIN } from "@getpaseo/protocol/brand-desktop";
 import { admitSecuredRelaySocket } from "./websocket/secure-relay-ingress.js";
-import type { PushNotificationSender } from "./push/index.js";
+import type { PushNotifications, PushNotificationSender } from "./push/index.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
@@ -441,11 +441,13 @@ export interface PaseoDaemonConfig {
       model?: string;
       thinkingOptionId?: string;
     }>;
+    instructions?: string;
   };
   providerOverrides?: Record<string, ProviderOverride>;
   log?: PersistedConfig["log"];
   onLifecycleIntent?: (intent: DaemonLifecycleIntent) => void;
   pushNotificationSender?: PushNotificationSender;
+  pushNotifications?: PushNotifications;
   managedProcesses?: ManagedProcessRegistry;
   configReload?: {
     env: NodeJS.ProcessEnv;
@@ -537,6 +539,16 @@ function createInitialRelayConfig(config: ResolvedDaemonSettings): MutableDaemon
   };
 }
 
+function createInitialMetadataGenerationConfig(
+  config: ResolvedDaemonSettings,
+): MutableDaemonConfig["metadataGeneration"] {
+  const instructions = config.metadataGeneration?.instructions?.trim();
+  return {
+    providers: config.metadataGeneration?.providers ?? [],
+    ...(instructions ? { instructions } : {}),
+  };
+}
+
 function resolveReloadEnv(config: PaseoDaemonConfig): NodeJS.ProcessEnv {
   return config.configReload?.env ?? process.env;
 }
@@ -565,9 +577,7 @@ function createInitialMutableDaemonConfig(config: ResolvedDaemonSettings): Mutab
     usage: { enabled: config.usageEnabled !== false },
     browserTools: { enabled: config.browserToolsEnabled ?? false },
     providers,
-    metadataGeneration: {
-      providers: config.metadataGeneration?.providers ?? [],
-    },
+    metadataGeneration: createInitialMetadataGenerationConfig(config),
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     idleRuntimeCleanup: config.idleRuntimeCleanup !== false,
@@ -1928,7 +1938,7 @@ export async function createPaseoDaemon(
               providerSnapshotManager,
               {
                 listen: formatListenTarget(boundListenTarget ?? listenTarget),
-                getListenStatus: listeners.status,
+                getListenStatus: listeners.refreshStatus,
                 setTailscaleEnabled: (enabled, localEndpoint, confirmed) =>
                   daemonConfigStore.setTailscaleEnabled(enabled, localEndpoint, confirmed),
                 worktreesRoot: config.worktreesRoot,
@@ -1956,6 +1966,7 @@ export async function createPaseoDaemon(
               orchestrationSkills,
               workspaceLabelService,
               workspaceArchiveOperations,
+              config.pushNotifications,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

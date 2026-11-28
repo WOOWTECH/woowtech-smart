@@ -19,6 +19,8 @@ export type AgentProviderModeDefinition = Omit<AgentMode, "icon" | "colorTier"> 
     isUnattended?: boolean;
   };
 
+export type ProviderCatalogRefreshMode = "background" | "on_demand";
+
 // TODO: `modes` should not be static. Providers (especially ACP) report their
 // own modes at runtime via session/new. We should fetch modes from the provider
 // as source of truth and enrich with UI metadata (icons, colorTier) on top.
@@ -29,6 +31,7 @@ export interface AgentProviderDefinition {
   /** The page that helps users set up and troubleshoot this provider. */
   docsUrl?: string;
   enabledByDefault?: boolean;
+  catalogRefresh?: ProviderCatalogRefreshMode;
   defaultModeId: string | null;
   modes: AgentProviderModeDefinition[];
   voice?: {
@@ -229,6 +232,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     label: "Copilot",
     description: "GitHub Copilot via Agent Client Protocol with dynamic modes and session support",
     docsUrl: BRAND_LINKS.docs.home,
+    catalogRefresh: "on_demand",
     defaultModeId: "https://agentclientprotocol.com/protocol/session-modes#agent",
     modes: COPILOT_MODES,
   },

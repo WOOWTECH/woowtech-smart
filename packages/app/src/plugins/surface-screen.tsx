@@ -3,6 +3,7 @@ import type { PluginIcon, PluginScreenParams, PluginScreenProps } from "@getpase
 import type { PluginTheme } from "@getpaseo/plugin";
 import { X } from "lucide-react-native";
 import { useCallback, useMemo, type ComponentType } from "react";
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
@@ -171,6 +172,7 @@ export function PluginSurfaceScreen() {
   const catalogStatus = usePluginCatalogStatus(serverId);
   const placeholderStatus = resolvePluginSurfacePlaceholder({ connectionStatus, catalogStatus });
   const compact = useIsCompactFormFactor();
+  const { t } = useTranslation();
   const { sidebarItem, surface } = useMemo(
     () => resolvePluginSurfaceContribution(plugin, identity),
     [identity, plugin],
@@ -229,18 +231,18 @@ export function PluginSurfaceScreen() {
       <>
         {hostFilter}
         <HeaderToggleButton
-          accessibilityLabel="Close plugin"
+          accessibilityLabel={t("common.actions.close")}
           onPress={close}
           testID="plugin-surface-close"
           tooltipKeys={EMPTY_SHORTCUT_KEYS}
-          tooltipLabel="Close"
+          tooltipLabel={t("common.actions.close")}
           tooltipSide="bottom"
         >
           <ThemedX size={18} uniProps={mutedColorMapping} />
         </HeaderToggleButton>
       </>
     ),
-    [close, hostFilter],
+    [close, hostFilter, t],
   );
 
   return (

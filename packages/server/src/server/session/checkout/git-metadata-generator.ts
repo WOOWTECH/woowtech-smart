@@ -99,8 +99,9 @@ export function createGitMetadataGenerator(deps: {
   logger: GitMetadataLogger;
   isGenerationEnabled?: () => boolean;
   buildMetadataPrompt?: typeof buildMetadataPrompt;
+  readHostInstructions?: () => string | undefined;
 }): GitMetadataGenerator {
-  const { workspaceGitService, generation, logger } = deps;
+  const { workspaceGitService, generation, logger, readHostInstructions } = deps;
   const isGenerationEnabled = deps.isGenerationEnabled ?? isGitMetadataGenerationEnabled;
   const buildPrompt = deps.buildMetadataPrompt ?? buildMetadataPrompt;
 
@@ -134,6 +135,7 @@ export function createGitMetadataGenerator(deps: {
     return buildPrompt({
       cwd: input.cwd,
       workspaceGitService,
+      hostInstructions: readHostInstructions?.(),
       contract: input.contract,
       styles: [{ configKey: input.styleConfigKey, default: input.styleDefault }],
       after: [

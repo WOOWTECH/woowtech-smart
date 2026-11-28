@@ -22,10 +22,10 @@ const noop = () => {};
 export function hiddenExampleCard(language: "en" | "zh" | "zh-TW"): TaskCard {
   const now = new Date(0).toISOString();
   const workspace =
-    language === "zh-TW" ? "示例工作區" : language === "zh" ? "示例工作区" : "Example workspace";
+    language === "zh-TW" ? "範例工作區" : language === "zh" ? "示例工作区" : "Example workspace";
   return {
     id: "example",
-    title: language === "zh-TW" ? "示例任務" : language === "zh" ? "示例任务" : "Example task",
+    title: language === "zh-TW" ? "範例任務" : language === "zh" ? "示例任务" : "Example task",
     lane: "needs_input",
     status: "needs_input",
     provider: "claude",
@@ -136,7 +136,7 @@ export function HiddenCount({
     <>
       <Text style={{ color: theme.colors.foregroundMuted }}>
         {language === "zh-TW"
-          ? "當前篩選或搜尋隱藏了以下任務。"
+          ? "目前篩選或搜尋隱藏了以下任務。"
           : language === "zh"
             ? "当前筛选或搜索隐藏了以下任务。"
             : "The current filters or search hide these tasks."}

@@ -1,7 +1,7 @@
 import { useHosts, useHostRuntimeLastError } from "@/runtime/host-runtime";
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, Pressable, ScrollView, type LayoutChangeEvent } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useRouter } from "expo-router";
 import { FolderOpen, Inbox, Plug, Smartphone } from "lucide-react-native";
@@ -22,6 +22,15 @@ import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { PairDeviceModal } from "@/devices";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { WINDOW_CONTENT_DATASET } from "@/components/desktop/titlebar-drag-region";
+import {
+  fitsHomeTilesToRow,
+  HOME_TILE_GAP,
+  HOME_TILE_WIDTH,
+  resolveHomeTileWidth,
+} from "@/screens/open-project-tiles";
+import { controlSizingForLayout } from "@/components/ui/control-geometry";
+
+const HOME_TILES_MAX_WIDTH = 2 * HOME_TILE_WIDTH + HOME_TILE_GAP;
 
 export function OpenProjectScreen() {
   const { t } = useTranslation();
@@ -35,6 +44,15 @@ export function OpenProjectScreen() {
   const [isPairDeviceOpen, setIsPairDeviceOpen] = useState(false);
 
   const isCompactLayout = useIsCompactFormFactor();
+  const [measuredTileWidth, setMeasuredTileWidth] = useState<number>();
+  const handleTilesLayout = useCallback((event: LayoutChangeEvent) => {
+    setMeasuredTileWidth(resolveHomeTileWidth(event.nativeEvent.layout.width));
+  }, []);
+  const fitsTilesToRow = fitsHomeTilesToRow(
+    isCompactLayout,
+    controlSizingForLayout(isCompactLayout),
+  );
+  const tileWidth = fitsTilesToRow ? measuredTileWidth : undefined;
 
   useEffect(() => {
     if (!isCompactLayout) {
@@ -73,13 +91,14 @@ export function OpenProjectScreen() {
           {hosts.map((host) => (
             <HostError key={host.serverId} serverId={host.serverId} label={host.label} />
           ))}
-          <View style={styles.tiles}>
+          <View style={styles.tiles} onLayout={fitsTilesToRow ? handleTilesLayout : undefined}>
             <HomeTile
               icon={FolderOpen}
               title={t("openProject.tiles.addProject.title")}
               description={t("openProject.tiles.addProject.description")}
               onPress={handleOpenPicker}
               testID="open-project-submit"
+              width={tileWidth}
               accent
             />
             <HomeTile
@@ -88,6 +107,7 @@ export function OpenProjectScreen() {
               description={t("openProject.tiles.importSession.description")}
               onPress={importSession.open}
               testID="open-project-import-session"
+              width={tileWidth}
             />
             <HomeTile
               icon={Plug}
@@ -95,6 +115,7 @@ export function OpenProjectScreen() {
               description={t("openProject.tiles.setupProviders.description")}
               onPress={handleOpenProviders}
               testID="open-project-setup-providers"
+              width={tileWidth}
             />
             {localServerId ? (
               <HomeTile
@@ -103,6 +124,7 @@ export function OpenProjectScreen() {
                 description={t("openProject.tiles.pairDevice.description")}
                 onPress={handleOpenPairDevice}
                 testID="open-project-pair-device"
+                width={tileWidth}
               />
             ) : null}
           </View>
@@ -138,9 +160,19 @@ interface HomeTileProps {
   onPress: () => void;
   testID?: string;
   accent?: boolean;
+  /** The measured width from the md breakpoint up; the stylesheet's width applies until then. */
+  width?: number;
 }
 
-function HomeTile({ icon: Icon, title, description, onPress, testID, accent }: HomeTileProps) {
+function HomeTile({
+  icon: Icon,
+  title,
+  description,
+  onPress,
+  testID,
+  accent,
+  width,
+}: HomeTileProps) {
   // useUnistyles is acceptable here: leaf component, off the hot path (home screen renders once).
   const { theme } = useUnistyles();
   const [hovered, setHovered] = useState(false);
@@ -152,10 +184,11 @@ function HomeTile({ icon: Icon, title, description, onPress, testID, accent }: H
   const pressableStyle = useCallback(
     ({ pressed }: { pressed: boolean }) => [
       styles.tile,
+      width !== undefined && { width },
       hovered && styles.tileHovered,
       pressed && styles.tilePressed,
     ],
-    [hovered],
+    [hovered, width],
   );
 
   return (
@@ -203,20 +236,20 @@ const styles = StyleSheet.create((theme) => ({
   hostError: {
     color: theme.colors.destructive,
     fontSize: theme.fontSize.base,
-    maxWidth: 452,
+    maxWidth: HOME_TILES_MAX_WIDTH,
     textAlign: "center",
   },
   tiles: {
     marginTop: { xs: theme.spacing[6], md: theme.spacing[12] },
     width: "100%",
-    maxWidth: 452,
+    maxWidth: HOME_TILES_MAX_WIDTH,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "flex-start",
-    gap: theme.spacing[3],
+    gap: HOME_TILE_GAP,
   },
   tile: {
-    width: { xs: "100%", md: 220 },
+    width: { xs: "100%", md: HOME_TILE_WIDTH },
     minHeight: { xs: 0, md: 132 },
     padding: theme.spacing[4],
     backgroundColor: theme.colors.surface1,

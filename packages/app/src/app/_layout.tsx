@@ -930,12 +930,14 @@ function RootStack() {
         <Stack.Screen name="welcome" />
         <Stack.Screen name="settings/index" options={settingsOptions} />
         <Stack.Screen name="settings/[section]" options={settingsOptions} />
+        <Stack.Screen name="settings/hosts/index" options={settingsOptions} />
         <Stack.Screen name="new" />
         <Stack.Screen name="open-project" />
         <Stack.Screen name="sessions" />
         <Stack.Screen name="schedules" />
       </Stack.Protected>
       <Stack.Screen name="h/[serverId]" />
+      <Stack.Screen name="settings/device-hosts/[serverId]" options={settingsOptions} />
       <Stack.Screen name="settings/hosts/[serverId]/index" options={settingsOptions} />
       <Stack.Screen name="settings/hosts/[serverId]/[hostSection]" options={settingsOptions} />
       <Stack.Screen

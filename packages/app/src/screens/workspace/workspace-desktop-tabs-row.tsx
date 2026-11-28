@@ -12,7 +12,14 @@ import React, {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { Pressable, Text, View, type LayoutChangeEvent, type ScrollView } from "react-native";
+import {
+  Pressable,
+  Text,
+  View,
+  type Insets,
+  type LayoutChangeEvent,
+  type ScrollView,
+} from "react-native";
 import { useFilePanelOpenWithMenu } from "@/file-panels";
 import {
   CopyX,
@@ -49,7 +56,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
-import { CONTROL_HEIGHTS } from "@/components/ui/control-geometry";
+import {
+  CONTROL_HEIGHTS,
+  controlHeightForLayout,
+  controlSizingForLayout,
+} from "@/components/ui/control-geometry";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useWorkspaceTabLayout } from "@/screens/workspace/use-workspace-tab-layout";
@@ -123,8 +134,28 @@ const TAB_RAIL_GLYPH_SIZE = paneContentToolbarIconSize(false);
 const TAB_MIN_WIDTH = 64;
 const TAB_MAX_WIDTH = 160;
 const TAB_CLOSE_BUTTON_RESERVED_WIDTH = 0;
+const TAB_CLOSE_BUTTON_SIZE = 18;
+const TAB_CLOSE_BUTTON_INSET = 4;
+// How far a touch-sized close target reaches from the drawn control toward the tab's label.
+const TAB_CLOSE_TOUCH_REACH = 8;
 const TAB_LABEL_LAYOUT_ALLOWANCE = 4;
 const AGENT_TOOLTIP_TITLE_MAX_LENGTH = 80;
+
+/**
+ * Touch layouts grow the close target inside the trailing overlay, which clips it: the chip's full
+ * height, out to the chip's edge, and a little toward the label, so a tap on the label still
+ * selects the tab. Pointer layouts keep the drawn control as the hit region.
+ */
+function tabCloseHitSlop(isCompact: boolean): Insets | undefined {
+  if (controlSizingForLayout(isCompact) === "pointer") return undefined;
+  const vertical = (controlHeightForLayout("sm", isCompact) - TAB_CLOSE_BUTTON_SIZE) / 2;
+  return {
+    top: vertical,
+    bottom: vertical,
+    left: TAB_CLOSE_TOUCH_REACH,
+    right: TAB_CLOSE_BUTTON_INSET,
+  };
+}
 
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedX = withUnistyles(X);
@@ -792,6 +823,7 @@ function TabChip({
     isFilled,
   });
   const showCloseControl = showCloseButton && (isHovered || isNative || isCompact || isClosingTab);
+  const closeHitSlop = useMemo(() => tabCloseHitSlop(isCompact), [isCompact]);
   const closeButtonDragBlockers = isWeb
     ? ({
         onPointerDown: (event: { stopPropagation?: () => void }) => {
@@ -925,6 +957,7 @@ function TabChip({
               accessibilityRole="button"
               accessibilityLabel={t("workspace.tabs.menu.close")}
               disabled={isClosingTab}
+              hitSlop={closeHitSlop}
               onPressIn={handleCloseButtonPressIn}
               onHoverIn={handleCloseButtonHoverIn}
               onHoverOut={handleCloseButtonHoverOut}
@@ -1793,9 +1826,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabCloseButton: {
     position: "absolute",
-    right: 4,
-    width: 18,
-    height: 18,
+    right: TAB_CLOSE_BUTTON_INSET,
+    width: TAB_CLOSE_BUTTON_SIZE,
+    height: TAB_CLOSE_BUTTON_SIZE,
     borderRadius: theme.borderRadius.sm,
     alignItems: "center",
     justifyContent: "center",
