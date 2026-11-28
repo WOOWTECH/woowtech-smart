@@ -237,9 +237,10 @@ for (const width of [1512, 390]) {
 
     await show.click();
     await section.getByRole("button", { name: "Next", exact: true }).click();
-    await expect(section.getByText("Page 2 of 38", { exact: true })).toBeVisible();
+    // 691 packages in mobile-third-party-licenses.json (regenerated for v0.18.1, #30), 20 a page.
+    await expect(section.getByText("Page 2 of 35", { exact: true })).toBeVisible();
     await section.getByRole("button", { name: "Previous", exact: true }).click();
-    await expect(section.getByText("Page 1 of 38", { exact: true })).toBeVisible();
+    await expect(section.getByText("Page 1 of 35", { exact: true })).toBeVisible();
     await expect(show).toHaveAttribute("aria-expanded", "false");
 
     await section.getByRole("button", { name: "Next", exact: true }).click();
@@ -254,7 +255,7 @@ for (const width of [1512, 390]) {
     await expect(show).not.toBeVisible();
     await search.fill("");
     await expect(show).toHaveAttribute("aria-expanded", "false");
-    await expect(section.getByText("Page 1 of 38", { exact: true })).toBeVisible();
+    await expect(section.getByText("Page 1 of 35", { exact: true })).toBeVisible();
   });
 }
 
