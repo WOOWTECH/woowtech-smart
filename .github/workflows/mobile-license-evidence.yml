@@ -1,0 +1,226 @@
+name: Mobile license evidence
+
+# Collects one production build's dependency evidence for the mobile third-party list and proposes
+# the regenerated list with woowtech/tools/mobile-licenses.mjs (team/store-audit/oss-inventory-execution.md
+# names the evidence). It builds nothing that ships and publishes nothing: a person reviews the report
+# and commits the list. source_ref picks the code to inventory; the tool comes from this workflow's commit.
+on:
+  # Temporary: GitHub only lets a manual run address a workflow that already has a run, so the
+  # first run comes from this push. The next commit removes this trigger.
+  push:
+    branches: [mobile/license-evidence-1128]
+    paths: [.github/workflows/mobile-license-evidence.yml]
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag or commit to inventory (empty uses this workflow's commit)
+        type: string
+        default: ""
+      brand:
+        type: choice
+        default: woowtech
+        options: [woowtech, apporo]
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        default: ""
+      brand:
+        type: string
+        default: woowtech
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  APP_VARIANT: production
+  CI: "1"
+  ONNXRUNTIME_NODE_INSTALL: skip
+  NODE_OPTIONS: "--max-old-space-size=6144"
+  WOOWTECH_BRAND: ${{ inputs.brand || 'woowtech' }}
+  TOOL: .license-tooling/woowtech/tools/mobile-licenses.mjs
+
+jobs:
+  js:
+    name: JavaScript packages in the production bundles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: .license-tooling
+          persist-credentials: false
+          sparse-checkout: woowtech/tools/mobile-licenses.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply brand
+        run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+      - run: npm run build:app-deps
+      - name: Export the production bundles with source maps
+        working-directory: packages/app
+        run: |
+          npx expo export --platform ios --source-maps --output-dir "$RUNNER_TEMP/export/ios"
+          npx expo export --platform android --source-maps --output-dir "$RUNNER_TEMP/export/android"
+      - name: Collect the bundled packages
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          node "$TOOL" js "$RUNNER_TEMP/export" . "$RUNNER_TEMP/evidence/js.json"
+          git rev-parse HEAD > "$RUNNER_TEMP/evidence/source.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: license-evidence-js
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Android release runtime classpath
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: .license-tooling
+          persist-credentials: false
+          sparse-checkout: woowtech/tools/mobile-licenses.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply brand
+        run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+      - run: npm run build:app-deps
+      - name: Generate the Android project
+        working-directory: packages/app
+        run: npx expo prebuild --platform android --no-install
+      - name: Resolve the release runtime classpath
+        working-directory: packages/app/android
+        run: ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > "$RUNNER_TEMP/dependencies.txt"
+      - name: Collect the components and their declared licenses
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          cp "$RUNNER_TEMP/dependencies.txt" "$RUNNER_TEMP/evidence/"
+          node "$TOOL" maven "$RUNNER_TEMP/dependencies.txt" "$HOME/.gradle/caches/modules-2/files-2.1" "$RUNNER_TEMP/evidence/maven.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: license-evidence-maven
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    name: iOS pods and acknowledgements
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: .license-tooling
+          persist-credentials: false
+          sparse-checkout: woowtech/tools/mobile-licenses.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Apply brand
+        run: node woowtech/tools/apply-brand.mjs "$WOOWTECH_BRAND"
+      - run: npm run build:app-deps
+      - name: Generate the iOS project and install pods
+        working-directory: packages/app
+        run: npx expo prebuild --platform ios
+      - name: Collect the pods and their acknowledgements
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          LOCK=packages/app/ios/Podfile.lock
+          ACK=$(find "packages/app/ios/Pods/Target Support Files" -name 'Pods-*-acknowledgements.plist' -print -quit)
+          test -f "$LOCK"
+          test -n "$ACK"
+          cp "$LOCK" "$RUNNER_TEMP/evidence/Podfile.lock"
+          ruby -ryaml -rjson -e 'puts JSON.generate(YAML.load_file(ARGV[0]))' "$LOCK" > "$RUNNER_TEMP/evidence/podfile-lock.json"
+          plutil -convert json -o "$RUNNER_TEMP/evidence/acknowledgements.json" "$ACK"
+          node "$TOOL" pods "$RUNNER_TEMP/evidence/podfile-lock.json" "$RUNNER_TEMP/evidence/acknowledgements.json" "$RUNNER_TEMP/evidence/pods.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: license-evidence-pods
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    name: Proposed third-party list
+    needs: [js, android, ios]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: .license-tooling
+          persist-credentials: false
+          sparse-checkout: woowtech/tools/mobile-licenses.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: license-evidence-*
+          path: ${{ runner.temp }}/evidence
+      - name: Assemble the list and the report
+        run: |
+          E="$RUNNER_TEMP/evidence"
+          mkdir -p "$RUNNER_TEMP/proposal"
+          node "$TOOL" assemble packages/app/src/screens/settings/mobile-third-party-licenses.json \
+            "$E/license-evidence-js/js.json" "$E/license-evidence-maven/maven.json" "$E/license-evidence-pods/pods.json" \
+            "$RUNNER_TEMP/proposal/mobile-third-party-licenses.json" "$RUNNER_TEMP/proposal/report.md"
+          cp "$E/license-evidence-js/source.txt" "$RUNNER_TEMP/proposal/source.txt"
+          head -c 900000 "$RUNNER_TEMP/proposal/report.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: license-list-proposal
+          path: ${{ runner.temp }}/proposal
+          if-no-files-found: error
+          retention-days: 14
