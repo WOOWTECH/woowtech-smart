@@ -1,0 +1,42 @@
+# iPad in portrait with the sidebar docked: the touch-device layout (#24, #27). run-native.mjs runs it
+# with MAESTRO_FLOW=ipad-touch-layout.yaml after seeding a project, then measures the home tiles and
+# the sidebar plus from the view hierarchy.
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: welcome-direct-connection
+    timeout: 60000
+- takeScreenshot: ipad-welcome
+- tapOn:
+    id: welcome-direct-connection
+- extendedWaitUntil:
+    visible:
+      id: direct-host-input
+    timeout: 15000
+- tapOn:
+    id: direct-host-input
+- eraseText
+- inputText: "127.0.0.1"
+- tapOn:
+    id: direct-port-input
+- eraseText
+- inputText: ${HOST_PORT}
+- tapOn:
+    id: direct-host-submit
+- extendedWaitUntil:
+    visible:
+      id: open-project-submit
+    timeout: 60000
+- extendedWaitUntil:
+    visible:
+      id: "sidebar-project-new-worktree-.*"
+    timeout: 30000
+# Two tiles share a row even where the pane is narrower than two full tiles.
+- assertVisible:
+    id: open-project-import-session
+    rightOf:
+      id: open-project-submit
+- takeScreenshot: ipad-home-portrait
