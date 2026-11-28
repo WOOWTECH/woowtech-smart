@@ -26,10 +26,11 @@ appId: ${APP_ID}
     id: settings-section-chat
 - assertVisible: "Always expand reasoning"
 - takeScreenshot: settings-chat
-- tapOn:
-    id: header-back-button
-- tapOn:
-    id: settings-section-terminal
+# Upstream 0.18 shows Terminal and Files on the same "Chat & panes" page, below Chat.
+- scrollUntilVisible:
+    element:
+      id: terminal-scrollback-input
+    direction: DOWN
 - tapOn:
     id: terminal-scrollback-input
 - eraseText
@@ -39,10 +40,10 @@ appId: ${APP_ID}
     id: terminal-scrollback-input
     text: "4321"
 - takeScreenshot: settings-terminal-edited
-- tapOn:
-    id: header-back-button
-- tapOn:
-    id: settings-section-files
+- scrollUntilVisible:
+    element:
+      id: file-panel-settings
+    direction: DOWN
 - assertVisible:
     id: file-panel-settings
 - takeScreenshot: settings-files
@@ -60,7 +61,11 @@ appId: ${APP_ID}
 - tapOn:
     id: welcome-open-settings
 - tapOn:
-    id: settings-section-terminal
+    id: settings-section-chat
+- scrollUntilVisible:
+    element:
+      id: terminal-scrollback-input
+    direction: DOWN
 - assertVisible:
     id: terminal-scrollback-input
     text: "4321"
