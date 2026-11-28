@@ -1,4 +1,12 @@
-import type { AgentAttachment } from "./messages.js";
+import type { AgentMessage } from "./agent-message.js";
+import type {
+  AgentAttachment,
+  AgentOptionChoiceSchema,
+  AgentOptionControlSchema,
+  AgentOptionSelectControlSchema,
+  AgentOptionToggleControlSchema,
+} from "./messages.js";
+import type { z } from "zod";
 import type { ProviderAuthStatus } from "./woowtech-provider-auth.js";
 
 export type AgentProvider = string;
@@ -126,9 +134,13 @@ export interface ProviderSnapshotEntry {
   label?: string;
   description?: string;
   iconSvg?: string;
+  /** The page that helps users set up and troubleshoot this provider. */
+  docsUrl?: string;
   defaultModeId?: string | null;
   /** woowtech smart: display-only login state (woowtech/README.md §3). */
   auth?: ProviderAuthStatus;
+  /** The provider can run a session behind an `agent.open.before` wrap. Absent means it cannot. */
+  launchWrap?: boolean;
 }
 
 export interface AgentFeatureToggle {
@@ -148,11 +160,27 @@ export interface AgentFeatureSelect {
   description?: string;
   tooltip?: string;
   icon?: string;
+  /** Desktop toolbar presentation; omitted means labeled. Mobile selectors stay labeled. */
+  desktopTrigger?: "icon" | "label";
   value: string | null;
   options: AgentSelectOption[];
 }
 
 export type AgentFeature = AgentFeatureToggle | AgentFeatureSelect;
+
+export type AgentOptionChoice = z.infer<typeof AgentOptionChoiceSchema>;
+
+/** `key` is the top-level provider option key the control reads and writes. */
+export type AgentOptionToggleControl = z.infer<typeof AgentOptionToggleControlSchema>;
+
+/** `defaultValue` is the choice an unset option stands for. */
+export type AgentOptionSelectControl = z.infer<typeof AgentOptionSelectControlSchema>;
+
+/**
+ * A provider's description of a composer control over one top-level option key.
+ * The control carries no value: it is read from the agent's effective options.
+ */
+export type AgentOptionControl = z.infer<typeof AgentOptionControlSchema>;
 
 export interface AgentCapabilityFlags {
   [capability: string]: boolean | undefined;
@@ -196,6 +224,18 @@ export interface AgentUsage {
   totalCostUsd?: number;
   contextWindowMaxTokens?: number;
   contextWindowUsedTokens?: number;
+}
+
+export type AgentMetricTone = "default" | "ok" | "warning" | "danger";
+
+/**
+ * One provider-owned label/value row. The provider formats `value`; Paseo renders
+ * it as given and never interprets it.
+ */
+export interface AgentMetric {
+  label: string;
+  value: string;
+  tone?: AgentMetricTone;
 }
 
 export const TOOL_CALL_ICON_NAMES = [
@@ -288,7 +328,7 @@ export type ToolCallDetail =
       subAgentType?: string;
       description?: string;
       childSessionId?: string;
-      log: string;
+      log?: string;
       actions?: Array<{
         index: number;
         toolName: string;
@@ -312,6 +352,7 @@ export type ToolCallDetail =
     };
 
 interface ToolCallBase {
+  agentMessage?: AgentMessage;
   [key: string]: unknown;
   type: "tool_call";
   callId: string;
@@ -389,7 +430,13 @@ export type AgentTimelineItem =
 export type AgentStreamEvent =
   | { type: "thread_started"; sessionId: string; provider: AgentProvider }
   | { type: "turn_started"; provider: AgentProvider; turnId?: string }
-  | { type: "turn_completed"; provider: AgentProvider; usage?: AgentUsage; turnId?: string }
+  | {
+      type: "turn_completed";
+      provider: AgentProvider;
+      usage?: AgentUsage;
+      turnId?: string;
+      metrics?: AgentMetric[];
+    }
   | { type: "usage_updated"; provider: AgentProvider; usage: AgentUsage; turnId?: string }
   | {
       type: "mode_changed";
@@ -499,7 +546,7 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-export type ProviderOptions = Record<string, JsonValue>;
+export type ProviderOptions = Record<string, unknown>;
 
 export interface McpToolRef {
   kind: "mcp";
@@ -522,6 +569,10 @@ export interface AgentSessionConfig {
   modeId?: string;
   model?: string;
   thinkingOptionId?: string;
+  /**
+   * @deprecated COMPAT(featureValues): added in v0.15.0, remove after 2027-05-01.
+   * Folded into `providerOptions` at the daemon's edge; the daemon never reads it internally.
+   */
   featureValues?: Record<string, unknown>;
   title?: string | null;
   providerOptions?: ProviderOptions;

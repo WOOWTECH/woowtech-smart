@@ -8,26 +8,23 @@ const MAX_TRANSIENT_DETACHED_PANES = 2;
 
 const SETTINGS_DESTINATIONS = [
   "General",
+  "Hosts",
   "Appearance",
-  "Layout",
-  "Editor",
+  "Sidebar",
+  "Chat & panes",
   "Shortcuts",
-  "Integrations",
   "Notifications",
-  "Permissions",
-  "Diagnostics",
   "About",
-  "Overview",
-  "Projects",
-  "Connections",
-  "Pair device",
-  "Agents",
-  "Metadata",
-  "Workspaces",
   "Providers",
-  // woowtech smart: no Usage row; account usage is hidden (woowtech/README.md section 23).
+  "Tools & prompts",
+  "Projects",
+  "Workspaces",
+  "Voice",
+  "Usage",
   "Terminals",
   "Plugins",
+  "Devices",
+  "Daemon",
 ];
 
 function assert(condition, message) {

@@ -15,6 +15,13 @@ import {
   type NoticeSection,
 } from "./woowtech-third-party-notices";
 import { PASEO_COPYRIGHT, PASEO_LICENSE_TEXT } from "./woowtech-paseo-license";
+import {
+  BETTER_PASEO_COPYRIGHT,
+  BETTER_PASEO_LICENSE_TEXT,
+  BETTER_PASEO_NAME,
+  BETTER_PASEO_SOURCE,
+  BETTER_PASEO_VERSION,
+} from "./woowtech-better-paseo-license";
 
 const hasChineseName = /[㐀-鿿]/.test(PRODUCT_NAME_ZH);
 
@@ -58,6 +65,7 @@ describe("the trademarks and third-party notices page", () => {
     if (!i18n.isInitialized) {
       await i18n.init();
     }
+    await i18n.loadLanguages(["en", "zh-TW"]);
   });
 
   it("opens from Settings at /settings/notices", () => {
@@ -240,6 +248,7 @@ describe("the trademarks and third-party notices page", () => {
       ["JS", true],
       ["TOML", true],
       ["Gitea", true],
+      ["Better Paseo / Beautiful Chat 1.7.0", false],
     ]);
   });
 
@@ -313,6 +322,20 @@ describe("the trademarks and third-party notices page", () => {
     });
   });
 
+  it("bundles Better Paseo / Beautiful Chat's exact MIT license and vendored version", () => {
+    const plugin = new URL("../../../../../plugins/better-paseo/", import.meta.url);
+    const provenance = JSON.parse(readFileSync(new URL("upstream-source.json", plugin), "utf8"));
+    expect(BETTER_PASEO_VERSION).toBe(provenance.version);
+    expect(BETTER_PASEO_SOURCE).toBe(provenance.repository);
+    expect(BETTER_PASEO_LICENSE_TEXT).toBe(readFileSync(new URL("LICENSE", plugin), "utf8"));
+    for (const language of ["en", "zh-TW"]) {
+      const notice = rowOf(pageIn(language), "mit", `${BETTER_PASEO_NAME} ${BETTER_PASEO_VERSION}`);
+      expect(notice.lines).toContain(BETTER_PASEO_COPYRIGHT);
+      expect(notice.lines).toContain(BETTER_PASEO_LICENSE_TEXT);
+      expect(notice.lines.some((line) => line.includes(BETTER_PASEO_SOURCE))).toBe(true);
+    }
+  });
+
   it("closes with the MIT License text and the copyright notice of each work under it", () => {
     const mit = pageIn("en").find((section) => section.id === "mit");
     expect(mit?.title).toBe("MIT License");
@@ -321,6 +344,7 @@ describe("the trademarks and third-party notices page", () => {
       "JS logo",
       "TOML logo",
       "Gitea logo",
+      "Better Paseo / Beautiful Chat 1.7.0",
       "text",
     ]);
     expect(rowOf(pageIn("en"), "mit", "Gitea logo").lines).toEqual([
@@ -338,13 +362,21 @@ describe("the trademarks and third-party notices page", () => {
       "JS logo",
       "TOML logo",
       "Gitea logo",
+      "Better Paseo / Beautiful Chat 1.7.0",
       "License text",
     ]);
     expect(
       pageIn("zh-TW")
         .find((section) => section.id === "mit")
         ?.rows.map((row) => row.title),
-    ).toEqual(["material-icon-theme", "JS 標誌", "TOML 標誌", "Gitea 標誌", "授權條文"]);
+    ).toEqual([
+      "material-icon-theme",
+      "JS 標誌",
+      "TOML 標誌",
+      "Gitea 標誌",
+      "Better Paseo / Beautiful Chat 1.7.0",
+      "授權條文",
+    ]);
   });
 
   it("labels the lines in Traditional Chinese and keeps names, credits and license text as written", () => {
@@ -440,6 +472,7 @@ describe("the trademarks and third-party notices page", () => {
   it("shows no English of woowtech smart's own in Traditional Chinese, only what the owners write", () => {
     // Names, owners, credits, sources, license names and copyright lines stay as written.
     const asWritten = new Set<string>([
+      BETTER_PASEO_LICENSE_TEXT,
       MIT_LICENSE_TEXT,
       PASEO_LICENSE_TEXT,
       PASEO_COPYRIGHT,

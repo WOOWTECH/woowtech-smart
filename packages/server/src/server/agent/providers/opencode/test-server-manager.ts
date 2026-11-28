@@ -1,4 +1,8 @@
-import type { OpenCodeServerAcquisition, OpenCodeServerManagerLike } from "./server-manager.js";
+import type {
+  OpenCodeDedicatedLaunch,
+  OpenCodeServerAcquisition,
+  OpenCodeServerManagerLike,
+} from "./server-manager.js";
 
 const events = {
   ready: async () => undefined,
@@ -24,8 +28,8 @@ export class TestOpenCodeServerManager implements OpenCodeServerManagerLike {
     return this.recordAcquisition({ kind: "new" });
   }
 
-  async acquireDedicated(env: Record<string, string>): Promise<OpenCodeServerAcquisition> {
-    return this.recordAcquisition({ kind: "dedicated", env });
+  async acquireDedicated(launch: OpenCodeDedicatedLaunch): Promise<OpenCodeServerAcquisition> {
+    return this.recordAcquisition({ kind: "dedicated", env: launch.env });
   }
 
   acquireExisting(url: string): OpenCodeServerAcquisition | null {
@@ -46,6 +50,7 @@ export class TestOpenCodeServerManager implements OpenCodeServerManagerLike {
     this.acquisitions.push(acquisition);
     return {
       server: this.server,
+      environment: input.env ?? {},
       events,
       release: async () => {
         acquisition.released = true;

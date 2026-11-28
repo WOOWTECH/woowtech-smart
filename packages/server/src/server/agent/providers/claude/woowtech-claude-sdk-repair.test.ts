@@ -6,12 +6,13 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import {
   createClaudeAgentSdkSource,
+  CLAUDE_AGENT_SDK_VERSION,
   loadClaudeAgentSdk,
   type ClaudeAgentSdkModule,
 } from "./claude-agent-sdk-runtime.js";
 
 let root: string;
-const prefix = "claude-agent-sdk-0.3.246";
+const prefix = `claude-agent-sdk-${CLAUDE_AGENT_SDK_VERSION}`;
 const missingLocal = async (): Promise<ClaudeAgentSdkModule> => {
   throw Object.assign(new Error("fixture missing"), { code: "ERR_MODULE_NOT_FOUND" });
 };

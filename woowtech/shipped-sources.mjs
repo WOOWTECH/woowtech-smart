@@ -20,6 +20,7 @@ const NOT_SHIPPED_DIRS = new Set([
   "node_modules",
   "dist",
   "test-utils",
+  "test-fixtures",
   "e2e",
   "__tests__",
   "daemon-e2e",

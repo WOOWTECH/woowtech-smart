@@ -1,3 +1,4 @@
+import { hostIdFromPathname } from "../routes";
 import {
   collectAllTabs,
   findPaneById,
@@ -15,4 +16,17 @@ export function getFocusedAgentId(layout: WorkspaceLayout | null): string | null
   return tab?.target.kind === "plugin" && tab.target.context === "agent"
     ? tab.target.agentId
     : null;
+}
+
+/** Host routes own global plugin actions, even when no workspace has been opened. */
+export function getPluginCommandCenterLocation(
+  pathname: string,
+  selection: { serverId: string; workspaceId: string } | null,
+  defaultHostId: string | null = null,
+): { serverId: string | null; workspaceId: string | null } {
+  const serverId = hostIdFromPathname(pathname) ?? selection?.serverId ?? defaultHostId;
+  return {
+    serverId,
+    workspaceId: selection?.serverId === serverId ? (selection?.workspaceId ?? null) : null,
+  };
 }

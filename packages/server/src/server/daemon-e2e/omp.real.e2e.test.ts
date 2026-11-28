@@ -1,15 +1,21 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import pino from "pino";
+import semver from "semver";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
 
 import type { AgentTimelineItem } from "../agent/agent-sdk-types.js";
 import {
   MIN_SUPPORTED_OMP_VERSION,
+  OmpAgentClient,
   formatOmpVersionSupport,
 } from "../agent/providers/omp/agent.js";
 import { DaemonClient } from "../test-utils/daemon-client.js";
@@ -48,14 +54,62 @@ async function preflight(): Promise<void> {
   }
 }
 
-async function createHarness(): Promise<Harness> {
+// OMP exits at startup when no model is usable at all, so the home offers one offline
+// model, and an agent on any other provider's model has no credentials.
+function createOfflineOmpHome(
+  options: { baseUrl?: string; askTimeoutSeconds?: number } = {},
+): string {
+  const baseUrl = options.baseUrl ?? "http://127.0.0.1:9/v1";
+  const home = mkdtempSync(path.join(tmpdir(), "paseo-real-omp-offline-"));
+  roots.add(home);
+  const agentDir = path.join(home, ".omp", "agent");
+  mkdirSync(agentDir, { recursive: true });
+  writeFileSync(
+    path.join(agentDir, "models.yml"),
+    [
+      "providers:",
+      "  offline:",
+      `    baseUrl: ${baseUrl}`,
+      "    api: openai-completions",
+      "    auth: none",
+      "    models:",
+      "      - id: offline-1",
+      "        name: Offline",
+      "        api: openai-completions",
+      "        reasoning: false",
+      "        input: [text]",
+      "        contextWindow: 128000",
+      "        maxTokens: 4096",
+      "        cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0}",
+      "",
+    ].join("\n"),
+  );
+  if (options.askTimeoutSeconds !== undefined) {
+    writeFileSync(
+      path.join(agentDir, "config.yml"),
+      `ask:\n  timeout: ${options.askTimeoutSeconds}\n`,
+    );
+  }
+  return home;
+}
+
+async function createHarness(options: { ompHome?: string } = {}): Promise<Harness> {
   const cwd = mkdtempSync(path.join(tmpdir(), "paseo-real-omp-"));
   const paseoHomeRoot = mkdtempSync(path.join(tmpdir(), "paseo-real-omp-home-"));
   const staticDir = mkdtempSync(path.join(tmpdir(), "paseo-real-omp-static-"));
   for (const root of [cwd, paseoHomeRoot, staticDir]) roots.add(root);
   const logger = pino({ level: process.env.OMP_E2E_LOG_LEVEL ?? "silent" });
   const daemon = await createTestPaseoDaemon({
-    agentClients: createRealProviderClients(["omp"], logger),
+    agentClients: options.ompHome
+      ? {
+          omp: new OmpAgentClient({
+            logger,
+            runtimeSettings: {
+              env: { HOME: options.ompHome, ANTHROPIC_API_KEY: "", ANTHROPIC_OAUTH_TOKEN: "" },
+            },
+          }),
+        }
+      : createRealProviderClients(["omp"], logger),
     providerOverrides: { omp: { enabled: true } },
     logger,
     paseoHomeRoot,
@@ -71,6 +125,110 @@ async function createHarness(): Promise<Harness> {
     subscribe: {},
   });
   return { daemon, client, cwd, paseoHomeRoot, staticDir };
+}
+
+async function installedOmpVersion(): Promise<string | null> {
+  const command = process.env.OMP_COMMAND?.trim() || "omp";
+  const { stdout } = await execFileAsync(command, ["--version"], { timeout: 10_000 });
+  return semver.coerce(stdout)?.version ?? null;
+}
+
+interface ScriptedModel {
+  baseUrl: string;
+  close(): Promise<void>;
+}
+
+async function readBody(request: IncomingMessage): Promise<string> {
+  let body = "";
+  for await (const chunk of request) body += String(chunk);
+  return body;
+}
+
+function sseChunk(delta: Record<string, unknown>, finishReason: string | null): string {
+  const chunk = {
+    id: "chatcmpl-scripted",
+    object: "chat.completion.chunk",
+    created: 0,
+    model: "offline-1",
+    choices: [{ index: 0, delta, finish_reason: finishReason }],
+  };
+  return `data: ${JSON.stringify(chunk)}\n\n`;
+}
+
+/**
+ * An OpenAI-compatible model that calls OMP's `ask` tool once with `html`, then
+ * replies with the tool's result so the test can read what OMP received.
+ */
+async function startScriptedAskModel(html: string): Promise<ScriptedModel> {
+  const server: Server = createServer((request, response) => {
+    void readBody(request).then((body) => {
+      const payload = JSON.parse(body || "{}") as {
+        tools?: Array<{ function?: { name?: string } }>;
+        messages?: Array<{ role?: string; content?: unknown }>;
+      };
+      const toolMessage = payload.messages?.find((message) => message.role === "tool");
+      const offersAsk = payload.tools?.some((tool) => tool.function?.name === "ask") ?? false;
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      if (!toolMessage && offersAsk) {
+        response.write(
+          sseChunk(
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_ask_1",
+                  type: "function",
+                  function: { name: "ask", arguments: JSON.stringify({ html }) },
+                },
+              ],
+            },
+            null,
+          ),
+        );
+        response.write(sseChunk({}, "tool_calls"));
+      } else {
+        const result = toolMessage ? JSON.stringify(toolMessage.content) : "ok";
+        response.write(sseChunk({ role: "assistant", content: `ASK_RESULT ${result}` }, null));
+        response.write(sseChunk({}, "stop"));
+      }
+      response.end("data: [DONE]\n\n");
+      return undefined;
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${port}/v1`,
+    close: () => new Promise((resolve) => server.close(() => resolve())),
+  };
+}
+
+const COLOR_FORM =
+  '<form><fieldset><legend>Which color do you prefer?</legend><label><input type="radio" name="color" value="Red" checked> Red</label><label><input type="radio" name="color" value="Blue"> Blue</label></fieldset><label>Why? <input name="why"></label></form>';
+
+async function skipUnlessOmpSendsForms(context: { skip: (note?: string) => void }): Promise<void> {
+  const version = await installedOmpVersion();
+  if (!version || semver.lt(version, "19.1.0")) {
+    context.skip(`OMP ${version ?? "unknown"} sends field-by-field ask requests, not forms`);
+  }
+}
+
+async function askWithForm(harness: Harness) {
+  const agent = await harness.client.createAgent({
+    cwd: harness.cwd,
+    title: "html-ask-form",
+    provider: "omp",
+    model: "offline/offline-1",
+    modeId: "full",
+  });
+  await harness.client.sendMessage(agent.id, "Ask me which color I prefer.");
+  const pending = await harness.client.waitForAgentUpsert(
+    agent.id,
+    (snapshot) => snapshot.pendingPermissions.length > 0,
+    60_000,
+  );
+  return { agentId: agent.id, permission: pending.pendingPermissions[0] };
 }
 
 async function closeHarness(harness: Harness): Promise<void> {
@@ -89,6 +247,23 @@ async function timeline(client: DaemonClient, agentId: string): Promise<AgentTim
     projection: "canonical",
   });
   return result.entries.map((entry) => entry.item);
+}
+
+async function readAssistantText(harness: Harness, agentId: string): Promise<string> {
+  const items = await timeline(harness.client, agentId);
+  return items
+    .filter((item) => item.type === "assistant_message")
+    .map((item) => item.text)
+    .join("");
+}
+
+function compactionFiller(records = 1200): string {
+  const teas = ["assam", "darjeeling", "sencha", "oolong"];
+  return Array.from(
+    { length: records },
+    (_, index) =>
+      `Record ${String(index).padStart(5, "0")}: tea=${teas[index % teas.length]} origin=region-${index % 37} notes=lorem ipsum dolor sit amet`,
+  ).join("\n");
 }
 
 function latestTools(items: AgentTimelineItem[]) {
@@ -185,7 +360,165 @@ afterEach(() => {
   roots.clear();
 });
 
+async function waitForTimelineItem(
+  client: DaemonClient,
+  agentId: string,
+  predicate: (item: AgentTimelineItem) => boolean,
+): Promise<AgentTimelineItem> {
+  const deadline = Date.now() + 60_000;
+  let items: AgentTimelineItem[] = [];
+  while (Date.now() < deadline) {
+    items = await timeline(client, agentId);
+    const item = items.find(predicate);
+    if (item) return item;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`Timed out waiting for OMP timeline item: ${JSON.stringify(items)}`);
+}
+
+async function contextWindowUsedTokens(client: DaemonClient, agentId: string) {
+  const result = await client.fetchAgent(agentId);
+  return result?.agent.lastUsage?.contextWindowUsedTokens;
+}
+
 describe("daemon E2E (real OMP)", () => {
+  test(
+    "an idle out-of-band follow-up starts a turn",
+    async () => {
+      const harness = await createHarness();
+      try {
+        const agent = await createAgent(harness, "idle-follow-up");
+        await harness.client.sendMessage(agent.id, "/follow-up Reply exactly IDLE_FOLLOWUP_OK");
+        await expect
+          .poll(() => readAssistantText(harness, agent.id), { timeout: 30_000 })
+          .toContain("IDLE_FOLLOWUP_OK");
+        const finish = await harness.client.waitForFinish(agent.id, TIMEOUT_MS);
+        expect(finish.status).toBe("idle");
+      } finally {
+        await closeHarness(harness);
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  test(
+    "an agent-sent idle follow-up starts a turn and notifies its parent",
+    async () => {
+      const harness = await createHarness();
+      const mcp = new Client({ name: "idle-follow-up-test", version: "1.0.0" });
+      try {
+        const parent = await createAgent(harness, "follow-up-parent");
+        const child = await createAgent(harness, "follow-up-child");
+        await mcp.connect(
+          new StreamableHTTPClientTransport(
+            new URL(
+              `http://127.0.0.1:${harness.daemon.port}/mcp/agents?callerAgentId=${parent.id}`,
+            ),
+          ),
+        );
+        const response = await mcp.callTool({
+          name: "send_agent_prompt",
+          arguments: { agentId: child.id, prompt: "/follow-up Reply exactly MCP_IDLE_FOLLOWUP_OK" },
+        });
+        expect(response.isError).not.toBe(true);
+        expect(response.structuredContent).toMatchObject({
+          success: true,
+          disposition: "out_of_band",
+        });
+        await expect
+          .poll(() => readAssistantText(harness, child.id), { timeout: 30_000 })
+          .toContain("MCP_IDLE_FOLLOWUP_OK");
+        await expect
+          .poll(
+            async () => {
+              const items = await timeline(harness.client, parent.id);
+              let notifications = 0;
+              for (const item of items) {
+                if (
+                  item.type === "tool_call" &&
+                  item.agentMessage?.sender.id === child.id &&
+                  item.agentMessage.event === "finished"
+                )
+                  notifications++;
+              }
+              return notifications;
+            },
+            { timeout: 15_000 },
+          )
+          .toBe(1);
+      } finally {
+        await mcp.close();
+        await closeHarness(harness);
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  test.each(["Reply with ok.", "/follow-up Reply with ok."])(
+    "a rejected %s fails the turn with OMP's error",
+    async (prompt) => {
+      const harness = await createHarness({ ompHome: createOfflineOmpHome() });
+      try {
+        const agent = await harness.client.createAgent({
+          cwd: harness.cwd,
+          title: "no-credentials",
+          provider: "omp",
+          model: "anthropic/claude-haiku-4-5",
+          modeId: "full",
+        });
+        await harness.client.sendMessage(agent.id, prompt);
+        const finish = await harness.client.waitForFinish(agent.id, 60_000);
+        expect(finish.status).toBe("error");
+        expect(finish.error).toContain("No API key found for anthropic");
+      } finally {
+        await closeHarness(harness);
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  test(
+    "manual compact shows its progress and refreshes context usage",
+    async () => {
+      const harness = await createHarness();
+      try {
+        const agent = await createAgent(harness, "manual-compact");
+        await promptAndFinish(harness, agent.id, "Reply exactly: ready");
+        await promptAndFinish(
+          harness,
+          agent.id,
+          `${compactionFiller(2500)}\n\nWhich tea is in record 00007? Reply with one word.`,
+        );
+        await promptAndFinish(harness, agent.id, "Reply exactly: after-filler");
+        const usedBefore = await contextWindowUsedTokens(harness.client, agent.id);
+        expect(usedBefore).toBeGreaterThan(20_000);
+
+        await harness.client.sendMessage(agent.id, "/compact");
+        await waitForTimelineItem(
+          harness.client,
+          agent.id,
+          (item) => item.type === "compaction" && item.status === "completed",
+        );
+
+        expect(await timeline(harness.client, agent.id)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ type: "compaction", status: "loading", trigger: "manual" }),
+            expect.objectContaining({ type: "compaction", status: "completed", trigger: "manual" }),
+          ]),
+        );
+        await harness.client.waitForAgentUpsert(
+          agent.id,
+          (snapshot) =>
+            (snapshot.lastUsage?.contextWindowUsedTokens ?? Infinity) < (usedBefore ?? 0),
+          60_000,
+        );
+      } finally {
+        await closeHarness(harness);
+      }
+    },
+    TIMEOUT_MS,
+  );
+
   test(
     "prompt, native tool, and resumed follow-up",
     async () => {
@@ -208,6 +541,72 @@ describe("daemon E2E (real OMP)", () => {
         );
       } finally {
         await closeHarness(harness);
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  test(
+    "an OMP 19.1+ HTML ask form is answered from the question card",
+    async (context) => {
+      await skipUnlessOmpSendsForms(context);
+      const model = await startScriptedAskModel(COLOR_FORM);
+      const harness = await createHarness({
+        ompHome: createOfflineOmpHome({ baseUrl: model.baseUrl }),
+      });
+      try {
+        const { agentId, permission } = await askWithForm(harness);
+        expect(permission).toMatchObject({
+          kind: "question",
+          input: {
+            questions: [
+              {
+                question: "Which color do you prefer?",
+                header: "color",
+                options: [{ label: "Red", description: "Default" }, { label: "Blue" }],
+              },
+              { question: "Why?", header: "why", options: [] },
+            ],
+          },
+        });
+        await harness.client.respondToPermission(agentId, permission.id, {
+          behavior: "allow",
+          updatedInput: { answers: { color: "Blue", why: "calmer" } },
+        });
+        expect((await harness.client.waitForFinish(agentId, 60_000)).status).toBe("idle");
+        const reply = await readAssistantText(harness, agentId);
+        expect(reply).toContain("ASK_RESULT");
+        expect(reply).toContain("Blue");
+        expect(reply).toContain("calmer");
+      } finally {
+        await closeHarness(harness);
+        await model.close();
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  test(
+    "an OMP 19.1+ HTML ask that times out in OMP closes its question card",
+    async (context) => {
+      await skipUnlessOmpSendsForms(context);
+      const model = await startScriptedAskModel(COLOR_FORM);
+      const harness = await createHarness({
+        ompHome: createOfflineOmpHome({ baseUrl: model.baseUrl, askTimeoutSeconds: 2 }),
+      });
+      try {
+        const { agentId } = await askWithForm(harness);
+        // OMP submits the preselected answers itself and sends `cancel` for the open dialog.
+        const settled = await harness.client.waitForAgentUpsert(
+          agentId,
+          (snapshot) => snapshot.status === "idle" && snapshot.pendingPermissions.length === 0,
+          60_000,
+        );
+        expect(settled.pendingPermissions).toEqual([]);
+        expect(await readAssistantText(harness, agentId)).toContain("Red");
+      } finally {
+        await closeHarness(harness);
+        await model.close();
       }
     },
     TIMEOUT_MS,
@@ -441,6 +840,56 @@ describe("daemon E2E (real OMP)", () => {
             .replace(/\s/g, ""),
         ).toContain(`HOST_TOOL_OK:${agent.id}`);
       } finally {
+        await closeHarness(harness);
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  test(
+    "a compaction shows as a compaction row after a daemon restart",
+    async () => {
+      const harness = await createHarness();
+      let restarted: TestPaseoDaemon | null = null;
+      let restartedClient: DaemonClient | null = null;
+      try {
+        const agent = await createAgent(harness, "compact-restart");
+        await promptAndFinish(
+          harness,
+          agent.id,
+          `${compactionFiller()}\n\nReply exactly OMP_COMPACT_FIRST`,
+        );
+        await promptAndFinish(harness, agent.id, "Reply exactly OMP_COMPACT_SECOND");
+        await harness.client.sendMessage(agent.id, "/compact");
+        await harness.client.waitForFinish(agent.id, TIMEOUT_MS);
+        await promptAndFinish(harness, agent.id, "Reply exactly OMP_COMPACT_THIRD");
+
+        await harness.client.close();
+        await harness.daemon.close();
+        restarted = await createTestPaseoDaemon({
+          agentClients: createRealProviderClients(["omp"], pino({ level: "silent" })),
+          providerOverrides: { omp: { enabled: true } },
+          logger: pino({ level: "silent" }),
+          paseoHomeRoot: harness.paseoHomeRoot,
+          staticDir: harness.staticDir,
+          cleanup: false,
+        });
+        restartedClient = new DaemonClient({ url: `ws://127.0.0.1:${restarted.port}/ws` });
+        await restartedClient.connect();
+        await restartedClient.fetchAgents({ subscribe: {} });
+        const replayed = await timeline(restartedClient, agent.id);
+
+        expect(
+          latestTools(replayed)
+            .map(toolResult)
+            .filter((text) => text.includes("Unsupported history record")),
+        ).toEqual([]);
+        expect(replayed.filter((item) => item.type === "compaction")).toEqual([
+          expect.objectContaining({ type: "compaction", status: "completed" }),
+        ]);
+      } finally {
+        await restartedClient?.close().catch(() => undefined);
+        await restarted?.close().catch(() => undefined);
         await closeHarness(harness);
       }
     },

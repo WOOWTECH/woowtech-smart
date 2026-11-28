@@ -8,7 +8,7 @@ import {
   whenHostRegistryLoaded,
   type PairingHostRegistry,
 } from "./woowtech-pairing-confirmation";
-import { linkMentionsOffer, offerPayloadFromLink } from "./woowtech-offer-link";
+import { isRelayPairingLink, linkMentionsOffer, offerPayloadFromLink } from "./woowtech-offer-link";
 
 // woowtech smart (fork-owned; woowtech/README.md, 19): pairing links and QR codes open the hosted
 // web app at its root with the offer in the fragment (BRAND_PAIRING.appBaseUrl). The phone app
@@ -69,7 +69,7 @@ export async function handlePairingLink(
   if (!url || !linkMentionsOffer(url)) return;
   // Before anything waits: the offer is a credential, and every message event reports it again.
   (handlers.clearLink ?? clearPairingLinkFromAddressBar)();
-  if (offerPayloadFromLink(url) === null) {
+  if (offerPayloadFromLink(url) === null && !isRelayPairingLink(url)) {
     // The message leaves the link out: the offer in it is a credential.
     (handlers.warn ?? console.warn)(
       "[Linking] Ignored a link whose fragment does not start with offer=",

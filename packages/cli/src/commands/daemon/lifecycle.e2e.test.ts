@@ -14,17 +14,6 @@ import {
 import { expect, test } from "vitest";
 import { connectToDaemon } from "../../utils/client.js";
 
-// woowtech smart: paseo.pid exists before its JSON is written, so a read right after it appears
-// can see an empty file (CI 2026-10-05: "Unexpected end of JSON input"). Wait for a whole lock.
-async function readLockPid(lockPath: string): Promise<number | null> {
-  try {
-    const lock = JSON.parse(await readFile(lockPath, "utf8")) as { pid?: unknown };
-    return typeof lock.pid === "number" ? lock.pid : null;
-  } catch {
-    return null;
-  }
-}
-
 const repo = fileURLToPath(new URL("../../../../..", import.meta.url));
 const cli = path.join(repo, "packages/cli/dist/index.js");
 
@@ -36,6 +25,10 @@ async function port() {
   if (value === 6767 || value === 6768) throw new Error("Unsafe test port");
   return value;
 }
+
+// Port zero lets the daemon bind its own port, with no gap for another
+// process to take a reserved one. Use it when the test needs no fixed port.
+const ownPort = "127.0.0.1:0";
 
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "paseo lifecycle "));
@@ -151,8 +144,8 @@ test("managed two-home restart retains its supervisor and never routes ordinary 
     const beforeA = await f.liveStatus(a);
     const beforeB = await f.liveStatus(b, poisoned);
     if (process.platform !== "win32") {
-      for (const home of [a, b, path.join(f.root, path.basename(resolvePaseoHome({})))])
-        expect((await stat(home)).mode & 0o777).toBe(0o700);
+      for (const home of [a, b]) expect((await stat(home)).mode & 0o777).toBe(0o700);
+      expect(existsSync(path.join(f.root, path.basename(resolvePaseoHome({}))))).toBe(false);
     }
 
     const repoB = path.join(f.root, "project-b");
@@ -161,7 +154,7 @@ test("managed two-home restart retains its supervisor and never routes ordinary 
     expect(await f.ok(["project", "ls", "--home", a])).toEqual([]);
     expect((await f.ok(["project", "ls", "--home", b], poisoned)).length).toBe(1);
     const stream = await f.run(["logs", "missing-agent", "--follow", "--home", b], poisoned);
-    expect(stream.stderr).toContain("Agent not found: missing-agent");
+    expect(stream.stderr).toContain("No agent found matching: missing-agent");
     const restart = await f.ok(["restart", "--home", b, "--timeout", "30"], poisoned);
     expect(restart.supervisorPid).toBe(launchB.pid);
     expect(restart.workerPid).not.toBe(beforeB.workerPid);
@@ -212,11 +205,11 @@ test("removed flags and ambiguous targets fail before side effects; observation 
   }
 }, 30_000);
 
-test("status reports the server id of a password-protected daemon to a caller without the password", async () => {
+test("local status uses the credential and reports the server id of a password-protected daemon", async () => {
   const f = await fixture();
   const home = f.homes[0]!;
   try {
-    await f.configure(home, `127.0.0.1:${await port()}`);
+    await f.configure(home, ownPort);
     const configPath = path.join(home, "config.json");
     const config = JSON.parse(await readFile(configPath, "utf8"));
     config.daemon.auth = { password: await hashDaemonPassword("secret") };
@@ -224,7 +217,7 @@ test("status reports the server id of a password-protected daemon to a caller wi
     await f.ok(["start", "--home", home, "--timeout", "30"]);
     const authenticated = await f.liveStatus(home, { PASEO_PASSWORD: "secret" });
     expect(await f.ok(["daemon", "status", "--home", home])).toMatchObject({
-      connectedDaemon: "auth_required",
+      connectedDaemon: "reachable",
       serverId: authenticated.serverId,
     });
   } finally {
@@ -373,14 +366,21 @@ test.skipIf(process.platform === "win32").each([["start"], ["daemon", "run"]])(
         stdio: "ignore",
       });
       const exited = new Promise((resolve) => child!.once("exit", resolve));
+      // The lock file exists before its contents identify the supervisor.
+      let supervisorPid: number | undefined;
       await expect
-        .poll(async () => readLockPid(path.join(home, "paseo.pid")), { timeout: 10_000 })
-        .not.toBeNull();
-      const lock = JSON.parse(await readFile(path.join(home, "paseo.pid"), "utf8"));
+        .poll(
+          async () => {
+            supervisorPid = (await readDaemonInstance(home))?.pid;
+            return supervisorPid;
+          },
+          { timeout: 10_000 },
+        )
+        .toBeTypeOf("number");
       await f.ok(["status", "--home", home]);
       child.kill("SIGINT");
       await exited;
-      expect(() => process.kill(lock.pid, 0)).toThrow();
+      expect(() => process.kill(supervisorPid!, 0)).toThrow();
       expect((await f.ok(["status", "--home", home])).localDaemon).toBe("stopped");
     } finally {
       child?.kill("SIGTERM");
@@ -423,7 +423,7 @@ test("empty explicit selectors never select the ambient daemon or create local s
   const f = await fixture();
   const home = f.homes[0]!;
   try {
-    await f.configure(home, `127.0.0.1:${await port()}`);
+    await f.configure(home, ownPort);
     await f.ok(["start", "--home", home]);
     const before = await f.liveStatus(home);
     for (const args of [
@@ -443,6 +443,37 @@ test("empty explicit selectors never select the ambient daemon or create local s
     await f.close();
   }
 }, 60_000);
+
+test.skipIf(process.platform === "win32")(
+  "restart confirms the replacement worker when a provider probe is slow",
+  async () => {
+    const f = await fixture();
+    const home = f.homes[0]!;
+    try {
+      await f.configure(home, `127.0.0.1:${await port()}`);
+      const provider = path.join(f.root, "slow-provider");
+      await writeFile(
+        provider,
+        `#!${process.execPath}\nsetTimeout(() => console.log("provider 1.0.0"), 1800);\n`,
+        { mode: 0o700 },
+      );
+      const configPath = path.join(home, "config.json");
+      const config = JSON.parse(await readFile(configPath, "utf8"));
+      config.agents = {
+        ...config.agents,
+        providers: { claude: { command: { mode: "replace", argv: [provider] } } },
+      };
+      await writeFile(configPath, JSON.stringify(config));
+      const launch = await f.ok(["start", "--home", home, "--timeout", "30"]);
+      const restarted = await f.ok(["restart", "--home", home, "--timeout", "30"]);
+      expect(restarted.supervisorPid).toBe(launch.pid);
+      expect(restarted.workerPid).not.toBe(restarted.previousWorkerPid);
+    } finally {
+      await f.close();
+    }
+  },
+  60_000,
+);
 
 test("IPv6 publication supports home-selected query and worker restart", async () => {
   const f = await fixture();
@@ -466,8 +497,8 @@ test("raw log following subscribes to a stored agent that exists only in B", asy
   const [a, b] = f.homes as [string, string];
   let follower: ReturnType<typeof spawn> | undefined;
   try {
-    await f.configure(a, `127.0.0.1:${await port()}`);
-    await f.configure(b, `127.0.0.1:${await port()}`);
+    await f.configure(a, ownPort);
+    await f.configure(b, ownPort);
     const agentId = "4de8b157-7614-4c38-b189-e50e57fb9498";
     const now = new Date().toISOString();
     await mkdir(path.join(b, "agents"));
@@ -487,7 +518,7 @@ test("raw log following subscribes to a stored agent that exists only in B", asy
     const launchA = await f.ok(["start", "--home", a]);
     await f.ok(["start", "--home", b]);
     const absent = await f.run(["logs", agentId, "--home", a]);
-    expect(absent.stderr).toContain("Agent not found");
+    expect(absent.stderr).toContain(`No agent found matching: ${agentId}`);
     follower = spawn(
       process.execPath,
       [cli, "logs", agentId, "--follow", "--tail", "0", "--home", b],
@@ -506,7 +537,7 @@ test("raw log following subscribes to a stored agent that exists only in B", asy
       errors += data;
     });
     await expect.poll(() => output, { timeout: 15_000 }).toContain("Following logs (no history;");
-    expect(errors).not.toContain("Agent not found");
+    expect(errors).not.toContain("No agent found matching");
   } finally {
     if (follower && follower.exitCode === null) {
       const exited = new Promise((resolve) => follower!.once("exit", resolve));

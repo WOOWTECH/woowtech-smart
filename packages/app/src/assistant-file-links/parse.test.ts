@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { resolveFilePreviewReadTarget } from "@/file-explorer/preview-target";
+import { resolveWorkspaceFilePaths } from "@/workspace/file-open";
 import {
   classifyAssistantFileLink,
   normalizeInlinePathTarget,
@@ -417,6 +419,128 @@ describe("parseAssistantFileLink", () => {
     }
     expect(() => parseFileProtocolUrl("file:///tmp/100% packet loss")).not.toThrow();
   });
+
+  it("decodes percent-encoded relative markdown hrefs", () => {
+    // markdown-it percent-encodes non-ASCII characters in hrefs, so a link
+    // written as [x](docs/reports/开户赠金.md) arrives here percent-encoded.
+    expect(
+      parseAssistantFileLink("docs/reports/%E5%BC%80%E6%88%B7%E8%B5%A0%E9%87%91.md", {
+        workspaceRoot: "/Users/test/project",
+        decodeHref: true,
+      }),
+    ).toEqual({
+      raw: "docs/reports/%E5%BC%80%E6%88%B7%E8%B5%A0%E9%87%91.md",
+      path: "/Users/test/project/docs/reports/开户赠金.md",
+      lineStart: undefined,
+      lineEnd: undefined,
+    });
+  });
+
+  it("decodes percent-encoded spaces in relative markdown hrefs", () => {
+    expect(
+      parseAssistantFileLink("docs/my%20file.md#L5", {
+        workspaceRoot: "/Users/test/project",
+        decodeHref: true,
+      }),
+    ).toEqual({
+      raw: "docs/my%20file.md#L5",
+      path: "/Users/test/project/docs/my file.md",
+      lineStart: 5,
+      lineEnd: undefined,
+    });
+  });
+
+  it("decodes percent-encoded absolute hrefs with line suffixes", () => {
+    expect(
+      parseAssistantFileLink("/tmp/%E5%BC%80%E6%88%B7.md:3", {
+        workspaceRoot: "/Users/test/project",
+        decodeHref: true,
+      }),
+    ).toEqual({
+      raw: "/tmp/%E5%BC%80%E6%88%B7.md:3",
+      path: "/tmp/开户.md",
+      lineStart: 3,
+      lineEnd: undefined,
+    });
+  });
+
+  it("decodes percent-encoded home-relative hrefs", () => {
+    expect(
+      parseAssistantFileLink("~/notes/%E5%BC%80%E6%88%B7.md", {
+        workspaceRoot: "/Users/test/project",
+        decodeHref: true,
+      }),
+    ).toEqual({
+      raw: "~/notes/%E5%BC%80%E6%88%B7.md",
+      path: "~/notes/开户.md",
+      lineStart: undefined,
+      lineEnd: undefined,
+    });
+  });
+
+  it("decodes percent-encoded Windows hrefs", () => {
+    expect(
+      parseAssistantFileLink("C:/repo/my%20dir/app.tsx#L8", {
+        workspaceRoot: "C:/repo",
+        decodeHref: true,
+      }),
+    ).toEqual({
+      raw: "C:/repo/my%20dir/app.tsx#L8",
+      path: "C:/repo/my dir/app.tsx",
+      lineStart: 8,
+      lineEnd: undefined,
+    });
+  });
+
+  it("keeps literal percent signs in raw paths that are not hrefs", () => {
+    // Inline-code and linkified tokens are raw file paths: a real file named
+    // "my%20file.md" must not be decoded into "my file.md".
+    expect(
+      parseAssistantFileLink("docs/my%20file.md", {
+        workspaceRoot: "/Users/test/project",
+      }),
+    ).toEqual({
+      raw: "docs/my%20file.md",
+      path: "/Users/test/project/docs/my%20file.md",
+      lineStart: undefined,
+      lineEnd: undefined,
+    });
+    expect(
+      parseAssistantFileLink("/tmp/my%20file.md:3", {
+        workspaceRoot: "/Users/test/project",
+      }),
+    ).toEqual({
+      raw: "/tmp/my%20file.md:3",
+      path: "/tmp/my%20file.md",
+      lineStart: 3,
+      lineEnd: undefined,
+    });
+  });
+
+  it("keeps non-ASCII characters in raw absolute paths", () => {
+    // `new URL` percent-encodes non-ASCII, so raw paths must not be routed
+    // through URL parsing — `/tmp/开户.md` must round-trip unchanged.
+    expect(
+      parseAssistantFileLink("/tmp/开户.md", {
+        workspaceRoot: "/Users/test/project",
+      }),
+    ).toEqual({
+      raw: "/tmp/开户.md",
+      path: "/tmp/开户.md",
+      lineStart: undefined,
+      lineEnd: undefined,
+    });
+    expect(
+      parseAssistantFileLink("/tmp/开户.md#L4", {
+        workspaceRoot: "/Users/test/project",
+      }),
+    ).toEqual({
+      raw: "/tmp/开户.md#L4",
+      path: "/tmp/开户.md",
+      lineStart: 4,
+      lineEnd: undefined,
+    });
+  });
 });
 
 describe("normalizeInlinePathTarget", () => {
@@ -468,4 +592,64 @@ describe("normalizeInlinePathTarget", () => {
       directory: "packages/app",
     });
   });
+});
+
+describe("encoded filename line markers", () => {
+  it.each(["docs/report.md%3A12", "docs/report.md%2812%2C4%29"])(
+    "keeps encoded line syntax in the filename %s",
+    (href) => {
+      expect(
+        parseAssistantFileLink(href, {
+          workspaceRoot: "/workspace",
+          decodeHref: true,
+        }),
+      ).toMatchObject({ path: `/workspace/${decodeURIComponent(href)}` });
+      expect(
+        parseAssistantFileLink(href, {
+          workspaceRoot: "/workspace",
+          decodeHref: true,
+        })?.lineStart,
+      ).toBeUndefined();
+    },
+  );
+});
+
+describe("slash-prefixed drive links in Windows workspaces", () => {
+  it.each([
+    ["/E:/demo/repo/tools/tool.vbs", "E:/demo/repo/tools/tool.vbs", undefined],
+    ["/E:/demo/repo/docs/my%20file.md#L12", "E:/demo/repo/docs/my file.md", 12],
+    ["/E:/demo/repo/docs/guide.md:12", "E:/demo/repo/docs/guide.md", 12],
+    ["E:/demo/repo/tools/tool.vbs", "E:/demo/repo/tools/tool.vbs", undefined],
+    ["file:///E:/demo/repo/tools/tool.vbs", "E:/demo/repo/tools/tool.vbs", undefined],
+  ])("resolves %s to the workspace read target", (href, path, lineStart) => {
+    const workspaceRoot = "E:\\demo\\repo";
+    const target = parseAssistantFileLink(href, {
+      workspaceRoot,
+      decodeHref: true,
+      explicitLink: true,
+    });
+    expect(target).toMatchObject({ raw: href, path });
+    expect(target?.lineStart).toBe(lineStart);
+    expect(resolveFilePreviewReadTarget({ path: target!.path, workspaceRoot })).toEqual({
+      cwd: workspaceRoot,
+      path,
+    });
+    expect(resolveWorkspaceFilePaths({ path: target!.path, workspaceRoot })).toEqual({
+      absolutePath: path,
+      relativePath: path.slice("E:/demo/repo/".length),
+    });
+  });
+
+  it.each(["/home/demo/repo", undefined])(
+    "preserves POSIX paths with workspace %s",
+    (workspaceRoot) => {
+      expect(
+        parseAssistantFileLink("/E:/demo/repo/tools/tool.vbs", {
+          workspaceRoot,
+          decodeHref: true,
+          explicitLink: true,
+        })?.path,
+      ).toBe("/E:/demo/repo/tools/tool.vbs");
+    },
+  );
 });

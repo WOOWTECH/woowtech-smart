@@ -18,7 +18,12 @@ const SWIPE_BACK = {
 describe("settings pages", () => {
   it("go back with a swipe from the left edge on an iPhone-width layout", () => {
     expect(settingsScreenOptionsFor({ os: "ios", windowWidth: 390 })).toEqual(SWIPE_BACK);
-    expect(settingsScreenOptionsFor({ os: "ios", windowWidth: 719 })).toEqual(SWIPE_BACK);
+    expect(
+      settingsScreenOptionsFor({
+        os: "ios",
+        windowWidth: SETTINGS_SWIPE_BACK_MAX_WIDTH - 1,
+      }),
+    ).toEqual(SWIPE_BACK);
   });
 
   it("take the swipe only near the left edge, so a drag across the page stays on it", () => {
@@ -32,7 +37,12 @@ describe("settings pages", () => {
   });
 
   it("keep the root stack's no animation on a wide layout, where one page replaces the next", () => {
-    expect(settingsScreenOptionsFor({ os: "ios", windowWidth: 720 })).toBeUndefined();
+    expect(
+      settingsScreenOptionsFor({
+        os: "ios",
+        windowWidth: SETTINGS_SWIPE_BACK_MAX_WIDTH,
+      }),
+    ).toBeUndefined();
     expect(settingsScreenOptionsFor({ os: "ios", windowWidth: 1180 })).toBeUndefined();
   });
 

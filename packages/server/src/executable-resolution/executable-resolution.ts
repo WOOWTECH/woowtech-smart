@@ -1,33 +1,72 @@
-import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
+import { constants as fsConstants, existsSync } from "node:fs";
+import { access, stat } from "node:fs/promises";
+import { delimiter, dirname, isAbsolute, resolve } from "node:path";
+import type { ProcessEnvRecord } from "../server/paseo-env.js";
 import { execCommand } from "../utils/spawn.js";
-import { isWindowsCommandScript } from "../utils/windows-command.js";
+import which from "which";
 import { windowsExecutableResolution } from "./windows.js";
 import { findWithWindowsPathRefresh } from "../utils/woowtech-windows-registry-path.js";
 import { probeWindowsExecutable } from "./woowtech-windows-probe.js";
 
-export { quoteWindowsArgument, quoteWindowsCommand } from "../utils/windows-command.js";
-
-type Which = (command: string, options: { all: true }) => Promise<string[]>;
-
-const require = createRequire(import.meta.url);
-const which = require("which") as Which;
 const PROBE_TIMEOUT_MS = 2000;
 
 function hasPathSeparator(value: string): boolean {
   return value.includes("/") || value.includes("\\");
 }
 
-async function enumerateCandidates(name: string): Promise<string[]> {
-  if (process.platform !== "win32" && existsSync("/usr/bin/which")) {
-    return enumerateCandidatesViaSystemWhich(name);
-  }
-  return enumerateCandidatesViaLibrary(name);
+function stripWindowsPathQuotes(entry: string): string {
+  return process.platform === "win32" &&
+    entry.length >= 2 &&
+    entry.startsWith('"') &&
+    entry.endsWith('"')
+    ? entry.slice(1, -1)
+    : entry;
 }
 
-async function enumerateCandidatesViaSystemWhich(name: string): Promise<string[]> {
+function normalizeDirectory(dir: string): string {
+  const resolved = resolve(dir);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function extractAbsolutePathDirs(rawPath: string | undefined): string[] {
+  if (!rawPath) {
+    return [];
+  }
+  return rawPath
+    .split(delimiter)
+    .map(stripWindowsPathQuotes)
+    .filter((entry) => entry.length > 0 && isAbsolute(entry));
+}
+
+async function enumerateCandidates(
+  name: string,
+  env?: ProcessEnvRecord,
+  probe = true,
+): Promise<string[]> {
+  const rawPath = env?.PATH !== undefined ? env.PATH : process.env.PATH;
+  const absolutePathDirs = extractAbsolutePathDirs(rawPath);
+  if (absolutePathDirs.length === 0) {
+    return [];
+  }
+  const filteredEnv: ProcessEnvRecord = {
+    ...(env ?? process.env),
+    PATH: absolutePathDirs.join(delimiter),
+  };
+  const allowedDirs = new Set(absolutePathDirs.map(normalizeDirectory));
+  const candidates =
+    probe && process.platform !== "win32" && existsSync("/usr/bin/which")
+      ? await enumerateCandidatesViaSystemWhich(name, filteredEnv)
+      : await enumerateCandidatesViaLibrary(name, filteredEnv);
+  return candidates.filter((candidate) => allowedDirs.has(normalizeDirectory(dirname(candidate))));
+}
+
+async function enumerateCandidatesViaSystemWhich(
+  name: string,
+  env?: ProcessEnvRecord,
+): Promise<string[]> {
   try {
     const { stdout } = await execCommand("/usr/bin/which", ["-a", name], {
+      baseEnv: env,
       timeout: 3000,
       killSignal: "SIGKILL",
     });
@@ -39,10 +78,13 @@ async function enumerateCandidatesViaSystemWhich(name: string): Promise<string[]
   }
 }
 
-async function enumerateCandidatesViaLibrary(name: string): Promise<string[]> {
+async function enumerateCandidatesViaLibrary(
+  name: string,
+  env?: ProcessEnvRecord,
+): Promise<string[]> {
   let candidates: string[];
   try {
-    candidates = await which(name, { all: true });
+    candidates = await which(name, { all: true, path: env?.PATH, pathExt: env?.PATHEXT });
   } catch (error) {
     // `which` throws ENOENT when the command is absent from PATH.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -63,14 +105,16 @@ async function enumerateCandidatesViaLibrary(name: string): Promise<string[]> {
 
 export async function probeExecutable(
   executablePath: string,
-  timeoutMs = PROBE_TIMEOUT_MS,
+  options: number | ExecutableResolutionOptions = PROBE_TIMEOUT_MS,
 ): Promise<boolean> {
+  const { probeTimeoutMs: timeoutMs = PROBE_TIMEOUT_MS, env } =
+    typeof options === "number" ? { probeTimeoutMs: options } : options;
   try {
     await execCommand(executablePath, ["--version"], {
+      baseEnv: env,
       timeout: timeoutMs,
       killSignal: "SIGKILL",
       maxBuffer: 64 * 1024,
-      shell: isWindowsCommandScript(executablePath),
     });
     return true;
   } catch (error) {
@@ -112,14 +156,67 @@ export function executableExists(
   return exists(executablePath) ? executablePath : null;
 }
 
+// PATH lookup that never runs the candidate, unlike findExecutable which probes
+// each one with `--version`. A terminal spawn path cannot afford that probe: it
+// would execute the profile command once before the terminal even opens.
+// `path` overrides the PATH to search, so a caller can resolve against the
+// environment its child process will actually get rather than the daemon's own.
+export async function findExecutableWithoutProbing(
+  name: string,
+  options: { path?: string; cwd: string },
+): Promise<string | null> {
+  if (!name) {
+    return null;
+  }
+  const path =
+    options.path === undefined
+      ? undefined
+      : options.path
+          .split(delimiter)
+          .map((entry) => resolve(options.cwd, entry))
+          .join(delimiter);
+  const candidates = await enumerateCandidatesViaLibrary(name, { PATH: path });
+  return candidates[0] ?? null;
+}
+
+async function isLocalExecutable(candidate: string): Promise<boolean> {
+  try {
+    const info = await stat(candidate);
+    if (!info.isFile()) return false;
+    if (process.platform !== "win32") {
+      await access(candidate, fsConstants.X_OK);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface ExecutableResolutionOptions {
+  probeTimeoutMs?: number;
+  env?: ProcessEnvRecord;
+  /** When false, resolves using the same candidate rules (including Windows WinGet fallback) without spawning `--version`. */
+  probe?: boolean;
+}
+
 export async function findExecutable(
   name: string,
-  probeTimeoutMs = PROBE_TIMEOUT_MS,
+  options: number | ExecutableResolutionOptions = PROBE_TIMEOUT_MS,
 ): Promise<string | null> {
+  const {
+    probeTimeoutMs = PROBE_TIMEOUT_MS,
+    env,
+    probe = true,
+  } = typeof options === "number" ? { probeTimeoutMs: options } : options;
   const trimmed = name.trim();
   if (!trimmed) {
     return null;
   }
+
+  const checkCandidate = probe
+    ? (command: string, timeout: number) =>
+        probeExecutable(command, { probeTimeoutMs: timeout, env })
+    : (command: string) => isLocalExecutable(command);
 
   if (process.platform === "win32") {
     // woowtech smart: a program installed while the app runs is found after re-reading the saved
@@ -127,22 +224,25 @@ export async function findExecutable(
     return findWithWindowsPathRefresh({
       lookup: () =>
         windowsExecutableResolution.find(trimmed, {
-          enumeratePathCandidates: enumerateCandidates,
+          enumeratePathCandidates: (command) => enumerateCandidates(command, env, probe),
           // woowtech smart: a probe that times out is a miss on Windows (plan G14).
-          probeExecutable: probeWindowsExecutable,
+          probeExecutable: probe
+            ? (command, timeout) => probeWindowsExecutable(command, timeout, env)
+            : checkCandidate,
           exists: existsSync,
+          localAppData: env?.LOCALAPPDATA,
           probeTimeoutMs,
         }),
     });
   }
 
   if (hasPathSeparator(trimmed)) {
-    return (await probeExecutable(trimmed, probeTimeoutMs)) ? trimmed : null;
+    return (await checkCandidate(trimmed, probeTimeoutMs)) ? trimmed : null;
   }
 
-  const candidates = await enumerateCandidates(trimmed);
+  const candidates = await enumerateCandidates(trimmed, env, probe);
   for (const candidate of candidates) {
-    if (await probeExecutable(candidate, probeTimeoutMs)) {
+    if (await checkCandidate(candidate, probeTimeoutMs)) {
       return candidate;
     }
   }

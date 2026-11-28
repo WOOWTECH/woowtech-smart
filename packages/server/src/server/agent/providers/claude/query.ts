@@ -2,12 +2,12 @@ import { type ChildProcess, type ChildProcessWithoutNullStreams } from "node:chi
 import type { Options, Query, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
 
 import {
-  createProviderEnv,
   createProviderEnvSpec,
   type ProviderRuntimeSettings,
 } from "../../provider-launch-config.js";
-import { buildSelfNodeCommand } from "../../../paseo-env.js";
-import { spawnProcess } from "../../../../utils/spawn.js";
+import { buildSelfNodeCommand, createExternalProcessEnv } from "../../../paseo-env.js";
+import { execCommand, spawnProcess } from "../../../../utils/spawn.js";
+import type { AgentLaunchContext } from "../../agent-sdk-types.js";
 import {
   type ClaudeAgentSdkModule,
   type ClaudeAgentSdkSource,
@@ -36,6 +36,8 @@ const defaultSdkSource: ClaudeAgentSdkSource = {
 export interface ClaudeQueryContext {
   runtimeSettings?: ProviderRuntimeSettings;
   launchEnv?: Record<string, string>;
+  /** Start Claude Code as `[...wrap, command, ...args]`. */
+  wrap?: AgentLaunchContext["wrap"];
   queryFactory?: ClaudeQueryFactory;
   sdk?: ClaudeAgentSdkSource;
   /** Called with the spawned child process so the caller can tree-kill it on close. */
@@ -47,7 +49,7 @@ function isChildProcessWithStreams(child: ChildProcess): child is ChildProcessWi
 }
 
 function resolveClaudeSpawnCommand(
-  spawnOptions: SpawnOptions,
+  spawnOptions: Pick<SpawnOptions, "command" | "args">,
   runtimeSettings?: ProviderRuntimeSettings,
 ): { command: string; args: string[] } {
   const commandConfig = runtimeSettings?.command;
@@ -71,11 +73,44 @@ function resolveClaudeSpawnCommand(
   };
 }
 
+type ClaudeLaunchEnvironment = Pick<ClaudeQueryContext, "runtimeSettings" | "launchEnv">;
+
+function createClaudeSpawnEnvSpec(
+  baseEnv: SpawnOptions["env"],
+  { runtimeSettings, launchEnv }: ClaudeLaunchEnvironment,
+) {
+  const spec = createProviderEnvSpec({ baseEnv, runtimeSettings, overlays: [launchEnv] });
+  // Session-open hooks may supply a client identity. Clear inherited SDK/parent identities.
+  spec.envOverlay.CLAUDE_CODE_ENTRYPOINT = launchEnv?.CLAUDE_CODE_ENTRYPOINT;
+  return spec;
+}
+
+export interface ClaudeLaunchVersionProbe extends ClaudeLaunchEnvironment {
+  executable: string;
+  cwd: string;
+  env: SpawnOptions["env"];
+}
+
+export function probeClaudeLaunchVersion(
+  launch: ClaudeLaunchVersionProbe,
+): Promise<{ stdout: string; stderr: string }> {
+  const { command, args } = resolveClaudeSpawnCommand(
+    { command: launch.executable, args: ["--version"] },
+    launch.runtimeSettings,
+  );
+  return execCommand(command, args, {
+    ...createClaudeSpawnEnvSpec(launch.env, launch),
+    cwd: launch.cwd,
+    shell: false,
+    timeout: 5_000,
+  });
+}
+
 function applyRuntimeSettingsToClaudeOptions(
   options: ClaudeOptions,
   context: ClaudeQueryContext,
 ): ClaudeOptions {
-  const { runtimeSettings, launchEnv, onChildProcess } = context;
+  const { runtimeSettings, onChildProcess, wrap } = context;
   return {
     ...options,
     spawnClaudeCodeProcess: (spawnOptions) => {
@@ -86,24 +121,15 @@ function applyRuntimeSettingsToClaudeOptions(
       // When the SDK passes a native binary path (from pathToClaudeCodeExecutable)
       // or the user overrides the command via runtime settings, use that directly.
       const isDefaultRuntime = resolved.command === "node" || resolved.command === "bun";
-      const providerEnvSpec = createProviderEnvSpec({
-        baseEnv: spawnOptions.env,
-        runtimeSettings,
-        overlays: [launchEnv],
-      });
-      const providerEnv = createProviderEnv({
-        baseEnv: spawnOptions.env,
-        runtimeSettings,
-        overlays: [launchEnv],
-      });
-      // buildSelfNodeCommand starts again from the daemon's own environment, so
-      // unset the parent Claude Code session's variables there too.
+      const providerEnvSpec = createClaudeSpawnEnvSpec(spawnOptions.env, context);
+      const providerEnv = createExternalProcessEnv(spawnOptions.env, providerEnvSpec.envOverlay);
       const selfNodeCommand = isDefaultRuntime
         ? buildSelfNodeCommand(resolved.args, { ...providerEnv, ...providerEnvSpec.envOverlay })
         : null;
       const command = selfNodeCommand?.command ?? resolved.command;
       const args = selfNodeCommand?.args ?? resolved.args;
       const child = spawnProcess(command, args, {
+        wrap,
         cwd: spawnOptions.cwd,
         ...(selfNodeCommand
           ? { env: selfNodeCommand.env, envMode: "internal" as const }

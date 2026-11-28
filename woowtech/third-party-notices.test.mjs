@@ -22,7 +22,7 @@
 //
 //   node --test woowtech/third-party-notices.test.mjs
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -100,6 +100,29 @@ const REPLACED_FILE_TYPE_LOGOS = {
 };
 
 const LUCIDE = "lucide-react-native";
+// The deprecated brand icons in 0.546.0's declarations, before 1.x removed them. Keep their
+// names (including Chromium's Chrome alias) forbidden even when the installed library has none.
+const RETIRED_LUCIDE_BRANDS = [
+  "Chromium",
+  "Chrome",
+  "Codepen",
+  "Codesandbox",
+  "Dribbble",
+  "Facebook",
+  "Figma",
+  "Framer",
+  "Github",
+  "Gitlab",
+  "Instagram",
+  "Linkedin",
+  "Pocket",
+  "RailSymbol",
+  "Slack",
+  "Trello",
+  "Twitch",
+  "Twitter",
+  "Youtube",
+];
 
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8");
 const relative = (file) => path.relative(repoRoot, file).split(path.sep).join("/");
@@ -146,23 +169,42 @@ function forgesShowingTheirMark() {
 /**
  * Lucide's brand icons, by every name lucide-react-native exports them under (Github, GithubIcon,
  * LucideGithub and so on), and the files it draws them in (github). Lucide's own type declarations
- * list them: it marks each one deprecated as one of its "Brand icons".
+ * list new deprecated brands; the retired names remain forbidden after their removal in 1.x.
  */
-function lucideBrandIcons() {
-  const types = readFileSync(
-    createRequire(path.join(repoRoot, "packages/app/package.json")).resolve(
-      `${LUCIDE}/dist/lucide-react-native.d.ts`,
-    ),
-    "utf8",
-  );
+function installedLucideTypes() {
+  const appRequire = createRequire(path.join(repoRoot, "packages/app/package.json"));
+  // Resolve the public entry, then read its manifest by filesystem path: 1.x exports neither
+  // package.json nor dist, and declares its types in exports["."].types rather than `types`.
+  let directory = path.dirname(appRequire.resolve(LUCIDE));
+  while (true) {
+    const manifest = path.join(directory, "package.json");
+    if (existsSync(manifest)) {
+      const metadata = JSON.parse(readFileSync(manifest, "utf8"));
+      if (metadata.name === LUCIDE) {
+        const types = metadata.exports?.["."]?.types ?? metadata.types ?? metadata.typings;
+        assert.equal(typeof types, "string", `${LUCIDE} must declare its public types`);
+        return readFileSync(path.resolve(directory, types), "utf8");
+      }
+    }
+    const parent = path.dirname(directory);
+    assert.notEqual(parent, directory, `${LUCIDE}'s package manifest not found`);
+    directory = parent;
+  }
+}
+
+function lucideBrandIcons(types = installedLucideTypes()) {
+  assert.match(types, /declare const \w+: LucideIcon;/, `${LUCIDE}'s icon declarations not found`);
   const brands = new Set(
-    [...types.matchAll(/\/\*\*((?:(?!\*\/)[\s\S])*?)\*\/\s*declare const (\w+): LucideIcon;/g)]
-      .filter(([, doc]) => doc.includes("Brand icons have been deprecated"))
-      .map(([, , name]) => name),
+    [
+      ...RETIRED_LUCIDE_BRANDS,
+      [...types.matchAll(/\/\*\*((?:(?!\*\/)[\s\S])*?)\*\/\s*declare const (\w+): LucideIcon;/g)]
+        .filter(([, doc]) => doc.includes("Brand icons have been deprecated"))
+        .map(([, , name]) => name),
+    ].flat(),
   );
-  assert.ok(brands.has("Github") && brands.has("Gitlab"), `${LUCIDE}'s brand icons not found`);
-  const names = new Set(brands);
-  const exported = /^export \{([^}]*)\};?$/m.exec(types)?.[1] ?? "";
+  const names = new Set([...brands].flatMap((name) => [name, `${name}Icon`, `Lucide${name}`]));
+  const exported = /^export \{([^}]*)\};?$/m.exec(types)?.[1];
+  assert.ok(exported, `${LUCIDE}'s public icon exports not found`);
   for (const entry of exported.split(",")) {
     const [name, alias] = entry.trim().split(/\s+as\s+/);
     if (alias && brands.has(name)) names.add(alias);
@@ -178,14 +220,13 @@ function lucideBrandIcons() {
  * re-export under any of the icon's names, a member of the whole library or of its `icons` object,
  * or an import of the icon's own file.
  */
-function lucideBrandIconsDrawn() {
-  const { names, files } = lucideBrandIcons();
+function lucideBrandIconsDrawn(sources, catalogue = lucideBrandIcons()) {
+  const { names, files } = catalogue;
   const drawn = [];
-  for (const file of shippedSourceFiles(path.join(repoRoot, "packages/app/src"), /\.[jt]sx?$/)) {
-    const source = readFileSync(file, "utf8");
-    const draw = (name) => drawn.push(`${relative(file)}: ${name}`);
+  for (const { file, source } of sources) {
+    const draw = (name) => drawn.push(`${file}: ${name}`);
     const named =
-      /(?:import|export)\s*(?:type\s*)?\{([^}]*)\}\s*from\s*["']lucide-react-native["']/g;
+      /(?:import|export)\s*(?:type\s*)?\{([^}]*)\}\s*from\s*["']lucide-react-native(?:\/icons)?["']/g;
     for (const [, list] of source.matchAll(named)) {
       for (const entry of list.split(",")) {
         const name = entry
@@ -195,7 +236,8 @@ function lucideBrandIconsDrawn() {
         if (names.has(name)) draw(name);
       }
     }
-    const wholeLibrary = /import\s*\*\s*as\s+(\w+)\s+from\s*["']lucide-react-native["']/g;
+    const wholeLibrary =
+      /import\s*\*\s*as\s+(\w+)\s+from\s*["']lucide-react-native(?:\/icons)?["']/g;
     const iconsObject =
       /import\s*\{[^}]*\bicons(?:\s+as\s+(\w+))?\b[^}]*\}\s*from\s*["']lucide-react-native["']/g;
     const libraries = [
@@ -212,7 +254,7 @@ function lucideBrandIconsDrawn() {
       }
     }
     for (const [, iconFile] of source.matchAll(
-      /["']lucide-react-native\/[^"']*\/([\w-]+?)(?:\.js)?["']/g,
+      /["']lucide-react-native\/[^"']*\/([\w-]+?)(?:\.[cm]?js)?["']/g,
     )) {
       if (files.has(iconFile)) draw(iconFile);
     }
@@ -246,13 +288,60 @@ test("every forge mark the app draws has an entry on the notices page, and no ot
 });
 
 test("the app draws no lucide brand icon, under any of its names", () => {
+  const sources = [
+    ...shippedSourceFiles(path.join(repoRoot, "packages/app/src"), /\.[jt]sx?$/),
+  ].map((file) => ({ file: relative(file), source: readFileSync(file, "utf8") }));
   assert.deepEqual(
-    lucideBrandIconsDrawn(),
+    lucideBrandIconsDrawn(sources),
     [],
     "A lucide brand icon ships. Lucide redraws the brand's logo as an outline in the caller's " +
       "colour, which the brands' rules do not allow: GitHub asks for its own mark in black or " +
       "white, GitLab allows no logo. Draw a forge's mark from components/icons where its name " +
       "stands next to it, or use a generic icon.",
+  );
+});
+
+test("the lucide guard catches retired brands, aliases and newly deprecated brands", () => {
+  const catalogue = lucideBrandIcons(`
+/** Brand icons have been deprecated */
+declare const FutureBrand: LucideIcon;
+export { FutureBrand, FutureBrand as AlternateBrand };
+`);
+  for (const brand of [...RETIRED_LUCIDE_BRANDS, "FutureBrand"]) {
+    for (const name of [brand, `${brand}Icon`, `Lucide${brand}`]) {
+      assert.ok(catalogue.names.has(name), `${name} must remain forbidden`);
+    }
+  }
+  assert.ok(catalogue.names.has("AlternateBrand"));
+  for (const name of catalogue.names) {
+    for (const source of [
+      `import { ${name} as Icon } from "lucide-react-native";`,
+      `export { ${name} } from "lucide-react-native/icons";`,
+      `import * as Glyphs from "lucide-react-native/icons"; Glyphs.${name};`,
+      `import { icons as glyphs } from "lucide-react-native"; glyphs["${name}"];`,
+    ]) {
+      assert.deepEqual(lucideBrandIconsDrawn([{ file: "fixture.tsx", source }], catalogue), [
+        `fixture.tsx: ${name}`,
+      ]);
+    }
+  }
+  for (const name of catalogue.files) {
+    const source = `import Icon from "lucide-react-native/icons/${name}";`;
+    assert.deepEqual(lucideBrandIconsDrawn([{ file: "fixture.tsx", source }], catalogue), [
+      `fixture.tsx: ${name}`,
+    ]);
+  }
+  assert.deepEqual(
+    lucideBrandIconsDrawn(
+      [
+        {
+          file: "fixture.tsx",
+          source: 'import { GitPullRequest, Scale } from "lucide-react-native";',
+        },
+      ],
+      catalogue,
+    ),
+    [],
   );
 });
 
@@ -322,20 +411,77 @@ test("the notices page carries Paseo's current root copyright and complete licen
   assert.equal(embedded.PASEO_LICENSE_TEXT, rootLicense);
 });
 
-test("Settings opens the notices page at /settings/notices on every platform", () => {
+function assertNoticesRouting(routes, settings, route, page) {
   assert.match(
-    read("packages/app/src/utils/host-routes.ts"),
+    routes,
     /export const SETTINGS_SECTION_SLUGS = \[[^\]]*"notices",[^\]]*\] as const;/,
   );
-  const settings = read("packages/app/src/screens/settings-screen.tsx");
   const item = /\{\s*id: "notices",[^}]*\}/.exec(settings)?.[0] ?? "";
   assert.match(item, /labelKey: "woowtech\.thirdPartyNotices\.title"/);
-  assert.doesNotMatch(item, /desktopOnly|webOnly/, "the page is not limited to one platform");
-  // The section switch hands the sections it has no case for to the fork, which renders notices.
-  assert.match(settings, /default:\s*return renderWoowtechSettingsSection\(view\.section\);/);
-  const page = read(NOTICES_PAGE);
-  assert.match(page, /section === "notices" \? <ThirdPartyNoticesSection \/> : null/);
+  assert.doesNotMatch(
+    item,
+    /desktopOnly|webOnly|hardwareKeyboardOnly/,
+    "the page is not limited to one platform",
+  );
+  assert.match(item, /Content: ThirdPartyNoticesSection\b/);
+  assert.match(
+    settings,
+    /import \{ ThirdPartyNoticesSection \} from "@\/screens\/settings\/woowtech-third-party-notices-section"/,
+  );
+  assert.match(
+    settings,
+    /const item = SIDEBAR_SECTION_ITEMS.find\(\(candidate\) => candidate.id === view.section\)/,
+  );
+  assert.match(settings, /default:\s*return item.Content \? <item.Content \/> : null;/);
+  assert.match(routes, /return `\/settings\/\$\{section\}` as const;/);
+  // Upstream 0.18 maps retired slugs to their new sections; a current slug such as "notices"
+  // passes through unchanged.
+  assert.match(
+    route,
+    /const normalized = normalizeSettingsSectionSlug\(rawSection\);\s*const section: SettingsSectionSlug = normalized \?\? "general";/,
+  );
+  assert.match(routes, /if \(isSettingsSectionSlug\(value\)\) \{\s*return value;/);
+  assert.match(route, /kind: "section" as const, section/);
+  assert.match(route, /return <SettingsScreen view=\{view\} \/>/);
+  assert.match(page, /export function ThirdPartyNoticesSection\(\)/);
   assert.match(page, /buildThirdPartyNotices\(t\)/);
+}
+
+test("Settings opens the notices page at /settings/notices on every platform", () => {
+  const routes = read("packages/app/src/utils/host-routes.ts");
+  const settings = read("packages/app/src/screens/settings-screen.tsx");
+  const route = read("packages/app/src/app/settings/[section].tsx");
+  const page = read(NOTICES_PAGE);
+  assertNoticesRouting(routes, settings, route, page);
+  for (const replacement of [
+    "",
+    "Content: WrongSection",
+    "Content: ThirdPartyNoticesSection, webOnly: true",
+    "Content: ThirdPartyNoticesSection, hardwareKeyboardOnly: true",
+  ]) {
+    assert.throws(() =>
+      assertNoticesRouting(
+        routes,
+        settings.replace("Content: ThirdPartyNoticesSection", replacement),
+        route,
+        page,
+      ),
+    );
+  }
+  assert.throws(() =>
+    assertNoticesRouting(routes.replace('  "notices",', ""), settings, route, page),
+  );
+  assert.throws(() =>
+    assertNoticesRouting(routes, settings.replace("<item.Content />", "null"), route, page),
+  );
+  assert.throws(() =>
+    assertNoticesRouting(
+      routes,
+      settings,
+      route.replace("<SettingsScreen view={view} />", "null"),
+      page,
+    ),
+  );
 });
 
 test("GitLab's forge mark is the text badge, in the caller's colour", () => {

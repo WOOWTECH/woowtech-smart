@@ -9,6 +9,7 @@ interface ClaudeModelManifestEntry {
   description: string;
   defaultPriority?: number;
   minimumClaudeCodeVersion?: string;
+  requiresDiscovery?: boolean;
   contextWindowMaxTokens?: number;
   effortLevels?: readonly ClaudeEffortLevel[];
   defaultThinkingOptionId?: ClaudeEffortLevel;
@@ -58,9 +59,38 @@ export const CLAUDE_MODEL_MANIFEST = [
     supportsFastMode: true,
   },
   {
+    id: "claude-mythos-5-2",
+    label: "Mythos 5.2",
+    requiresDiscovery: true,
+    description: "Mythos 5.2 · Requires verified access",
+    minimumClaudeCodeVersion: "2.1.321",
+    defaultThinkingOptionId: "medium",
+    contextWindowMaxTokens: 1_000_000,
+    effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
+    supportsFastMode: true,
+  },
+  {
+    id: "claude-mythos-5-1",
+    label: "Mythos 5.1",
+    requiresDiscovery: true,
+    description: "Mythos 5.1 · Requires verified access",
+    contextWindowMaxTokens: 1_000_000,
+    effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
+  },
+  {
+    id: "claude-fable-5-2",
+    label: "Fable 5.2",
+    description: "Fable 5.2 · Most powerful model",
+    minimumClaudeCodeVersion: "2.1.321",
+    defaultThinkingOptionId: "medium",
+    contextWindowMaxTokens: 1_000_000,
+    effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
+    supportsFastMode: true,
+  },
+  {
     id: "claude-fable-5-1",
     label: "Fable 5.1",
-    description: "Fable 5.1 · Most powerful model",
+    description: "Fable 5.1 · Previous release",
     contextWindowMaxTokens: 1_000_000,
     effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
   },
@@ -171,9 +201,19 @@ export const CLAUDE_MODEL_MANIFEST = [
     supportsThinkingDisabled: true,
   },
   {
+    id: "claude-haiku-5-5",
+    label: "Haiku 5.5",
+    description: "Haiku 5.5 · Fastest for quick answers",
+    minimumClaudeCodeVersion: "2.1.293",
+    defaultThinkingOptionId: "medium",
+    contextWindowMaxTokens: 1_000_000,
+    effortLevels: CLAUDE_EFFORT_LEVELS.xhigh,
+    supportsThinkingDisabled: true,
+  },
+  {
     id: "claude-haiku-4-5",
     label: "Haiku 4.5",
-    description: "Haiku 4.5 · Fastest for quick answers",
+    description: "Haiku 4.5 · Previous release",
     contextWindowMaxTokens: 200_000,
   },
 ] as const satisfies readonly ClaudeModelManifestEntry[];
@@ -186,30 +226,39 @@ function buildThinkingOptions(
   effortLevels: readonly ClaudeEffortLevel[] | undefined,
   supportsThinkingDisabled: boolean,
   defaultThinkingOptionId: ClaudeEffortLevel,
+  independentUltracode: boolean,
 ): AgentSelectOption[] | undefined {
   if (!effortLevels) {
     return undefined;
   }
 
-  const options: AgentSelectOption[] = [
+  return [
     ...(supportsThinkingDisabled ? [{ id: CLAUDE_DISABLED_THINKING_OPTION_ID, label: "Off" }] : []),
     ...effortLevels.map((id) => ({
       id,
       label: CLAUDE_EFFORT_LABELS[id],
       ...(id === defaultThinkingOptionId ? { isDefault: true } : {}),
+      // COMPAT(claudeUltracodeThinkingOption): added in v0.17.0, remove after 2027-05-18.
+      ...(independentUltracode && id === "xhigh"
+        ? { metadata: { replacesThinkingOptionId: CLAUDE_ULTRACODE_THINKING_OPTION_ID } }
+        : {}),
     })),
+    ...(!independentUltracode && effortLevels.includes("xhigh")
+      ? [{ id: CLAUDE_ULTRACODE_THINKING_OPTION_ID, label: "Ultra Code" }]
+      : []),
   ];
-
-  if (effortLevels.includes("xhigh")) {
-    options.push({ id: CLAUDE_ULTRACODE_THINKING_OPTION_ID, label: "Ultra Code" });
-  }
-
-  return options;
 }
 
-export function getClaudeManifestModels(claudeCodeVersion?: string): AgentModelDefinition[] {
+export function getClaudeManifestModels(
+  claudeCodeVersion?: string,
+  discoveredModelIds?: ReadonlySet<string>,
+): AgentModelDefinition[] {
   const availableModels: readonly ClaudeModelManifestEntry[] = CLAUDE_MODEL_MANIFEST.filter(
-    (model) => isModelAvailableInClaudeCode(model, claudeCodeVersion),
+    (model) =>
+      isModelAvailableInClaudeCode(model, claudeCodeVersion) &&
+      (discoveredModelIds === undefined ||
+        !("requiresDiscovery" in model && model.requiresDiscovery) ||
+        discoveredModelIds.has(model.id)),
   );
   const defaultModel = availableModels.reduce<ClaudeModelManifestEntry | undefined>(
     (selected, candidate) =>
@@ -223,6 +272,7 @@ export function getClaudeManifestModels(claudeCodeVersion?: string): AgentModelD
       model.effortLevels,
       model.supportsThinkingDisabled === true,
       getDefaultThinkingOptionId(model),
+      supportsIndependentClaudeUltracode(claudeCodeVersion),
     );
     const definition: AgentModelDefinition = {
       provider: "claude",
@@ -293,6 +343,31 @@ export function parseClaudeCodeVersion(value: string): [number, number, number] 
   return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
 }
 
+export function supportsIndependentClaudeUltracode(version: string | undefined): boolean {
+  return version === undefined || compareVersions(version, "2.1.284") >= 0;
+}
+
+/**
+ * The Claude Code version bundled with the Agent SDK release that documents
+ * `mcpServersDelivery: "initialize"`. The SDK only guarantees that delivery for
+ * the bundled Claude Code or newer: an older binary exits on an unknown flag or
+ * has its session ended by the SDK.
+ */
+export const CLAUDE_MCP_SERVERS_VIA_INITIALIZE_MIN_VERSION = "2.1.326";
+
+/**
+ * Whether MCP servers can reach Claude Code over stdin instead of `--mcp-config`
+ * on its command line, where any local user can read their headers and env.
+ * An unknown version (a wrapper command) stays on the command line so the
+ * session still starts.
+ */
+export function supportsClaudeMcpServersViaInitialize(version: string | undefined): boolean {
+  return (
+    version !== undefined &&
+    compareVersions(version, CLAUDE_MCP_SERVERS_VIA_INITIALIZE_MIN_VERSION) >= 0
+  );
+}
+
 export interface ClaudeDisabledThinkingResolution {
   supported: boolean;
   fallbackThinkingOptionId: string | undefined;
@@ -334,6 +409,14 @@ export function claudeManifestModelSupportsFastMode(modelId: string | null | und
   );
 }
 
+export function claudeManifestModelSupportsUltracode(modelId: string | null | undefined): boolean {
+  const normalized = normalizeClaudeRuntimeModelId(modelId);
+  const model: ClaudeModelManifestEntry | undefined = CLAUDE_MODEL_MANIFEST.find(
+    (candidate) => candidate.id === normalized,
+  );
+  return model?.effortLevels?.includes("xhigh") === true;
+}
+
 /**
  * Normalize first-party Claude model IDs for manifest capability checks. Provider-prefixed
  * runtime IDs intentionally use normalizeClaudeRuntimeModelId instead.
@@ -349,7 +432,7 @@ export function normalizeClaudeManifestModelId(value: string | null | undefined)
   }
 
   const singleSegmentMatch = trimmed.match(
-    /^(?:claude[-_ ])?(fable|opus|sonnet|haiku)[-_ ]+(\d+)(?:\[1m\])?(?:[-_ ]+\d{8})?(?:\[1m\])?$/i,
+    /^(?:claude[-_ ])?(mythos|fable|opus|sonnet|haiku)[-_ ]+(\d+)(?:\[1m\])?(?:[-_ ]+\d{8})?(?:\[1m\])?$/i,
   );
   if (singleSegmentMatch) {
     return normalizeSingleSegmentClaudeModelId(
@@ -360,7 +443,7 @@ export function normalizeClaudeManifestModelId(value: string | null | undefined)
   }
 
   const runtimeMatch = trimmed.match(
-    /^(?:claude[-_ ])?(fable|opus|sonnet|haiku)[-_ ]+(\d+)[-.](\d+)(?:\[1m\])?(?:[-_ ]+\d{8})?(?:\[1m\])?$/i,
+    /^(?:claude[-_ ])?(mythos|fable|opus|sonnet|haiku)[-_ ]+(\d+)[-.](\d+)(?:\[1m\])?(?:[-_ ]+\d{8})?(?:\[1m\])?$/i,
   );
   if (!runtimeMatch) {
     return null;
@@ -393,7 +476,7 @@ export function normalizeClaudeRuntimeModelId(value: string | null | undefined):
   }
 
   const runtimeMatch = trimmed.match(
-    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)[-.](\d+)(\[1m\])?/i,
+    /claude[-_ ](mythos|fable|opus|sonnet|haiku)[-_ ]+(\d+)[-.](\d+)(\[1m\])?/i,
   );
   if (runtimeMatch) {
     const normalizedModelId = normalizeMajorMinorClaudeModelId(
@@ -408,7 +491,7 @@ export function normalizeClaudeRuntimeModelId(value: string | null | undefined):
   }
 
   const singleSegmentMatch = trimmed.match(
-    /claude[-_ ](fable|opus|sonnet|haiku)[-_ ]+(\d+)(\[1m\])?/i,
+    /claude[-_ ](mythos|fable|opus|sonnet|haiku)[-_ ]+(\d+)(\[1m\])?/i,
   );
   if (!singleSegmentMatch) {
     return null;

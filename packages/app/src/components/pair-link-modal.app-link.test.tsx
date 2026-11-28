@@ -7,26 +7,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { BRAND_PAIRING } from "@getpaseo/protocol/brand-pairing";
 import { PairingOfferError } from "@/runtime/woowtech-offer-link";
 
-// What the modal hands to the daemon probe, to the host registry and to its caller.
+// Pairing confirmation, probing and persistence are owned by HostRuntimeStore. This UI
+// boundary checks the exact link handed to that flow and its success/cancel/error outcomes.
 const daemon = vi.hoisted(() => ({
-  probes: [] as unknown[],
-  imports: [] as Array<{ link: string; label: string | undefined }>,
+  submissions: [] as Array<{ link: string; password: string | undefined }>,
+  outcome: "connected" as "connected" | "cancelled" | Error,
   saved: [] as unknown[],
-}));
-
-// The user's answer to the host confirmation (runtime/woowtech-pairing-confirmation.ts), and the
-// links it was asked about.
-const confirmation = vi.hoisted(() => ({
-  answer: true as boolean | Error,
-  asked: [] as string[],
-}));
-
-vi.mock("@/runtime/woowtech-pairing-confirmation", () => ({
-  confirmPairingLink: async (link: string) => {
-    confirmation.asked.push(link);
-    if (confirmation.answer instanceof Error) throw confirmation.answer;
-    return confirmation.answer;
-  },
 }));
 
 vi.mock("@/components/adaptive-modal-sheet", async () => {
@@ -65,18 +51,20 @@ vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => true }));
 vi.mock("@/runtime/host-runtime", () => ({
   useHosts: () => [],
   useHostMutations: () => ({
-    upsertConnectionFromOfferUrl: async (link: string, label?: string) => {
-      daemon.imports.push({ link, label });
-      return { serverId: "srv_pairing_test" };
-    },
+    beginLinkPairing: () => ({
+      submit: async (link: string, password?: string) => {
+        daemon.submissions.push({ link, password });
+        if (daemon.outcome instanceof Error) throw daemon.outcome;
+        if (daemon.outcome === "cancelled") return { status: "cancelled" };
+        return {
+          status: "connected",
+          profile: { serverId: "srv_pairing_test" },
+          serverId: "srv_pairing_test",
+          hostname: "mbp",
+        };
+      },
+    }),
   }),
-}));
-
-vi.mock("@/utils/test-daemon-connection", () => ({
-  connectToDaemon: async (connection: unknown, options: unknown) => {
-    daemon.probes.push({ connection, options });
-    return { client: { close: async () => undefined }, hostname: "mbp" };
-  },
 }));
 
 const OFFER = {
@@ -89,7 +77,7 @@ const PAYLOAD = Buffer.from(JSON.stringify(OFFER)).toString("base64url");
 const APP_LINK = `woowtech-smart:///#offer=${PAYLOAD}`;
 const WEB_LINK = `https://smart.woowtech.io/#offer=${PAYLOAD}`;
 
-let modal: typeof import("./pair-link-modal");
+let modal: typeof import("@/hosts/add-host/internal/pair-link-modal");
 const linksGivenToUrl: string[] = [];
 const closeModal = () => undefined;
 const recordSaved = (result: unknown) => {
@@ -98,13 +86,13 @@ const recordSaved = (result: unknown) => {
 
 beforeAll(async () => {
   vi.stubGlobal("React", React);
-  modal = await import("./pair-link-modal");
+  modal = await import("@/hosts/add-host/internal/pair-link-modal");
 }, 120_000);
 
 beforeEach(() => {
   vi.stubGlobal("React", React);
   // React Native's URL class does not reliably read the fragment of a custom-scheme
-  // link, so the modal has to find the offer without it.
+  // link, so the modal must hand the link to the runtime without rewriting it.
   vi.stubGlobal(
     "URL",
     class extends URL {
@@ -114,11 +102,9 @@ beforeEach(() => {
       }
     },
   );
-  daemon.probes = [];
-  daemon.imports = [];
+  daemon.submissions = [];
+  daemon.outcome = "connected";
   daemon.saved = [];
-  confirmation.answer = true;
-  confirmation.asked = [];
   linksGivenToUrl.length = 0;
 });
 
@@ -133,19 +119,8 @@ function paste(link: string): void {
   fireEvent.click(screen.getByTestId("pair-link-submit"));
 }
 
-const PROBE = {
-  connection: {
-    id: "probe",
-    type: "relay",
-    relayEndpoint: "relay.woowtech.io:443",
-    useTls: true,
-    daemonPublicKeyB64: OFFER.daemonPublicKeyB64,
-  },
-  options: { serverId: "srv_pairing_test" },
-};
-
 // woowtech smart's daemon hands out links that open the web app; older daemons hand out links in
-// the app's own scheme. Pasted, both pair once the user confirms the host.
+// the app's own scheme. Both must reach the runtime's confirmation and pairing flow intact.
 describe("pasting a pairing link", () => {
   it("shows the daemon's link as the example", () => {
     render(<modal.PairLinkModal visible onClose={closeModal} />);
@@ -155,11 +130,10 @@ describe("pasting a pairing link", () => {
     );
   });
 
-  it("pairs the host from a web app link once the user confirms it", async () => {
+  it("forwards a web app link and reports the runtime's connected host", async () => {
     paste(WEB_LINK);
 
     await waitFor(() => expect(daemon.saved).toHaveLength(1));
-    expect(confirmation.asked).toEqual([WEB_LINK]);
     expect(daemon.saved).toEqual([
       {
         profile: { serverId: "srv_pairing_test" },
@@ -168,43 +142,37 @@ describe("pasting a pairing link", () => {
         isNewHost: true,
       },
     ]);
-    expect(daemon.probes).toEqual([PROBE]);
-    expect(daemon.imports).toEqual([{ link: WEB_LINK, label: "mbp" }]);
+    expect(daemon.submissions).toEqual([{ link: WEB_LINK, password: undefined }]);
     expect(linksGivenToUrl).toEqual([]);
   });
 
-  it("pairs the host from a link in the app's own scheme, asking with the text as pasted", async () => {
+  it("forwards a link in the app's own scheme with only surrounding whitespace removed", async () => {
     paste(`  ${APP_LINK}  `);
 
     await waitFor(() => expect(daemon.saved).toHaveLength(1));
-    expect(confirmation.asked).toEqual([APP_LINK]);
-    expect(daemon.probes).toEqual([PROBE]);
-    expect(daemon.imports).toEqual([{ link: APP_LINK, label: "mbp" }]);
+    expect(daemon.submissions).toEqual([{ link: APP_LINK, password: undefined }]);
     expect(linksGivenToUrl).toEqual([]);
   });
 
-  it("connects to nothing and shows no error when the user says no", async () => {
-    confirmation.answer = false;
+  it("reports no saved host or error when the runtime cancels pairing", async () => {
+    daemon.outcome = "cancelled";
     paste(WEB_LINK);
 
-    await waitFor(() => expect(confirmation.asked).toEqual([WEB_LINK]));
+    await waitFor(() =>
+      expect(daemon.submissions).toEqual([{ link: WEB_LINK, password: undefined }]),
+    );
     await act(async () => {});
-    expect(daemon.probes).toEqual([]);
-    expect(daemon.imports).toEqual([]);
     expect(daemon.saved).toEqual([]);
     expect(screen.queryByText(/errors|Error|Invalid|Unable/)).toBeNull();
   });
 
   it("shows why a link cannot be used", async () => {
-    confirmation.answer = new PairingOfferError(
-      "Invalid pairing offer: the relay is not host:port",
-    );
+    daemon.outcome = new PairingOfferError("Invalid pairing offer: the relay is not host:port");
     paste(WEB_LINK);
 
     expect(
       await screen.findByText("Invalid pairing offer: the relay is not host:port"),
     ).toBeTruthy();
-    expect(daemon.probes).toEqual([]);
-    expect(daemon.imports).toEqual([]);
+    expect(daemon.saved).toEqual([]);
   });
 });

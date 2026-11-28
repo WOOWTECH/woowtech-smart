@@ -125,7 +125,6 @@ async function expectForkFailureWithoutOverlappingStatus(page: Page) {
   const expectContinuousToast = await observeToastReplacement(page);
   await page.getByRole("button", { name: "Fork chat from here" }).last().click();
   await page.getByRole("menuitem", { name: "Fork in a new tab", exact: true }).click();
-  // woowtech smart: connection errors read "Host is not connected" (utils/error-messages.ts).
   await expect(page.getByRole("alert").filter({ hasText: "Host is not connected" })).toBeVisible();
   await expectReconnectingToastGone(page, { timeout: 100 });
   await expectReconnectingToastVisible(page);
@@ -135,7 +134,7 @@ async function expectForkFailureWithoutOverlappingStatus(page: Page) {
 async function observeToastReplacement(page: Page) {
   const observation = await page
     .getByRole("alert")
-    .filter({ hasText: "Reconnecting to host" })
+    .filter({ hasText: "Reconnecting" })
     .evaluateHandle((toast) => {
       const frames: Array<{ connected: boolean; opacity: number; transform: string }> = [];
       let frame = 0;
@@ -356,6 +355,8 @@ test.describe("Viewed agent timelines", () => {
   });
 
   test("two visible split chats both stay current", async ({ page }) => {
+    // Keep both split panes wide enough for the tab-rail interactions below.
+    await page.setViewportSize({ width: 1600, height: 900 });
     const scenario = await seedViewedTimelineScenario();
     try {
       await enableMoveTabShortcut(page);

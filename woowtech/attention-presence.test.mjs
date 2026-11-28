@@ -55,10 +55,12 @@ test("attention raised while the daemon stops notifies nobody", () => {
       /^const woowtechStopping = this\.connectionLifecycle === "stopping";$/,
       `${name} must read the stopping flag first`,
     );
+    // Agent finishes additionally pass through the unread-finish deduplicator, which can only
+    // suppress delivery. Suppress shutdown first so an undelivered finish is never marked sent.
     assert.match(
       method(tree, name).body.getText(tree),
-      /const plan = woowtechNotificationPlanWhileStopping\(\s*this\.woowtechPlanWithoutPhone\(\s*computeNotificationPlan\(/,
-      `${name} must pass its plan through woowtechNotificationPlanWhileStopping last`,
+      /const plan = (?:this\.planOncePerUnreadFinish\(\s*params,\s*)?woowtechNotificationPlanWhileStopping\(\s*this\.woowtechPlanWithoutPhone\(\s*computeNotificationPlan\(/,
+      `${name} must suppress shutdown notifications before any finish deduplication`,
     );
   }
 
@@ -74,7 +76,8 @@ test("attention raised while the daemon stops notifies nobody", () => {
 
 // With nobody present and no phone to push to, the computer used last shows the notice (owner
 // 2026-11-14): both broadcasts hand upstream's plan, with the clients it was computed from, to
-// the rule, and the rule asks the push token store.
+// the rule, and the rule asks the push token store whether a phone takes this kind of notice
+// (per-device notification preferences, upstream 0.18).
 test("with no phone to push to, the computer used last shows the notice", () => {
   const tree = source(serverFile);
   for (const name of ["broadcastAgentAttention", "broadcastTerminalAttention"]) {
@@ -86,7 +89,7 @@ test("with no phone to push to, the computer used last shows the notice", () => 
     );
     assert.match(
       body,
-      /this\.woowtechPlanWithoutPhone\(\s*computeNotificationPlan\(\{[\s\S]*?\}\),\s*notificationEntries,\s*nowMs,\s*\)/,
+      /this\.woowtechPlanWithoutPhone\(\s*computeNotificationPlan\(\{[\s\S]*?\}\),\s*notificationEntries,\s*nowMs,\s*\{ kind: "(?:agent|terminal)", reason: params\.reason \},\s*\)/,
       `${name} must pass its plan through woowtechPlanWithoutPhone`,
     );
   }
@@ -96,7 +99,7 @@ test("with no phone to push to, the computer used last shows the notice", () => 
     helper,
     /deviceType: this\.sessions\.get\(ws\)\?\.session\.getClientActivity\(ws\)\?\.deviceType \?\? null,/,
   );
-  assert.match(helper, /hasPushTargets: \(\) => this\.pushNotifications\.hasActiveTokens\(\),/);
+  assert.match(helper, /hasPushTargets: \(\) => this\.pushNotifications\.hasActiveTokens\(kind\),/);
 });
 
 // An error pushes too (owner 2026-11-14): an agent's plan and the notice a computer is asked to show

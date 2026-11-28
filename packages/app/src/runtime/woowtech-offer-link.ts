@@ -3,7 +3,7 @@ import {
   decodeOfferFragmentPayload,
   type ConnectionOffer,
 } from "@getpaseo/protocol/connection-offer";
-import { parseHostPort } from "@getpaseo/protocol/daemon-endpoints";
+import { parseHostPort, parseRelayConnectionUri } from "@getpaseo/protocol/daemon-endpoints";
 
 // woowtech smart (fork-owned; woowtech/README.md, 19): the one definition of a pairing link that
 // the link listener, the scanner, the paste field and the desktop fingerprint share, and the
@@ -30,13 +30,33 @@ export function offerPayloadFromLink(link: string): string | null {
   return payload.length > 0 ? payload : null;
 }
 
-/** Whether the fragment carries "offer=" anywhere. Only used to scrub the address bar, never to import. */
+/** Relay URI or the newer hosted connection fragment, matched only at its boundary. */
+export function isRelayPairingLink(link: string): boolean {
+  const raw = link.trim();
+  return raw.startsWith("relay://") || (fragmentOf(raw)?.startsWith("connect=") ?? false);
+}
+
+/** Whether the link carries pairing credentials. Used to scrub the address bar, never to import. */
 export function linkMentionsOffer(link: string): boolean {
-  return fragmentOf(link)?.includes(OFFER_FRAGMENT_START) ?? false;
+  const fragment = fragmentOf(link);
+  return (
+    link.trim().startsWith("relay://") ||
+    Boolean(fragment?.includes(OFFER_FRAGMENT_START) || fragment?.includes("connect="))
+  );
 }
 
 /** offerPayloadFromLink → decodeOfferFragmentPayload → ConnectionOfferSchema.parse → validatePairingOffer. */
 export function readPairingOffer(link: string): ConnectionOffer {
+  if (isRelayPairingLink(link)) {
+    let offer: ConnectionOffer;
+    try {
+      offer = parseRelayConnectionUri(link.trim()).offer;
+    } catch (error) {
+      throw new PairingOfferError("Invalid pairing connection", { cause: error });
+    }
+    validatePairingOffer(offer);
+    return offer;
+  }
   const payload = offerPayloadFromLink(link);
   if (payload === null) {
     throw new PairingOfferError(

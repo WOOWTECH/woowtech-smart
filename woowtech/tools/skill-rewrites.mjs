@@ -131,13 +131,14 @@ function patternRewrites({
     // The skill's own name.
     (text) =>
       text.replace(/^(name: )(paseo(?:-[a-z]+)*)$/m, (_, key, name) => `${key}${skillName(name)}`),
-    // Another skill: **paseo-help**, /paseo-advisor or "the paseo skill". A
-    // slash before a file name, as in /paseo-plugin.json, is a path.
+    // Another skill: **paseo-help**, /paseo-advisor, /skill:paseo-advisor,
+    // $paseo-advisor or "the paseo skill". A slash before a file name, as in
+    // /paseo-plugin.json, is a path.
     (text) => text.replace(/\*\*(paseo(?:-[a-z]+)*)\*\*/g, (_, name) => `**${skillName(name)}**`),
     (text) =>
       text.replace(
-        /(?<=^|[\s`(])\/(paseo(?:-[a-z]+)*)(?![\w-]|\.\w)/g,
-        (_, name) => `/${skillName(name)}`,
+        /(?<=^|[\s`(])(\/(?:skill:)?|\$)(paseo(?:-[a-z]+)*)(?![\w-]|\.\w)/g,
+        (_, prefix, name) => `${prefix}${skillName(name)}`,
       ),
     (text) =>
       text.replace(/(?<![\w.@/-])paseo(?:-[a-z]+)*(?= skill\b)/g, (name) => skillName(name)),

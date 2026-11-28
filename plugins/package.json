@@ -1,0 +1,24 @@
+{
+  "name": "@getpaseo/builtin-plugins",
+  "version": "0.18.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:better-paseo",
+    "build:better-paseo": "npm ci --prefix better-paseo --omit=dev --workspaces=false --no-audit --no-fund && npm run bundle:better-paseo",
+    "bundle:better-paseo": "node better-paseo/scripts/build-builtin.mjs",
+    "typecheck": "tsgo -p tsconfig.json --noEmit && npm run typecheck:better-paseo",
+    "typecheck:better-paseo": "tsgo -p better-paseo/tsconfig.json --noEmit",
+    "test": "vitest run --config ../vitest.config.ts",
+    "pretypecheck:better-paseo": "npm run build:better-paseo",
+    "pretest": "npm run build:better-paseo"
+  },
+  "dependencies": {
+    "@getpaseo/plugin": "*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "vitest": "^4.1.6"
+  }
+}

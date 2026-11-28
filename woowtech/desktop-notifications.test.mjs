@@ -1,5 +1,6 @@
 // Merge guards for the small upstream notification seams. Native delivery behavior
-// is covered by woowtech-notification-delivery.test.ts with a typed event/timer port.
+// is covered by woowtech-notification-delivery.test.ts with a typed event/timer port;
+// renderer click handoff is covered by packages/app/src/notification-open/electron.test.ts.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -82,12 +83,15 @@ test("agent notification caller localizes after existing suppression and dedupli
   const start = session.indexOf("const notifyAgentAttention = useCallback(");
   assert.notEqual(start, -1);
   const callback = session.slice(start, session.indexOf("\n  useEffect(", start));
+  // Upstream 0.18 moved suppression and deduplication into deliverAgentAttentionOsNotification;
+  // the localized text is what its sendNotification callback hands to the OS.
+  assert.match(callback, /deliverAgentAttentionOsNotification\(\{/);
   assert.match(
     callback,
-    /sendOsNotification\(\s*localizeAgentNotification\(\{\s*notification,\s*reason: params.reason,\s*t: notificationTranslationRef.current,?\s*\}\)/,
+    /sendNotification: \(notification\) =>\s*sendOsNotification\(\s*localizeAgentNotification\(\{\s*notification,\s*reason: params.reason,\s*t: notificationTranslationRef.current,?\s*\}\)/,
   );
-  assert.match(callback, /\[serverId\]/);
-  assert.doesNotMatch(callback, /\[serverId, t\]/);
+  assert.match(callback, /\[queryClient, serverId\]/);
+  assert.doesNotMatch(callback, /\[queryClient, serverId, t\]|\[serverId, t\]/);
   assert.match(
     session,
     /const \{ t \} = useTranslation\(\);\s*const notificationTranslationRef = useRef\(t\);\s*notificationTranslationRef.current = t;/,
@@ -97,24 +101,61 @@ test("agent notification caller localizes after existing suppression and dedupli
   assert.ok(dependencies, "observeEvents effect dependencies");
   assert.match(dependencies[1], /\bnotifyAgentAttention\b/);
   assert.doesNotMatch(dependencies[1], /\bt\b|notificationTranslationRef/);
-  // An error notifies like the other reasons (owner 2026-11-14); upstream returned before showing it.
-  assert.doesNotMatch(
-    callback,
-    /params\.reason === "error"/,
-    "a computer must show an agent's error",
+
+  const notifications = source("packages/app/src/contexts/session-notifications.ts");
+  const deliverStart = notifications.indexOf(
+    "export function deliverAgentAttentionOsNotification(",
   );
-  assert.match(callback, /if \(!isAwayFromAgent\) \{\s*return;/);
-  assert.match(callback, /if \(lastNotified && lastNotified >= timestampMs\) \{\s*return;/);
-  assert.match(callback, /attentionNotifiedRef.current.set\(params.agentId, timestampMs\)/);
+  assert.notEqual(deliverStart, -1);
+  const deliver = notifications.slice(
+    deliverStart,
+    notifications.indexOf("\nexport function ", deliverStart + 1),
+  );
+  // An error notifies like the other reasons (owner 2026-11-14): no early return for it, only
+  // the device's own preference, which upstream turns on by default.
+  assert.doesNotMatch(deliver, /reason === "error"/, "a computer must show an agent's error");
   assert.match(
-    callback,
-    /resolveAgentAttentionNotification\(\{\s*notification: params.notification,/,
+    deliver,
+    /shouldDeliverNotification\(input\.preferences, \{\s*kind: "agent",\s*reason: input\.params\.reason,?\s*\}\)/,
   );
-  assert.ok(
-    callback.indexOf("localizeAgentNotification(") > callback.indexOf("if (!notification)"),
+  const preferences = source("packages/protocol/src/notification-preferences.ts");
+  assert.match(
+    preferences,
+    /export const DEFAULT_NOTIFICATION_PREFERENCES[\s\S]*?agentError: true,/,
   );
-  assert.match(session, /return input.notification.data.workspaceId \? input.notification : null/);
-  assert.match(session, /return buildAgentAttentionNotificationPayload\(/);
+  assert.match(deliver, /if \(!isAwayFromAgent\) \{\s*return false;/);
+  assert.match(deliver, /if \(lastNotified && lastNotified >= timestampMs\) \{\s*return false;/);
+  assert.match(deliver, /input\.attentionNotified\.set\(input\.params\.agentId, timestampMs\)/);
+  assert.match(
+    deliver,
+    /resolveAgentAttentionNotification\(\{\s*notification: input\.params\.notification,/,
+  );
+  assert.ok(deliver.indexOf("input.sendNotification(") > deliver.indexOf("if (!notification)"));
+  assert.match(
+    notifications,
+    /return input.notification.data.workspaceId \? input.notification : null/,
+  );
+  assert.match(notifications, /return buildAgentAttentionNotificationPayload\(/);
+});
+
+// woowtech smart (owner 2026-11-28, README section 16): every event notifies by default, as before
+// 0.18. Upstream 0.18 turns agent finished and terminal finished off, and nobody upgrading from 0.17
+// has saved preferences, so those notices would stop without a word.
+test("every notification event is on by default", async () => {
+  const { DEFAULT_NOTIFICATION_PREFERENCES, normalizeNotificationPreferences } = await importSource(
+    "packages/protocol/src/notification-preferences.ts",
+  );
+  const everyEvent = {
+    agentPermission: true,
+    agentError: true,
+    agentFinished: true,
+    terminalNeedsInput: true,
+    terminalFinished: true,
+  };
+  assert.equal(DEFAULT_NOTIFICATION_PREFERENCES.enabled, true);
+  assert.deepEqual(DEFAULT_NOTIFICATION_PREFERENCES.events, everyEvent);
+  assert.deepEqual(normalizeNotificationPreferences(undefined).events, everyEvent);
+  assert.deepEqual(normalizeNotificationPreferences({ events: {} }).events, everyEvent);
 });
 
 test("renderer owns its delivery result union and agrees with Electron without sibling src imports", () => {
@@ -163,7 +204,7 @@ test("notification icon ships with every packaged desktop and is resolved from r
   }
 });
 
-test("notification clicks reopen a window and wait for the renderer's PushNotificationRouter", () => {
+test("notification clicks reopen a window and reach the renderer's notification-open router", () => {
   const main = source("packages/desktop/src/features/notifications.ts");
   assert.match(main, /createNotificationClickRouter\(\{/);
   assert.match(main, /void clickRouter\.routeClick\(senderWebContentsId, data\)/);
@@ -183,13 +224,38 @@ test("notification clicks reopen a window and wait for the renderer's PushNotifi
   );
   const host = source("packages/app/src/desktop/host.ts");
   assert.match(host, /takePendingClick\?: \(\) => Promise</);
-  const layout = source("packages/app/src/app/_layout.tsx");
-  const router = layout.slice(layout.indexOf("function PushNotificationRouter()"));
-  const subscribe = router.indexOf("removeDesktopNotificationListener = unlisten;");
-  const take = router.indexOf("takePendingDesktopNotificationClick(");
+  const entry = source("packages/app/src/notification-open/source.electron.ts");
+  assert.match(
+    entry,
+    /return createElectronNotificationOpenSource\(\{ getHost: getDesktopHost, web: createWebSource\(\) \}\)/,
+  );
+  const adapter = source("packages/app/src/notification-open/electron.ts");
+  assert.match(adapter, /const subscription = host\?\.events\?\.on\?\.\(\s*"notification-click"/);
+  assert.match(adapter, /Promise\.resolve\(subscription\)\s*\.then\(async \(stop\) =>/);
+  const subscribe = adapter.indexOf("stopDesktop = stop;");
+  const take = adapter.indexOf("await takePendingDesktopNotificationClick(");
   assert.notEqual(subscribe, -1);
   assert.ok(take > subscribe, "pending click is taken only after the click listener exists");
-  assert.match(router.slice(take), /openNotification\(data\)/);
+  assert.match(adapter.slice(subscribe, take), /if \(!stop\) return undefined;/);
+  assert.match(adapter.slice(take), /if \(data\) deliver\(data\)/);
+  assert.match(
+    adapter,
+    /if \(activeListener\) activeListener\(tap\);\s*else pendingTaps\.push\(tap\);/,
+    "a consumed click must survive a renderer router remount",
+  );
+  assert.match(adapter, /for \(const tap of pendingTaps\.splice\(0\)\) onTap\(tap\)/);
+  assert.match(adapter, /stopWeb\(\);\s*stopDesktop\?\.\(\);/);
+  const router = source("packages/app/src/notification-open/react/index.tsx");
+  assert.match(router, /import \{ createNotificationOpenSource \} from "\.\.\/source"/);
+  assert.match(
+    router,
+    /createNotificationOpenRouter\(\{\s*source: createNotificationOpenSource\(\)/,
+  );
+  assert.match(router, /useEffect\(\(\) => notificationRouter\.start\(\), \[\]\)/);
+  assert.match(
+    source("packages/app/src/app/_layout.tsx"),
+    /<NotificationOpenRouter startupBlocked=/,
+  );
 });
 
 test("Windows gets the electron-builder appId as AppUserModelID before the app is ready", async () => {

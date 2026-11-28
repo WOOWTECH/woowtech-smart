@@ -29,10 +29,12 @@ const LINE_LINK = /(?<![\w.-])line\.me\/|(?<![\w.-])lin\.ee\/|lwo6431z/i;
 
 test("shipped code links to WoowTech, not to Paseo's website, GitHub or Discord", () => {
   const hits = findInShippedSources([PASEO_WEBSITE, PASEO_GITHUB, DISCORD_INVITE], {
-    // The plugin API is still upstream's, so plugin authors keep Paseo's
-    // plugin docs.
+    // The approved upstream gallery and plugin API keep their own submission and docs links.
     skipPaths: ["packages/cli/src/commands/plugin/scaffold.ts"],
-    allowLines: [/paseo\.sh\/docs\/plugins\//],
+    allowLines: [
+      /paseo\.sh\/docs\/plugins\//,
+      /^\s*"https:\/\/github\.com\/getpaseo\/plugins\/issues\/new\?template=submit-plugin\.yml";$/,
+    ],
   });
   assert.deepEqual(hits, []);
 });

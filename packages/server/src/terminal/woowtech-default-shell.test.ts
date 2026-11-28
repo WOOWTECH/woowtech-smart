@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveDefaultTerminalShell } from "./terminal.js";
+import { resolveDefaultTerminalShell } from "./default-terminal-shell.js";
 import {
   prepareWoowtechDefaultShell,
   resolveWoowtechDefaultShell,

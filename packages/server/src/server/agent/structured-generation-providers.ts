@@ -13,6 +13,7 @@ export interface StructuredGenerationDaemonConfig {
       model?: string;
       thinkingOptionId?: string;
     }>;
+    instructions?: string;
   };
 }
 
@@ -40,6 +41,10 @@ export interface ResolveStructuredGenerationProvidersOptions {
   };
 }
 
+/**
+ * A non-empty configured list means Manual: only those models are tried, in order.
+ * An empty list means Automatic: built-in defaults, then the current selection.
+ */
 export async function resolveStructuredGenerationProviders(
   options: ResolveStructuredGenerationProvidersOptions,
 ): Promise<StructuredGenerationProvider[]> {
@@ -53,16 +58,18 @@ export async function resolveStructuredGenerationProviders(
   const entriesByProvider = new Map(enabledEntries.map((entry) => [entry.provider, entry]));
   const providers: StructuredGenerationProvider[] = [];
 
-  for (const configured of configuredProviders) {
-    const resolvedConfigured = resolveConfiguredCandidate(
-      configured,
-      modelEntries,
-      entriesByProvider,
-    );
-    if (!resolvedConfigured) {
-      continue;
+  if (configuredProviders.length > 0) {
+    for (const configured of configuredProviders) {
+      const resolvedConfigured = resolveConfiguredCandidate(
+        configured,
+        modelEntries,
+        entriesByProvider,
+      );
+      if (resolvedConfigured) {
+        providers.push(resolvedConfigured);
+      }
     }
-    providers.push(resolvedConfigured);
+    return dedupeProviders(providers);
   }
 
   for (const identifier of DEFAULT_STRUCTURED_GENERATION_PROVIDERS) {

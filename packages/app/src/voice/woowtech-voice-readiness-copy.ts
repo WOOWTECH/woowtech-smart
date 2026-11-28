@@ -8,6 +8,7 @@ import { i18n } from "@/i18n/i18next";
 
 /** The daemon's sentences and the woowtech.voiceReadiness key each one reads as. */
 export const KNOWN_VOICE_READINESS_REASONS: Readonly<Record<string, string>> = {
+  "Voice features are disabled in daemon config.": "featuresDisabled",
   "Dictation is disabled in daemon config.": "dictationDisabled",
   "Dictation is unavailable: speech-to-text service is not ready.": "dictationSttUnavailable",
   "Realtime voice is disabled in daemon config.": "voiceDisabled",

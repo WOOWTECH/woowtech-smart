@@ -52,6 +52,8 @@ export function useSchedules(): UseSchedulesResult {
     queryFn: () => fetchAggregatedSchedules({ hosts: hostInputs, runtime }),
     dataShape: "list",
     staleTimeMs: 5_000,
+    // A run can complete after Run Now returns; this observer unmounts off the Schedules screen.
+    refetchInterval: 5_000,
   });
 
   let loadState: AggregateLoadState<AggregatedSchedule>;

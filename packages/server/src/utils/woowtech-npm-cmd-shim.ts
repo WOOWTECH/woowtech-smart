@@ -3,6 +3,8 @@
 // npm are such shims. Only the exact templates of npm's cmd-shim (4.1 and later, npm 7+) are
 // recognized; anything else, including shims that set environment variables or use another
 // interpreter, returns null and keeps running through cmd.exe.
+// TODO: migrate shim reads with spawnProcess's synchronous ChildProcess return contract.
+// eslint-disable-next-line paseo/no-sync-io -- Owned Windows launch resolution; only this shim read.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 

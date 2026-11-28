@@ -631,6 +631,37 @@ describe("stream reducer tool call idempotency", () => {
 });
 
 describe("stream reducer canonical tool calls", () => {
+  it("keeps metadata.intent across lifecycle updates that omit it", () => {
+    const base = { provider: "codex" as const, callId: "call-intent", name: "shell" };
+    const state = hydrateStreamState([
+      {
+        event: canonicalToolTimeline({
+          ...base,
+          status: "running",
+          metadata: { intent: "Inspect" },
+        }),
+        timestamp: new Date(0),
+      },
+      {
+        event: canonicalToolTimeline({ ...base, status: "running" }),
+        timestamp: new Date(1),
+      },
+      {
+        event: canonicalToolTimeline({
+          ...base,
+          status: "completed",
+          metadata: { exitReason: "done" },
+        }),
+        timestamp: new Date(2),
+      },
+    ]);
+
+    expect(findToolByCallId(state, base.callId)?.payload.data.metadata).toEqual({
+      intent: "Inspect",
+      exitReason: "done",
+    });
+  });
+
   it("keeps repeated call ids in different turns as distinct timeline rows", () => {
     const callId = "tool-reused-across-turns";
     const state = hydrateStreamState([
@@ -659,6 +690,82 @@ describe("stream reducer canonical tool calls", () => {
     const tools = state.filter(isAgentToolCallItem);
     expect(tools.map((tool) => tool.turnId)).toEqual(["autonomous-turn-1", "autonomous-turn-2"]);
     expect(new Set(tools.map((tool) => tool.id)).size).toBe(2);
+  });
+
+  it.each(["live", "canonical"] as const)(
+    "keeps current tool identity during %s updates when an older turn reports late",
+    (source) => {
+      let state: StreamItem[] = [];
+      const events = [
+        { callId: "background", turnId: "codex-turn-17", status: "running" as const },
+        { callId: "exec-current", turnId: "codex-turn-18", status: "running" as const },
+        { callId: "background", turnId: "codex-turn-17", status: "completed" as const },
+        { callId: "exec-current", turnId: "codex-turn-18", status: "completed" as const },
+      ];
+      for (const [index, item] of events.entries()) {
+        state = reduceStreamUpdate(
+          state,
+          canonicalToolTimeline({
+            provider: "codex",
+            name: "exec_command",
+            ...item,
+          }),
+          new Date(index * 1000),
+          { source },
+        );
+      }
+      expect(
+        state.filter(isAgentToolCallItem).map((item) => ({
+          id: item.id,
+          turnId: item.turnId,
+          status: item.payload.data.status,
+        })),
+      ).toEqual([
+        {
+          id: "agent_tool_turn:codex-turn-17/background",
+          turnId: "codex-turn-17",
+          status: "completed",
+        },
+        {
+          id: "agent_tool_turn:codex-turn-18/exec-current",
+          turnId: "codex-turn-18",
+          status: "completed",
+        },
+      ]);
+    },
+  );
+
+  it("does not move reasoning into an older turn when a late tool update finalizes it", () => {
+    const background = canonicalToolTimeline({
+      provider: "codex",
+      name: "exec_command",
+      callId: "background",
+      turnId: "old",
+      status: "running",
+    });
+    let state = reduceStreamUpdate([], background, new Date(0));
+    state = reduceStreamUpdate(
+      state,
+      {
+        type: "timeline",
+        provider: "codex",
+        turnId: "current",
+        item: { type: "reasoning", text: "Working on the current request" },
+      },
+      new Date(1),
+    );
+    state = reduceStreamUpdate(
+      state,
+      canonicalToolTimeline({
+        provider: "codex",
+        name: "exec_command",
+        callId: "background",
+        turnId: "old",
+        status: "completed",
+      }),
+      new Date(2),
+    );
+    expect(state.at(-1)).toMatchObject({ kind: "thought", turnId: "current", status: "ready" });
   });
 
   it("merges lifecycle updates for the same call occurrence", () => {
@@ -2304,4 +2411,29 @@ describe("notification timeline items", () => {
     ]);
     expect(new Set(state.map((item) => item.id)).size).toBe(state.length);
   });
+});
+
+it("retains agent-message provenance through live delivery and repeated history", () => {
+  const agentMessage = {
+    event: "finished" as const,
+    sender: { id: "remote::worker", title: "Reviewer" },
+    text: "Done",
+  };
+  const event = {
+    type: "timeline",
+    provider: "codex",
+    item: {
+      type: "tool_call",
+      callId: "delivery",
+      name: "agent_message",
+      status: "completed",
+      error: null,
+      detail: { type: "plain_text", text: "Done" },
+      agentMessage,
+    },
+  } satisfies AgentStreamEventPayload;
+  const live = reduceStreamUpdate([], event, new Date(1));
+  const replay = reduceStreamUpdate(live, event, new Date(2));
+  expect(replay).toHaveLength(1);
+  expect(replay[0]).toMatchObject({ payload: { data: { agentMessage } } });
 });

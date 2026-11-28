@@ -13,6 +13,7 @@ function isAllowedExternalUrl(url: string): boolean {
 }
 
 export async function openExternalUrl(url: string): Promise<void> {
+  if (!isAllowedExternalUrl(url)) return;
   if (isWeb) {
     const opener = getDesktopHost()?.opener?.openUrl;
     if (typeof opener === "function") {
@@ -20,18 +21,7 @@ export async function openExternalUrl(url: string): Promise<void> {
       return;
     }
 
-    // Mirror the Electron opener's scheme allowlist: forge-supplied URLs
-    // (check target_url, job links) reach this sink, so refuse anything that
-    // is not plain http(s) or mailto instead of handing it to window.open.
-    if (!isAllowedExternalUrl(url)) {
-      return;
-    }
-
     window.open(url, "_blank", "noopener,noreferrer");
-    return;
-  }
-
-  if (!isAllowedExternalUrl(url)) {
     return;
   }
 

@@ -1,5 +1,6 @@
 import type {
   OmpAgentMessage,
+  OmpExtensionUiResponse,
   OmpModel,
   OmpPromptAck,
   OmpRpcHostToolDefinition,
@@ -18,6 +19,8 @@ export interface OmpRuntimeLaunch {
   cwd: string;
   argv: string[];
   env?: Record<string, string>;
+  /** Start OMP as `[...wrap, ...argv]`. */
+  wrap?: readonly [string, ...string[]];
   protocolMode?: "rpc" | "rpc-ui";
   model?: string;
   thinkingOptionId?: string;
@@ -32,6 +35,8 @@ export interface OmpStartSessionInput {
   cwd: string;
   signal?: AbortSignal;
   env?: Record<string, string>;
+  /** The agent's launch wrap; every OMP process started for the agent runs behind it. */
+  wrap?: readonly [string, ...string[]];
   protocolMode?: "rpc" | "rpc-ui";
   model?: string;
   thinkingOptionId?: string;
@@ -42,16 +47,23 @@ export interface OmpStartSessionInput {
   extraArgs?: string[];
 }
 
+export interface OmpPromptInput {
+  message: string;
+  images?: Array<{ type: "image"; data: string; mimeType: string }>;
+  streamingBehavior?: "steer" | "followUp";
+}
+
 export interface OmpRuntimeSession {
+  readonly environment: Record<string, string>;
   onEvent(callback: (event: OmpRuntimeEvent) => void): () => void;
-  prompt(
-    message: string,
-    images?: Array<{ type: "image"; data: string; mimeType: string }>,
-  ): Promise<OmpPromptAck>;
+  // With streamingBehavior, a busy OMP queues the message instead of rejecting it, and an
+  // idle OMP starts a run with it.
+  prompt(input: OmpPromptInput): Promise<OmpPromptAck>;
   compact(customInstructions?: string): Promise<void>;
   setAutoCompaction(enabled: boolean): Promise<void>;
   abort(): Promise<void>;
   getState(): Promise<OmpSessionState>;
+  setFastMode(enabled: boolean): Promise<{ enabled: boolean; active: boolean }>;
   getMessages(): Promise<OmpAgentMessage[]>;
   getAvailableModels(timeoutMs?: number | null): Promise<OmpModel[]>;
   setModel(provider: string, modelId: string): Promise<OmpModel>;
@@ -65,16 +77,12 @@ export interface OmpRuntimeSession {
   branch(entryId: string): Promise<{ text: string }>;
   getBranchMessages(): Promise<Array<{ entryId: string; text: string }>>;
   activeBranchEntryId?: string;
-  steer(message: string, images?: Array<{ type: "image"; data: string; mimeType: string }>): void;
-  followUp(
+  steer(
     message: string,
     images?: Array<{ type: "image"; data: string; mimeType: string }>,
-  ): void;
+  ): Promise<void>;
   handoff(customInstructions?: string): Promise<void>;
-  respondToExtensionUiRequest(
-    id: string,
-    response: { value?: string; confirmed?: boolean; cancelled?: boolean },
-  ): void;
+  respondToExtensionUiRequest(id: string, response: OmpExtensionUiResponse): void;
   cancelExtensionUiRequest(id: string): void;
   close(): Promise<void>;
 }
@@ -108,6 +116,7 @@ export function buildOmpLaunch(input: {
             ...input.session.env,
           }
         : undefined,
+    wrap: input.session.wrap,
     model: input.session.model,
     thinkingOptionId: input.session.thinkingOptionId,
     protocolMode,

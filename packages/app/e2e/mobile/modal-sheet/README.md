@@ -85,8 +85,93 @@ agent-device test packages/app/e2e/mobile/modal-sheet/model-tablet.android.ad \
   --artifacts-dir /tmp/paseo-model-tablet-qa
 ```
 
+`model-tablet-profile.android.ad` taps the `+` of a model row in New workspace, asserts the seeded
+profile form opens, and asserts that closing the form leaves the remembered model selected. Run it
+on the same tablet setup, after `model-tablet.android.ad` or with `MODEL_LABEL` remembered, against a
+host with no agent profiles: with a profile saved, the picker opens on its root view, which has no
+Back. Set `PROFILE_MODEL_ID` to a different model on the provider's first page:
+
+```sh
+agent-device test packages/app/e2e/mobile/modal-sheet/model-tablet-profile.android.ad \
+  --serial "$ANDROID_SERIAL" --metro-port "$MODEL_QA_METRO_PORT" \
+  --env FORM_URL="paseo://new?serverId=${SHEET_QA_SERVER_ID}" \
+  --env PROVIDER_ID=codex --env MODEL_LABEL="$MODEL_QA_MODEL_LABEL" \
+  --env PROFILE_MODEL_ID="$MODEL_QA_PROFILE_MODEL_ID"
+```
+
 The existing-agent journey needs the sidebar pinned so its composer stays narrow. Start each run with no modal open;
 a failed provider tap leaves its modal open, so dismiss it before the next run. These host-dependent
 journeys remain outside the default mobile suite, alongside the compact sheet journeys above.
 
 Keep generated screenshots, recordings, and run logs outside the repository.
+
+## Stacked adaptive sheets
+
+`stacked-pairing.ad` opens the welcome screen's pairing sheet and then the root-mounted host
+confirmation. It first types without tapping the input to verify autofocus, then cancels the
+confirmation, closes and reopens the underlying sheet, confirms again,
+and completes the password retry. `stacked-settings.ad` checks the same return and retry through
+Settings → add host → Direct connection → Advanced. Run both on phones and tablets so both the
+bottom sheet and centered dialog are exercised.
+
+These integration journeys require the host-confirmation flow in the test app. Include both the
+sheet fix and that flow in the QA checkout when verifying them; the production sheet component
+has no dependency on the host-confirmation feature.
+
+Use a fresh English app with notification permission granted and first-use keyboard prompts
+already dismissed. Load this checkout from an isolated Metro. Start an isolated password-protected
+daemon and a local Wrangler relay with `--var 'PASEO_RELAY_UPSTREAM:'`; the checked-in upstream
+setting otherwise forwards traffic to the hosted relay, which drops password rejection replies.
+Set `PAIRING_LINK` to the daemon's `relay://` URI with an intentionally incorrect `password` query
+parameter, and `PASSWORD` to its correct password. This exercises password retry even while the
+daemon accepts relay connections with no credential.
+
+```sh
+agent-device replay packages/app/e2e/mobile/modal-sheet/stacked-pairing.ad \
+  --state-dir "$SHEET_QA_DEVICE_STATE" --session stacked-ipad --platform ios \
+  --udid "$SHEET_QA_IOS_UDID" \
+  --env PAIRING_LINK="$SHEET_QA_LINK" --env PASSWORD="$SHEET_QA_PASSWORD" \
+  --env OUT="$SHEET_QA_OUTPUT"
+```
+
+For Settings, first open Settings with Add host visible. With a saved host, open Switch host
+first. Use a second loopback spelling
+(`localhost` instead of `127.0.0.1`) for the same local relay so the saved host asks for confirmation
+of its changed connection. Pass that link to `stacked-settings.ad` with the same arguments.
+For an app with no saved hosts, use the original link; Add host is visible directly in Settings.
+
+Android uses the same journeys: copy each script outside the repository, change its context's
+`platform=ios` to `platform=android`, and pass `--serial` instead of `--udid`. Reverse both Metro
+(including the port advertised by its manifest) and the local relay ports. Keep driver state,
+artifacts, and sessions separate from other runs. These host-dependent journeys remain outside the
+default mobile suite, alongside the existing modal-sheet scripts.
+
+On iPhone, bulk replacement or bulk keyboard entry of the advanced URI field triggers a
+repeated-update error with both the parent and stacked-sheet implementations. Entering the complete
+URI one character at a time passed with both implementations; faster typing remains unverified.
+On iPad, replacing the field a second time appends text. For this Settings journey, use the
+native clipboard Paste menu, then continue the assertions manually. Dismiss the password keyboard
+with Done to submit when the Connect button is below the keyboard. The welcome pairing regression
+runs end to end without these adjustments.
+
+## Sheet footer keyboard safe-area clearance
+
+`footer-keyboard.android.sh` records the **Add project** sheet on an Android device or emulator
+across repeated keyboard open/dismiss transitions, then runs `assert-sheet-footer-keyboard.mjs`
+over every recorded frame. Configure three-button navigation, `show_ime_with_hard_keyboard=1`, and
+a visible soft keyboard (such as Gboard) on the test device before running so the script does not
+mutate device settings. The assertion checks both settled positions against the navigation bar
+height and fails if any frame drops the **Open project** button into the navigation bar or
+overshoots above its open-keyboard position.
+
+```sh
+ANDROID_SERIAL=emulator-5554 \
+  packages/app/e2e/mobile/modal-sheet/footer-keyboard.android.sh
+```
+
+You can also validate an existing screen recording directly (optionally passing pixel tolerance and
+navigation bar height in pixels):
+
+```sh
+node packages/app/e2e/mobile/modal-sheet/assert-sheet-footer-keyboard.mjs /path/to/recording.mp4 4 96
+```

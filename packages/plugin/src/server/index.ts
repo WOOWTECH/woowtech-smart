@@ -1,11 +1,31 @@
 export type {
+  UsageSourceRegistration,
+  UsageReport,
+  UsageWindow,
+  UsageBalance,
+  UsageDetail,
+} from "./usage.js";
+export type {
   PluginHandlerContext,
   PluginServerContext,
   PluginServerContribution,
+  PluginSettings,
+  PluginSettingsState,
+  PluginSubscriptionContext,
 } from "./contracts.js";
 export type {
+  PluginHooks,
+  PluginHookEvents,
+  PluginHookRequests,
+  PluginHookPayload,
+  PluginHookResult,
   PluginHookContext,
   PluginHookWorkspace,
+  PluginHookWorktree,
+  PluginWorktreeCreateRequest,
+  PluginLaunchWrap,
+  PluginTerminalCreateRequest,
+  PluginCommandRunRequest,
   PluginHookAgent,
   PluginSessionOpenRequest,
   PluginTurnOutcome,
@@ -13,3 +33,26 @@ export type {
   PluginBeforeRequests,
   PluginLifecycleRegistration,
 } from "./lifecycle.js";
+
+export { spawnProcess, execCommand, terminateProcess } from "./process.js";
+export type { SpawnProcessOptions } from "./process.js";
+
+export { defineAgentTool } from "./agent-tools.js";
+export type { AgentToolDefinition, AgentToolResult, AgentToolContext } from "./agent-tools.js";
+export type {
+  PluginNotifications,
+  PluginNotificationSendInput,
+  PluginNotificationSendResult,
+  PluginNotificationOpenTarget,
+} from "./notifications.js";
+export type {
+  PluginWorktreeContext,
+  PluginWorktreeCreateInput,
+  PluginWorktreeCreateResult,
+  PluginWorktreeRemoveRequest,
+  PluginWorktreeRemoveResult,
+  PluginWorktreeRestoreTarget,
+  PluginWorktreeRestoreRequest,
+  PluginWorktreeRestoreResult,
+  WorktreeManagerRegistration,
+} from "./worktree.js";

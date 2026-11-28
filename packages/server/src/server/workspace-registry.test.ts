@@ -13,6 +13,7 @@ import {
   FileBackedWorkspaceRegistry,
   resolveWorkspaceDisplayName,
   resolveWorkspaceName,
+  type WorkspaceMutation,
 } from "./workspace-registry.js";
 
 describe("resolveWorkspaceName", () => {
@@ -26,6 +27,21 @@ describe("resolveWorkspaceName", () => {
     expect(resolveWorkspaceName({ title: null, derivedDisplayName: "feature/payments" })).toBe(
       "feature/payments",
     );
+  });
+
+  test("createPersistedWorkspaceRecord defaults background to false and preserves explicit intent", () => {
+    const base = {
+      workspaceId: "ws-1",
+      projectId: "proj-1",
+      cwd: "/tmp/repo",
+      kind: "local_checkout" as const,
+      displayName: "main",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    };
+    expect(createPersistedWorkspaceRecord(base).background).toBe(false);
+    expect(createPersistedWorkspaceRecord({ ...base, background: false }).background).toBe(false);
+    expect(createPersistedWorkspaceRecord({ ...base, background: true }).background).toBe(true);
   });
 
   test("resolveWorkspaceDisplayName applies the same rule over the persisted record", () => {
@@ -98,6 +114,35 @@ describe("workspace registries", () => {
     await projectRegistry.remove("remote:github.com/acme/repo");
     expect(await projectRegistry.get("remote:github.com/acme/repo")).toBeNull();
     expect(await projectRegistry.list()).toEqual([]);
+  });
+
+  test("writes once per mutation and skips missing-record mutations", async () => {
+    let writes = 0;
+    const registry = new FileBackedProjectRegistry(
+      path.join(tmpDir, "projects", "write-count.json"),
+      logger,
+      {
+        writeRecords: async (filePath, records) => {
+          writes++;
+          await writeJsonFileAtomic(filePath, records);
+        },
+      },
+    );
+    const project = createPersistedProjectRecord({
+      projectId: "counted",
+      rootPath: tmpDir,
+      kind: "git",
+      displayName: "Counted",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    });
+    await registry.upsert(project);
+    expect(writes).toBe(1);
+    await registry.update("missing", (current) => current);
+    await registry.remove("missing");
+    expect(writes).toBe(1);
+    await registry.update(project.projectId, (current) => ({ ...current, customName: "Changed" }));
+    expect(writes).toBe(2);
   });
 
   test("preserves a concurrent project update when archiving", async () => {
@@ -415,6 +460,10 @@ describe("workspace registries", () => {
 
   test("creates, updates, archives, deletes, and lists workspace records", async () => {
     await workspaceRegistry.initialize();
+    const mutations: WorkspaceMutation[] = [];
+    workspaceRegistry.subscribeToMutations((mutation) => {
+      mutations.push(mutation);
+    });
     await workspaceRegistry.upsert(
       createPersistedWorkspaceRecord({
         workspaceId: "/tmp/repo",
@@ -445,11 +494,16 @@ describe("workspace registries", () => {
     expect(archived?.archivedAt).toBe("2026-03-03T00:00:00.000Z");
 
     await workspaceRegistry.remove("/tmp/repo");
+    expect(mutations.at(-1)).toEqual({
+      kind: "remove",
+      workspaceId: "/tmp/repo",
+      workspace: archived,
+    });
     expect(await workspaceRegistry.get("/tmp/repo")).toBeNull();
-    expect(await workspaceRegistry.list()).toEqual([]);
+    expect(await workspaceRegistry.listAll()).toEqual([]);
   });
 
-  test("refreshes workspace archive timestamps when an archive is repeated", async () => {
+  test("preserves the first workspace archive and reports whether a queued archive applied", async () => {
     await workspaceRegistry.initialize();
     await workspaceRegistry.upsert(
       createPersistedWorkspaceRecord({
@@ -463,12 +517,24 @@ describe("workspace registries", () => {
       }),
     );
 
-    await workspaceRegistry.archive("workspace-one", "2026-03-02T00:00:00.000Z");
-    await workspaceRegistry.archive("workspace-one", "2026-03-03T00:00:00.000Z");
-
-    expect(await workspaceRegistry.get("workspace-one")).toMatchObject({
-      archivedAt: "2026-03-03T00:00:00.000Z",
-      updatedAt: "2026-03-03T00:00:00.000Z",
+    const events: WorkspaceMutation[] = [];
+    workspaceRegistry.subscribeToMutations((event) => {
+      events.push(event);
+    });
+    expect(
+      await Promise.all([
+        workspaceRegistry.archive("workspace-one", "2026-03-02T00:00:00.000Z"),
+        workspaceRegistry.archive("workspace-one", "2026-03-03T00:00:00.000Z"),
+      ]),
+    ).toEqual([true, false]);
+    expect(events.map((event) => event.kind)).toEqual(["archive"]);
+    const reloaded = new FileBackedWorkspaceRegistry(
+      path.join(tmpDir, "projects", "workspaces.json"),
+      logger,
+    );
+    expect(await reloaded.get("workspace-one")).toMatchObject({
+      archivedAt: "2026-03-02T00:00:00.000Z",
+      updatedAt: "2026-03-02T00:00:00.000Z",
     });
   });
 
@@ -537,5 +603,213 @@ describe("workspace registries", () => {
       title: "Payments work",
       pinnedAt: "2026-03-03T00:00:00.000Z",
     });
+  });
+
+  test("publishUpsert publishes the latest record after a concurrent update and suppresses deferred label broadcasts", async () => {
+    await workspaceRegistry.initialize();
+    const record = createPersistedWorkspaceRecord({
+      workspaceId: "ws-deferred-update",
+      projectId: "proj-1",
+      cwd: "/tmp/repo",
+      kind: "local_checkout",
+      displayName: "main",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    });
+    const mutations: WorkspaceMutation[] = [];
+    workspaceRegistry.subscribeToMutations((mutation) => {
+      mutations.push(mutation);
+    });
+
+    await workspaceRegistry.upsert(record, { publish: false });
+    expect(mutations).toHaveLength(0);
+
+    await workspaceRegistry.update(record.workspaceId, (existing) => ({
+      ...existing,
+      title: "Renamed mid-unarchive",
+      updatedAt: "2026-03-02T00:00:00.000Z",
+    }));
+    await workspaceRegistry.upsert({
+      ...(await workspaceRegistry.get(record.workspaceId))!,
+      displayName: "refreshed-branch",
+      updatedAt: "2026-03-02T00:01:00.000Z",
+    });
+    await workspaceRegistry.commitWorkspaceLabelMutation({
+      stage: (records) => {
+        const current = records.get(record.workspaceId)!;
+        return {
+          updates: [{ ...current, labels: ["lbl_1"] }],
+          result: undefined,
+          forcePersist: true,
+        };
+      },
+      beforeWorkspaceWrite: async () => {},
+      afterWorkspaceWrite: async () => {},
+      afterCommit: () => {},
+    });
+    expect(mutations).toHaveLength(0);
+
+    await workspaceRegistry.publishUpsert(record);
+    expect(mutations).toHaveLength(1);
+    expect(mutations[0]).toMatchObject({
+      kind: "upsert",
+      workspaceId: record.workspaceId,
+      workspace: {
+        title: "Renamed mid-unarchive",
+        displayName: "refreshed-branch",
+        labels: ["lbl_1"],
+      },
+    });
+  });
+
+  test("publishUpsert does not resurrect a workspace archived or removed while deferred", async () => {
+    await workspaceRegistry.initialize();
+    const archivedTarget = createPersistedWorkspaceRecord({
+      workspaceId: "ws-deferred-archive",
+      projectId: "proj-1",
+      cwd: "/tmp/repo-a",
+      kind: "local_checkout",
+      displayName: "main",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    });
+    const removedTarget = createPersistedWorkspaceRecord({
+      workspaceId: "ws-deferred-remove",
+      projectId: "proj-1",
+      cwd: "/tmp/repo-b",
+      kind: "local_checkout",
+      displayName: "main",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    });
+    const mutations: WorkspaceMutation[] = [];
+    workspaceRegistry.subscribeToMutations((mutation) => {
+      mutations.push(mutation);
+    });
+
+    await workspaceRegistry.upsert(archivedTarget, { publish: false });
+    await workspaceRegistry.archive(archivedTarget.workspaceId, "2026-03-02T00:00:00.000Z");
+    await workspaceRegistry.publishUpsert(archivedTarget);
+
+    await workspaceRegistry.upsert(removedTarget, { publish: false });
+    await workspaceRegistry.remove(removedTarget.workspaceId);
+    await workspaceRegistry.publishUpsert(removedTarget);
+
+    expect(mutations.map((m) => `${m.kind}:${m.workspaceId}`)).toEqual([
+      `archive:${archivedTarget.workspaceId}`,
+      `remove:${removedTarget.workspaceId}`,
+    ]);
+  });
+
+  test("stale publishUpsert resuming after archive and re-unarchive does not release the newer hold", async () => {
+    await workspaceRegistry.initialize();
+    const record = createPersistedWorkspaceRecord({
+      workspaceId: "ws-token-race",
+      projectId: "proj-1",
+      cwd: "/tmp/repo-token",
+      kind: "local_checkout",
+      displayName: "main",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    });
+    const mutations: WorkspaceMutation[] = [];
+    workspaceRegistry.subscribeToMutations((mutation) => {
+      mutations.push(mutation);
+    });
+
+    let releaseFirstHook!: () => void;
+    let enteredFirstHook = false;
+    const unsubBefore = workspaceRegistry.subscribeBeforePublish(async () => {
+      if (!enteredFirstHook) {
+        enteredFirstHook = true;
+        await new Promise<void>((resolve) => {
+          releaseFirstHook = resolve;
+        });
+      }
+    });
+
+    const tokenA = Symbol("unarchive-a");
+    const tokenB = Symbol("unarchive-b");
+    await workspaceRegistry.upsert(record, { publish: false, deferToken: tokenA });
+    const publishA = workspaceRegistry.publishUpsert(record, { deferToken: tokenA });
+    await Promise.resolve();
+
+    await workspaceRegistry.archive(record.workspaceId, "2026-03-02T00:00:00.000Z");
+    await workspaceRegistry.upsert(record, { publish: false, deferToken: tokenB });
+
+    // Caller A resumes after archive + Caller B acquired a fresh hold.
+    releaseFirstHook();
+    await publishA;
+
+    expect(workspaceRegistry.isPublicationDeferred(record.workspaceId)).toBe(true);
+    expect(mutations.map((m) => m.kind)).toEqual(["archive"]);
+
+    await workspaceRegistry.publishUpsert(record, { deferToken: tokenB });
+    expect(workspaceRegistry.isPublicationDeferred(record.workspaceId)).toBe(false);
+    expect(mutations.map((m) => m.kind)).toEqual(["archive", "upsert"]);
+    unsubBefore();
+  });
+
+  test("waitForDeferredPublication waits until publishUpsert finishes notifying listeners or deferral clears", async () => {
+    await workspaceRegistry.initialize();
+    const record = createPersistedWorkspaceRecord({
+      workspaceId: "ws-wait-deferred",
+      projectId: "proj-1",
+      cwd: "/tmp/repo-wait",
+      kind: "local_checkout",
+      displayName: "main",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    });
+
+    const events: string[] = [];
+    let releaseMutation!: () => void;
+    workspaceRegistry.subscribeToMutations(async (mutation) => {
+      events.push(`mutation-start:${mutation.kind}`);
+      await new Promise<void>((resolve) => {
+        releaseMutation = resolve;
+      });
+      events.push(`mutation-end:${mutation.kind}`);
+    });
+
+    const token = Symbol("wait-deferred");
+    await workspaceRegistry.upsert(record, { publish: false, deferToken: token });
+
+    let waiterResolved = false;
+    let waiterWaited = false;
+    const waitPromise = (async () => {
+      waiterWaited = await workspaceRegistry.waitForDeferredPublication(record.workspaceId);
+      waiterResolved = true;
+      events.push("waiter-resolved");
+    })();
+
+    await Promise.resolve();
+    expect(waiterResolved).toBe(false);
+
+    const publishPromise = workspaceRegistry.publishUpsert(record, { deferToken: token });
+    await vi.waitFor(() => {
+      expect(events).toContain("mutation-start:upsert");
+    });
+    // Waiter must stay pending until mutation broadcast completes so clients receive workspace_update first.
+    expect(waiterResolved).toBe(false);
+    expect(workspaceRegistry.isPublicationDeferred(record.workspaceId)).toBe(false);
+
+    // A waiter joining during the settling window (after deferral released but before notifyMutation
+    // completes) must still wait and report waited=true.
+    let settlingWaiterResolved = false;
+    let settlingWaiterWaited = false;
+    const settlingWaitPromise = (async () => {
+      settlingWaiterWaited = await workspaceRegistry.waitForDeferredPublication(record.workspaceId);
+      settlingWaiterResolved = true;
+    })();
+    await Promise.resolve();
+    expect(settlingWaiterResolved).toBe(false);
+
+    releaseMutation();
+    await Promise.all([publishPromise, waitPromise, settlingWaitPromise]);
+    expect(waiterWaited).toBe(true);
+    expect(settlingWaiterWaited).toBe(true);
+    expect(await workspaceRegistry.waitForDeferredPublication(record.workspaceId)).toBe(false);
+    expect(events).toEqual(["mutation-start:upsert", "mutation-end:upsert", "waiter-resolved"]);
   });
 });

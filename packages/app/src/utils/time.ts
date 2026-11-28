@@ -133,21 +133,27 @@ export function formatCompactTimeAgo(date: Date, now: Date = new Date()): string
 }
 
 /**
- * How many local midnights lie between two instants: 0 for the same day, 1 for yesterday.
- * Counted on the calendar rather than in elapsed time, so six days and 23 hours ago on
- * today's weekday is 7, and rounded so a DST day of 23 or 25 hours still counts as one.
+ * A compact label put back into a sentence, for a tooltip or a line with room for prose:
+ * "now" → "just now", "5m" → "5m ago", "Jan 15" stays a date.
  */
-function localCalendarDaysBetween(earlier: Date, later: Date): number {
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  return Math.round((startOfDay(later).getTime() - startOfDay(earlier).getTime()) / DAY_MS);
+export function formatCompactTimeAgoAsProse(label: string): string {
+  if (label === i18n.t("woowtech.time.compact.now")) return i18n.t("woowtech.time.justNow");
+  for (const unit of ["minutes", "hours", "days"] as const) {
+    const value = Number.parseInt(label, 10);
+    if (Number.isFinite(value) && label === i18n.t(`woowtech.time.compact.${unit}`, { value })) {
+      return i18n.t(`woowtech.time.ago.${unit}`, { value });
+    }
+  }
+  return label;
 }
 
-/**
- * woowtech smart: the locale a timestamp's words come from, the app language's (as in
- * formatMonthDay) rather than the system's, so a timestamp reads like the label around it. With the
- * system in Chinese and the app in English the turn label read "Worked for 1s, ended 星期三 下午4:52".
- * A memoized label passes it in, so a language change recomputes the label.
- */
+/** Count local calendar dates using equally spaced UTC values for their year, month and day. */
+export function localCalendarDaysBetween(earlier: Date, later: Date): number {
+  const calendarDay = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return (calendarDay(later) - calendarDay(earlier)) / DAY_MS;
+}
+
+/** The app language supplies date words; the device still controls 12/24-hour time. */
 export function appDateLocale(): string {
   return i18n.t("woowtech.time.dateLocale");
 }
@@ -169,6 +175,11 @@ function getTimeFormatter(locale: string): Intl.DateTimeFormat {
   });
   cachedTimeFormatter = { locale, formatter };
   return formatter;
+}
+
+/** A clock time in the device's 12h/24h preference: "3:00 PM" or "15:00". */
+export function formatTimeOfDay(date: Date): string {
+  return getTimeFormatter(appDateLocale()).format(date);
 }
 
 /**

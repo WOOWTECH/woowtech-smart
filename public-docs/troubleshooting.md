@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Why Paseo can't find a provider you've installed, and how to fix the PATH and environment mismatches behind most setup issues.
+description: Fix Linux AppImage launch errors, missing providers, and environment mismatches.
 nav: Common problems
 order: 90
 category: Troubleshooting
@@ -8,7 +8,22 @@ category: Troubleshooting
 
 # Troubleshooting
 
-Almost every "it works in my terminal but not in Paseo" problem is the same thing: Paseo and your terminal aren't searching the same `PATH`. This page covers how to spot that and fix it.
+## AppImage won't open on Linux
+
+Make the downloaded AppImage executable, then launch it from a terminal to see any error:
+
+```bash
+chmod +x Paseo-x86_64.AppImage
+./Paseo-x86_64.AppImage
+```
+
+If it reports `error loading libfuse.so.2`, run without FUSE:
+
+```bash
+./Paseo-x86_64.AppImage --appimage-extract-and-run
+```
+
+The Paseo window should open. You can also install the `.deb` on Debian/Ubuntu or the `.rpm` on Fedora from the [download page](https://paseo.sh/download).
 
 ## Paseo can't find my provider
 
@@ -18,7 +33,7 @@ Paseo launches the agent CLIs you've already installed, it doesn't bundle them (
 
 ### See what Paseo sees
 
-Open **Settings → your host → Providers**, tap the provider, then tap **Diagnostic**. The rows that matter:
+Open **Settings → your host → Providers**, tap the provider, then tap **Diagnostic report**. The rows that matter:
 
 - **Resolved path** — where Paseo found the binary, or `not found`.
 - **Daemon PATH** — the `PATH` Paseo is searching. Compare it to `echo $PATH` in a fresh terminal.
@@ -92,7 +107,7 @@ paseo reload
 
 Paseo applies runtime-safe settings and names any paths that require a restart. Invalid JSON or a schema error applies nothing; fix the reported error and run the command again. If a launch environment variable or flag owns a changed setting, reload reports it separately.
 
-Run `paseo daemon restart` only when reload requests it. In the app, open **Settings → your host → Overview** and use **Restart daemon**. Running agents keep going, and clients reconnect automatically.
+Run `paseo daemon restart` only when reload requests it. In the app, open **Settings → Host → Daemon** and use **Restart daemon**. Running agents keep going, and clients reconnect automatically.
 
 ## Still stuck?
 

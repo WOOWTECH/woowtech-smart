@@ -90,6 +90,16 @@ class FakeDaemonClient {
   cancelDictationStream(dictationId: string): void {
     this.cancels.push(dictationId);
   }
+
+  emitStreamError(dictationId: string, error: string): void {
+    const message = {
+      type: "dictation_stream_error",
+      payload: { dictationId, error, retryable: true },
+    } as SessionOutboundMessage;
+    for (const listener of this.rawMessageListeners) {
+      listener(message);
+    }
+  }
 }
 
 const tick = async () => {
@@ -108,6 +118,67 @@ const promiseOutcome = async <T>(promise: Promise<T>, timeoutMs: number) => {
 };
 
 describe("DictationStreamSender", () => {
+  it("settles a cancelled start without waiting for the host acknowledgement", async () => {
+    const client = new FakeDaemonClient();
+    let acknowledge!: () => void;
+    vi.spyOn(client, "startDictationStream").mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    const sender = new DictationStreamSender({ client, format: "pcm" });
+    const starting = sender.restartStream("start");
+
+    sender.cancel();
+    const outcome = await promiseOutcome(starting, 50);
+    acknowledge();
+    await starting;
+
+    expect(outcome).toBe("resolved");
+    expect(sender.getDictationId()).toBeNull();
+  });
+
+  it("ignores a cancelled start's late failure while the next recording starts", async () => {
+    const client = new FakeDaemonClient();
+    let failFirst!: (error: Error) => void;
+    let acknowledgeSecond!: () => void;
+    vi.spyOn(client, "startDictationStream")
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            failFirst = reject;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            acknowledgeSecond = resolve;
+          }),
+      );
+    let nextId = 0;
+    const sender = new DictationStreamSender({
+      client,
+      format: "pcm",
+      createDictationId: () => `d${++nextId}`,
+    });
+    const first = sender.restartStream("start");
+    const firstOutcome = promiseOutcome(first, 50);
+    sender.cancel();
+    const second = sender.restartStream("start");
+    failFirst(new Error("Late cancelled acknowledgement timeout"));
+
+    expect(await firstOutcome).toBe("resolved");
+    expect(sender.getDictationId()).toBe("d2");
+    expect(await promiseOutcome(second, 1)).toBe("timed-out");
+    sender.enqueueSegment("new-recording");
+    acknowledgeSecond();
+    await second;
+    expect(client.chunks.map(({ dictationId, audio }) => ({ dictationId, audio }))).toEqual([
+      { dictationId: "d2", audio: "new-recording" },
+    ]);
+  });
+
   it("enqueues segments and sends them after stream start", async () => {
     const client = new FakeDaemonClient();
     const ids = ["d1"];
@@ -312,6 +383,29 @@ describe("DictationStreamSender", () => {
 
     client.emitAck("d1", 1);
     await expect(finish).resolves.toEqual({ dictationId: "d1", text: "ok" });
+  });
+
+  it("fails finish with the daemon's stream error instead of waiting for acks", async () => {
+    const client = new FakeDaemonClient();
+    client.autoAck = false;
+    let nextId = 0;
+    const sender = new DictationStreamSender({
+      client,
+      format: "audio/pcm;rate=16000;bits=16",
+      createDictationId: () => `d${++nextId}`,
+    });
+
+    sender.enqueueSegment("seg0");
+    await tick();
+    client.emitStreamError("d1", "Local speech worker request timed out: commit");
+    sender.enqueueSegment("seg1");
+    await tick();
+
+    const finish = sender.finish(1);
+    await expect(promiseOutcome(finish, 1000)).resolves.toBe("rejected");
+    await expect(finish).rejects.toThrow("Local speech worker request timed out");
+    expect(client.finishes).toEqual([]);
+    expect(sender.getSegmentCount()).toBe(2);
   });
 
   it("does not replay long buffered native dictation in one synchronous burst", async () => {

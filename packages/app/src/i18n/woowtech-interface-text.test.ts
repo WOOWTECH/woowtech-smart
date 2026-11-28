@@ -5,9 +5,10 @@ import { i18n } from "@/i18n/i18next";
 import { buildKeyboardShortcutHelpSections } from "@/keyboard/keyboard-shortcuts";
 
 function pinWorkspaceLabel(): string {
-  const rows = buildKeyboardShortcutHelpSections({ isMac: true, isDesktop: true }).flatMap(
-    (section) => section.rows,
-  );
+  const rows = buildKeyboardShortcutHelpSections({
+    isMac: true,
+    usesDesktopBindings: true,
+  }).flatMap((section) => section.rows);
   const row = rows.find((candidate) => candidate.id === "pin-workspace");
   if (!row) throw new Error("the shortcut help has no pin-workspace row");
   return i18n.t(row.labelKey);

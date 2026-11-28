@@ -12,8 +12,13 @@ import { definePanel, type PanelDescriptor } from "@/panels/panel-registry";
 import { queryClient } from "@/data/query-client";
 import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
 import { terminalDisplayName } from "@/terminal/woowtech-terminal-name";
-import { usePanelStore } from "@/stores/panel-store";
+import { showExplorerSidebar } from "@/workspace-tabs/explorer-sidebar";
+import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { useIsCompactFormFactor } from "@/constants/layout";
+import { getIsElectron } from "@/constants/platform";
+import { createWorkspaceBrowser } from "@/desktop/browser/store";
 import { useSessionStore } from "@/stores/session-store";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { useWorkspaceDirectory, useWorkspaceFields } from "@/stores/session-store-hooks";
 
 type ListTerminalsPayload = ListTerminalsResponse["payload"];
@@ -81,17 +86,36 @@ function TerminalPanel() {
   const { isWorkspaceFocused, isPaneFocused } = usePaneFocus();
   const workspaceFields = useWorkspaceFields(serverId, workspaceId, (w) => ({
     workspaceDirectory: w.workspaceDirectory,
-    isGitCheckout: w.projectKind === "git",
   }));
   const workspaceDirectory = workspaceFields?.workspaceDirectory || null;
-  const isGitCheckout = workspaceFields?.isGitCheckout ?? false;
-  const openCompactFileExplorer = usePanelStore((state) => state.openCompactFileExplorer);
+  const isCompact = useIsCompactFormFactor();
   const handleOpenFileExplorer = useCallback(() => {
     if (!workspaceDirectory) {
       return;
     }
-    openCompactFileExplorer({ serverId, cwd: workspaceDirectory, isGit: isGitCheckout });
-  }, [isGitCheckout, openCompactFileExplorer, serverId, workspaceDirectory]);
+    showExplorerSidebar({
+      isCompact,
+      workspaceKey: buildWorkspaceTabPersistenceKey({ serverId, workspaceId }),
+    });
+  }, [isCompact, serverId, workspaceId, workspaceDirectory]);
+  const handleOpenBrowserUrl = useCallback(
+    (url: string) => {
+      if (!getIsElectron()) {
+        return;
+      }
+      const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
+      if (!workspaceKey) {
+        return;
+      }
+      const { browserId } = createWorkspaceBrowser({ initialUrl: url });
+      useWorkspaceLayoutStore.getState().openTab({
+        workspaceKey,
+        target: { kind: "browser", browserId },
+        intent: "reveal",
+      });
+    },
+    [serverId, workspaceId],
+  );
   invariant(target.kind === "terminal", "TerminalPanel requires terminal target");
 
   if (!workspaceDirectory) {
@@ -111,6 +135,7 @@ function TerminalPanel() {
       isPaneFocused={isPaneFocused}
       onOpenFileExplorer={handleOpenFileExplorer}
       onOpenWorkspaceFile={openFileInWorkspace}
+      onOpenBrowserUrl={handleOpenBrowserUrl}
     />
   );
 }

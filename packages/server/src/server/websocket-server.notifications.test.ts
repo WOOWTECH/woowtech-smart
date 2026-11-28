@@ -1,4 +1,9 @@
 import { BRAND } from "@getpaseo/protocol/brand-values";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  type NotificationKind,
+} from "@getpaseo/protocol/notification-preferences";
+import { createWorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import { SessionDelivery } from "./session/owned-subscriptions/index.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,12 +11,13 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Server as HTTPServer } from "http";
 import type pino from "pino";
-import type { AgentManager } from "./agent/agent-manager.js";
+import type { AgentAttentionCallback, AgentManager } from "./agent/agent-manager.js";
 import type { AgentStorage } from "./agent/agent-storage.js";
 import type { DownloadTokenStore } from "./file-download/token-store.js";
 import type { DaemonConfigStore } from "./daemon-config-store.js";
 import type { ScheduleService } from "./schedule/service.js";
 import type { CheckoutDiffManager } from "./checkout-diff-manager.js";
+import type { Session } from "./session.js";
 import { asInternals, createStub } from "./test-utils/class-mocks.js";
 import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
 import {
@@ -56,13 +62,7 @@ import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 
 interface WebSocketServerInternals {
   sessions: Map<unknown, unknown>;
-  broadcastAgentAttention(params: {
-    agentId: string;
-    reason: string;
-    preview?: string;
-    providerId?: string;
-    timestamp?: string;
-  }): Promise<void>;
+  broadcastAgentAttention(params: Parameters<AgentAttentionCallback>[0]): Promise<void>;
 }
 
 function createLogger() {
@@ -86,16 +86,23 @@ function createWorkspaceAutoNameStub(): WorkspaceAutoName {
 
 class RecordingPushNotificationSender implements PushNotificationSender {
   readonly sent: PushPayload[] = [];
+  readonly sentWithKind: Array<{ payload: PushPayload; kind?: NotificationKind }> = [];
 
-  async send(payload: PushPayload): Promise<void> {
+  async send(payload: PushPayload, kind?: NotificationKind): Promise<void> {
     this.sent.push(payload);
+    this.sentWithKind.push({ payload, kind });
   }
 }
 
-function createServer(agentManagerOverrides?: Record<string, unknown>) {
+function createServer(
+  agentManagerOverrides?: Record<string, unknown>,
+  customPushSender?: PushNotificationSender,
+) {
   const pushNotifications = new RecordingPushNotificationSender();
+  const sender = customPushSender ?? pushNotifications;
   const agentManager = {
     subscribe: vi.fn(() => () => {}),
+    onStop: () => () => {},
     setAgentAttentionCallback: vi.fn(),
     getAgent: vi.fn(() => ({ workspaceId: WORKSPACE_ID, pendingPermissions: new Map() })),
     getLastAssistantMessage: vi.fn(async () => null),
@@ -127,6 +134,7 @@ function createServer(agentManagerOverrides?: Record<string, unknown>) {
     null,
     { allowedOrigins: new Set() },
     createWorkspaceAutoNameStub(),
+    createWorkspaceRuntimeStore(),
     undefined,
     undefined,
     undefined,
@@ -155,7 +163,7 @@ function createServer(agentManagerOverrides?: Record<string, unknown>) {
     undefined,
     undefined,
     undefined,
-    pushNotifications,
+    sender,
     createProviderSnapshotManagerStub().manager,
   );
 
@@ -227,8 +235,8 @@ function setPhoneHasPushToken(server: VoiceAssistantWebSocketServer, hasToken: b
   ).pushNotifications = { hasActiveTokens: () => hasToken };
 }
 
-function readAttentionRequiredMessage(ws: ReturnType<typeof createOpenSocket>) {
-  const rawMessage = ws.send.mock.calls[0]?.[0];
+function readAttentionRequiredMessage(ws: ReturnType<typeof createOpenSocket>, index = 0) {
+  const rawMessage = ws.send.mock.calls[index]?.[0];
   expect(typeof rawMessage).toBe("string");
   if (typeof rawMessage !== "string") throw new Error("Expected string WebSocket frame");
   const message = JSON.parse(rawMessage);
@@ -261,6 +269,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-1",
       provider: "claude",
       reason: "finished",
+      attentionTimestamp: new Date(),
     });
 
     expect(unsubscribed.send).not.toHaveBeenCalled();
@@ -285,6 +294,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-1",
       provider: "claude",
       reason: "finished",
+      attentionTimestamp: new Date(),
     });
 
     expect(pushNotifications.sent).toEqual([
@@ -319,6 +329,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-2",
       provider: "claude",
       reason: "finished",
+      attentionTimestamp: new Date(),
     });
 
     expect(pushNotifications.sent).toHaveLength(1);
@@ -345,6 +356,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-X",
       provider: "claude",
       reason: "finished",
+      attentionTimestamp: new Date(),
     });
 
     expect(readAttentionRequiredMessage(electronWs).shouldNotify).toBe(true);
@@ -367,6 +379,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-X",
       provider: "claude",
       reason: "finished",
+      attentionTimestamp: new Date(),
     });
 
     expect(readAttentionRequiredMessage(phoneWs).shouldNotify).toBe(false);
@@ -389,6 +402,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-X",
       provider: "claude",
       reason: "finished",
+      attentionTimestamp: new Date(),
     });
 
     expect(readAttentionRequiredMessage(desktopWs).shouldNotify).toBe(false);
@@ -403,6 +417,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-X",
       provider: "claude",
       reason: "finished",
+      attentionTimestamp: new Date(),
     });
 
     expect(pushNotifications.sent).toEqual([]);
@@ -416,6 +431,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-no-heartbeat",
       provider: "claude",
       reason: "finished",
+      attentionTimestamp: new Date(),
     });
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
@@ -423,9 +439,8 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
   });
 
   // woowtech smart (README section 16, owner 2026-11-14): an error pushes too, so the user can come
-  // back and change the task or the conversation (woowtech-attention-presence.ts). Upstream did not
-  // push errors.
-  it("pushes error attention too when the only connected client has never sent a heartbeat", async () => {
+  // back and change the task or the conversation (woowtech-attention-presence.ts).
+  it("pushes error attention with agent error NotificationKind when the only connected client has never sent a heartbeat", async () => {
     const { server, pushNotifications } = createServer();
     const ws = connectClient(server, null);
 
@@ -433,11 +448,13 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-no-heartbeat",
       provider: "claude",
       reason: "error",
+      attentionTimestamp: new Date(),
     });
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
     expect(pushNotifications.sent).toHaveLength(1);
     expect(pushNotifications.sent[0]?.data?.reason).toBe("error");
+    expect(pushNotifications.sentWithKind[0]?.kind).toEqual({ kind: "agent", reason: "error" });
   });
 
   // woowtech smart: a present computer shows the error, and the daemon remembers it, so the phone
@@ -461,6 +478,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-X",
       provider: "claude",
       reason: "error",
+      attentionTimestamp: new Date(),
     });
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(true);
@@ -493,6 +511,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
         agentId: "agent-X",
         provider: "claude",
         reason: "finished",
+        attentionTimestamp: new Date(),
       });
 
       expect(readAttentionRequiredMessage(earlierWs).shouldNotify).toBe(false);
@@ -509,6 +528,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
         agentId: "agent-X",
         provider: "claude",
         reason: "finished",
+        attentionTimestamp: new Date(),
       });
 
       expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
@@ -524,6 +544,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
         agentId: "agent-X",
         provider: "claude",
         reason: "error",
+        attentionTimestamp: new Date(),
       });
 
       expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
@@ -540,6 +561,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
         agentId: "agent-X",
         provider: "claude",
         reason: "error",
+        attentionTimestamp: new Date(),
       });
 
       expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(true);
@@ -561,6 +583,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
         agentId: "agent-X",
         provider: "claude",
         reason: "finished",
+        attentionTimestamp: new Date(),
       });
 
       expect(readAttentionRequiredMessage(phoneWs).shouldNotify).toBe(false);
@@ -578,6 +601,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
         agentId: "agent-X",
         provider: "claude",
         reason: "finished",
+        attentionTimestamp: new Date(),
       });
 
       expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
@@ -591,8 +615,13 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     const { server } = createServer();
 
     const serverInfo = asInternals<{
-      buildServerInfoStatusPayload(session: { getPermissions(): string[] }): unknown;
-    }>(server).buildServerInfoStatusPayload({ getPermissions: () => [] });
+      buildServerInfoStatusPayload(
+        session: Pick<Session, "getPermissions" | "getHostSourceId">,
+      ): unknown;
+    }>(server).buildServerInfoStatusPayload({
+      getPermissions: () => [],
+      getHostSourceId: () => "client-test",
+    });
 
     expect(parseServerInfoStatusPayload(serverInfo)?.features?.woowtechPush).toBe(true);
   });
@@ -652,6 +681,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
         agentId,
         provider: "claude",
         reason: "finished",
+        attentionTimestamp: new Date(),
       });
       await new Promise((resolve) => setImmediate(resolve));
 
@@ -674,5 +704,125 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+
+  it("filters agent finished, permission, and error pushes per token preferences", async () => {
+    const home = mkdtempSync(path.join(tmpdir(), "paseo-ws-agent-prefs-"));
+    try {
+      const deliveries: Array<{ tokens: string[]; payload: PushPayload }> = [];
+      const realPush = createPushNotifications({
+        logger: createStub<pino.Logger>(createLogger()),
+        filePath: path.join(home, "push-tokens.json"),
+        deliver: async (tokens, payload) => {
+          deliveries.push({ tokens, payload });
+        },
+      });
+      // Phone A: permission and error on, finished off (woowtech smart: the defaults turn every
+      // event on, owner 2026-11-28)
+      realPush.renew("ExponentPushToken[phone-default]", {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        events: {
+          ...DEFAULT_NOTIFICATION_PREFERENCES.events,
+          agentFinished: false,
+        },
+      });
+      // Phone B: finished enabled, error disabled
+      realPush.renew("ExponentPushToken[phone-finished-only]", {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        events: {
+          ...DEFAULT_NOTIFICATION_PREFERENCES.events,
+          agentPermission: false,
+          agentError: false,
+          agentFinished: true,
+        },
+      });
+
+      const { server } = createServer(undefined, realPush);
+
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-1",
+        provider: "claude",
+        reason: "finished",
+        attentionTimestamp: new Date(1_000),
+      });
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-1",
+        provider: "claude",
+        reason: "permission",
+        attentionTimestamp: new Date(2_000),
+      });
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-1",
+        provider: "claude",
+        reason: "error",
+        attentionTimestamp: new Date(3_000),
+      });
+
+      // woowtech smart: the relay payload is built asynchronously (push/woowtech-push-content.ts).
+      await vi.waitFor(() => expect(deliveries).toHaveLength(3));
+      expect(deliveries.map((d) => ({ tokens: d.tokens, reason: d.payload.data.reason }))).toEqual([
+        { tokens: ["ExponentPushToken[phone-finished-only]"], reason: "finished" },
+        { tokens: ["ExponentPushToken[phone-default]"], reason: "permission" },
+        { tokens: ["ExponentPushToken[phone-default]"], reason: "error" },
+      ]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+  it("notifies once while an agent's finish stays unread", async () => {
+    const { server, pushNotifications } = createServer();
+    const broadcast = (attentionTimestamp: Date) =>
+      asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-1",
+        provider: "claude",
+        reason: "finished",
+        attentionTimestamp,
+      });
+    const firstUnreadFinish = new Date(1_000);
+
+    await broadcast(firstUnreadFinish);
+    await broadcast(firstUnreadFinish);
+    await broadcast(firstUnreadFinish);
+    expect(pushNotifications.sent).toHaveLength(1);
+
+    // After the user reads the agent (or marks it unread), its next unread finish is new.
+    await broadcast(new Date(2_000));
+    expect(pushNotifications.sent).toHaveLength(2);
+  });
+
+  it("notifies a repeated finish when the user had the agent on screen for the first one", async () => {
+    const { server, pushNotifications } = createServer();
+    // With a phone token, leaving the computer routes the unread finish to the phone.
+    setPhoneHasPushToken(server, true);
+    const activity = {
+      deviceType: "web" as const,
+      appVisible: true,
+      focusedAgentId: "agent-1" as string | null,
+      lastActivityAt: new Date(),
+    };
+    const ws = connectClient(server, activity);
+    const unreadFinish = new Date(1_000);
+    const broadcast = () =>
+      asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-1",
+        provider: "claude",
+        reason: "finished",
+        attentionTimestamp: unreadFinish,
+      });
+
+    await broadcast();
+    expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toEqual([]);
+
+    // The user leaves; the agent keeps finishing turns it starts on its own.
+    activity.appVisible = false;
+    activity.focusedAgentId = null;
+    activity.lastActivityAt = new Date(Date.now() - 600_000);
+    await broadcast();
+    await broadcast();
+    expect(pushNotifications.sent).toHaveLength(1);
+    expect(ws.send).toHaveBeenCalledTimes(3);
+    expect(readAttentionRequiredMessage(ws, 1).shouldNotify).toBe(false);
+    expect(readAttentionRequiredMessage(ws, 2).shouldNotify).toBe(false);
   });
 });

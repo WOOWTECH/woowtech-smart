@@ -114,7 +114,7 @@ describe("planWindowsSpawn", () => {
     ).toEqual({
       via: "cmd-script",
       command: "C:\\Windows\\System32\\cmd.exe",
-      args: ['/d /v:off /s /c "C:\\tools\\build.cmd ^^^"fix^^^ ^^^(wip^^^)^^^" ^^^"a^^^&b^^^""'],
+      args: ['/d /v:off /s /c "C:\\tools\\build.cmd ^"fix^ ^(wip^)^" ^"a^&b^""'],
       windowsVerbatimArguments: true,
     });
   });
@@ -133,7 +133,7 @@ describe("planWindowsSpawn", () => {
     expect(planWindowsSpawn({ command: "claude", args: ["-v"], env: ENV, ...noNode })).toEqual({
       via: "cmd-script",
       command: "C:\\Windows\\System32\\cmd.exe",
-      args: [`/d /v:off /s /c "${NPM}\\claude.cmd ^^^"-v^^^""`],
+      args: [`/d /v:off /s /c "${NPM}\\claude.cmd -v"`],
       windowsVerbatimArguments: true,
     });
   });

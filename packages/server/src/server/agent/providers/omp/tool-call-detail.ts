@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import type { ToolCallDetail } from "../../agent-sdk-types.js";
+import type { ToolCallDetail, ToolCallTimelineItem } from "../../agent-sdk-types.js";
+import { omitNullArgs } from "../tool-call-args.js";
 
 interface BashToolInput {
   command: string;
@@ -57,8 +58,13 @@ interface OmpToolResultObject {
   details?: OmpToolResultDetails;
 }
 
+interface OmpToolResultStructuredError {
+  message: string;
+}
+
 interface OmpToolResultDetails {
   diff?: string;
+  error?: string | OmpToolResultStructuredError;
   mode?: string;
   xdev?: unknown;
 }
@@ -123,7 +129,7 @@ interface OmpUnknownToolCall {
   args: unknown;
 }
 
-export type OmpTrackedToolCall =
+export type OmpTrackedToolCall = (
   | OmpBashToolCall
   | OmpReadToolCall
   | OmpEditToolCall
@@ -131,7 +137,8 @@ export type OmpTrackedToolCall =
   | OmpFindToolCall
   | OmpGrepToolCall
   | OmpLsToolCall
-  | OmpUnknownToolCall;
+  | OmpUnknownToolCall
+) & { intent?: string };
 
 interface ToolCallOutputSummary {
   output?: string;
@@ -154,9 +161,17 @@ const OmpToolResultContentSchema = z.union([
   OmpToolResultUnknownContentSchema,
 ]);
 
+// OMP's own tools report a string error; Paseo host tools (browser_*) report
+// a structured `{ code, message, retryable }` error.
+const OmpToolResultErrorSchema = z.union([
+  z.string(),
+  z.object({ message: z.string() }).passthrough(),
+]);
+
 const OmpToolResultDetailsSchema = z
   .object({
     diff: z.string().optional(),
+    error: OmpToolResultErrorSchema.optional(),
   })
   .passthrough();
 
@@ -270,13 +285,70 @@ export function extractTextFromToolResult(result: OmpToolResult): string | undef
   return textParts.length > 0 ? textParts.join("\n") : undefined;
 }
 
-export function parseToolArgs(toolName: string, rawArgs: unknown): OmpTrackedToolCall {
+export function toolFailureMessage(result: OmpToolResult): string {
+  const error = result && typeof result !== "string" ? result.details?.error : undefined;
+  const errorMessage = typeof error === "string" ? error : error?.message;
+  if (errorMessage) {
+    return errorMessage.split("\n", 1)[0].slice(0, 240);
+  }
+  const output = extractTextFromToolResult(result);
+  const exitMessage = output?.match(/(?:Command|Process) exited with code \d+/i)?.[0];
+  if (exitMessage) return exitMessage;
+  const firstLine = output
+    ?.split("\n")
+    .find((line) => line.trim())
+    ?.trim();
+  if (firstLine) return firstLine.slice(0, 240);
+  if (result && typeof result !== "string") {
+    const code = result.exitCode ?? result.code;
+    if (typeof code === "number") return `Tool exited with code ${code}`;
+  }
+  return "Tool call failed";
+}
+
+export function isOmpToolFailure(
+  toolCall: OmpTrackedToolCall,
+  result: OmpToolResult,
+  isError: boolean,
+): boolean {
+  return (
+    isError ||
+    (toolCall.toolName === "web_search" &&
+      result !== null &&
+      typeof result !== "string" &&
+      typeof result.details?.error === "string")
+  );
+}
+
+/**
+ * `intent` is the harness-level value OMP reports beside the arguments. Never derive it from
+ * `rawArgs.i`: OMP copies its own `i` into `intent`, and any other `i` belongs to the tool.
+ */
+export function parseToolArgs(
+  toolName: string,
+  rawArgs: unknown,
+  intent?: unknown,
+): OmpTrackedToolCall {
+  const toolCall = parseToolArgsByName(toolName, rawArgs);
+  // Replayed session files are unvalidated, so a non-string intent is dropped here.
+  return typeof intent === "string" ? { ...toolCall, intent } : toolCall;
+}
+
+export function withOmpToolIntent(
+  item: ToolCallTimelineItem,
+  toolCall: OmpTrackedToolCall,
+): ToolCallTimelineItem {
+  if (toolCall.intent === undefined) return item;
+  return { ...item, metadata: { ...item.metadata, intent: toolCall.intent } };
+}
+
+function parseToolArgsByName(toolName: string, rawArgs: unknown): OmpTrackedToolCall {
   if (toolName === "edit") {
     return parseEditToolArgs(rawArgs);
   }
   const schema = SIMPLE_TOOL_SCHEMAS[toolName as SimpleToolKind];
   if (schema) {
-    const parsed = schema.safeParse(rawArgs);
+    const parsed = schema.safeParse(omitNullArgs(rawArgs));
     if (parsed.success) {
       return {
         kind: toolName as SimpleToolKind,
@@ -289,6 +361,12 @@ export function parseToolArgs(toolName: string, rawArgs: unknown): OmpTrackedToo
 }
 
 export function resolveToolCallName(toolCall: OmpTrackedToolCall, result?: OmpToolResult): string {
+  if (
+    (toolCall.kind === "read" || toolCall.kind === "write") &&
+    toolCall.args.path.startsWith("xd://")
+  ) {
+    return toolCall.args.path.slice("xd://".length).split(/[/?#]/, 1)[0] || toolCall.toolName;
+  }
   if (toolCall.kind === "write" && result && typeof result !== "string") {
     const xdev = XdevExecuteDetailsSchema.safeParse(result.details?.xdev);
     if (xdev.success) {
@@ -316,6 +394,20 @@ export function mapToolDetail(
       };
     }
     case "read":
+      if (toolCall.args.path.startsWith("xd://")) {
+        return {
+          type: "plain_text",
+          label: resolveToolCallName(toolCall),
+          text: extractTextFromToolResult(parsedResult),
+        };
+      }
+      if (/^https?:\/\//.test(toolCall.args.path)) {
+        return {
+          type: "fetch",
+          url: toolCall.args.path,
+          result: extractTextFromToolResult(parsedResult),
+        };
+      }
       return {
         type: "read",
         filePath: toolCall.args.path,
@@ -371,6 +463,15 @@ function mapWriteToolDetail(args: WriteToolInput, result: OmpToolResult): ToolCa
       type: "unknown",
       input: args,
       output: result,
+    };
+  }
+
+  // A write to `xd://` runs a tool, not a file write. Name the invoked tool while it runs.
+  if (args.path.startsWith("xd://")) {
+    return {
+      type: "plain_text",
+      label: args.path.slice("xd://".length).split(/[/?#]/, 1)[0],
+      text: extractTextFromToolResult(result),
     };
   }
 

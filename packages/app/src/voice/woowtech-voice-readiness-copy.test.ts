@@ -62,10 +62,17 @@ describe("why dictation or voice mode is unavailable", () => {
     const runtime = readFileSync(join(SERVER, "speech/speech-runtime.ts"), "utf8");
     const sentences = [
       ...runtime.matchAll(
-        /message: "((?:Dictation|Realtime voice) is (?:disabled|unavailable)[^"]*)"/g,
+        /message: "((?:(?:Dictation|Realtime voice) is|Voice features are) (?:disabled|unavailable)[^"]*)"/g,
       ),
     ].map((match) => match[1]);
-    expect(new Set(sentences)).toEqual(new Set(Object.keys(KNOWN_VOICE_READINESS_REASONS)));
+    // Keep the two disabled-mode messages used by 0.10.2 hosts after the new host combined them.
+    const legacyReasons = [
+      "Dictation is disabled in daemon config.",
+      "Realtime voice is disabled in daemon config.",
+    ];
+    expect(new Set([...sentences, ...legacyReasons])).toEqual(
+      new Set(Object.keys(KNOWN_VOICE_READINESS_REASONS)),
+    );
     expect(runtime).toContain(
       "message: `Voice features are unavailable while models download in the background (${joinModelIds(missingModelIds)}).`",
     );

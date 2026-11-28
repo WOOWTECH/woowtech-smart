@@ -1,0 +1,21 @@
+{
+  "title": "工作區筆記",
+  "intro": "為下一個靈感留一點空間。",
+  "draft": "你的草稿",
+  "placeholder": "有什麼想記下來的？",
+  "add": "新增筆記",
+  "empty": "暫無筆記。在上方寫下你的想法吧。",
+  "notes_other": "{{count}} 則筆記",
+  "preview": "預覽草稿",
+  "close": "關閉預覽",
+  "previewTitle": "草稿預覽",
+  "draftEmpty": "草稿為空。",
+  "locale": "應用語言：{{locale}}",
+  "open": "開啟工作區筆記",
+  "description": "開啟筆記頁面",
+  "hint": "[可選文字]",
+  "copyTitle": "複製筆記標題",
+  "tools": "筆記工具",
+  "pin": "顯示筆記工具",
+  "openPanel": "開啟筆記面板"
+}

@@ -35,7 +35,7 @@ const ENABLED = ["ci.yml"];
 const CALL_ONLY = ["pi-agent-signing.yml"];
 
 // Reviewed artifact verification: manual or reusable, never push/PR triggered.
-const MANUAL_VERIFICATION = ["windows-installed-verify.yml"];
+const MANUAL_VERIFICATION = ["windows-installed-verify.yml", "mobile-license-evidence.yml"];
 
 // Disabled in GitHub: Actions → the workflow → ··· → Disable workflow.
 const DISABLED_IN_UI = {
@@ -259,7 +259,7 @@ test("CI gives a cold Metro bundle ten minutes, not 30, 90 or 120 seconds", () =
   // The desktop job's lifecycle E2E compiles the same bundle while its window waits 90 s,
   // and its browser E2E starts another Metro and waits Playwright's default 30 s for Settings.
   for (const file of [
-    "packages/app/e2e/support/global-setup.ts",
+    "packages/app/e2e/support/metro-warmup.mjs",
     "packages/desktop/e2e/daemon-lifecycle-renderer.electron.mjs",
     "packages/desktop/e2e/browser-tabs.e2e.mjs",
   ]) {
@@ -269,6 +269,9 @@ test("CI gives a cold Metro bundle ten minutes, not 30, 90 or 120 seconds", () =
       `${file} ignores the setting`,
     );
   }
+  const globalSetup = readRepoCode("packages/app/e2e/support/global-setup.ts");
+  assert.match(globalSetup, /import\s*\{\s*warmMetro\s*\}\s*from\s*["']\.\/metro-warmup\.mjs["']/);
+  assert.match(globalSetup, /await warmMetro\(metroPort\)/);
   const metroSteps = ubuntuSteps(/\btest:e2e\b/);
   assert.ok(metroSteps.length >= 5, "the Playwright and desktop E2E steps were not found");
   assert.deepEqual(

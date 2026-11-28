@@ -96,7 +96,7 @@ export const VENDOR_MARKS = {
   minimax: {
     show: "badge",
     logo: "MiniMax's logo",
-    files: [`${icons}/minimax-icon.tsx`],
+    files: [`${icons}/minimax-icon.tsx`, `${acp}/minimax-code.svg`],
     acpIcons: ["minimax-code"],
     logoPaths: [
       "M16.278 2c1.156 0 2.093.927 2.093 2.07v12.501a.74.74 0 00.744.709",
@@ -197,6 +197,12 @@ export const VENDOR_MARKS = {
     acpIcons: ["deepagents"],
     logoPaths: ["M99.4385 87.698C91.9239 80.1832 81.7121 75.9531 71.0844 75.9531"],
   },
+  devin: {
+    show: "badge",
+    files: [`${acp}/devin.svg`],
+    acpIcons: ["devin"],
+    logoPaths: ["M2.033 9.867l2.554 1.483a.589.589 0 00.592 0l2.554-1.483.01-.008"],
+  },
   dimcode: {
     show: "upstream",
     files: [`${acp}/dimcode.svg`],
@@ -220,6 +226,12 @@ export const VENDOR_MARKS = {
     files: [`${acp}/fast-agent.svg`],
     acpIcons: ["fast-agent"],
     logoPaths: [],
+  },
+  fx: {
+    show: "badge",
+    files: [],
+    acpIcons: ["fx"],
+    logoPaths: ["M237.892 0C243.178 8.73262e-05 249.383 1.41857 253.025 3.07422"],
   },
   gemini: {
     show: "badge",
@@ -247,9 +259,21 @@ export const VENDOR_MARKS = {
   },
   grok: {
     show: "badge",
-    files: [],
+    files: [`${acp}/grok.svg`],
     acpIcons: ["grok"],
     logoPaths: ["M395.479 633.828L735.91 381.105C752.599 368.715 776.454 373.548"],
+  },
+  hermes: {
+    show: "badge",
+    files: [`${acp}/hermes.svg`],
+    acpIcons: ["hermes"],
+    logoPaths: ["M11.981.009c.226-.012.453-.011.679 0 .247.01.495.024.74.062"],
+  },
+  hoplite: {
+    show: "badge",
+    files: [`${acp}/hoplite.svg`],
+    acpIcons: ["hoplite"],
+    logoPaths: ["M8.237 7.813C8.276 7.789 8.327 7.796 8.358 7.83L9.741 9.346"],
   },
   junie: {
     show: "badge",
@@ -268,6 +292,12 @@ export const VENDOR_MARKS = {
     files: [`${acp}/kimi.svg`],
     acpIcons: ["kimi"],
     logoPaths: ["M19.514 7.342C19.711 7.862 19.814 8.413 19.816 8.969C19.816 12.494"],
+  },
+  kiro: {
+    show: "badge",
+    files: [`${acp}/kiro.svg`],
+    acpIcons: ["kiro"],
+    logoPaths: ["M7.97 16.376c-1.644 3.642 1.86 4.556 4.443 2.424.76 2.39 3.608.607"],
   },
   "minion-code": {
     show: "badge",
@@ -322,7 +352,7 @@ export const VENDOR_MARKS = {
   },
   trae: {
     show: "badge",
-    files: [],
+    files: [`${acp}/traecli.svg`],
     acpIcons: ["traecli"],
     logoPaths: ["M2.4 4.8H21.6V19.2H2.4Z M5.92 7.52H19.2V15.36H5.92Z"],
   },
@@ -353,6 +383,12 @@ export const VENDOR_MARKS = {
   webstorm: {
     show: "badge",
     files: [`${editors}/webstorm.png`],
+    acpIcons: [],
+    logoPaths: [],
+  },
+  xcode: {
+    show: "badge",
+    files: [`${editors}/xcode.png`],
     acpIcons: [],
     logoPaths: [],
   },

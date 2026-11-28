@@ -4,6 +4,7 @@
 // upstream translates the string or rewrites its English, so an entry never hides
 // upstream's newer text. Terms follow zh-tw-terms.mjs.
 export const UNTRANSLATED = {
+  "settings.host.agentProfiles.systemPromptLabel": ["System prompt", "系統提示詞"],
   "composer.input.terminalAccessibilityLabel": ["Terminal prompt", "終端機提示詞"],
   "composer.attachments.addFile": ["Upload file", "上傳檔案"],
   "composer.attachments.dropFilesHere": ["Drop files here", "將檔案拖放到這裡"],
@@ -31,7 +32,6 @@ export const UNTRANSLATED = {
   "workspace.git.diff.unified": ["Unified diff", "單欄 diff"],
   "workspace.git.diff.split": ["Side-by-side diff", "並排 diff"],
   "workspace.git.pr.sections.checks": ["Checks", "檢查"],
-  "workspace.git.pr.states.open": ["Open", "開啟"],
   "sidebar.project.actions.openFolder": ["Open in file manager", "在檔案管理員中開啟"],
   "sidebar.project.actions.openFolderFailed": ["Couldn't open folder", "無法開啟資料夾"],
   "newWorkspace.tooltips.project": ["Choose the project", "選擇專案"],
@@ -82,55 +82,35 @@ export const UNTRANSLATED = {
   ],
   "desktop.daemon.status.running": ["running", "執行中"],
   "desktop.daemon.status.notRunning": ["not running", "未執行"],
-  "settings.sections.layout": ["Layout", "版面配置"],
   "settings.layout.openInSidePane.title": ["Open location", "開啟位置"],
   "settings.layout.openInSidePane.destinations.main": ["Main panel", "主面板"],
   "settings.layout.openInSidePane.destinations.side": ["On the side", "旁邊"],
   "settings.layout.openInSidePane.destinations.explorer": ["Explorer sidebar", "側邊面板"],
-  "settings.layout.openInSidePane.sources.explorerFiles.label": [
-    "Selecting a file in Explorer",
-    "在側邊面板選取檔案",
-  ],
   "settings.layout.openInSidePane.sources.explorerFiles.description": [
     "Open files selected in the Explorer sidebar beside your work",
     "在工作內容旁開啟從側邊面板選取的檔案",
   ],
-  "settings.layout.openInSidePane.sources.diffs.label": ["Opening a diff", "開啟 diff"],
   "settings.layout.openInSidePane.sources.diffs.description": [
     "Open diffs from Explorer and agent conversations beside your work",
     "在工作內容旁開啟來自側邊面板和 Agent 對話的 diff",
-  ],
-  "settings.layout.openInSidePane.sources.chatFiles.label": [
-    "Opening a file from an agent chat",
-    "從 Agent 對話開啟檔案",
   ],
   "settings.layout.openInSidePane.sources.chatFiles.description": [
     "Open file links and tool-call files beside the conversation",
     "在對話旁開啟檔案連結和工具呼叫中的檔案",
   ],
-  "settings.layout.openInSidePane.sources.diffFiles.label": [
-    "Opening a file from Changes",
-    "從「變更」開啟檔案",
-  ],
   "settings.layout.openInSidePane.sources.diffFiles.description": [
     "Open source files selected from a diff beside it",
     "在 diff 旁開啟從中選取的原始檔",
   ],
-  "settings.layout.openInSidePane.sources.subagents.label": ["Opening a subagent", "開啟子 Agent"],
   "settings.layout.openInSidePane.sources.subagents.description": [
     "Open subagents beside their parent agent",
     "在上層 Agent 旁開啟子 Agent",
-  ],
-  "settings.layout.openInSidePane.sources.pullRequests.label": [
-    "Opening a pull request from Changes",
-    "從「變更」開啟 pull request",
   ],
   "settings.layout.openInSidePane.sources.pullRequests.description": [
     "Open pull request details beside Changes",
     "在「變更」旁開啟 pull request 詳細資料",
   ],
   "settings.plugins.logs.action": ["Logs", "記錄"],
-  "settings.plugins.logs.title": ["Logs: {{id}}", "記錄：{{id}}"],
   "settings.plugins.logs.loading": ["Loading logs…", "正在載入記錄…"],
   "settings.plugins.logs.refresh": ["Refresh", "重新整理"],
   "settings.plugins.logs.refreshing": ["Refreshing…", "正在重新整理…"],
@@ -254,12 +234,15 @@ export const UNTRANSLATED = {
 
 // zh-TW strings that stay English on purpose: the named terms (Agent,
 // Daemon), Git commands, diff, tokens, examples and names.
+// Exemptions name individual keys, never a namespace; new prose still needs a translation.
 export const KEEP_ENGLISH = new Set([
-  "shell.commandCenter.agents",
+  "settings.host.connectionKinds.tailscale", // Product name
+  "settings.host.connectionKinds.ssh", // Protocol abbreviation
   "workspace.tabs.fallback.agent",
   "workspace.tabs.toasts.agentIdCopiedLabel",
   "settings.hostSections.agents",
   "desktop.daemon.title",
+  "settings.hostSections.daemon", // The daemon term, like desktop.daemon.title
   "desktop.daemon.status.pid",
   "workspace.git.actions.commit.label",
   "workspace.git.actions.pull.label",
@@ -277,9 +260,36 @@ export const KEEP_ENGLISH = new Set([
   "workspace.git.pr.accessibility.pullRequest",
   "panels.diff.diffLabel",
   "contextWindow.tokens",
+  // Technical concepts retain the same names as their commands and surrounding Git UI.
+  "message.backgroundWork.shell", // Shell
+  "newWorkspace.refPicker.pullRequest", // Pull request
+  "newWorkspace.refPicker.pullRequest_mr", // Merge request
+  // Chinese keeps these technical names and abbreviations singular in list labels too.
+  "newWorkspace.refPicker.pullRequests",
+  "newWorkspace.refPicker.pullRequests_mr",
+  "newWorkspace.refPicker.pullRequestsShort", // PR
+  "newWorkspace.refPicker.pullRequestsShort_mr", // MR
+  "newWorkspace.worktreePicker.title", // Worktree
+  "providerCatalog.types.acp", // ACP protocol
+  "panels.file.filePanels.builtin.markdown", // Markdown format
+  "panels.file.filePanels.builtin.html", // HTML format
+  // Store, service, and provider names are proper nouns, not untranslated instructions.
+  "onboarding.setup.steps.phone.appStore",
+  "onboarding.setup.steps.phone.googlePlay",
+  "onboarding.setup.steps.phone.tailscale.title",
+  "settings.voice.providers.openai",
+  // Keyboard key names match the keycaps; the modifier is supplied by the platform.
+  "settings.general.sendShortcut.options.enter",
+  "settings.general.sendShortcut.options.mod-enter",
+  // Structural templates contain only supplied titles/names or localized date/time values.
+  // Keep the placeholders intact; key and interpolation parity checks still cover them.
+  "panels.file.filePanels.option", // {{title}} — {{owner}}
+  "providerUsage.timing.resetsAtWeekday", // {{weekday}} {{time}}
   // Replaced as the translations load: the product name, the help channel, and the name of
   // the theme whose id is claude (packages/app/src/i18n/theme-copy.ts).
   "sidebar.help.appName",
+  "onboarding.setup.title",
+  "panels.file.filePanels.builtin.owner",
   "sidebar.help.discord",
   "settings.appearance.theme.options.claude",
   // Each language's own name.
@@ -293,8 +303,8 @@ export const KEEP_ENGLISH = new Set([
   "settings.appearance.theme.options.ghostty",
   // Examples of what to type.
   "settings.host.appearance.preview.workspaceName",
-  "settings.plugins.directoryPlaceholder",
   "settings.host.terminalProfiles.namePlaceholder",
   "settings.host.terminalProfiles.commandPlaceholder",
   "settings.host.terminalProfiles.argsPlaceholder",
+  "settings.voice.openai.keyPlaceholder", // sk-... is an API key prefix, not UI prose.
 ]);

@@ -38,12 +38,12 @@ vi.mock("@/hooks/use-daemon-config", () => ({
 
 vi.mock("expo-clipboard", () => ({ setStringAsync: async () => undefined }));
 
-let section: typeof import("./pair-device-section");
+let section: typeof import("@/devices/pair-device-section");
 const closeSheet = () => {};
 
 beforeAll(async () => {
   vi.stubGlobal("React", React);
-  section = await import("./pair-device-section");
+  section = await import("@/devices/pair-device-section");
 }, 120_000);
 
 beforeEach(() => {

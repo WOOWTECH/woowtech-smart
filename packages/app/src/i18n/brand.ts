@@ -1,4 +1,4 @@
-import { withCliCommand } from "@getpaseo/protocol/brand-cli";
+import { CLI_COMMAND, withCliCommand } from "@getpaseo/protocol/brand-cli";
 import type { Resource, ResourceKey, ResourceLanguage } from "i18next";
 import { APP_NAME, APP_NAME_ZH, withChineseName } from "./product-name";
 import { supportCopyFor } from "./support-copy";
@@ -92,6 +92,20 @@ function withSupportCopy(translation: ResourceKey, language: string): ResourceKe
   );
 }
 
+function withCliCopy(translation: ResourceKey): ResourceKey {
+  if (!isRecord(translation)) return translation;
+  // This message names the command itself, with no subcommand for withCliCommand to match.
+  // Keep the replacement local to this copy; project names and internal identifiers stay intact.
+  const path = ["desktop", "integrations", "cli", "keptForeign"];
+  const text = path.reduce<unknown>(
+    (value, key) => (isRecord(value) ? value[key] : undefined),
+    translation,
+  );
+  return typeof text === "string"
+    ? withText(translation, path, text.replace(/\bpaseo\b/g, CLI_COMMAND))
+    : translation;
+}
+
 function withWoowtechCopy(translation: ResourceKey, language: string): ResourceKey {
   if (!isRecord(translation)) {
     return translation;
@@ -117,7 +131,7 @@ export function rebrandResources(resources: Resource): Resource {
           return [
             namespace,
             namespace === "translation"
-              ? withWoowtechCopy(withSupportCopy(rebranded, language), language)
+              ? withWoowtechCopy(withSupportCopy(withCliCopy(rebranded), language), language)
               : rebranded,
           ];
         }),

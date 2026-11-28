@@ -163,7 +163,7 @@ test("Windows windows come to the front and the first close explains the tray (p
   const main = source("packages/desktop/src/main.ts");
   assert.match(
     main,
-    /once\("ready-to-show", \(\) => \{[\s\S]*?if \(process.platform === "win32"\) raiseWindowsWindow\(mainWindow\);\s*else mainWindow.show\(\);/,
+    /if \(process.platform === "win32"\) \{\s*(?:\/\/[^\n]*\n\s*)?mainWindow.once\("ready-to-show", \(\) => raiseWindowsWindow\(mainWindow\)\);\s*\} else \{\s*showWindowWhenReady\(mainWindow, \{\s*showOnLoad: process.platform === "linux",\s*\}\);/,
   );
   assert.match(
     main,
@@ -341,7 +341,11 @@ test("Windows installs an update only from a silent restart, never at quit (G37,
     updater,
     /const \{ isSilent, isForceRunAfter \} = updateInstallMode\(\{\s*platform: process.platform,\s*\.\.\.requested,\s*\}\);/,
   );
-  assert.match(updater, /autoUpdater.quitAndInstall\(isSilent, isForceRunAfter\);/);
+  assert.match(
+    updater,
+    /return runElectronQuitAndInstall\(\{\s*platform: process.platform,\s*updater: autoUpdater,[\s\S]*?isSilent,\s*isForceRunAfter,/,
+  );
+  assert.match(updater, /updater.quitAndInstall\(isSilent, isForceRunAfter\);/);
 });
 
 // Run the actual workflow metadata command: RCs must never enter the publishing path.

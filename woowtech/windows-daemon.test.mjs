@@ -122,7 +122,12 @@ test("the Windows daemon never runs an executable a project carries (G28)", () =
   const worktree = read("packages/server/src/utils/worktree.ts");
   assert.match(
     worktree,
-    /execFileAsync\(shellInvocation.shell, shellInvocation.args, \{[\s\S]*?windowsHide: true,/,
+    /execCommand\(shellInvocation.shell, shellInvocation.args, \{[\s\S]*?shell: false,/,
+  );
+  // The shared exec helper owns the hidden-window option since v0.17.5.
+  assert.match(
+    read("packages/plugin/src/server/process.ts"),
+    /export async function execCommand\([\s\S]*?windowsHide: true,/,
   );
 });
 
@@ -137,7 +142,10 @@ test("a Windows terminal's pseudoconsole is closed once (G10, node-pty #983)", (
     terminal,
     /const ptyKiller = createPtyKiller\(\{ pty: ptyProcess, platform: process.platform \}\);/,
   );
-  assert.match(terminal, /\.\.\.woowtechConptyOptions\(process.platform, process.env\),/);
+  assert.match(
+    terminal,
+    /\.\.\.woowtechConptyOptions\(process.platform, baseEnv \?\? process.env\),/,
+  );
 });
 
 test("Windows hosts do not install terminal agent hooks and say so in settings (G9 v1)", () => {
@@ -161,19 +169,38 @@ test("Windows starts programs without cmd.exe when it can (G17, G30)", () => {
   const spawnProcess = spawnTs.indexOf("export function spawnProcess(");
   const execCommand = spawnTs.indexOf("export async function execCommand(");
   assert.ok(spawnProcess !== -1 && execCommand > spawnProcess);
+  assert.match(
+    spawnTs,
+    /import \{\s*spawnProcess as spawnCli,\s*execCommand as execCli,[^}]*\} from "@getpaseo\/plugin\/server";/,
+  );
   for (const [body, upstreamCall] of [
-    [spawnTs.slice(spawnProcess, execCommand), "return spawn(resolvedCommand"],
-    [spawnTs.slice(execCommand), "return execFileAsync(resolvedCommand"],
+    [spawnTs.slice(spawnProcess, execCommand), "return spawnCli(command, args"],
+    [spawnTs.slice(execCommand), "return execCli(command, args"],
   ]) {
     assert.match(
       body,
       /planDirectWindowsSpawn\(\{\s*platform: process.platform,\s*command,\s*args,\s*requestedShell: [^,]+,\s*env: childEnv,\s*\}\)/,
     );
     const plan = body.indexOf("planDirectWindowsSpawn(");
-    assert.ok(plan < body.indexOf(upstreamCall), "the plan comes before upstream's cmd.exe path");
+    const fallback = body.indexOf(upstreamCall);
+    assert.ok(fallback > plan, "the plan comes before the shared upstream launcher");
   }
+  assert.match(
+    spawnTs,
+    /if \(windowsPlan\) \{\s*return spawn\(windowsPlan.command, windowsPlan.args,/,
+  );
+  assert.match(
+    spawnTs,
+    /if \(windowsPlan\) \{\s*return execWindowsPlan\(\{ plan: windowsPlan, env: childEnv, options \}\);/,
+  );
   assert.match(spawnTs, /windowsVerbatimArguments: windowsPlan.windowsVerbatimArguments,/);
   assert.match(spawnTs, /windowsVerbatimArguments: plan.windowsVerbatimArguments,/);
+  const shared = readFileSync(join(root, "packages/plugin/src/server/process.ts"), "utf8");
+  for (const launcher of ["spawn", "execFileAsync"]) {
+    const start = shared.indexOf(`return ${launcher}(invocation.command, invocation.args,`);
+    assert.notEqual(start, -1, `${launcher}: shared launcher not found`);
+    assert.match(callArguments(shared, shared.indexOf("(", start)), /windowsHide: true/);
+  }
 });
 
 test("Windows re-reads the saved PATH when a program is not found (G29)", () => {
@@ -200,7 +227,16 @@ test("Windows detection knows WinGet's Codex name and never trusts a silent prob
   const windowsBranch = resolution.slice(
     resolution.indexOf('if (process.platform === "win32") {\n    // woowtech'),
   );
-  assert.match(windowsBranch, /probeExecutable: probeWindowsExecutable,/);
+  assert.match(
+    windowsBranch,
+    /enumeratePathCandidates: \(command\) => enumerateCandidates\(command, env, probe\),/,
+  );
+  // Upstream 0.18 can resolve without probing; a probing lookup, the default, still uses ours.
+  assert.match(resolution, /probe = true,/);
+  assert.match(
+    windowsBranch,
+    /probeExecutable: probe\s*\? \(command, timeout\) => probeWindowsExecutable\(command, timeout, env\)\s*: checkCandidate,/,
+  );
   const windows = readFileSync(
     join(root, "packages/server/src/executable-resolution/windows.ts"),
     "utf8",
@@ -212,7 +248,7 @@ test("a new Windows terminal opens PowerShell, like Windows Terminal (G27, D16)"
   const terminal = readFileSync(join(root, "packages/server/src/terminal/terminal.ts"), "utf8");
   assert.match(
     terminal,
-    /\? await resolveTerminalSpawnCommand\(command, args\)\s*: await prepareWoowtechDefaultShell\(\{ shell, upstreamDefault: resolveDefaultTerminalShell \}\);/,
+    /\? await resolveTerminalSpawnCommand\(command, args\)\s*: await prepareWoowtechDefaultShell\(\{\s*shell,\s*env: baseEnv,\s*upstreamDefault: resolveDefaultTerminalShell,\s*\}\);/,
   );
   assert.doesNotMatch(terminal, /shell \?\? resolveDefaultTerminalShell\(\)/);
 });

@@ -185,8 +185,12 @@ test("the daemon pushes to WOOWTECH_PUSH_RELAY_URL with four fields, and nowhere
 
 test("the daemon's server_info tells the app that it pushes through the relay", () => {
   // buildServerInfoStatusPayload reads a few fields of the running server; these are enough.
-  const daemon = { serverId: IDS.serverId, daemonVersion: "0.0.0-guard" };
-  const session = { getPermissions: () => [] };
+  const daemon = {
+    serverId: IDS.serverId,
+    daemonVersion: "0.0.0-guard",
+    providerSnapshotManager: { supportsConfigRequiredProvider: () => false },
+  };
+  const session = { getPermissions: () => [], getHostSourceId: () => "source-push-guard" };
   const serverInfo = VoiceAssistantWebSocketServer.prototype.buildServerInfoStatusPayload.call(
     daemon,
     session,
@@ -238,8 +242,22 @@ test("the daemon stores the app's register_push_token string as it is, a wsp1 st
 const APP_SOURCES = { dirs: ["packages/app/src"], files: ["packages/app/index.ts"] };
 const PUSH_ENTRY = "packages/app/src/push-notifications/index.native.ts";
 const UPSTREAM_SUBSCRIPTIONS = "packages/app/src/push-notifications/internal/subscriptions.ts";
-// A module specifier that names upstream's subscriptions.ts, relative or through the @/ alias.
-const NAMES_UPSTREAM_SUBSCRIPTIONS = /["'](?:\.{1,2}\/|@\/)(?:[^"']*\/)?subscriptions(?:\.ts)?["']/;
+const UPSTREAM_EXPO_TOKEN = "packages/app/src/push-notifications/internal/expo-token.ts";
+// Candidate specifiers; resolve their paths before identifying the Expo push module.
+const NAMES_UPSTREAM_SUBSCRIPTIONS =
+  /["']((?:\.{1,2}\/|@\/)(?:[^"']*\/)?subscriptions(?:\.[cm]?[jt]sx?)?)["']/;
+
+function referencesUpstreamPushSubscriptions(file, line) {
+  for (const [, specifier] of line.matchAll(new RegExp(NAMES_UPSTREAM_SUBSCRIPTIONS, "g"))) {
+    const resolved = specifier.startsWith("@/")
+      ? path.posix.join("packages/app/src", specifier.slice(2))
+      : path.posix.join(path.posix.dirname(file), specifier);
+    if (resolved.replace(/\.[cm]?[jt]sx?$/, "") === UPSTREAM_SUBSCRIPTIONS.slice(0, -3)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /** The module each name of `source`'s `import { … } from "…"` statements comes from. */
 function importedFrom(source) {
@@ -288,10 +306,44 @@ test("the phone apps subscribe through woowtech-subscriptions, never upstream's"
     `${PUSH_ENTRY} no longer turns Expo's push registration off when it loads`,
   );
   assert.deepEqual(
-    findInShippedSources([NAMES_UPSTREAM_SUBSCRIPTIONS], APP_SOURCES),
+    findInShippedSources([NAMES_UPSTREAM_SUBSCRIPTIONS], APP_SOURCES).filter((match) => {
+      const [, file, lineNumber] = /^(.*):(\d+)$/.exec(match);
+      const line = readFileSync(path.join(repoRoot, file), "utf8").split("\n")[
+        Number(lineNumber) - 1
+      ];
+      return referencesUpstreamPushSubscriptions(file, line);
+    }),
     [],
     "app code that loads upstream's subscriptions.ts",
   );
+});
+
+test("the push import guard resolves the Expo module without rejecting plugin subscriptions", () => {
+  const cases = [
+    [PUSH_ENTRY, 'import { startSubscription } from "./internal/subscriptions";', true],
+    [PUSH_ENTRY, 'export * from "./internal/subscriptions.js";', true],
+    [
+      "packages/app/src/plugins/registry.ts",
+      'import "@/push-notifications/internal/subscriptions";',
+      true,
+    ],
+    [
+      "packages/app/src/plugins/registry.ts",
+      'import("../push-notifications/internal/subscriptions.ts");',
+      true,
+    ],
+    [
+      "packages/app/src/plugins/registry.ts",
+      'import("@/plugins/../push-notifications/internal/subscriptions");',
+      true,
+    ],
+    ["packages/app/src/plugins/registry.ts", 'import { subscribe } from "./subscriptions";', false],
+    [PUSH_ENTRY, 'import { subscribe } from "@/plugins/subscriptions";', false],
+    [PUSH_ENTRY, 'import { startSubscription } from "./internal/woowtech-subscriptions";', false],
+  ];
+  for (const [file, source, expected] of cases) {
+    assert.equal(referencesUpstreamPushSubscriptions(file, source), expected, `${file}: ${source}`);
+  }
 });
 
 test("iOS disables Expo registration through its native String adapter", () => {
@@ -325,8 +377,10 @@ test("only upstream's unused subscriptions.ts asks Expo for a push token", () =>
     ...APP_SOURCES,
     allowLines: [/^export async function getExpoPushTokenAsync\(\) \{$/],
   });
-
-  assert.deepEqual(filesOf(mentions), [UPSTREAM_SUBSCRIPTIONS], mentions.join(", "));
+  // Upstream 0.18 moved the call into expo-token.ts, which only subscriptions.ts loads.
+  assert.deepEqual(filesOf(mentions), [UPSTREAM_EXPO_TOKEN], mentions.join(", "));
+  const loaders = findInShippedSources([/["']\.\/expo-token["']/], APP_SOURCES);
+  assert.deepEqual(filesOf(loaders), [UPSTREAM_SUBSCRIPTIONS], loaders.join(", "));
 });
 
 const APP_ROOT = path.join(repoRoot, "packages/app");

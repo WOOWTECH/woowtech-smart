@@ -17,6 +17,15 @@ function inputFrom(value: string) {
   };
 }
 
+function claudeNotification(notificationType: string) {
+  return JSON.stringify({
+    session_id: "session-1",
+    hook_event_name: "Notification",
+    message: "Claude is waiting for your input",
+    notification_type: notificationType,
+  });
+}
+
 function ttyInput() {
   return {
     isTTY: true,
@@ -119,23 +128,26 @@ describe("runHooksCommand", () => {
     expectPostedState(send, state);
   });
 
-  it("maps Claude idle prompt notifications to needs-input", async () => {
-    const send = await runHook(
-      claudeProvider.id,
-      claudeProvider.events[4].event,
-      inputFrom('{"reason":"idle_prompt"}'),
-    );
-
-    expectPostedState(send, "needs-input");
-  });
-
-  it.each(["permission_prompt", "elicitation_prompt", "elicitation_response", "auth_success"])(
-    "ignores Claude %s notifications",
-    async (reason) => {
+  it.each(["idle_prompt", "permission_prompt"])(
+    "maps Claude %s notifications to needs-input",
+    async (notificationType) => {
       const send = await runHook(
         claudeProvider.id,
         claudeProvider.events[4].event,
-        inputFrom(JSON.stringify({ reason })),
+        inputFrom(claudeNotification(notificationType)),
+      );
+
+      expectPostedState(send, "needs-input");
+    },
+  );
+
+  it.each(["elicitation_prompt", "elicitation_response", "auth_success"])(
+    "ignores Claude %s notifications",
+    async (notificationType) => {
+      const send = await runHook(
+        claudeProvider.id,
+        claudeProvider.events[4].event,
+        inputFrom(claudeNotification(notificationType)),
       );
 
       expect(send.calls).toEqual([]);

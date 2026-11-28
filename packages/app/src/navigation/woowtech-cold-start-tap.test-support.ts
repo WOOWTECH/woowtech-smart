@@ -1,24 +1,11 @@
-// RC-I-21c (woowtech/README.md section 16): a cold start from a notification tap, without
-// rendering. Extends the T1 S3 harness (woowtech-workspace-open-intent.test-support.ts) with what a
-// cold start adds: the root index and host index startup restore, the cached directory that lands
-// before the live one, the persisted workspace layout that remembers each workspace's focused
-// agent, and PushNotificationRouter's tap hand-over.
-//
-// Real: resolveNotificationTarget / buildNotificationRoute, resolveNavigateToAgent,
-// navigateToWorkspace, navigateToHostWorkspaceRoute, prepareWorkspaceTab, resolveStartupRoute /
-// resolveHostIndexRoute / resolveWorkspaceSelectionStatus, readWorkspaceRouteOpenParam,
-// isAgentOpenIntentWaitingForWorkspace, shouldLatchWorkspaceRecovery / isWorkspaceRecoveryLatchHeld,
-// subscribeToNotificationTaps, createWorkspaceLayoutStore
-// (openTab, reconcileTabs, persist merge), React Navigation's StackRouter and expo-router's route
-// tree from the src/app file names.
-// Transcribed from expo-router 6.0.23 as in the T1 S3 harness: linkTo's findDivergentState and
-// getPayloadFromStateRoute. Modeled: Redirect (router.replace while focused), the workspace route's
-// open-intent effect and render gate (app/h/[serverId]/workspace/[workspaceId]/index.tsx), the
-// WorkspaceScreen reconcile effect, and, for the witnesses, upstream's wait rule and
-// PushNotificationRouter.
+// Cold-start notification integration without rendering: production notification-open router,
+// native adapter, agent/workspace resolvers, startup decisions and persisted layout store.
+// Native delivery, directory arrivals and route effects are driven explicitly by the fixture.
+// The stack adapter below models Expo's link dispatch; this is not a device/E2E test.
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { NavigationContainerRefWithCurrent } from "@react-navigation/native";
+import type { NavigationContainerRefWithCurrent } from "expo-router/react-navigation";
+// Expo's public navigation barrel loads native UI; this is its same pure router implementation.
 import {
   CommonActions,
   StackRouter,
@@ -27,7 +14,7 @@ import {
   type ParamListBase,
   type PartialState,
   type StackNavigationState,
-} from "@react-navigation/routers";
+} from "expo-router/build/react-navigation/routers";
 import { getRoutes } from "expo-router/build/getRoutes";
 import type { RouteNode } from "expo-router/build/Route";
 import type { RequireContext } from "expo-router/build/types";
@@ -37,12 +24,7 @@ import {
   resolveStartupRoute,
   resolveWorkspaceSelectionStatus,
 } from "@/navigation/host-runtime-bootstrap";
-import {
-  isAgentOpenIntentWaitingForWorkspace,
-  isWorkspaceRecoveryLatchHeld,
-  readWorkspaceRouteOpenParam,
-  shouldLatchWorkspaceRecovery,
-} from "@/navigation/woowtech-workspace-open-intent";
+import { readWorkspaceRouteOpenParam } from "@/navigation/woowtech-workspace-open-intent";
 import {
   navigateToHostWorkspaceRoute,
   registerWorkspaceRouteNavigationRef,
@@ -56,6 +38,7 @@ import {
   collectAllTabs,
   createWorkspaceLayoutStore,
   findPaneById,
+  type OpenWorkspaceTabInput,
 } from "@/stores/workspace-layout-store";
 import {
   decodeWorkspaceIdFromPathSegment,
@@ -65,15 +48,15 @@ import {
   type WorkspaceOpenIntent,
 } from "@/utils/host-routes";
 import { resolveNavigateToAgent } from "@/utils/navigate-to-agent/resolve";
-import { buildNotificationRoute, resolveNotificationTarget } from "@/utils/notification-routing";
+import { createNotificationOpenRouter } from "@/notification-open";
+import {
+  createNativeNotificationOpenSource,
+  type NativeNotifications,
+  type NativeNotificationResponse,
+} from "@/notification-open/native";
+import { resolveAgentRoute, type AgentRouteLookup } from "@/navigation/agent-route-resolution";
 import { prepareWorkspaceTab } from "@/utils/prepare-workspace-tab";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
-import {
-  subscribeToNotificationTaps,
-  type NotificationResponseLike,
-  type NotificationResponseSource,
-} from "@/navigation/woowtech-notification-response";
-
 const APP_ROUTES_DIR = join(__dirname, "../app");
 
 type StackState = StackNavigationState<ParamListBase>;
@@ -89,6 +72,7 @@ interface ActionRoute {
 const ROOT_SLOT_NAME = "__root";
 const HOST_ROUTE_NAME = "h/[serverId]";
 const HOST_INDEX_ROUTE_NAME = "index";
+const AGENT_ROUTE_NAME = "agent/[agentId]";
 export const WORKSPACE_ROUTE_NAME = "workspace/[workspaceId]/index";
 
 const ROOT_LEAF_ROUTE_NAMES: Readonly<Record<string, string>> = {
@@ -173,6 +157,29 @@ function hydrateState(
 // (/h/<server>, whose focused child is the host index), and workspace routes with ?open.
 function actionStateFor(href: string): ActionRoute {
   const [pathname, search = ""] = href.split("?");
+  const agentPath = /^\/h\/([^/]+)\/agent\/([^/]+)$/.exec(pathname);
+  if (agentPath) {
+    const serverId = decodeURIComponent(agentPath[1]);
+    return {
+      name: ROOT_SLOT_NAME,
+      state: {
+        routes: [
+          {
+            name: HOST_ROUTE_NAME,
+            params: { serverId },
+            state: {
+              routes: [
+                {
+                  name: AGENT_ROUTE_NAME,
+                  params: { serverId, agentId: decodeURIComponent(agentPath[2]) },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+  }
   const selection = parseHostWorkspaceRouteFromPathname(pathname);
   if (selection) {
     const open = new URLSearchParams(search).get("open");
@@ -376,63 +383,57 @@ export interface PersistedWorkspaceLayout {
   focusedAgentId: string;
 }
 
-/** upstream: wait for the live snapshot too. app: isAgentOpenIntentWaitingForWorkspace. */
-export type OpenIntentWaitRule = "upstream" | "app";
-/** upstream: a per-mount useRef de-dupe, nothing cleared. app: subscribeToNotificationTaps. */
-export type RouterKind = "upstream" | "app";
-
 export interface ColdStartInput {
   serverId: string;
-  persistedLayouts: PersistedWorkspaceLayout[];
   rememberedWorkspaceId: string | null;
-  waitRule: OpenIntentWaitRule;
-  router: RouterKind;
 }
 
-type Response = NotificationResponseLike;
-
-/** expo-notifications' iOS emitter: one lastResponse per module instance, listeners get each tap. */
-export class NativeNotificationEmitter implements NotificationResponseSource {
-  lastResponse: Response | null = null;
+/** Typed Expo adapter: optionally replays Android's pending list when a listener remounts. */
+export class NativeNotificationEmitter implements NativeNotifications {
+  lastResponse: NativeNotificationResponse | null = null;
   clearCalls = 0;
-  private readonly listeners = new Set<(response: Response) => void>();
+  replayPendingOnSubscribe = false;
+  private readonly pending: NativeNotificationResponse[] = [];
+  private readonly listeners = new Set<(response: NativeNotificationResponse) => void>();
   private deliveryClock = 1_700_000_000;
 
   tap(identifier: string, data: Record<string, string> | null): void {
-    this.deliveryClock += 1;
-    const response: Response = {
-      notification: { date: this.deliveryClock, request: { identifier, content: { data } } },
+    const response: NativeNotificationResponse = {
+      notification: {
+        date: ++this.deliveryClock,
+        request: { identifier, content: { data: data ?? undefined } },
+      },
     };
+    this.pending.push(response);
     this.lastResponse = response;
-    for (const listener of this.listeners) {
-      listener(response);
-    }
+    for (const listener of this.listeners) listener(response);
   }
-
-  getLastNotificationResponse(): Response | null {
+  setNotificationHandler(): void {}
+  async getLastNotificationResponseAsync() {
     return this.lastResponse;
   }
-
   clearLastNotificationResponse(): void {
-    this.clearCalls += 1;
+    this.clearCalls++;
     this.lastResponse = null;
   }
-
-  addNotificationResponseReceivedListener(listener: (response: Response) => void) {
+  addNotificationResponseReceivedListener(
+    listener: (response: NativeNotificationResponse) => void,
+  ) {
     this.listeners.add(listener);
-    return { remove: () => this.listeners.delete(listener) };
+    if (this.replayPendingOnSubscribe) for (const response of this.pending) listener(response);
+    return {
+      remove: () => {
+        this.listeners.delete(listener);
+      },
+    };
   }
 }
 
 const LAYOUT_STORAGE_KEY = "workspace-layout-state";
-
-async function flushMicrotasks(rounds = 10): Promise<void> {
-  for (let round = 0; round < rounds; round += 1) {
-    await Promise.resolve();
-  }
+async function flushMicrotasks(rounds = 20): Promise<void> {
+  for (let round = 0; round < rounds; round++) await Promise.resolve();
 }
 
-/** Writes what the previous app process persisted: tabs per workspace and the focused agent. */
 export async function seedPreviousProcess(
   serverId: string,
   layouts: PersistedWorkspaceLayout[],
@@ -458,96 +459,63 @@ export async function seedPreviousProcess(
 
 export interface ColdStartScenario {
   native: NativeNotificationEmitter;
-  timeline: string[];
-  /** PushNotificationRouter mounts (first commit of the root layout) or remounts. */
   mountRouter(): Promise<void>;
   unmountRouter(): void;
-  /** The persisted workspace layout finishes hydrating (zustand persist over AsyncStorage). */
+  settle(): Promise<void>;
   layoutHydrates(): Promise<void>;
-  /** paseo:last-workspace-route-selection finishes hydrating. */
   selectionHydrates(): void;
-  /** The host registry loads: the session exists, HostRouteBootstrapBoundary renders children. */
   hostRegistryLoads(): void;
-  /** DirectorySync.restoreCachedDirectory lands, right after the registry (host-runtime.ts). */
   cacheRestores(content: DirectoryContent): void;
-  /**
-   * The first live directory snapshot lands: hasHydratedWorkspaces / hasHydratedAgents. It
-   * replaces the cached workspaces (WorkspaceReplica.commitSnapshot), so one archived meanwhile
-   * is gone.
-   */
   liveDirectoryArrives(content: DirectoryContent): void;
-  /** A tap while the app runs (listener delivery). */
-  tapWhileRunning(identifier: string, data: Record<string, string> | null): void;
-  /** The user picks a tab in the visible workspace. */
+  agentLookupCompletes(agentId: string, workspaceId: string | null): void;
+  tapWhileRunning(identifier: string, data: Record<string, string> | null): Promise<void>;
   userFocusesAgent(agentId: string): void;
-  /** Keeps the host index mounted and focused without redirecting yet (Redirect's extra commit). */
   setHoldHostIndexRedirect(hold: boolean): void;
   visible(): string;
-  /**
-   * What the focused workspace route passes as WorkspaceDeck's recoveryRequested, and whether
-   * WorkspaceScreen would inspect recovery (shouldInspectWorkspaceRecovery in workspace-screen.tsx):
-   * requested, the live directory in and the workspace missing.
-   */
   recovery(): { requested: boolean; inspects: boolean } | null;
   openTabCalls: { workspaceKey: string; agentId: string | null; pin: boolean; hydrated: boolean }[];
+  agentTabs(workspaceId: string): string[];
   rootStack(): string[];
   dispose(): void;
 }
 
-/**
- * A new app process. The tap that launched it, if any, must be put on `native` before
- * mountRouter() (iOS delivers it to the emitter before JS reads it).
- */
 export function createColdStartScenario(input: ColdStartInput): ColdStartScenario {
   const { serverId } = input;
   const native = new NativeNotificationEmitter();
-  const timeline: string[] = [];
   const openTabCalls: ColdStartScenario["openTabCalls"] = [];
-
-  // Hold the new store's hydration read until layoutHydrates().
-  let releaseLayoutHydration!: () => void;
+  let releaseLayoutHydration = () => {};
   const layoutGate = new Promise<void>((resolve) => {
     releaseLayoutHydration = resolve;
   });
-  const storage = AsyncStorage as unknown as { getItem: (key: string) => Promise<string | null> };
-  const originalGetItem = storage.getItem;
-  // The read is issued now and answers with what disk held now (AsyncStorage serializes its
-  // operations), but the answer reaches the store only when layoutHydrates() opens the gate.
-  storage.getItem = (key: string) => {
-    const value = originalGetItem(key);
-    return layoutGate.then(() => value);
-  };
-  const layoutStore = createWorkspaceLayoutStore();
-  storage.getItem = originalGetItem;
-
+  // Inject storage so delaying this process's hydration cannot affect other stores.
+  const layoutStore = createWorkspaceLayoutStore(undefined, {
+    getItem: (key) => {
+      const value = AsyncStorage.getItem(key);
+      return layoutGate.then(() => value);
+    },
+    setItem: (key, value) => AsyncStorage.setItem(key, value),
+    removeItem: (key) => AsyncStorage.removeItem(key),
+  });
   let container = settle({
     routes: [actionStateFor("/")],
   } as unknown as PartialState<NavigationState>);
   let registryLoaded = false;
   let selectionHydrated = false;
-  let selection: { serverId: string; workspaceId: string } | null = input.rememberedWorkspaceId
+  let selection = input.rememberedWorkspaceId
     ? { serverId, workspaceId: input.rememberedWorkspaceId }
     : null;
-  let rememberedBeforeHydration: { serverId: string; workspaceId: string } | null = null;
   let cached: DirectoryContent | null = null;
   let live: DirectoryContent | null = null;
-  // Per mounted workspace route (HostWorkspaceRouteContent): consumedIntentRef, intentConsumed,
-  // recoveryLatchKey.
-  const routeStateByKey = new Map<
-    string,
-    { consumedKey: string | null; intentConsumed: boolean; recoveryLatchKey: string | null }
-  >();
+  const lookups = new Map<string, AgentRouteLookup>();
+  const readyWaiters = new Set<() => void>();
   let unmountCurrentRouter: (() => void) | null = null;
   let holdHostIndex = false;
 
   function dispatch(action: NavigationAction): void {
     const next = applyAction(container, action);
-    if (!next) {
-      throw new Error(`no navigator has the key ${String(action.target)}`);
-    }
+    if (!next) throw new Error(`no navigator has the key ${String(action.target)}`);
     container = settle(next);
   }
-
   function linkTo(type: "NAVIGATE" | "POP_TO" | "PUSH" | "REPLACE", href: string): void {
     const { navigator, route } = findDivergentNavigator(actionStateFor(href), container);
     const payload = payloadFromActionRoute(route);
@@ -557,300 +525,192 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
       payload: { name: payload.screen, params: payload.params },
     });
   }
-
   const current = { isReady: () => true, getRootState: () => container, dispatch };
   const unregister = registerWorkspaceRouteNavigationRef({
     ...current,
     current,
-    addListener: () => () => undefined,
+    addListener: () => () => {},
   } as unknown as NavigationContainerRefWithCurrent<ReactNavigation.RootParamList>);
 
-  function sessionWorkspaceIds(): Set<string> {
-    // WorkspaceReplica: the live snapshot replaces what the cache committed.
-    return new Set(live ? live.workspaceIds : (cached?.workspaceIds ?? []));
+  const directory = () => live ?? cached;
+  const workspaceExists = (id: string) =>
+    registryLoaded && (directory()?.workspaceIds.includes(id) ?? false);
+  const agentWorkspace = (id: string) =>
+    directory()?.agents.find((agent) => agent.id === id)?.workspaceId;
+  function recordOpen(tab: OpenWorkspaceTabInput) {
+    openTabCalls.push({
+      workspaceKey: tab.workspaceKey,
+      agentId: tab.target.kind === "agent" ? tab.target.agentId : null,
+      pin: tab.pin === true,
+      hydrated: layoutStore.persist.hasHydrated(),
+    });
   }
-
-  function sessionAgents(): { id: string; workspaceId: string }[] {
-    const byId = new Map<string, { id: string; workspaceId: string }>();
-    for (const agent of [...(cached?.agents ?? []), ...(live?.agents ?? [])]) {
-      byId.set(agent.id, agent);
-    }
-    return [...byId.values()];
-  }
-
   const workspaceDeps: NavigateToWorkspaceDeps = {
     getSessionWorkspaces: () =>
       registryLoaded
         ? new Map(
-            Array.from(sessionWorkspaceIds(), (id) => [id, { id } as WorkspaceDescriptor] as const),
+            (directory()?.workspaceIds ?? []).map((id) => [id, { id } as WorkspaceDescriptor]),
           )
         : undefined,
-    getSessionAgents: () => [],
     isWorkspaceLayoutHydrated: () => layoutStore.persist.hasHydrated(),
+    deferOpenTab: (tab) => layoutStore.getState().deferOpenTab(tab),
     openTab: (tab) => {
-      openTabCalls.push({
-        workspaceKey: tab.workspaceKey,
-        agentId: tab.target.kind === "agent" ? tab.target.agentId : null,
-        pin: tab.pin === true,
-        hydrated: layoutStore.persist.hasHydrated(),
-      });
+      recordOpen(tab);
       return layoutStore.getState().openTab(tab);
     },
+    revealTab: () => {},
+    revealWorkspace: (key) => layoutStore.getState().focusWorkspace(key),
     rememberLastWorkspace: (next) => {
       selection = next;
-      if (!selectionHydrated) {
-        rememberedBeforeHydration = next;
-      }
     },
     navigateToRoute: (route) =>
       navigateToHostWorkspaceRoute(route, { dismissTo: (href) => linkTo("POP_TO", href) }),
   };
-
-  // PushNotificationRouter.openNotification (app/_layout.tsx).
-  function openNotification(data: Record<string, unknown> | undefined): void {
-    const target = resolveNotificationTarget(data);
-    if (target.serverId && target.workspaceId && target.agentId) {
-      resolveNavigateToAgent(
-        {
-          serverId: target.serverId,
-          workspaceId: target.workspaceId,
-          agentId: target.agentId,
-          pin: true,
-        },
-        {
-          readAgentNavTarget: () => ({ agentWorkspaceId: null }),
-          navigateToHostAgent: (route) => linkTo("NAVIGATE", route),
-          navigateToWorkspace: (navigation) => navigateToWorkspace(navigation, workspaceDeps),
-        },
-      );
-      return;
-    }
-    linkTo("NAVIGATE", buildNotificationRoute(data));
+  function navigateAgent(target: { serverId: string; agentId: string; workspaceId?: string }) {
+    resolveNavigateToAgent(
+      { ...target, pin: true },
+      {
+        readAgentNavTarget: ({ agentId }) => ({ agentWorkspaceId: agentWorkspace(agentId) }),
+        navigateToHostAgent: (route) => linkTo("NAVIGATE", route),
+        navigateToWorkspace: (navigation) => navigateToWorkspace(navigation, workspaceDeps),
+      },
+    );
   }
-
-  // Upstream's PushNotificationRouter (getpaseo/paseo, app/_layout.tsx): a per-mount useRef
-  // de-dupe and getLastNotificationResponseAsync, nothing cleared. The async getter reads the last
-  // response at once and hands it over one microtask later.
-  function mountRouterLikeUpstream(): () => void {
-    let lastHandledId: string | null = null;
-    const openFromResponse = (response: Response) => {
-      const identifier = response.notification.request.identifier;
-      if (lastHandledId === identifier) {
-        return;
-      }
-      lastHandledId = identifier;
-      openNotification(
-        response.notification.request.content.data as Record<string, unknown> | undefined,
+  function canNavigate() {
+    const { route, depth } = focusedRouteIn(container);
+    const atIndex = route.name === "index" && (depth === 1 || depth === 2);
+    return registryLoaded && selectionHydrated && !atIndex;
+  }
+  const notifications = createNotificationOpenRouter({
+    source: createNativeNotificationOpenSource(native),
+    whenReadyToNavigate: () =>
+      canNavigate()
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            readyWaiters.add(resolve);
+          }),
+    openAgent: (target) => {
+      navigateAgent(target);
+      render();
+    },
+    openTerminal: ({ serverId: targetServerId, workspaceId, terminalId }) => {
+      navigateToWorkspace(
+        { serverId: targetServerId, workspaceId, target: { kind: "terminal", terminalId } },
+        workspaceDeps,
       );
       render();
-    };
-    const subscription = native.addNotificationResponseReceivedListener(openFromResponse);
-    const last = native.getLastNotificationResponse();
-    queueMicrotask(() => {
-      if (last) {
-        openFromResponse(last);
-      }
-    });
-    return () => subscription.remove();
-  }
-
-  function mountRouterLikeApp(): () => void {
-    return subscribeToNotificationTaps(native, (data) => {
-      openNotification(data);
+    },
+    openRoute: (route) => {
+      linkTo("NAVIGATE", route);
       render();
-    });
-  }
+    },
+  });
 
-  function workspaceExists(workspaceId: string): boolean {
-    return registryLoaded && sessionWorkspaceIds().has(workspaceId);
-  }
-
-  function isWaitingForWorkspace(intent: WorkspaceOpenIntent | null, workspaceId: string): boolean {
-    const exists = workspaceExists(workspaceId);
-    if (input.waitRule === "app") {
-      return isAgentOpenIntentWaitingForWorkspace({ openIntent: intent, workspaceExists: exists });
-    }
-    // Upstream's line: isAgentOpenIntent && (!hasHydratedWorkspaces || !workspaceExists).
-    return intent?.kind === "agent" && (live === null || !exists);
-  }
-
-  function selectionStatus(workspaceId: string | null) {
+  function selectionStatus() {
     return resolveWorkspaceSelectionStatus({
       hasHydratedWorkspaces: live !== null,
-      workspaceExists: workspaceId ? workspaceExists(workspaceId) : false,
+      workspaceExists: selection ? workspaceExists(selection.workspaceId) : false,
     });
   }
-
-  // app/index.tsx: <Redirect> once resolveStartupRoute says so, only while focused.
-  function runRootIndexRedirect(): boolean {
+  function runStartupRedirect(): boolean {
     const { route, depth } = focusedRouteIn(container);
-    if (route.name !== "index" || depth !== 1) {
-      return false;
+    if (route.name !== "index") return false;
+    if (depth === 1) {
+      const decision = resolveStartupRoute({
+        route: { kind: "index", pathname: "/" },
+        startupBlocker: { kind: "none" },
+        hostRegistryStatus: registryLoaded ? "ready" : "loading",
+        hosts: registryLoaded ? [{ serverId }] : [],
+        anyOnlineHostServerId: live ? serverId : null,
+        workspaceSelection: selection,
+        workspaceSelectionStatus: selectionStatus(),
+        isWorkspaceSelectionLoaded: selectionHydrated,
+        hasGivenUpWaitingForHost: false,
+        isWaitingForSetup: false,
+      });
+      if (decision.kind !== "redirect") return false;
+      linkTo("REPLACE", String(decision.href));
+      return true;
     }
-    const decision = resolveStartupRoute({
-      route: { kind: "index", pathname: "/" },
-      startupBlocker: { kind: "none" },
-      hostRegistryStatus: registryLoaded ? "ready" : "loading",
-      hosts: registryLoaded ? [{ serverId }] : [],
-      anyOnlineHostServerId: live ? serverId : null,
-      workspaceSelection: selection,
-      workspaceSelectionStatus: selectionStatus(selection?.workspaceId ?? null),
-      isWorkspaceSelectionLoaded: selectionHydrated,
-      hasGivenUpWaitingForHost: false,
-    });
-    if (decision.kind !== "redirect") {
-      return false;
-    }
-    linkTo("REPLACE", String(decision.href));
-    return true;
-  }
-
-  // app/h/[serverId]/index.tsx: <Redirect href={resolveHostIndexRoute(...)}> once hydrated.
-  // expo-router's Redirect fires from useFocusEffect only after useOptionalNavigation has loaded
-  // (link/useLoadedNavigation.js), one commit after the host index first renders; holdHostIndex
-  // keeps the scenario inside that window.
-  function runHostIndexRedirect(): boolean {
-    const { route, depth } = focusedRouteIn(container);
-    if (route.name !== HOST_INDEX_ROUTE_NAME || depth !== 2 || !registryLoaded) {
-      return false;
-    }
-    if (!selectionHydrated || holdHostIndex) {
-      return false;
-    }
-    const workspaceId = selection?.serverId === serverId ? selection.workspaceId : null;
+    if (depth !== 2 || !registryLoaded || !selectionHydrated || holdHostIndex) return false;
     linkTo(
       "REPLACE",
       String(
         resolveHostIndexRoute({
           serverId,
           workspaceSelection: selection,
-          workspaceSelectionStatus: selectionStatus(workspaceId),
+          workspaceSelectionStatus: selectionStatus(),
         }),
       ),
     );
     return true;
   }
-
-  // HostWorkspaceRouteContent's open-intent effect (workspace/[workspaceId]/index.tsx).
+  function runAgentRouteEffect(): boolean {
+    const { route } = focusedRouteIn(container);
+    if (route.name !== AGENT_ROUTE_NAME || !registryLoaded) return false;
+    const agentId = paramValue((route.params as Params)?.agentId);
+    const resolution = resolveAgentRoute({
+      serverId,
+      agentId,
+      cachedWorkspaceId: agentWorkspace(agentId),
+      connectionStatus: live ? "online" : "offline",
+      lookup: lookups.get(agentId) ?? { kind: "idle" },
+      hasHydratedWorkspaces: live !== null,
+      hasHydratedLayout: layoutStore.persist.hasHydrated(),
+    });
+    if (resolution.kind === "resolved") {
+      navigateAgent({ serverId, agentId, workspaceId: resolution.workspaceId });
+      return true;
+    }
+    if (resolution.kind === "notFound") {
+      linkTo("REPLACE", `/h/${serverId}`);
+      return true;
+    }
+    return false;
+  }
+  // Legacy ?open= bookmarks enter pending model state; internal notifications never create it.
   function runWorkspaceRouteEffect(): boolean {
     const { route, navigator } = focusedRouteIn(container);
-    if (route.name !== WORKSPACE_ROUTE_NAME || !registryLoaded) {
-      return false;
-    }
+    if (route.name !== WORKSPACE_ROUTE_NAME || !registryLoaded) return false;
     const params = (route.params ?? {}) as Params;
-    const routeServerId = paramValue(params.serverId);
     const workspaceId = decodeWorkspaceIdFromPathSegment(paramValue(params.workspaceId)) ?? "";
     const openValue = readWorkspaceRouteOpenParam(params);
-    const openIntent = parseWorkspaceOpenIntent(openValue);
-    if (!openValue || !layoutStore.persist.hasHydrated()) {
-      return false;
-    }
-    if (isWaitingForWorkspace(openIntent, workspaceId)) {
-      return false;
-    }
-    let routeState = routeStateByKey.get(route.key);
-    if (!routeState) {
-      routeState = { consumedKey: null, intentConsumed: false, recoveryLatchKey: null };
-      routeStateByKey.set(route.key, routeState);
-    }
-    const consumptionKey = `${routeServerId}:${workspaceId}:${openValue}`;
-    if (routeState.consumedKey !== consumptionKey) {
-      routeState.consumedKey = consumptionKey;
-      if (
-        input.waitRule === "app" &&
-        shouldLatchWorkspaceRecovery({ openIntent, hasHydratedWorkspaces: live !== null })
-      ) {
-        routeState.recoveryLatchKey = `${routeServerId}:${workspaceId}`;
-      }
-      if (openIntent) {
-        prepareWorkspaceTab(
-          {
-            serverId: routeServerId,
-            workspaceId,
-            target: openIntentTarget(openIntent),
-            pin: openIntent.kind === "agent",
-          },
-          workspaceDeps,
-        );
-      }
-    }
+    if (!openValue) return false;
+    const intent = parseWorkspaceOpenIntent(openValue);
+    if (intent)
+      prepareWorkspaceTab(
+        { serverId, workspaceId, target: openIntentTarget(intent), pin: intent.kind === "agent" },
+        { openTab: workspaceDeps.deferOpenTab },
+      );
     dispatch({
       ...CommonActions.setParams({ open: undefined }),
       source: route.key,
       target: navigator.key,
     });
-    routeState.intentConsumed = true;
     return true;
   }
-
-  // HostWorkspaceRouteContent's recovery request and the effect that releases its latch.
-  function workspaceRouteRecovery(): { requested: boolean; inspects: boolean } | null {
+  function focusedWorkspace(): string | null {
     const { route } = focusedRouteIn(container);
-    if (route.name !== WORKSPACE_ROUTE_NAME || !registryLoaded) {
-      return null;
-    }
-    const params = (route.params ?? {}) as Params;
-    const workspaceId = decodeWorkspaceIdFromPathSegment(paramValue(params.workspaceId)) ?? "";
-    const routeKey = `${paramValue(params.serverId)}:${workspaceId}`;
-    const routeState = routeStateByKey.get(route.key);
-    const exists = workspaceExists(workspaceId);
-    const held = isWorkspaceRecoveryLatchHeld({
-      latchedRouteKey: routeState?.recoveryLatchKey ?? null,
-      routeKey,
-      hasHydratedWorkspaces: live !== null,
-      workspaceExists: exists,
-    });
-    if (routeState && routeState.recoveryLatchKey !== null && !held) {
-      routeState.recoveryLatchKey = null;
-    }
-    const isAgentOpenIntent =
-      parseWorkspaceOpenIntent(readWorkspaceRouteOpenParam(params))?.kind === "agent";
-    const requested = isAgentOpenIntent || held;
-    return { requested, inspects: requested && live !== null && !exists };
+    return route.name === WORKSPACE_ROUTE_NAME
+      ? decodeWorkspaceIdFromPathSegment(paramValue((route.params as Params)?.workspaceId))
+      : null;
   }
-
-  function focusedAgentIn(workspaceId: string): string | null {
-    const layout = layoutStore.getState().layoutByWorkspace[`${serverId}:${workspaceId}`];
-    if (!layout) {
-      return null;
-    }
-    const tabId = findPaneById(layout.root, layout.focusedPaneId)?.focusedTabId;
-    const tab = collectAllTabs(layout.root).find((candidate) => candidate.tabId === tabId);
-    return tab?.target.kind === "agent" ? tab.target.agentId : null;
-  }
-
-  // What HostWorkspaceRouteContent renders: null, or the deck for the route's workspace.
-  function workspaceRouteView(): { workspaceId: string } | "blank" | "splash" | null {
-    const { route } = focusedRouteIn(container);
-    if (route.name !== WORKSPACE_ROUTE_NAME) {
-      return null;
-    }
-    if (!registryLoaded) {
-      return "splash";
-    }
-    const params = (route.params ?? {}) as Params;
-    const workspaceId = decodeWorkspaceIdFromPathSegment(paramValue(params.workspaceId)) ?? "";
-    const openValue = readWorkspaceRouteOpenParam(params);
-    const waiting = isWaitingForWorkspace(parseWorkspaceOpenIntent(openValue), workspaceId);
-    const intentConsumed = routeStateByKey.get(route.key)?.intentConsumed ?? false;
-    if (openValue && !waiting && (!intentConsumed || !layoutStore.persist.hasHydrated())) {
-      return "blank";
-    }
-    return { workspaceId };
-  }
-
-  // WorkspaceScreen's reconcileTabs layout effect (workspace-screen.tsx) for the deck.
-  function runWorkspaceScreenReconcile(): void {
-    const view = workspaceRouteView();
-    if (!view || typeof view === "string" || !layoutStore.persist.hasHydrated()) {
-      return;
+  function reconcileWorkspace() {
+    const workspaceId = focusedWorkspace();
+    if (!workspaceId || !layoutStore.persist.hasHydrated()) return;
+    const workspaceKey = `${serverId}:${workspaceId}`;
+    // usePendingWorkspaceOpen gates consumption on the live directory and layout, not payload hints.
+    const pending = layoutStore.getState().pendingOpenByWorkspace[workspaceKey];
+    if (pending && live && workspaceExists(workspaceId)) {
+      recordOpen(pending);
+      layoutStore.getState().consumePendingOpen(workspaceKey);
     }
     const agentIds = new Set(
-      sessionAgents()
-        .filter((agent) => agent.workspaceId === view.workspaceId)
+      (directory()?.agents ?? [])
+        .filter((agent) => agent.workspaceId === workspaceId)
         .map((agent) => agent.id),
     );
-    layoutStore.getState().reconcileTabs(`${serverId}:${view.workspaceId}`, {
+    layoutStore.getState().reconcileTabs(workspaceKey, {
       agentsHydrated: live !== null,
       terminalsHydrated: false,
       activeAgentIds: agentIds,
@@ -861,49 +721,58 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
       hasActivePendingDraftCreate: false,
     });
   }
-
   function render(): void {
-    for (let pass = 0; pass < 12; pass += 1) {
-      const changed = runRootIndexRedirect() || runHostIndexRedirect() || runWorkspaceRouteEffect();
-      workspaceRouteRecovery();
-      runWorkspaceScreenReconcile();
+    for (let pass = 0; pass < 12; pass++) {
+      const changed = runStartupRedirect() || runAgentRouteEffect() || runWorkspaceRouteEffect();
+      reconcileWorkspace();
       if (!changed) {
+        if (canNavigate()) {
+          for (const resolve of readyWaiters) resolve();
+          readyWaiters.clear();
+        }
         return;
       }
     }
-    throw new Error("the screens' effects did not settle");
+    throw new Error("route effects did not settle");
   }
-
+  async function settleEffects() {
+    render();
+    await flushMicrotasks();
+    render();
+  }
+  function agentTabs(workspaceId: string): string[] {
+    const layout = layoutStore.getState().layoutByWorkspace[`${serverId}:${workspaceId}`];
+    return layout
+      ? collectAllTabs(layout.root).flatMap((tab) =>
+          tab.target.kind === "agent" ? [tab.target.agentId] : [],
+        )
+      : [];
+  }
   function visible(): string {
-    const view = workspaceRouteView();
-    if (view === "blank" || view === "splash") {
-      return view;
-    }
-    if (view) {
-      return `${view.workspaceId}/${focusedAgentIn(view.workspaceId) ?? "-"}`;
+    const workspaceId = focusedWorkspace();
+    if (workspaceId) {
+      const layout = layoutStore.getState().layoutByWorkspace[`${serverId}:${workspaceId}`];
+      const focusedTabId = layout && findPaneById(layout.root, layout.focusedPaneId)?.focusedTabId;
+      const tab =
+        layout && collectAllTabs(layout.root).find((candidate) => candidate.tabId === focusedTabId);
+      return `${workspaceId}/${tab?.target.kind === "agent" ? tab.target.agentId : "-"}`;
     }
     const { route, depth } = focusedRouteIn(container);
+    if (route.name === AGENT_ROUTE_NAME)
+      return `agent:${paramValue((route.params as Params)?.agentId)}`;
     return depth === 2 ? `host:${route.name}` : route.name;
   }
 
-  function record(label: string): void {
-    timeline.push(`${label} -> ${visible()}`);
-  }
-
-  record("launch");
-
   return {
     native,
-    timeline,
     openTabCalls,
+    agentTabs,
+    visible,
+    settle: settleEffects,
     async mountRouter() {
       unmountCurrentRouter?.();
-      unmountCurrentRouter =
-        input.router === "upstream" ? mountRouterLikeUpstream() : mountRouterLikeApp();
-      render();
-      // Both routers hand the launch tap over one microtask after the mounting commit.
-      await new Promise<void>((resolve) => queueMicrotask(resolve));
-      record("router mounted");
+      unmountCurrentRouter = notifications.start();
+      await settleEffects();
     },
     unmountRouter() {
       unmountCurrentRouter?.();
@@ -911,66 +780,58 @@ export function createColdStartScenario(input: ColdStartInput): ColdStartScenari
     },
     async layoutHydrates() {
       releaseLayoutHydration();
-      await flushMicrotasks(20);
-      if (!layoutStore.persist.hasHydrated()) {
-        throw new Error("the layout store did not hydrate");
-      }
-      render();
-      record("layout hydrated");
+      await settleEffects();
+      if (!layoutStore.persist.hasHydrated()) throw new Error("layout did not hydrate");
     },
     selectionHydrates() {
       selectionHydrated = true;
-      // last-workspace-selection.ts: a remember() before hydration wins over the disk value.
-      if (rememberedBeforeHydration) {
-        selection = rememberedBeforeHydration;
-      }
       render();
-      record("selection hydrated");
     },
     hostRegistryLoads() {
       registryLoaded = true;
       render();
-      record("registry loaded");
     },
     cacheRestores(content) {
       cached = content;
       render();
-      record("cache restored");
     },
     liveDirectoryArrives(content) {
       live = content;
       render();
-      record("live directory");
     },
-    tapWhileRunning(identifier, data) {
-      native.tap(identifier, data);
+    agentLookupCompletes(agentId, workspaceId) {
+      lookups.set(agentId, { kind: "found", workspaceId });
       render();
-      record(`tap ${identifier}`);
+    },
+    async tapWhileRunning(identifier, data) {
+      native.tap(identifier, data);
+      await settleEffects();
     },
     userFocusesAgent(agentId) {
-      const view = workspaceRouteView();
-      if (!view || typeof view === "string") {
-        throw new Error("no workspace is visible");
-      }
+      const workspaceId = focusedWorkspace();
+      if (!workspaceId) throw new Error("no workspace is visible");
       layoutStore.getState().openTab({
-        workspaceKey: `${serverId}:${view.workspaceId}`,
+        workspaceKey: `${serverId}:${workspaceId}`,
         target: { kind: "agent", agentId },
         intent: "reveal",
       });
       render();
-      record(`user focuses ${agentId}`);
     },
     setHoldHostIndexRedirect(hold) {
       holdHostIndex = hold;
       render();
-      record(hold ? "host index redirect held" : "host index redirect released");
     },
-    visible,
-    recovery: workspaceRouteRecovery,
+    recovery() {
+      const workspaceId = focusedWorkspace();
+      if (!workspaceId) return null;
+      const pending = layoutStore.getState().pendingOpenByWorkspace[`${serverId}:${workspaceId}`];
+      const requested = pending?.target.kind === "agent";
+      return { requested, inspects: requested && live !== null && !workspaceExists(workspaceId) };
+    },
     rootStack() {
-      const rootStack = container.routes[container.index].state as StackState;
-      return rootStack.routes.map((route, index) =>
-        index === rootStack.index ? `*${route.name}` : route.name,
+      const root = container.routes[container.index].state as StackState;
+      return root.routes.map((route, index) =>
+        index === root.index ? `*${route.name}` : route.name,
       );
     },
     dispose() {

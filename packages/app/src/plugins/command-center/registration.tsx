@@ -1,5 +1,5 @@
 import { usePathname } from "expo-router";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useCommandCenterActions } from "@/command-center/provider";
 import { useToast } from "@/contexts/toast-context";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
@@ -9,18 +9,32 @@ import { useWorkspaceExists } from "@/stores/session-store-hooks";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
 import { createPluginClientStateSource } from "../client-state/source";
-import { hostIdFromPathname } from "../routes";
+import { publishFocusedAgent } from "../focused-agent";
 import { useInstalledPlugins } from "../registry";
-import { createPluginSurfaceRuntime } from "../surface-runtime";
 import { buildPluginCommandCenterContributions } from "./contributions";
-import { getFocusedAgentId } from "./context";
+import { getFocusedAgentId, getPluginCommandCenterLocation } from "./context";
 import { createPluginNavigation } from "../navigation";
+import { getPreferredPluginContributionHost, pluginScreensHostKey } from "../contribution-host";
 
 export function PluginCommandCenterActions() {
   const pathname = usePathname();
   const selection = useActiveWorkspaceSelection();
-  const serverId = selection?.serverId ?? hostIdFromPathname(pathname);
-  const workspaceId = selection?.workspaceId ?? null;
+  const installed = useInstalledPlugins();
+  const firstGlobalPlugin = installed.find((plugin) =>
+    plugin.commandCenterItems.some((item) => item.context === "global"),
+  );
+  const preferredHostId = firstGlobalPlugin
+    ? getPreferredPluginContributionHost(pluginScreensHostKey(firstGlobalPlugin.id))
+    : null;
+  const defaultPlugin =
+    installed.find(
+      (plugin) => plugin.id === firstGlobalPlugin?.id && plugin.serverId === preferredHostId,
+    ) ?? firstGlobalPlugin;
+  const { serverId, workspaceId } = getPluginCommandCenterLocation(
+    pathname,
+    selection,
+    defaultPlugin?.serverId ?? null,
+  );
   const workspaceExists = useWorkspaceExists(serverId, workspaceId);
   const workspaceKey = serverId && workspaceId ? `${serverId}:${workspaceId}` : null;
   const layout = useWorkspaceLayoutStore((state) =>
@@ -38,8 +52,16 @@ export function PluginCommandCenterActions() {
       normalizeWorkspaceOpaqueId(agent?.workspaceId) === normalizeWorkspaceOpaqueId(workspaceId)
     );
   });
+  const handedAgentId = agentExists ? focusedAgentId : null;
+  // The agent a plugin's `{ focused: true }` composer names is the one handed to agent items.
+  // Known limit: this publishes in an effect, so a command that runs on the first commit after a
+  // route change can still see the previous route's agent. Publishing from a shared
+  // navigation/focus context would remove the gap.
+  useEffect(() => {
+    publishFocusedAgent(serverId && handedAgentId ? { serverId, agentId: handedAgentId } : null);
+    return () => publishFocusedAgent(null);
+  }, [handedAgentId, serverId]);
   const client = useHostRuntimeClient(serverId ?? "");
-  const installed = useInstalledPlugins();
   const plugins = useMemo(
     () => installed.filter((plugin) => plugin.serverId === serverId),
     [installed, serverId],
@@ -53,30 +75,15 @@ export function PluginCommandCenterActions() {
     if (!client || !serverId || !stateSource) return [];
     return buildPluginCommandCenterContributions({
       plugins,
-      runtime(plugin) {
-        const runtime = createPluginSurfaceRuntime(client, plugin);
-        if (!runtime) throw new Error("Plugin host is offline");
-        return runtime;
-      },
       state: stateSource,
       workspaceId: workspaceExists ? workspaceId : null,
-      agentId: agentExists ? focusedAgentId : null,
+      agentId: handedAgentId,
       navigation: createPluginNavigation({ serverId, workspaceId }),
       reportError(error) {
         toast.error(error instanceof Error ? error.message : String(error));
       },
     });
-  }, [
-    agentExists,
-    client,
-    focusedAgentId,
-    plugins,
-    serverId,
-    stateSource,
-    toast,
-    workspaceExists,
-    workspaceId,
-  ]);
+  }, [client, handedAgentId, plugins, serverId, stateSource, toast, workspaceExists, workspaceId]);
 
   useCommandCenterActions({
     sourceId: serverId ? `plugins:${serverId}` : "plugins",

@@ -4,7 +4,10 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { AgentManager } from "./agent/agent-manager.js";
-import type { StructuredAgentGenerationWithFallbackOptions } from "./agent/agent-response-loop.js";
+import {
+  StructuredAgentFallbackError,
+  type StructuredAgentGenerationWithFallbackOptions,
+} from "./agent/agent-response-loop.js";
 import {
   attemptFirstAgentBranchAutoName,
   type AttemptFirstAgentBranchAutoNameResult,
@@ -227,6 +230,52 @@ describe("generateBranchNameFromFirstAgentContext", () => {
     ]);
   });
 
+  test("tries only the manual model and logs its failure", async () => {
+    const logger = createLogger();
+    const failure = new StructuredAgentFallbackError([
+      { provider: "local-llm", model: "qwen-local", available: true, error: "connection refused" },
+    ]);
+    const calls: StructuredAgentGenerationWithFallbackOptions<unknown>[] = [];
+
+    const result = await generateBranchNameFromFirstAgentContext({
+      agentManager: {} as AgentManager,
+      cwd: "/tmp/repo",
+      providerSnapshotManager: {
+        listProviders: vi.fn(async () => [
+          {
+            provider: "opencode",
+            status: "ready" as const,
+            enabled: true,
+            models: [
+              { provider: "opencode", id: "minimax-m3", label: "MiniMax M3", isDefault: true },
+            ],
+          },
+        ]),
+      },
+      daemonConfig: {
+        metadataGeneration: { providers: [{ provider: "local-llm", model: "qwen-local" }] },
+      },
+      currentSelection: { provider: "opencode", model: "minimax-m3" },
+      firstAgentContext: { prompt: "Fix the login flow" },
+      logger,
+      deps: {
+        generateStructuredAgentResponseWithFallback: async (options) => {
+          calls.push(options as StructuredAgentGenerationWithFallbackOptions<unknown>);
+          throw failure;
+        },
+      },
+    });
+
+    expect(result).toBeNull();
+    expect(calls.map((call) => call.providers)).toEqual([
+      [{ provider: "local-llm", model: "qwen-local" }],
+    ]);
+    expect(logger.error).toHaveBeenCalledWith(
+      { err: failure, attempts: failure.attempts },
+      "Structured branch name generation failed",
+    );
+  });
+
   test.each([
     ["paseo.json missing", undefined],
     ["paseo.json exists but invalid JSON", "{ nope"],
@@ -290,12 +339,51 @@ describe("generateBranchNameFromFirstAgentContext", () => {
     );
   });
 
+  test("host instructions apply alongside default styles and leave baseline intact when empty", async () => {
+    const empty = await generateBranchPromptWithConfig(undefined, {
+      metadataGeneration: { instructions: "   \n\t " },
+    });
+    expect(empty.prompt).toBe(BRANCH_PROMPT_BASELINE);
+
+    const withHost = await generateBranchPromptWithConfig(undefined, {
+      metadataGeneration: {
+        instructions: "  Write in Simplified Chinese. Do not use em dashes.  ",
+      },
+    });
+    expect(withHost.prompt).toContain("Title style:\nAn actionable task label");
+    expect(withHost.prompt).toContain("Branch style:\nA short task-shaped slug");
+    expect(withHost.prompt).toContain(
+      "Additional instructions:\nWrite in Simplified Chinese. Do not use em dashes.",
+    );
+    expect(withHost.prompt).toContain("Return JSON only with fields 'title' and 'branch'.");
+  });
+
+  test("host instructions compose with project overrides and defer to project style on conflict", async () => {
+    const { prompt } = await generateBranchPromptWithConfig(
+      {
+        metadataGeneration: {
+          title: { instructions: "Write titles in English." },
+        },
+      },
+      {
+        metadataGeneration: {
+          instructions: "Write in Simplified Chinese. Do not use em dashes.",
+        },
+      },
+    );
+
+    expect(prompt).toContain("Title style:\nWrite titles in English.");
+    expect(prompt).toContain(
+      "Additional host instructions (follow these too, unless the style above says otherwise):\nWrite in Simplified Chinese. Do not use em dashes.",
+    );
+  });
+
   test("keeps the branch slug validator fallback when instructions are present", async () => {
     const repoRoot = createTempDir("paseo-branch-config-");
     const worktreeRoot = createTempDir("paseo-branch-worktree-");
     mkdirSync(path.join(worktreeRoot, ".git"));
-    writePaseoWorktreeMetadata(worktreeRoot, { baseRefName: "main" });
-    writePaseoWorktreeFirstAgentBranchAutoNameMetadata(worktreeRoot, {
+    await writePaseoWorktreeMetadata(worktreeRoot, { baseRefName: "main" });
+    await writePaseoWorktreeFirstAgentBranchAutoNameMetadata(worktreeRoot, {
       placeholderBranchName: "dazzling-yak",
     });
     writeConfig(repoRoot, {
@@ -337,7 +425,15 @@ describe("generateBranchNameFromFirstAgentContext", () => {
   });
 });
 
-async function generateBranchPromptWithConfig(config: unknown): Promise<{ prompt: string }> {
+async function generateBranchPromptWithConfig(
+  config: unknown,
+  daemonConfig?: {
+    metadataGeneration?: {
+      providers?: Array<{ provider: string; model?: string; thinkingOptionId?: string }>;
+      instructions?: string;
+    };
+  },
+): Promise<{ prompt: string }> {
   const repoRoot = createTempDir("paseo-branch-config-");
   if (typeof config === "string") {
     writeFileSync(path.join(repoRoot, "paseo.json"), config);
@@ -356,6 +452,7 @@ async function generateBranchPromptWithConfig(config: unknown): Promise<{ prompt
     workspaceGitService: createNoopWorkspaceGitService({
       resolveRepoRoot: async () => repoRoot,
     }),
+    daemonConfig,
     firstAgentContext: { prompt: "Fix the login flow" },
     logger: createLogger(),
     deps: { generateStructuredAgentResponseWithFallback: structured.generateStructured },

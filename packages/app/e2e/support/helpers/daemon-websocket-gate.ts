@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
-import { daemonWsRoutePattern } from "./daemon-port";
+import { daemonWsRoutePattern, wsRoutePatternForPort } from "./daemon-port";
 
 export interface DirectoryBootstrapCounts {
   agents: number;
@@ -17,6 +17,7 @@ interface ClientRequest {
   direction?: unknown;
   subscribe?: unknown;
   page?: { cursor?: unknown };
+  filter?: unknown;
   payload?: unknown;
   mode?: unknown;
   path?: unknown;
@@ -83,7 +84,8 @@ function readClientRequest(message: string | Buffer): ClientRequest | null {
 }
 
 function directoryForRequest(request: ClientRequest): keyof DirectoryBootstrapCounts | null {
-  if (request.page?.cursor) return null;
+  // Core directory replicas bootstrap unfiltered pages. Plugins own their filtered subscriptions.
+  if (request.page?.cursor || request.filter !== undefined) return null;
   if (request.type === "fetch_agents_request") return "agents";
   if (request.type === "fetch_workspaces_request") return "workspaces";
   return null;
@@ -294,7 +296,8 @@ function recordClientRequest(
   directoryStarts.total[directory] += 1;
 }
 
-export async function installDaemonWebSocketGate(page: Page) {
+/** Gates the shared E2E daemon, or the daemon on `port` for a spec that runs its own. */
+export async function installDaemonWebSocketGate(page: Page, options: { port?: number } = {}) {
   let acceptingConnections = true;
   let reconnectWithFreshClient = false;
   let suppressAgentStream = false;
@@ -445,7 +448,11 @@ export async function installDaemonWebSocketGate(page: Page) {
     return true;
   };
 
-  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+  const routePattern =
+    options.port === undefined
+      ? daemonWsRoutePattern()
+      : wsRoutePatternForPort(String(options.port));
+  await page.routeWebSocket(routePattern, (ws) => {
     if (!acceptingConnections) {
       blockedConnectionCount += 1;
       for (const resolve of blockedConnectionWaiters) resolve();
@@ -842,6 +849,9 @@ export async function installDaemonWebSocketGate(page: Page) {
         unsubscribed: { ...directoryStarts.unsubscribed },
         total: { ...directoryStarts.total },
       };
+    },
+    getServerMessageCount(type: string): number {
+      return serverMessageCounts.get(type) ?? 0;
     },
     getClientRequestCount(type: string): number {
       return clientRequestCounts.get(type) ?? 0;

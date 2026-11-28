@@ -6,7 +6,23 @@ import {
   selectWorkspaceIsolation,
 } from "../support/helpers/new-workspace";
 import { seedWorkspace } from "../support/helpers/seed-client";
+import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
+import {
+  composerLocator,
+  expectComposerVisible,
+  fillComposerDraft,
+  enterComposerFullscreen,
+  resizeComposerViewport,
+  expectComposerFullscreenControls,
+} from "../support/helpers/composer";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
+import {
+  seedTerminalProfiles,
+  selectLaunchOption,
+  terminalPromptInput,
+} from "../support/helpers/new-workspace-launch";
+
+test.use({ channel: "chromium", launchOptions: { args: ["--use-fake-device-for-media-stream"] } });
 
 type WebSocketMessage = string | Buffer;
 
@@ -75,7 +91,12 @@ async function installSyntheticMicrophone(page: Page): Promise<void> {
   });
 }
 
-async function installDictationFailureHarness(page: Page) {
+async function installDictationFailureHarness(
+  page: Page,
+  options: { holdInitialStart?: boolean } = {},
+) {
+  let rejectInitialStart: (() => void) | null = null;
+  let audioChunksSeen = 0;
   let resolveAudioChunk!: () => void;
   let resolveCreateRequest!: () => void;
   const audioChunk = new Promise<void>((resolve) => {
@@ -95,6 +116,14 @@ async function installDictationFailureHarness(page: Page) {
       const dictationId = typeof request?.dictationId === "string" ? request.dictationId : null;
 
       if (type === "dictation_stream_start" && dictationId) {
+        if (options.holdInitialStart && !rejectInitialStart) {
+          rejectInitialStart = () =>
+            sendSessionMessage(ws, {
+              type: "dictation_stream_error",
+              payload: { dictationId, error: "Late cancelled start failure", retryable: true },
+            });
+          return;
+        }
         sendSessionMessage(ws, {
           type: "dictation_stream_ack",
           payload: { dictationId, ackSeq: -1 },
@@ -107,6 +136,7 @@ async function installDictationFailureHarness(page: Page) {
           type: "dictation_stream_ack",
           payload: { dictationId, ackSeq: seq },
         });
+        audioChunksSeen += 1;
         resolveAudioChunk();
         return;
       }
@@ -145,6 +175,14 @@ async function installDictationFailureHarness(page: Page) {
   });
 
   return {
+    failInitialStart: () => {
+      if (!rejectInitialStart) throw new Error("No initial dictation start received");
+      rejectInitialStart();
+    },
+    waitForNextAudio: async () => {
+      const before = audioChunksSeen;
+      await expect.poll(() => audioChunksSeen).toBeGreaterThan(before);
+    },
     waitForAudio: () => audioChunk,
     waitForCreateRequest: () => createRequest,
     failWorkspaceCreation: () => {
@@ -195,4 +233,161 @@ test.describe("New Workspace dictation submit", () => {
       await seeded.cleanup();
     }
   });
+});
+
+test("restarts dictation immediately after cancelling an unacknowledged start", async ({
+  page,
+}) => {
+  const agent = await seedMockAgentWorkspace({
+    repoPrefix: "dictation-cancel-restart-",
+    title: "Dictation cancel restart",
+  });
+  await installSyntheticMicrophone(page);
+  const harness = await installDictationFailureHarness(page, { holdInitialStart: true });
+  const start = page.getByRole("button", { name: "Start dictation", exact: true });
+  const cancel = page.getByRole("button", { name: "Cancel dictation", exact: true });
+  try {
+    await openAgentRoute(page, agent);
+    await expectComposerVisible(page);
+    await start.click();
+    await expect(cancel).toBeVisible();
+    await cancel.click();
+    await expect(start).toBeVisible();
+    await start.click();
+    await expect(cancel).toBeVisible({ timeout: 3_000 });
+    harness.failInitialStart();
+    await harness.waitForNextAudio();
+    await page.getByRole("button", { name: "Insert transcription", exact: true }).click();
+    await expect(composerLocator(page)).toHaveValue(TRANSCRIPT);
+  } finally {
+    await agent.cleanup();
+  }
+});
+
+async function startDictationWithShortcut(page: Page): Promise<void> {
+  await composerLocator(page).press("Control+d");
+}
+
+test("dictation shortcut leaves retained fullscreen and exposes recording controls", async ({
+  page,
+}) => {
+  const agent = await seedMockAgentWorkspace({
+    repoPrefix: "fullscreen-dictation-",
+    title: "Fullscreen dictation shortcut",
+  });
+  await installSyntheticMicrophone(page);
+  const harness = await installDictationFailureHarness(page);
+  const draft = "First line\nSecond line\nThird line";
+  try {
+    await resizeComposerViewport(page, "portrait");
+    await openAgentRoute(page, agent);
+    await expectComposerVisible(page);
+    await fillComposerDraft(page, draft);
+    await enterComposerFullscreen(page);
+    await resizeComposerViewport(page, "landscape");
+    await expectComposerFullscreenControls(page);
+    await startDictationWithShortcut(page);
+    await harness.waitForAudio();
+    await expect(page.getByRole("button", { name: "Exit fullscreen", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Cancel dictation", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Insert transcription", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Insert transcription and send", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel dictation", exact: true }).click();
+    await expect(composerLocator(page)).toBeEditable();
+    await expect(composerLocator(page)).toHaveValue(draft);
+    await resizeComposerViewport(page, "portrait");
+    await enterComposerFullscreen(page);
+    await resizeComposerViewport(page, "landscape");
+    await composerLocator(page).press("Control+Shift+d");
+    await expect(page.getByRole("button", { name: "Exit fullscreen", exact: true })).toHaveCount(0);
+    await expect(
+      page.getByText("Realtime voice is disabled in this test.", { exact: true }),
+    ).toBeVisible();
+    await expect(composerLocator(page)).toHaveValue(draft);
+  } finally {
+    await agent.cleanup();
+  }
+});
+
+async function controlMicrophonePermission(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  const { targetInfo } = await cdp.send("Target.getTargetInfo");
+  const origin = new URL(page.url()).origin;
+  return async (setting: "denied" | "granted") => {
+    await cdp.send("Browser.setPermission", {
+      permission: { name: "microphone" },
+      setting,
+      origin,
+      browserContextId: targetInfo.browserContextId,
+    });
+  };
+}
+
+function startDictationByMic(page: Page) {
+  return page.getByRole("button", { name: "Start dictation", exact: true }).click();
+}
+
+function expectDictationPermissionError(page: Page) {
+  return expect(page.getByTestId("message-input-root").getByRole("alert")).toHaveText(
+    "Allow microphone access and try again.",
+  );
+}
+
+test("keeps the draft and retries from the mic after access is restored", async ({ page }) => {
+  const agent = await seedMockAgentWorkspace({
+    repoPrefix: "dictation-permission-",
+    title: "Dictation permission",
+  });
+  const draft = "Keep my draft";
+  await installDictationFailureHarness(page);
+  try {
+    await openAgentRoute(page, agent);
+    await expectComposerVisible(page);
+    await fillComposerDraft(page, draft);
+
+    const setMicrophonePermission = await controlMicrophonePermission(page);
+    await setMicrophonePermission("denied");
+    await startDictationByMic(page);
+    await expectDictationPermissionError(page);
+    await expect(composerLocator(page)).toHaveValue(draft);
+
+    await setMicrophonePermission("granted");
+    await startDictationByMic(page);
+    await expect(page.getByRole("button", { name: "Cancel dictation", exact: true })).toBeVisible();
+    await expect(page.getByText("Allow microphone access and try again.")).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel dictation", exact: true }).click();
+    await expect(composerLocator(page)).toHaveValue(draft);
+  } finally {
+    await agent.cleanup();
+  }
+});
+
+test("shows dictation failure when the terminal prompt starts it by shortcut", async ({ page }) => {
+  const workspace = await seedWorkspace({ repoPrefix: "terminal-dictation-permission-" });
+  const profile = {
+    id: "echo-prompt",
+    name: "Echo prompt",
+    command: "echo",
+    args: ["{{{prompt}}}"],
+  };
+  const profiles = await seedTerminalProfiles([profile]);
+  await installDictationFailureHarness(page);
+  try {
+    await gotoAppShell(page);
+    await waitForSidebarHydration(page);
+    await openNewWorkspaceComposer(page, workspace);
+    await selectLaunchOption(page, profile.id);
+
+    const setMicrophonePermission = await controlMicrophonePermission(page);
+    await setMicrophonePermission("denied");
+    await terminalPromptInput(page).press("Control+d");
+    await expectDictationPermissionError(page);
+  } finally {
+    await profiles.restore();
+    await workspace.cleanup();
+  }
 });

@@ -3,8 +3,12 @@ import {
   executableExists,
   findExecutable,
 } from "../../executable-resolution/executable-resolution.js";
+import {
+  createExternalProcessEnv,
+  type ProcessEnvRecord,
+  type ExternalProcessEnv,
+} from "../paseo-env.js";
 import { builtinLaunchDefault } from "../../executable-resolution/woowtech-claude-fallback.js";
-import { createExternalProcessEnv, type ProcessEnvRecord } from "../paseo-env.js";
 import { PARENT_CLAUDE_SESSION_ENV_VARS } from "./parent-claude-session-env.js";
 export {
   AgentProviderRuntimeSettingsMapSchema,
@@ -41,6 +45,7 @@ export interface ResolvedProviderLaunch {
   command: string;
   args: string[];
   source: ProviderLaunchSource;
+  env?: ProcessEnvRecord;
 }
 
 export interface ProviderLaunchAvailability {
@@ -62,12 +67,16 @@ function normalizeLaunchDefault(
   return defaultBinary;
 }
 
-async function resolveLaunchPath(command: string): Promise<string | null> {
-  const found = await findExecutable(command);
+async function resolveLaunchPath(
+  command: string,
+  env?: ProcessEnvRecord,
+  options?: { probe?: boolean },
+): Promise<string | null> {
+  const found = await findExecutable(command, { env, probe: options?.probe });
   if (found) {
     return found;
   }
-  if (isAbsolute(command)) {
+  if (options?.probe !== false && isAbsolute(command)) {
     return executableExists(command);
   }
   return null;
@@ -75,10 +84,11 @@ async function resolveLaunchPath(command: string): Promise<string | null> {
 
 async function resolveDefaultLaunchPath(
   defaultBinary: ProviderLaunchDefault,
+  options?: { probe?: boolean },
 ): Promise<string | null> {
   return defaultBinary.resolvePath
     ? await defaultBinary.resolvePath()
-    : await resolveLaunchPath(defaultBinary.command);
+    : await resolveLaunchPath(defaultBinary.command, undefined, options);
 }
 
 export interface ResolveProviderLaunchOptions {
@@ -114,13 +124,14 @@ export async function resolveProviderLaunch({
 export async function checkProviderLaunchAvailable(
   launch: ResolvedProviderLaunch,
   defaultBinary?: ProviderLaunchDefault,
+  options?: { probe?: boolean },
 ): Promise<ProviderLaunchAvailability> {
   // woowtech smart: a default `claude` also tries its install locations (woowtech/README.md §3).
   const launchDefault = defaultBinary ?? builtinLaunchDefault(launch.command);
   const resolvedPath =
     launchDefault && launch.source !== "override"
-      ? await resolveDefaultLaunchPath(launchDefault)
-      : await resolveLaunchPath(launch.command);
+      ? await resolveDefaultLaunchPath(launchDefault, options)
+      : await resolveLaunchPath(launch.command, launch.env, options);
   return {
     available: resolvedPath !== null,
     resolvedPath,
@@ -247,7 +258,7 @@ export function createProviderEnvSpec(options: ProviderEnvOptions = {}): Provide
   };
 }
 
-export function createProviderEnv(options: ProviderEnvOptions = {}): NodeJS.ProcessEnv {
+export function createProviderEnv(options: ProviderEnvOptions = {}): ExternalProcessEnv {
   const spec = createProviderEnvSpec(options);
   return createExternalProcessEnv(spec.baseEnv ?? process.env, spec.envOverlay);
 }

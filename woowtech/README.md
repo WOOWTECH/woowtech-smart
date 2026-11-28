@@ -971,6 +971,7 @@ node --test woowtech/*.test.mjs
   - 推播的部分只改 daemon（`websocket-server.ts` 的 import 和兩處呼叫），舊版 App 也有效。
   - 電腦上顯示（2026-11-15 在 elmomac 實測時發現）：上游 `session-context.tsx` 的 `notifyAgentAttention` 遇到 `error` 就 return，所以桌面版和網頁從來不顯示 agent 出錯的通知。daemon 交給在場電腦的 `error` 什麼都沒顯示，要等 3 分鐘沒人理才補推手機；沒有手機的人完全收不到。現在拿掉那行，`error` 跟另外兩種一樣顯示。標題照舊是「需要你的注意」；內文 daemon 一律送上游的英文 `Encountered an error.`，所以照原因換成「工作出錯停下了，點一下查看。」（`woowtech-agent-notification.ts`，英文和其他語言照上游）。手機照舊只靠推播（手機上 `sendOsNotification` 回 false）。這部分要新版桌面版和網頁版才有。
   - 怎麼在真機讓 agent 出錯：用不存在的模型沒用（Claude 回一則說明模型有問題的訊息，turn 照樣算完成）。要讓 Claude 的行程在回覆途中結束：先請它寫一篇長文，再對這個 agent 的 Claude 行程送 SIGTERM，daemon 記 `Claude Code process exited with code 143`，agent 變成 error。
+- 每種通知預設都開（owner 2026-11-28 選「改回 Smart 原本的做法」）：上游 0.18 起每台裝置在「設定 → 通知」自己選要收哪些，預設關掉「Agent finished」和「Terminal finished」。0.17 沒有這些開關，升級的人都沒存過偏好，會直接套預設值，照上游的話這兩種通知就默默停了。所以 `packages/protocol/src/notification-preferences.ts` 的 `DEFAULT_NOTIFICATION_PREFERENCES` 五種事件全開：App 的設定、手機註冊推播時帶給 daemon 的偏好都從它開始，每台裝置仍可自己關。沒帶偏好的舊版手機走 `push/index.ts` 的 `LEGACY_PUSH_NOTIFICATION_PREFERENCES`，本來就全開。守門是 `woowtech/desktop-notifications.test.mjs` 的「every notification event is on by default」。合併上游時，上游改了預設或斷言預設的測試，保留全開、跟著改測試。
 - Mac 顯示不出通知時改推手機（提案 4，owner 2026-10-05 同意；2026-10-06 加上 B：沒人理就補推）：daemon 只交給一個在場的用戶端顯示，不推播；Mac 的通知被關掉、還沒按允許、或 5 秒沒結果時，什麼都不會出現。現在：
   - daemon 交出通知時記下來（`woowtech-attention-fallback.ts`）：agent 用 agent ID 加這則訊息的 `timestamp`，terminal 用 terminal ID（同一個 terminal 只留最新的），也記下交給哪個 session。只記可以推播的（2026-11-14 起 `error` 也推，見下面「出錯也推播」），停止中本來就沒有對象。最多 64 則、60 秒。
   - App 的 `sendOsNotification` 回報沒顯示（桌面版是 `failed` 或 5 秒 `unconfirmed`，丟出錯誤也算）時，`utils/woowtech-notification-fallback.ts` 送 `attention.notification.report_display_failure.request`。手機不送：手機本來就只靠推播。只送給 `server_info.features.woowtechAttentionFallback` 是 true 的 daemon，官方 Paseo 不會有。
@@ -1442,8 +1443,10 @@ node --test woowtech/*.test.mjs
 - OFF 基線與 positive control 放 `woowtech-workspace-auto-name.test.ts`；上游 `workspace-auto-name.test.ts` 僅保留 ON policy 注入，原斷言不變。合併上游後跑這兩檔與 `node --test woowtech/workspace-auto-name.test.mjs`。守門鎖住 production OFF、兩個 daemon 入口、排程前 gate 與 bootstrap 接點，並以 AST 掃 server production sources：命名 generator 只能由 `workspace-auto-name.ts` 存取。守存取而非只找函式呼叫，才能攔住 import alias、間接引用、namespace、dynamic import 與 re-export；函式宣告本身和測試不當作新 caller。
 - D5 修正（F8-min）：commit 訊息與 PR 草稿的 AI 產生也先完全關閉，共用 `woowtech-metadata-policy.ts`，但使用獨立的 Git metadata policy。`git-metadata-generator.ts` 兩個入口在讀 diff、載入 metadata instructions、讀 provider 偏好、列舉 provider 或呼叫生成前直接返回既有固定文字：commit `Update files`；PR title `Update changes`、body 空字串（依 C-022 使用者決定，不再加自動產生或品牌文字）。AI 回應 schema 的 body 最小長度仍是 1；OFF 不經該 schema，真實 CheckoutSession 與本機 forge port 測試確認空 body 可以送到建立 PR 路徑。
 - 手填 commit 訊息與 PR 文字照舊使用（維持原有 trim）；PR 只有一欄空白時只補空欄。真正的 Git commit、push、建立 PR 流程不變。沒有 env/home 開關，不清除既有磁碟設定；未來明確 provider 選擇與手寫介面依 F8 計畫另做，這次不新增。
-- metadata 設定頁保留，用 fork copy 覆寫總說明與三段模型提示，明說目前停用、已存偏好不會啟用生成。比隱藏頁面更少改動，也讓使用者知道舊設定仍保留。專案設定的後設資料區塊也用 fork 說明保留指令但不會用於自動產生，表單與磁碟設定不變。繁中使用「後設資料」及「提交訊息」，英文與其他語系使用英文；不改上游語系檔或 OpenCode 探測流程。
+- metadata 設定頁保留，用 fork copy 覆寫總說明與三段模型提示，明說完整 Smart daemon 仍停用生成，其他相容主機依其自身政策，可能呼叫模型與使用額度；儲存偏好不改變主機的啟用政策。比隱藏頁面更少改動，也讓使用者知道舊設定仍保留。專案設定的後設資料區塊亦說明指令保存在連線主機，是否用於生成由該主機決定；表單與磁碟設定不變。繁中使用「後設資料」及「提交訊息」，英文與其他語系使用英文；不改上游語系檔或 OpenCode 探測流程。
 - Git metadata 測試放 `session/checkout/woowtech-git-metadata.test.ts`：預設 OFF 零呼叫、固定值、原 instructions builder 接點、明確 ON 的 positive control，以及真實 handler 的手填／部分手填行為。handler 測試只寫臨時 Git repo 與本機 bare remote，forge 用 typed fake，不發外部請求。原 `git-metadata-generator.test.ts` 僅注入 ON policy 保留原斷言；`session.test.ts` 在既有 mock 區塊以測試端 ON 覆寫保留 prompt 行為測試（C-022 明確核准的既有 mock 例外）。production `session.ts` 不傳 override，守門禁止測試用 policy 覆寫出現在 server production source：提供 policy 的物件成員（屬性、簡寫、方法、getter、有值的 class field）、對同名成員的 `=`、`??=`、`||=`、`&&=`、解構和參數的預設值（`const { name = … } = deps`、`{ name: local = … }`、`(name = …)`），以及用字串寫出 policy 名稱（`defineProperty`、`Reflect.set`、computed key）都算覆寫；唯一放行的是 `x.name = options.name ?? <fork policy>`，也就是 `WorkspaceAutoName` 建構子的接線。字串相加組出的名稱（`deps["isGeneration" + "Enabled"]`）和區域變數的初始值（`const name = deps.name ?? …`）不在範圍內；生成器入口那一行由第 2 項的 regex 釘住。合併上游後務必逐檔跑這兩檔與 fork OFF suite；不要只跑 generator 單元測試而漏掉 Session 接線。另跑 `node --test woowtech/git-metadata.test.mjs woowtech/workspace-auto-name.test.mjs` 鎖住兩個 gate、policy 預設與 production 接點；`woowtech-copy.test.ts` 守住限定語系政策、placeholder 與頁面文案接點。
+
+- 主機相容範圍：以上 hard-OFF gate 由本 repo 的完整 Smart daemon 提供。Agent Connect 若使用官方 server 加品牌／PID／builtin patch，不會因為套用相同 builtin 而帶入此政策；不能從 Web 品牌或外掛版本推定 host 已停用生成。Metadata 與專案頁文案須區分完整 Smart 主機和其他相容主機；後者依自身政策，可能呼叫模型及使用額度。此文案更正不改任何 server policy，也不替 Agent Connect 的 Paseo target 新設 OFF 規則。
 
 ### 21. 附件上傳撐過重連
 
@@ -1538,36 +1541,19 @@ node --test woowtech/*.test.mjs
   - 改回上游標誌的演練（同一天）：把 `cursor` 改成 `"upstream"` 再跑工具。工具改了 3 個檔（`acp-provider-icons/cursor.svg`、`editor-targets/cursor.png`、`acp-provider-icons.ts` 的 cursor 項目），內容跟 `130705c02^` 逐位元組相同。守門 18/18、App 的 5 個廠商相關測試檔 37/37、桌面版 3 檔 14/14、App 的 typecheck 都通過，程式和測試都不用改。改回 `"badge"` 再跑一次工具，樹回到乾淨。
   - 小尺寸和深淺色主題上看不看得清楚，要在實機上看，單元測試證明不了。
 
-### 23. 關掉帳號用量（方案額度）
+### 23. 帳號用量：跟隨上游，預設開啟
 
-- 原因：owner 在 2026-09-29 決定隱藏用量頁。上游的用量功能為了查每家 provider 的帳號額度，會讀使用者存下的 provider 憑證，再把 token 送到該家的額度 API。對我們的產品，這是隱私問題。讀的東西（全部在 `packages/server/src/services/quota-fetcher/providers/`，只讀不寫）：
-  - Claude：`$CLAUDE_HOME` 或 `~/.claude` 的 `.credentials.json`（不看 Claude Code 的 `CLAUDE_CONFIG_DIR`）；macOS 上沒有這個檔，就用 `security find-generic-password` 讀鑰匙圈的「Claude Code-credentials」，換了 `HOME` 也照樣讀得到。拿到 OAuth token 就呼叫 api.anthropic.com。
-  - Codex、Kimi、MiniMax、Grok：各自的 auth／credentials 檔（`~/.codex/auth.json`、`~/.kimi…`、`~/.mmx/…`、`~/.grok/auth.json`）或環境變數的 token。
-  - Copilot：`GITHUB_TOKEN` 這類環境變數或 `gh` 的 `hosts.yml`。Cursor：環境變數、Cursor 的 `state.vscdb`（SQLite）或 `~/.config/cursor/auth.json`。Z.AI：`ZAI_API_KEY`、`GLM_API_KEY`。
-- 關掉的：
-  - daemon：政策在 `packages/server/src/server/woowtech-provider-usage-policy.ts`，固定回 false，不讀 env、home 或設定。上游的 `ProviderUsageService`（`quota-fetcher/service.ts`，+18／−6 行，註解 `woowtech smart:`）關閉時建構子不建任何 fetcher，`listUsage` 第一行就回空清單，不經快取。`provider.usage.list.request` 照樣回 `provider.usage.list.response`，`providers` 是空陣列：沒有 rpc_error、沒有讀鑰匙圈或憑證檔、沒有網路請求。daemon 本來就沒有背景輪詢或主動推送帳號用量，只在收到請求時查。
-  - 協定不變，`server_info.features.providerUsageList` 仍是 true。改成 false 的話，舊版 App 每次打開 context 圓環的 tooltip 都會出現紅字「Update the host to see provider usage」；維持 true 加空清單，舊版 App 的 tooltip 不多東西，用量頁顯示「No usage data」。client SDK 的 `providers.listUsage()` 拿到空清單。
-  - App：旗標在 `packages/app/src/provider-usage/woowtech-usage-visibility.ts`（`PROVIDER_USAGE_VISIBLE = false`）。設定的主機清單（桌面版側欄和手機設定首頁共用）沒有「用量」這一列；`/settings/hosts/<id>/usage` 當成不認得的區段，開到「連線」；context 圓環的 tooltip 不送用量請求、不顯示用量區塊。連到還開著用量的舊版或上游 daemon 時也一樣，不會讓對方去讀憑證。接點都有 `woowtech smart:` 註解：`screens/settings-screen.tsx` 的 `HOST_SECTION_ITEMS`、`app/settings/hosts/[serverId]/[hostSection].tsx`、`components/context-window-meter.tsx` 三處。`HostUsagePage` 和 `provider-usage/` 的元件留著，走不到。沒有新的介面文字。
-- 保留的：每個工作階段自己的 token、context 和費用。它們來自 agent 的事件（`usage_updated`、`turn_completed` 帶的 usage；Pi、OMP 是 poller 向自己的 agent 行程要 `get_session_stats`），不讀帳號憑證，也不打額度 API。context 圓環和 tooltip 的「上下文視窗」、「已使用 N%」、tokens、「工作階段費用」照舊。
-- 以後要打開：
-  1. 先決定讀哪些憑證、要不要讓使用者自己選（例如設定頁的開關，預設關），再改。不要直接把政策改回 true。
-  2. 改 `isProviderUsageFetchingEnabled()` 和 `PROVIDER_USAGE_VISIBLE`（或接到使用者的選擇），同時改兩個守門（`woowtech/provider-usage*.test.mjs`）、fork 測試的 OFF 基線、兩個上游 e2e spec 的 `describe.skip`，並把「Usage」加回桌面版 `settings-memory.electron.mjs` 的設定清單。
-  3. 上游的 `792715e76`（#5465，用量來源改成內建外掛、跟著工作階段的帳號）仍延後。它刪掉整個 `quota-fetcher/` 和 `provider-usage/`，也改了這節的三個 App 接點和 `websocket-server.ts`。拿它的時候，這節的 gate 要在新架構重做，守門會先紅。
-- 測試：
-  - `services/quota-fetcher/woowtech-provider-usage.test.ts`：OFF 基線（政策、service 和 RPC 都回空清單；stub fetcher、鑰匙圈 stub 和 fetch stub 都是 0 次）；ON 對照（同一組 stub 看得到 fetcher 1 次、鑰匙圈 1 次、api.anthropic.com 1 次）；Pi 和 OMP 的每工作階段計數照舊。Claude 的 fetcher 用暫存 home、鑰匙圈 stub 和 fetch stub，政策打開時也碰不到真的 `~/.claude`、鑰匙圈或網路。
-  - 上游 `service.test.ts` 每個 `new ProviderUsageService` 都注入 `isUsageFetchingEnabled: () => true`，原斷言不變（同第 20 節的做法）。
-  - App：`provider-usage/woowtech-usage-visibility.test.ts`（清單少了用量列、其他列順序不變，用量路由當成不認得，打開時恢復）；`components/woowtech-context-window-meter.test.tsx`（jsdom：主機仍宣告有用量，打開 tooltip 只有上下文、tokens 和費用，`listProviderUsage` 0 次）。
-  - 守門 `woowtech/provider-usage.test.mjs`（daemon）和 `provider-usage-app.test.mjs`（App）：政策固定 false；service 的兩個 gate；daemon 建 service 不帶任何 override；server 出貨的程式裡，fetcher 只能由 service 建、service 只能由 daemon 建（AST 掃描，擋 import alias、namespace、re-export、dynamic import、`extends`）；沒有出貨的 server 程式寫到 `isUsageFetchingEnabled`；App 旗標固定 false、三個接點；App 出貨的程式裡，除了現有的擁有者，沒有檔案用到用量的元件、hook、`listProviderUsage`、`provider.usage.list.request` 或 `section: "usage"`。
-  - e2e：上游的 `provider-usage-settings.spec.ts`、`provider-usage-tooltip.spec.ts` 改成 `describe.skip`，`helpers/settings.ts` 改成期待沒有用量列；新的 `woowtech-provider-usage-hidden.spec.ts` 驗側欄沒有用量列、用量路由開到「連線」、tooltip 不送請求。CI #10（run 36642688479，含 Playwright）這 2 個都過。
-  - 桌面版 browser E2E 的設定輪播（`packages/desktop/e2e/settings-memory.electron.mjs`，上游檔）拿掉「Usage」，其他列照舊輪一遍。CI #10、#11 的 desktop-tests 就是在這裡等不到用量列，30 秒逾時。
-  - `provider-usage-app.test.mjs` 也掃 App 和桌面版的 e2e（`packages/app/e2e/`、`packages/desktop/e2e/` 的 JS／TS 與 agent-device 流程），不准再開用量頁：「Usage」字樣、`settings-host-section-usage`、`openSettingsHostSection`／`buildSettingsHostSectionRoute` 帶 `"usage"`、`section: "usage"`、`/settings/hosts/<id>/usage`。例外：`describe.skip` 裡的上游 spec；斷言不存在的 `expect`（`toHaveCount(0)`、`toBeHidden()`、`not.toBeVisible()`、`not.toBeAttached()`）；`woowtech-provider-usage-hidden.spec.ts` 開舊路由、確認落到「連線」的那一行。改 settings-memory 前這項紅（抓到第 28 行），改後綠。
-- 合併上游後：跑 `node --test woowtech/provider-usage.test.mjs woowtech/provider-usage-app.test.mjs`、server 的 `woowtech-provider-usage.test.ts` 與 `service.test.ts`、App 的 `woowtech-usage-visibility.test.ts` 與 `woowtech-context-window-meter.test.tsx`。
+- owner 在 2026-11-25 決定恢復帳號用量、預設開啟；2026-11-26 的 web 對齊採用 Paseo 0.17.4 的 usage-source 外掛架構。這取代 2026-09-29 的固定關閉政策，不再保留舊 `quota-fetcher/` 與 App 的 `provider-usage/woowtech-usage-visibility.ts` gate。
+- App 使用上游 `packages/app/src/usage/`：側欄用量、卡片、顯示已用／剩餘額度、釘選和主機選擇。主機設定仍可關閉用量；已有的明確關閉設定不能被升級覆寫。
+- daemon 由內建 usage-source 外掛查詢各 provider，使用主機上現有登入所需的憑證；帳號 token 不透過用量回應交給網頁。`UsageSession` 保留舊 `provider.usage.list.request` 的相容回應，新版使用 `usage.list_reports`。依照上游 capability 決定可用功能，舊主機缺少新 API 時不得假裝已有用量資料。
+- 每個工作階段本身的 token、context 和費用沿用 agent 事件；帳號額度與這些數字是不同來源。
+- 原先斷言用量永遠隱藏、永遠不讀憑證的兩個 `woowtech/provider-usage*.test.mjs` 與 hidden E2E 已隨政策移除。對應驗證改由上游 `usage/preferences`、usage runtime、`server/session/usage/usage-session`、`server/plugins/usage-sources.e2e`，以及瀏覽器 `usage-settings`、`usage-modal`、`usage-off`、`usage-sidebar-item` 測試負責。測試使用假憑證／fixture，不使用真實帳號查詢。
 
 ### 24. 商標與第三方授權（上架合規）
 
 - 2026-10-13 擴充：Paseo 的 Apache-2.0 全文與版權，加上行動版軟體清單 `screens/settings/mobile-third-party-licenses.json`；`woowtech-mobile-licenses-section.tsx` 提供搜尋、每頁 20 筆、一次展開一個套件全文，支援繁中／英文及螢幕閱讀器的套件名稱與展開狀態。條款保留原文，Android SDK／ML Kit 專用條款不標成開源授權。
-- 本次盤點共 747 筆、189 份去重全文，另追查預編譯原生庫及 terminal WebView 內嵌 bundle。Hermes LLVH／dtoa 保留精確 source commit 的保守 notices，不宣稱每段原始碼都存留於 dead-stripped binary。
-- 清單依此分支的 iOS／Android production Metro source map、保存的原生建置資料與官方授權檔整理。它不是舊商店安裝檔的逐位元驗證；依賴更新或新 archive 產生後，要重新對照最終產物。開發快取移到外接位置時，可用 `WOOWTECH_METRO_WATCH_FOLDERS` 提供以系統 path delimiter 分隔的實際依賴根目錄，供 Metro 建立完整 file map。
+- 第一次盤點（10/13）共 747 筆、189 份去重全文。2026-11-28 依上游 v0.18.1 重新產生：691 筆、156 份。手機的終端機已改用原生 grid（xterm 網頁版只在瀏覽器版用），舊的 terminal WebView 內嵌 bundle 項目移除。預編譯原生庫（Skia、Fresco、libavif、Hermes、NDK libc++、React Native 的 Folly／glog 等、SQLite）逐項對到 v0.18.1 的版本與平台，補上原本漏列的 Adobe DNG SDK、NDK cpu-features，以及 Hermes V1 帶進來的 Boost.Context；SQLite 的全文改成 SQLite 原始碼裡的公有領域聲明（舊版誤放 Unlicense 範本）。Hermes LLVH／dtoa 保留精確 source commit 的保守 notices，不宣稱每段原始碼都存留於 dead-stripped binary。
+- 重新產生用手動 workflow `mobile-license-evidence.yml`（工具 `woowtech/tools/mobile-licenses.mjs`）：從正式版 iOS／Android bundle 的 source map、Gradle `releaseRuntimeClasspath`、Podfile.lock 與 CocoaPods acknowledgements 收集證據，和現有清單比對後產生提案與報告（run 的 Step summary）。沒有證據的預編譯原生庫照舊沿用，報告會列出來要人對版本；「Needs a person's look」的項目逐一處理後才提交，手動補的全文之後重跑會依名稱沿用。依賴更新後重跑：`gh workflow run mobile-license-evidence.yml -f source_ref=<ref> -f brand=woowtech`。它不是舊商店安裝檔的逐位元驗證。開發快取移到外接位置時，可用 `WOOWTECH_METRO_WATCH_FOLDERS` 提供以系統 path delimiter 分隔的實際依賴根目錄，供 Metro 建立完整 file map。
 
 - 依據：協調資料夾的 `coord/reports/logo-usage-research.md`（逐家研究，不在 repo 裡，不是法律意見）。
 - owner 的決定（2026-09-30）：

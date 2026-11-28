@@ -796,22 +796,25 @@ const AGENT_NOTIFICATION_BODIES_ZH_TW: typeof AGENT_NOTIFICATION_BODIES_ENGLISH 
 
 const METADATA_GENERATION_ENGLISH = {
   projectInfo:
-    "{productName} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved project instructions are retained but are not used for automatic generation.",
+    "Project instructions are saved on the connected host. Full {productName} hosts keep automatic naming and AI commit/PR generation disabled; other compatible hosts may use these instructions when generating metadata.",
   description:
-    "{productName} currently does not automatically generate workspace titles, branch names, commit messages or PR drafts. Saved model preferences are retained but do not enable generation.",
-  automaticHint: "Automatic model selection is inactive while generation is disabled.",
-  preferredHint: "Saved model preferences are inactive while generation is disabled.",
-  fallbackHint: "This preference is retained; no model is called for metadata generation.",
+    "Full {productName} hosts disable automatic workspace titles, branch names, commit messages and PR drafts. Other compatible hosts, including Agent Connect runtimes, follow their own policy and may call models and consume quota. These settings save provider preferences on the connected host.",
+  automaticHint:
+    "The connected host chooses providers automatically when its generation policy allows it.",
+  preferredHint:
+    "The connected host uses saved provider and model preferences when it allows generation.",
+  fallbackHint:
+    "Model calls and fallback behavior depend on the connected host's generation policy.",
 };
 
 const METADATA_GENERATION_ZH_TW: typeof METADATA_GENERATION_ENGLISH = {
   projectInfo:
-    "{productName} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的專案指令會保留，但不會用於自動產生。",
+    "專案指令會儲存在連線主機。完整的 {productName} 主機仍停用自動命名與提交訊息／PR 的 AI 產生；其他相容主機可能在產生後設資料時使用這些指令。",
   description:
-    "{productName} 目前不會自動產生工作區標題、分支名稱、提交訊息或 PR 草稿。已儲存的模型偏好會保留，但不會啟用自動產生。",
-  automaticHint: "自動產生已停用，目前不會自動選擇模型。",
-  preferredHint: "自動產生已停用，目前不會套用已儲存的模型偏好。",
-  fallbackHint: "此偏好會保留；不會呼叫任何模型來產生後設資料。",
+    "完整的 {productName} 主機停用工作區標題、分支名稱、提交訊息與 PR 草稿的自動產生。其他相容主機（包含 Agent Connect 啟動的服務）依其自身政策，可能呼叫模型並使用額度。此處只儲存連線主機的供應商偏好。",
+  automaticHint: "連線主機允許自動產生時，才會自行選擇供應商。",
+  preferredHint: "連線主機允許產生時，會使用已儲存的供應商與模型偏好。",
+  fallbackHint: "是否呼叫模型與使用哪些備援模型，取決於連線主機的生成政策。",
 };
 
 // Upstream hardcodes the schedules screen, its form and its cadence text in English.
@@ -1197,6 +1200,7 @@ const WORKSPACE_RECOVERY_ZH_TW: typeof WORKSPACE_RECOVERY_ENGLISH = {
 // only those words (voice/woowtech-voice-readiness-copy.ts). The English matches the daemon's text.
 const VOICE_READINESS_ENGLISH = {
   dictationDisabled: "Dictation is disabled in daemon config.",
+  featuresDisabled: "Voice features are disabled in daemon config.",
   dictationSttUnavailable: "Dictation is unavailable: speech-to-text service is not ready.",
   voiceDisabled: "Realtime voice is disabled in daemon config.",
   voiceTurnDetectionUnavailable:
@@ -1209,6 +1213,7 @@ const VOICE_READINESS_ENGLISH = {
 
 const VOICE_READINESS_ZH_TW: typeof VOICE_READINESS_ENGLISH = {
   dictationDisabled: "主機的設定關閉了聽寫。",
+  featuresDisabled: "主機的設定關閉了語音功能。",
   dictationSttUnavailable: "無法使用聽寫：主機的語音轉文字服務還沒準備好。",
   voiceDisabled: "主機的設定關閉了語音模式。",
   voiceTurnDetectionUnavailable: "無法使用語音模式：主機偵測說話停頓的服務還沒準備好。",

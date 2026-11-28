@@ -169,6 +169,7 @@ function LicenseEntryRow({
           style={styles.toggleButton}
           accessibilityLabel={toggleLabel}
           accessibilityState={accessibilityState}
+          aria-expanded={expanded}
         >
           {expanded ? copy.hide : copy.show}
         </Button>
