@@ -143,7 +143,7 @@ describe("host settings in Traditional Chinese", () => {
   });
 
   it("warns about browser tools in Chinese", () => {
-    renderPage(<browserTools.BrowserToolsOptInCard serverId="host-1" />);
+    renderPage(<browserTools.BrowserToolsRow serverId="host-1" />);
 
     expect(screen.getByText("瀏覽器工具")).toBeTruthy();
     expect(

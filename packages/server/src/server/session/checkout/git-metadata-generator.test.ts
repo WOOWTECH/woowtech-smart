@@ -248,6 +248,8 @@ describe("createGitMetadataGenerator", () => {
       workspaceGitService: diffSource,
       generation,
       logger: createLogger().logger,
+      // woowtech smart: generation is off on a full Smart host unless turned on, like the tests above.
+      isGenerationEnabled: () => true,
       readHostInstructions: () => "  Write in Simplified Chinese. Do not use em dashes.  ",
     });
 

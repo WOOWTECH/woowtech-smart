@@ -242,6 +242,7 @@ test("the daemon stores the app's register_push_token string as it is, a wsp1 st
 const APP_SOURCES = { dirs: ["packages/app/src"], files: ["packages/app/index.ts"] };
 const PUSH_ENTRY = "packages/app/src/push-notifications/index.native.ts";
 const UPSTREAM_SUBSCRIPTIONS = "packages/app/src/push-notifications/internal/subscriptions.ts";
+const UPSTREAM_EXPO_TOKEN = "packages/app/src/push-notifications/internal/expo-token.ts";
 // Candidate specifiers; resolve their paths before identifying the Expo push module.
 const NAMES_UPSTREAM_SUBSCRIPTIONS =
   /["']((?:\.{1,2}\/|@\/)(?:[^"']*\/)?subscriptions(?:\.[cm]?[jt]sx?)?)["']/;
@@ -376,8 +377,10 @@ test("only upstream's unused subscriptions.ts asks Expo for a push token", () =>
     ...APP_SOURCES,
     allowLines: [/^export async function getExpoPushTokenAsync\(\) \{$/],
   });
-
-  assert.deepEqual(filesOf(mentions), [UPSTREAM_SUBSCRIPTIONS], mentions.join(", "));
+  // Upstream 0.18 moved the call into expo-token.ts, which only subscriptions.ts loads.
+  assert.deepEqual(filesOf(mentions), [UPSTREAM_EXPO_TOKEN], mentions.join(", "));
+  const loaders = findInShippedSources([/["']\.\/expo-token["']/], APP_SOURCES);
+  assert.deepEqual(filesOf(loaders), [UPSTREAM_SUBSCRIPTIONS], loaders.join(", "));
 });
 
 const APP_ROOT = path.join(repoRoot, "packages/app");

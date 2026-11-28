@@ -2,6 +2,7 @@ import { BRAND } from "@getpaseo/protocol/brand-values";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
+import { resolveDaemonVersion } from "../../daemon-version.js";
 import { ACPAgentClient } from "./acp-agent.js";
 
 const echoClientInfoAgent = fileURLToPath(
@@ -24,9 +25,11 @@ describe("ACP client identity", () => {
       defaultCommand: [process.execPath, echoClientInfoAgent],
     });
 
+    // Upstream 0.18 adds a title and the daemon's real version beside the name.
     expect(await client.clientInfoSeenByAgent()).toEqual({
       name: `${BRAND.name}`,
-      version: "dev",
+      title: `${BRAND.name}`,
+      version: resolveDaemonVersion(import.meta.url),
     });
   });
 });

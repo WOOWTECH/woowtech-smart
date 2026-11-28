@@ -751,6 +751,8 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
         attentionTimestamp: new Date(3_000),
       });
 
+      // woowtech smart: the relay payload is built asynchronously (push/woowtech-push-content.ts).
+      await vi.waitFor(() => expect(deliveries).toHaveLength(3));
       expect(deliveries.map((d) => ({ tokens: d.tokens, reason: d.payload.data.reason }))).toEqual([
         { tokens: ["ExponentPushToken[phone-finished-only]"], reason: "finished" },
         { tokens: ["ExponentPushToken[phone-default]"], reason: "permission" },

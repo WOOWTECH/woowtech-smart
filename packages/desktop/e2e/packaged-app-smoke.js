@@ -341,7 +341,7 @@ function extractPaseoElectronPids(processList) {
 
   const pids = [];
   for (const line of processList.split(/\r?\n/).slice(1)) {
-    if (!line.includes("Paseo.app/Contents/")) {
+    if (!line.includes(`${EXECUTABLE_NAME}.app/Contents/`)) {
       continue;
     }
     const match = line.trim().match(/^(\d+)\s+/);

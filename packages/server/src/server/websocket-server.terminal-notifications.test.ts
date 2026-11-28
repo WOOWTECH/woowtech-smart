@@ -541,12 +541,14 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
   it("filters terminal needs_input and finished pushes per token preferences", async () => {
     const home = mkdtempSync(path.join(tmpdir(), "paseo-ws-terminal-prefs-"));
     try {
-      const deliveries: Array<{ tokens: string[]; title: string }> = [];
+      // woowtech smart: a push leaves the machine titled with the brand, not the notice
+      // (push/woowtech-push-content.ts), so this checks which phones got each push.
+      const deliveries: Array<{ tokens: string[] }> = [];
       const realPush = createPushNotifications({
         logger: createStub<pino.Logger>(createLogger()),
         filePath: path.join(home, "push-tokens.json"),
-        deliver: async (tokens, payload) => {
-          deliveries.push({ tokens, title: payload.title });
+        deliver: async (tokens) => {
+          deliveries.push({ tokens });
         },
       });
       // Token with explicit default preferences: terminalNeedsInput: true, terminalFinished: false
@@ -585,11 +587,8 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
       await flushAsync();
 
       expect(deliveries).toEqual([
-        { tokens: ["ExponentPushToken[phone-default]"], title: "Terminal needs input" },
-        {
-          tokens: ["ExponentPushToken[phone-terminal-finished]"],
-          title: "Terminal finished",
-        },
+        { tokens: ["ExponentPushToken[phone-default]"] },
+        { tokens: ["ExponentPushToken[phone-terminal-finished]"] },
       ]);
     } finally {
       rmSync(home, { recursive: true, force: true });
