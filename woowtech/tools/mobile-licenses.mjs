@@ -57,31 +57,43 @@ function declaredLicenses(pkg) {
   return [];
 }
 
+/**
+ * Where a bundled source file may be on disk. Expo's maps name files from the server root with a
+ * leading slash ("/node_modules/react/index.js", "/packages/client/src/x.ts"); a real absolute
+ * path or a relative one is taken as it is.
+ */
+function candidateFiles(source, roots) {
+  const normalized = source.replace(/^webpack:\/\/\//, "").replace(/\\/g, "/");
+  const relative = normalized.replace(/^\/+/, "");
+  const candidates = path.isAbsolute(normalized) && existsSync(normalized) ? [normalized] : [];
+  for (const base of roots) candidates.push(path.resolve(base, relative));
+  return [...new Set(candidates)];
+}
+
 /** The package root a bundled source file belongs to: the last node_modules segment, or a workspace. */
 function packageRootOf(source, roots) {
-  const normalized = source.replace(/^webpack:\/\/\//, "").replace(/\\/g, "/");
-  const marker = normalized.lastIndexOf("node_modules/");
-  const candidates = [];
-  if (marker >= 0) {
-    const rest = normalized.slice(marker + "node_modules/".length).split("/");
-    const nameParts = rest[0].startsWith("@") ? rest.slice(0, 2) : rest.slice(0, 1);
-    const relativeRoot = normalized.slice(0, marker) + "node_modules/" + nameParts.join("/");
-    for (const base of roots) candidates.push(path.resolve(base, relativeRoot));
-  } else {
+  const repo = roots[roots.length - 1];
+  for (const file of candidateFiles(source, roots)) {
+    const marker = file.lastIndexOf(`node_modules${path.sep}`);
+    if (marker >= 0) {
+      const rest = file.slice(marker + `node_modules${path.sep}`.length).split(path.sep);
+      const nameParts = rest[0].startsWith("@") ? rest.slice(0, 2) : rest.slice(0, 1);
+      const root = path.join(file.slice(0, marker), "node_modules", ...nameParts);
+      if (existsSync(path.join(root, "package.json"))) return root;
+      continue;
+    }
     // A workspace package (packages/*, plugins): the nearest package.json inside the repository.
-    const repo = roots[roots.length - 1];
-    for (const base of roots) {
-      let dir = path.dirname(path.resolve(base, normalized));
-      while (dir.startsWith(repo) && dir !== path.dirname(dir)) {
-        if (existsSync(path.join(dir, "package.json"))) {
-          candidates.push(dir);
-          break;
-        }
-        dir = path.dirname(dir);
-      }
+    // Only a file that exists, or a wrong base would walk up into the app's own package.json.
+    if (!existsSync(file)) continue;
+    for (
+      let dir = path.dirname(file);
+      dir.startsWith(repo) && dir !== repo;
+      dir = path.dirname(dir)
+    ) {
+      if (existsSync(path.join(dir, "package.json"))) return dir;
     }
   }
-  return candidates.find((dir) => existsSync(path.join(dir, "package.json"))) ?? null;
+  return null;
 }
 
 function collectJs(exportDir, repoRoot, out) {
