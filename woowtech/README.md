@@ -1551,8 +1551,8 @@ node --test woowtech/*.test.mjs
 ### 24. 商標與第三方授權（上架合規）
 
 - 2026-10-13 擴充：Paseo 的 Apache-2.0 全文與版權，加上行動版軟體清單 `screens/settings/mobile-third-party-licenses.json`；`woowtech-mobile-licenses-section.tsx` 提供搜尋、每頁 20 筆、一次展開一個套件全文，支援繁中／英文及螢幕閱讀器的套件名稱與展開狀態。條款保留原文，Android SDK／ML Kit 專用條款不標成開源授權。
-- 本次盤點共 747 筆、189 份去重全文，另追查預編譯原生庫及 terminal WebView 內嵌 bundle。Hermes LLVH／dtoa 保留精確 source commit 的保守 notices，不宣稱每段原始碼都存留於 dead-stripped binary。
-- 清單依此分支的 iOS／Android production Metro source map、保存的原生建置資料與官方授權檔整理。它不是舊商店安裝檔的逐位元驗證；依賴更新或新 archive 產生後，要重新對照最終產物。開發快取移到外接位置時，可用 `WOOWTECH_METRO_WATCH_FOLDERS` 提供以系統 path delimiter 分隔的實際依賴根目錄，供 Metro 建立完整 file map。
+- 第一次盤點（10/13）共 747 筆、189 份去重全文。2026-11-28 依上游 v0.18.1 重新產生：691 筆、156 份。手機的終端機已改用原生 grid（xterm 網頁版只在瀏覽器版用），舊的 terminal WebView 內嵌 bundle 項目移除。預編譯原生庫（Skia、Fresco、libavif、Hermes、NDK libc++、React Native 的 Folly／glog 等、SQLite）逐項對到 v0.18.1 的版本與平台，補上原本漏列的 Adobe DNG SDK、NDK cpu-features，以及 Hermes V1 帶進來的 Boost.Context；SQLite 的全文改成 SQLite 原始碼裡的公有領域聲明（舊版誤放 Unlicense 範本）。Hermes LLVH／dtoa 保留精確 source commit 的保守 notices，不宣稱每段原始碼都存留於 dead-stripped binary。
+- 重新產生用手動 workflow `mobile-license-evidence.yml`（工具 `woowtech/tools/mobile-licenses.mjs`）：從正式版 iOS／Android bundle 的 source map、Gradle `releaseRuntimeClasspath`、Podfile.lock 與 CocoaPods acknowledgements 收集證據，和現有清單比對後產生提案與報告（run 的 Step summary）。沒有證據的預編譯原生庫照舊沿用，報告會列出來要人對版本；「Needs a person's look」的項目逐一處理後才提交，手動補的全文之後重跑會依名稱沿用。依賴更新後重跑：`gh workflow run mobile-license-evidence.yml -f source_ref=<ref> -f brand=woowtech`。它不是舊商店安裝檔的逐位元驗證。開發快取移到外接位置時，可用 `WOOWTECH_METRO_WATCH_FOLDERS` 提供以系統 path delimiter 分隔的實際依賴根目錄，供 Metro 建立完整 file map。
 
 - 依據：協調資料夾的 `coord/reports/logo-usage-research.md`（逐家研究，不在 repo 裡，不是法律意見）。
 - owner 的決定（2026-09-30）：
