@@ -1623,7 +1623,10 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
             <>
               <GeneralSection settings={settings} handleLanguageChange={handleLanguageChange} />
               <SendingSection />
-              {isDesktopApp ? <OpenLocationSection /> : null}
+              {/* The web splits panes too; the phone layout has no side pane to open into. */}
+              {isDesktopApp || (isWeb && !isCompactLayout) ? (
+                <OpenLocationSection showServiceUrls={isDesktopApp} />
+              ) : null}
             </>
           );
         case "diagnostics":

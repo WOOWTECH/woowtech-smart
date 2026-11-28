@@ -83,8 +83,11 @@ function ServiceUrlRow() {
   );
 }
 
-/** Where things open: files, diffs, subagents, pull requests, and script URLs. Desktop only. */
-export function OpenLocationSection() {
+/**
+ * Where things open: files, diffs, subagents, pull requests, and script URLs. Script URLs open in
+ * the desktop app's own browser, so only the desktop app shows that row.
+ */
+export function OpenLocationSection({ showServiceUrls = true }: { showServiceUrls?: boolean }) {
   const { t } = useTranslation();
   const { settings, updateSettings } = useAppSettings();
   const handleDestinationChange = useCallback(
@@ -116,7 +119,7 @@ export function OpenLocationSection() {
           allowExplorer
           onDestinationChange={handleDestinationChange}
         />
-        <ServiceUrlRow />
+        {showServiceUrls ? <ServiceUrlRow /> : null}
       </SettingsCard>
     </SettingsSection>
   );
