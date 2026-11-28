@@ -5,8 +5,8 @@
 // Android release runtime classpath. .github/workflows/mobile-license-evidence.yml runs each step.
 //
 //   node woowtech/tools/mobile-licenses.mjs js <export dir> <repo root> <out.json>
-//   node woowtech/tools/mobile-licenses.mjs maven <dependencies.txt> <gradle files-2.1 dir> <out.json>
-//   node woowtech/tools/mobile-licenses.mjs pods <Podfile.lock as JSON> <acknowledgements as JSON> <out.json>
+//   node woowtech/tools/mobile-licenses.mjs maven <dependencies.txt> <gradle files-2.1 dir> <repo root> <out.json>
+//   node woowtech/tools/mobile-licenses.mjs pods <Podfile.lock as JSON> <acknowledgements as JSON> <ios dir> <repo root> <out.json>
 //   node woowtech/tools/mobile-licenses.mjs assemble <current list> <js.json> <maven.json> <pods.json> <out list> <report.md>
 //
 // Conservative like the first inventory: every pod CocoaPods resolves for the app target is listed,
@@ -29,7 +29,7 @@ const writeJson = (file, value) => writeFileSync(file, `${JSON.stringify(value, 
 const LICENSE_FILE = /^(licen[cs]e|copying|notice)(\.|-|_|$)/i;
 // Words that need a person's look before the list claims a notice is satisfied.
 const REVIEW_WORDS =
-  /GPL|MPL|EPL|CDDL|CC-|Creative Commons|SEE LICENSE|UNLICENSED|Commercial|Proprietary/i;
+  /\b(?:A?L?GPL|MPL|EPL|CDDL)\b|\bCC-|Creative Commons|SEE LICENSE|UNLICENSED|Commercial|Proprietary/i;
 
 function walk(dir, keep, found = []) {
   for (const name of readdirSync(dir)) {
@@ -98,6 +98,29 @@ function packageRootOf(source, roots) {
   return null;
 }
 
+/**
+ * A bundled package's name, version and license. A module inside the repository that declares no
+ * license is part of the app's own source, so it carries the repository's license (Paseo's).
+ */
+function packageEntry(pkg, real, repo) {
+  const workspace = !real.includes(`${path.sep}node_modules${path.sep}`);
+  let licenses = declaredLicenses(pkg);
+  let files = licenseFiles(real);
+  if (workspace && licenses.length === 0 && files.length === 0) {
+    licenses = declaredLicenses(readJson(path.join(repo, "package.json")));
+    files = licenseFiles(repo);
+  }
+  return {
+    name: pkg.name,
+    version: pkg.version,
+    root: path.relative(repo, real),
+    workspace,
+    licenses,
+    licenseFiles: files,
+    platforms: [],
+  };
+}
+
 function collectJs(exportDir, repoRoot, out) {
   const repo = realpathSync(repoRoot);
   const appDir = path.join(repo, "packages/app");
@@ -126,15 +149,7 @@ function collectJs(exportDir, repoRoot, out) {
       }
       if (pkg.name === appName || real === repo) continue;
       const key = `${pkg.name}@${pkg.version}`;
-      const entry = packages.get(key) ?? {
-        name: pkg.name,
-        version: pkg.version,
-        root: path.relative(repo, real),
-        workspace: !real.includes(`${path.sep}node_modules${path.sep}`),
-        licenses: declaredLicenses(pkg),
-        licenseFiles: licenseFiles(real),
-        platforms: [],
-      };
+      const entry = packages.get(key) ?? packageEntry(pkg, real, repo);
       if (!entry.platforms.includes(platform)) entry.platforms.push(platform);
       packages.set(key, entry);
     }
@@ -160,9 +175,13 @@ function parseGradleTree(text) {
     if (!match) continue;
     const [, group, artifact, declared, resolved, tail] = match;
     if (/\((n|c)\)/.test(tail) || group === "project") continue;
-    const version = resolved ?? declared;
+    // A substitution names the module that replaces this one: "-> com.facebook.react:react-android:0.86.3".
+    const coordinate = resolved?.includes(":")
+      ? resolved
+      : `${group}:${artifact}:${resolved ?? declared}`;
+    const version = coordinate.split(":")[2];
     if (!version || version.includes("{")) continue;
-    coordinates.add(`${group}:${artifact}:${version}`);
+    coordinates.add(coordinate);
   }
   return [...coordinates].sort();
 }
@@ -177,6 +196,30 @@ function pomPath(cacheDir, group, artifact, version) {
   return null;
 }
 
+/** Maven repositories some npm packages ship ("local-maven-repo"), found once per run. */
+let localMavenRepositories = [];
+
+function findLocalMavenRepositories(repo) {
+  const found = [];
+  const nodeModules = path.join(repo, "node_modules");
+  if (!existsSync(nodeModules)) return found;
+  const consider = (dir) => {
+    for (const candidate of [
+      path.join(dir, "local-maven-repo"),
+      path.join(dir, "android", "local-maven-repo"),
+    ]) {
+      if (existsSync(candidate)) found.push(candidate);
+    }
+  };
+  for (const name of readdirSync(nodeModules)) {
+    const dir = path.join(nodeModules, name);
+    if (!name.startsWith("@")) consider(dir);
+    else if (statSync(dir).isDirectory())
+      for (const scoped of readdirSync(dir)) consider(path.join(dir, scoped));
+  }
+  return found;
+}
+
 const MAVEN_REPOSITORIES = [
   "https://dl.google.com/dl/android/maven2",
   "https://repo.maven.apache.org/maven2",
@@ -187,6 +230,10 @@ async function readPom(cacheDir, group, artifact, version) {
   const cached = pomPath(cacheDir, group, artifact, version);
   if (cached) return readFileSync(cached, "utf8");
   const relative = `${group.replace(/\./g, "/")}/${artifact}/${version}/${artifact}-${version}.pom`;
+  for (const local of localMavenRepositories) {
+    if (existsSync(path.join(local, relative)))
+      return readFileSync(path.join(local, relative), "utf8");
+  }
   for (const repository of MAVEN_REPOSITORIES) {
     const response = await fetch(`${repository}/${relative}`, {
       headers: { "user-agent": "woowtech-license-audit" },
@@ -223,7 +270,8 @@ async function pomLicenses(cacheDir, group, artifact, version, depth = 0) {
   return { licenses: [], source: "no licenses in pom" };
 }
 
-async function collectMaven(treeFile, cacheDir, out) {
+async function collectMaven(treeFile, cacheDir, repoRoot, out) {
+  localMavenRepositories = findLocalMavenRepositories(repoRoot);
   const coordinates = parseGradleTree(readFileSync(treeFile, "utf8"));
   if (coordinates.length === 0) throw new Error(`no resolved components in ${treeFile}`);
   const components = [];
@@ -237,7 +285,22 @@ async function collectMaven(treeFile, cacheDir, out) {
   console.log(`maven: ${components.length} components, ${missing} without a declared license`);
 }
 
-function collectPods(lockJsonFile, ackJsonFile, out) {
+/** The license of the package a development pod comes from, through Podfile.lock's EXTERNAL SOURCES. */
+function podPackageNotice(lock, name, iosDir, repo) {
+  const source = lock["EXTERNAL SOURCES"]?.[name]?.[":path"];
+  if (!source) return null;
+  for (let dir = path.resolve(iosDir, source); dir.startsWith(repo); dir = path.dirname(dir)) {
+    const manifest = path.join(dir, "package.json");
+    if (!existsSync(manifest) || !readJson(manifest).name) continue;
+    const entry = packageEntry(readJson(manifest), realpathSync(dir), repo);
+    const text = entry.licenseFiles.map((file) => file.text).join("\n\n");
+    return text ? { license: entry.licenses.join(" AND "), text, from: entry.name } : null;
+  }
+  return null;
+}
+
+function collectPods(lockJsonFile, ackJsonFile, iosDir, repoRoot, out) {
+  const repo = realpathSync(repoRoot);
   const lock = readJson(lockJsonFile);
   const versions = new Map();
   for (const item of lock.PODS ?? []) {
@@ -252,13 +315,15 @@ function collectPods(lockJsonFile, ackJsonFile, out) {
   }
   const pods = [...versions.entries()]
     .map(([name, version]) => {
-      const notice = notices.get(name);
+      const fromPackage = podPackageNotice(lock, name, iosDir, repo);
+      const notice = notices.get(name) ?? fromPackage;
       return {
         name,
         version,
-        license: notice?.license ?? "",
+        license: notice?.license || fromPackage?.license || "",
         text: notice?.text ?? null,
         sha256: notice ? sha256(notice.text) : null,
+        noticeFrom: notices.has(name) ? "acknowledgements" : (fromPackage?.from ?? null),
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));

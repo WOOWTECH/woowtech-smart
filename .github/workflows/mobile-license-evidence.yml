@@ -122,7 +122,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
           cp "$RUNNER_TEMP/dependencies.txt" "$RUNNER_TEMP/evidence/"
-          node "$TOOL" maven "$RUNNER_TEMP/dependencies.txt" "$HOME/.gradle/caches/modules-2/files-2.1" "$RUNNER_TEMP/evidence/maven.json"
+          node "$TOOL" maven "$RUNNER_TEMP/dependencies.txt" "$HOME/.gradle/caches/modules-2/files-2.1" . "$RUNNER_TEMP/evidence/maven.json"
       - uses: actions/upload-artifact@v4
         with:
           name: license-evidence-maven
@@ -170,7 +170,7 @@ jobs:
           cp "$LOCK" "$RUNNER_TEMP/evidence/Podfile.lock"
           ruby -ryaml -rjson -e 'puts JSON.generate(YAML.load_file(ARGV[0]))' "$LOCK" > "$RUNNER_TEMP/evidence/podfile-lock.json"
           plutil -convert json -o "$RUNNER_TEMP/evidence/acknowledgements.json" "$ACK"
-          node "$TOOL" pods "$RUNNER_TEMP/evidence/podfile-lock.json" "$RUNNER_TEMP/evidence/acknowledgements.json" "$RUNNER_TEMP/evidence/pods.json"
+          node "$TOOL" pods "$RUNNER_TEMP/evidence/podfile-lock.json" "$RUNNER_TEMP/evidence/acknowledgements.json" packages/app/ios . "$RUNNER_TEMP/evidence/pods.json"
       - uses: actions/upload-artifact@v4
         with:
           name: license-evidence-pods
