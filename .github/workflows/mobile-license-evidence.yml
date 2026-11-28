@@ -5,11 +5,6 @@ name: Mobile license evidence
 # names the evidence). It builds nothing that ships and publishes nothing: a person reviews the report
 # and commits the list. source_ref picks the code to inventory; the tool comes from this workflow's commit.
 on:
-  # Temporary: GitHub only lets a manual run address a workflow that already has a run, so the
-  # first run comes from this push. The next commit removes this trigger.
-  push:
-    branches: [mobile/license-evidence-1128]
-    paths: [.github/workflows/mobile-license-evidence.yml]
   workflow_dispatch:
     inputs:
       source_ref:
