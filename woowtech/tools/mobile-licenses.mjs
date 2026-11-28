@@ -85,12 +85,14 @@ function packageRootOf(source, roots) {
     // A workspace package (packages/*, plugins): the nearest package.json inside the repository.
     // Only a file that exists, or a wrong base would walk up into the app's own package.json.
     if (!existsSync(file)) continue;
+    // A nested package.json that only sets "type" or "sideEffects" is not the package's root.
     for (
       let dir = path.dirname(file);
       dir.startsWith(repo) && dir !== repo;
       dir = path.dirname(dir)
     ) {
-      if (existsSync(path.join(dir, "package.json"))) return dir;
+      const manifest = path.join(dir, "package.json");
+      if (existsSync(manifest) && readJson(manifest).name) return dir;
     }
   }
   return null;
@@ -118,6 +120,10 @@ function collectJs(exportDir, repoRoot, out) {
       }
       const real = realpathSync(root);
       const pkg = readJson(path.join(real, "package.json"));
+      if (!pkg.name || !pkg.version) {
+        unresolved.add(source);
+        continue;
+      }
       if (pkg.name === appName || real === repo) continue;
       const key = `${pkg.name}@${pkg.version}`;
       const entry = packages.get(key) ?? {
