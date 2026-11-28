@@ -60,15 +60,16 @@ describe("notifications settings model", () => {
   });
 
   it("updates individual built-in event switches without mutating other preferences", () => {
+    // woowtech smart: agent finished is on by default (owner 2026-11-28), so this turns it off.
     const next = setNotificationEventEnabled(
       DEFAULT_NOTIFICATION_PREFERENCES,
       "agentFinished",
-      true,
+      false,
     );
-    expect(next.events.agentFinished).toBe(true);
+    expect(next.events.agentFinished).toBe(false);
     expect(next.events.agentPermission).toBe(true);
     expect(next.events.agentError).toBe(true);
-    expect(DEFAULT_NOTIFICATION_PREFERENCES.events.agentFinished).toBe(false);
+    expect(DEFAULT_NOTIFICATION_PREFERENCES.events.agentFinished).toBe(true);
   });
 
   it("detects when any connected host with serverInfo lacks pushNotificationPreferences", () => {

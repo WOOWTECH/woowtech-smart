@@ -37,6 +37,7 @@ const CALL_ONLY = ["pi-agent-signing.yml", "native-parity.yml"];
 // Reviewed artifact verification: manual or reusable, never push/PR triggered.
 const MANUAL_VERIFICATION = [
   "windows-installed-verify.yml",
+  "mobile-license-evidence.yml",
   "settings-desktop-verify.yml",
   "settings-android-emulator.yml",
   "desktop-upgrade-retention.yml",

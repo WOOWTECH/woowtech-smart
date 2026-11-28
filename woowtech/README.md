@@ -971,6 +971,7 @@ node --test woowtech/*.test.mjs
   - 推播的部分只改 daemon（`websocket-server.ts` 的 import 和兩處呼叫），舊版 App 也有效。
   - 電腦上顯示（2026-11-15 在 elmomac 實測時發現）：上游 `session-context.tsx` 的 `notifyAgentAttention` 遇到 `error` 就 return，所以桌面版和網頁從來不顯示 agent 出錯的通知。daemon 交給在場電腦的 `error` 什麼都沒顯示，要等 3 分鐘沒人理才補推手機；沒有手機的人完全收不到。現在拿掉那行，`error` 跟另外兩種一樣顯示。標題照舊是「需要你的注意」；內文 daemon 一律送上游的英文 `Encountered an error.`，所以照原因換成「工作出錯停下了，點一下查看。」（`woowtech-agent-notification.ts`，英文和其他語言照上游）。手機照舊只靠推播（手機上 `sendOsNotification` 回 false）。這部分要新版桌面版和網頁版才有。
   - 怎麼在真機讓 agent 出錯：用不存在的模型沒用（Claude 回一則說明模型有問題的訊息，turn 照樣算完成）。要讓 Claude 的行程在回覆途中結束：先請它寫一篇長文，再對這個 agent 的 Claude 行程送 SIGTERM，daemon 記 `Claude Code process exited with code 143`，agent 變成 error。
+- 每種通知預設都開（owner 2026-11-28 選「改回 Smart 原本的做法」）：上游 0.18 起每台裝置在「設定 → 通知」自己選要收哪些，預設關掉「Agent finished」和「Terminal finished」。0.17 沒有這些開關，升級的人都沒存過偏好，會直接套預設值，照上游的話這兩種通知就默默停了。所以 `packages/protocol/src/notification-preferences.ts` 的 `DEFAULT_NOTIFICATION_PREFERENCES` 五種事件全開：App 的設定、手機註冊推播時帶給 daemon 的偏好都從它開始，每台裝置仍可自己關。沒帶偏好的舊版手機走 `push/index.ts` 的 `LEGACY_PUSH_NOTIFICATION_PREFERENCES`，本來就全開。守門是 `woowtech/desktop-notifications.test.mjs` 的「every notification event is on by default」。合併上游時，上游改了預設或斷言預設的測試，保留全開、跟著改測試。
 - Mac 顯示不出通知時改推手機（提案 4，owner 2026-10-05 同意；2026-10-06 加上 B：沒人理就補推）：daemon 只交給一個在場的用戶端顯示，不推播；Mac 的通知被關掉、還沒按允許、或 5 秒沒結果時，什麼都不會出現。現在：
   - daemon 交出通知時記下來（`woowtech-attention-fallback.ts`）：agent 用 agent ID 加這則訊息的 `timestamp`，terminal 用 terminal ID（同一個 terminal 只留最新的），也記下交給哪個 session。只記可以推播的（2026-11-14 起 `error` 也推，見下面「出錯也推播」），停止中本來就沒有對象。最多 64 則、60 秒。
   - App 的 `sendOsNotification` 回報沒顯示（桌面版是 `failed` 或 5 秒 `unconfirmed`，丟出錯誤也算）時，`utils/woowtech-notification-fallback.ts` 送 `attention.notification.report_display_failure.request`。手機不送：手機本來就只靠推播。只送給 `server_info.features.woowtechAttentionFallback` 是 true 的 daemon，官方 Paseo 不會有。
@@ -1580,8 +1581,8 @@ node --test woowtech/*.test.mjs
 ### 24. 商標與第三方授權（上架合規）
 
 - 2026-10-13 擴充：Paseo 的 Apache-2.0 全文與版權，加上行動版軟體清單 `screens/settings/mobile-third-party-licenses.json`；`woowtech-mobile-licenses-section.tsx` 提供搜尋、每頁 20 筆、一次展開一個套件全文，支援繁中／英文及螢幕閱讀器的套件名稱與展開狀態。條款保留原文，Android SDK／ML Kit 專用條款不標成開源授權。
-- 本次盤點共 747 筆、189 份去重全文，另追查預編譯原生庫及 terminal WebView 內嵌 bundle。Hermes LLVH／dtoa 保留精確 source commit 的保守 notices，不宣稱每段原始碼都存留於 dead-stripped binary。
-- 清單依此分支的 iOS／Android production Metro source map、保存的原生建置資料與官方授權檔整理。它不是舊商店安裝檔的逐位元驗證；依賴更新或新 archive 產生後，要重新對照最終產物。開發快取移到外接位置時，可用 `WOOWTECH_METRO_WATCH_FOLDERS` 提供以系統 path delimiter 分隔的實際依賴根目錄，供 Metro 建立完整 file map。
+- 第一次盤點（10/13）共 747 筆、189 份去重全文。2026-11-28 依上游 v0.18.1 重新產生：691 筆、156 份。手機的終端機已改用原生 grid（xterm 網頁版只在瀏覽器版用），舊的 terminal WebView 內嵌 bundle 項目移除。預編譯原生庫（Skia、Fresco、libavif、Hermes、NDK libc++、React Native 的 Folly／glog 等、SQLite）逐項對到 v0.18.1 的版本與平台，補上原本漏列的 Adobe DNG SDK、NDK cpu-features，以及 Hermes V1 帶進來的 Boost.Context；SQLite 的全文改成 SQLite 原始碼裡的公有領域聲明（舊版誤放 Unlicense 範本）。Hermes LLVH／dtoa 保留精確 source commit 的保守 notices，不宣稱每段原始碼都存留於 dead-stripped binary。
+- 重新產生用手動 workflow `mobile-license-evidence.yml`（工具 `woowtech/tools/mobile-licenses.mjs`）：從正式版 iOS／Android bundle 的 source map、Gradle `releaseRuntimeClasspath`、Podfile.lock 與 CocoaPods acknowledgements 收集證據，和現有清單比對後產生提案與報告（run 的 Step summary）。沒有證據的預編譯原生庫照舊沿用，報告會列出來要人對版本；「Needs a person's look」的項目逐一處理後才提交，手動補的全文之後重跑會依名稱沿用。依賴更新後重跑：`gh workflow run mobile-license-evidence.yml -f source_ref=<ref> -f brand=woowtech`。它不是舊商店安裝檔的逐位元驗證。開發快取移到外接位置時，可用 `WOOWTECH_METRO_WATCH_FOLDERS` 提供以系統 path delimiter 分隔的實際依賴根目錄，供 Metro 建立完整 file map。
 
 - 依據：協調資料夾的 `coord/reports/logo-usage-research.md`（逐家研究，不在 repo 裡，不是法律意見）。
 - owner 的決定（2026-09-30）：

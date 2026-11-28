@@ -203,6 +203,7 @@ export async function expectNotificationSwitchState(
   }
 }
 
+// woowtech smart: every event is on by default, the finished ones included (owner 2026-11-28).
 export async function expectDefaultNotificationSettings(page: Page): Promise<void> {
   await expectNotificationSwitchState(page, "Enable notifications", {
     checked: true,
@@ -217,7 +218,7 @@ export async function expectDefaultNotificationSettings(page: Page): Promise<voi
     disabled: false,
   });
   await expectNotificationSwitchState(page, "Agent finished", {
-    checked: false,
+    checked: true,
     disabled: false,
   });
   await expectNotificationSwitchState(page, "Terminal needs input", {
@@ -225,7 +226,7 @@ export async function expectDefaultNotificationSettings(page: Page): Promise<voi
     disabled: false,
   });
   await expectNotificationSwitchState(page, "Terminal finished", {
-    checked: false,
+    checked: true,
     disabled: false,
   });
   await expectNotificationSwitchState(page, "Plugin notifications", {

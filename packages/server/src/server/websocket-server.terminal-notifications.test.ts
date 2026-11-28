@@ -551,8 +551,15 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
           deliveries.push({ tokens });
         },
       });
-      // Token with explicit default preferences: terminalNeedsInput: true, terminalFinished: false
-      realPush.renew("ExponentPushToken[phone-default]", DEFAULT_NOTIFICATION_PREFERENCES);
+      // Token with terminalNeedsInput: true, terminalFinished: false (woowtech smart: the defaults
+      // turn every event on, owner 2026-11-28)
+      realPush.renew("ExponentPushToken[phone-default]", {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        events: {
+          ...DEFAULT_NOTIFICATION_PREFERENCES.events,
+          terminalFinished: false,
+        },
+      });
       // Token with terminalFinished: true, terminalNeedsInput: false
       realPush.renew("ExponentPushToken[phone-terminal-finished]", {
         ...DEFAULT_NOTIFICATION_PREFERENCES,

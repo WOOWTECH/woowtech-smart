@@ -1264,7 +1264,7 @@ describe("notification preferences storage", () => {
           notifications: {
             enabled: "invalid",
             events: {
-              agentFinished: true,
+              agentFinished: false,
               agentError: "nope",
             },
             plugins: {
@@ -1282,7 +1282,7 @@ describe("notification preferences storage", () => {
       enabled: true,
       events: {
         ...DEFAULT_NOTIFICATION_PREFERENCES.events,
-        agentFinished: true,
+        agentFinished: false,
       },
       plugins: {
         enabled: true,

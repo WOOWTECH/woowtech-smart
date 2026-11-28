@@ -83,12 +83,15 @@ describe("push notifications", () => {
     pushNotifications.renew("ExponentPushToken[legacy-device]");
     pushNotifications.renew("ExponentPushToken[modern-device]", DEFAULT_NOTIFICATION_PREFERENCES);
 
-    // Legacy tokens keep finished pushes; modern defaults skip them.
+    // Legacy tokens keep finished pushes; woowtech smart: so do Smart's defaults, which turn every
+    // event on (owner 2026-11-28).
     await pushNotifications.send(
       { title: "Agent finished", body: "Done" },
       { kind: "agent", reason: "finished" },
     );
-    expect(deliveries).toEqual([["ExponentPushToken[legacy-device]"]]);
+    expect(deliveries).toEqual([
+      ["ExponentPushToken[legacy-device]", "ExponentPushToken[modern-device]"],
+    ]);
 
     // woowtech smart: legacy tokens also keep error pushes, as Smart pushed errors before
     // preferences existed (owner 2026-11-14, woowtech/README.md 16).
@@ -97,7 +100,7 @@ describe("push notifications", () => {
       { kind: "agent", reason: "error" },
     );
     expect(deliveries).toEqual([
-      ["ExponentPushToken[legacy-device]"],
+      ["ExponentPushToken[legacy-device]", "ExponentPushToken[modern-device]"],
       ["ExponentPushToken[legacy-device]", "ExponentPushToken[modern-device]"],
     ]);
   });

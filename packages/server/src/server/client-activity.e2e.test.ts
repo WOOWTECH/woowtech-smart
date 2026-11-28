@@ -746,8 +746,15 @@ describe("client activity tracking", () => {
           },
         });
 
-        // Phone B uses defaults (agentFinished: false, agentError: true)
-        client2.registerPushToken("ExponentPushToken[phone-b]", DEFAULT_NOTIFICATION_PREFERENCES);
+        // Phone B turns agentFinished off and keeps agentError on (woowtech smart: the defaults
+        // turn every event on, owner 2026-11-28)
+        client2.registerPushToken("ExponentPushToken[phone-b]", {
+          ...DEFAULT_NOTIFICATION_PREFERENCES,
+          events: {
+            ...DEFAULT_NOTIFICATION_PREFERENCES.events,
+            agentFinished: false,
+          },
+        });
 
         const staleTime = new Date(Date.now() - PRESENCE_THRESHOLD_MS - 5_000).toISOString();
         client1.sendHeartbeat({
