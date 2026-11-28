@@ -439,7 +439,49 @@ function podEntry(pod, ctx) {
   return { id, name: pod.name, version: pod.version, platforms: ["ios"], licenses, documentIds };
 }
 
-function report(current, next, carried, review) {
+// Files that change with the list, read from the checkout it belongs to (the working directory).
+const LICENSES_SECTION = "packages/app/src/screens/settings/woowtech-mobile-licenses-section.tsx";
+const LICENSES_SPEC = "packages/app/e2e/browser/sidebar-help.spec.ts";
+const EXPORT_BASELINES = [
+  "woowtech/web/export-baseline.json",
+  "woowtech/web/export-baseline.apporo.json",
+];
+// As woowtech/web/check-export.mjs reads URLs: the list's texts ship in the web export.
+const URL_ORIGIN = /(?:https?|wss?):\/\/[A-Za-z0-9.-]+/g;
+const SCRIPT_URL = /https?:\/\/[^\s"'<>`]+\.m?js\b/g;
+const readIfExists = (file) => (existsSync(file) ? readFileSync(file, "utf8") : "");
+const normalizeOrigin = (origin) => origin.replace(/[.-]+$/, "").toLowerCase();
+
+/** The licenses test's page count, and the URLs in the texts the web export check would stop at. */
+function changesWithTheList(next) {
+  const changes = [];
+  const pageSize = Number(/const PAGE_SIZE = (\d+);/.exec(readIfExists(LICENSES_SECTION))?.[1]);
+  const expected = Number(/Page \d+ of (\d+)/.exec(readIfExists(LICENSES_SPEC))?.[1]);
+  if (pageSize > 0 && expected > 0) {
+    const pages = Math.ceil(next.entries.length / pageSize);
+    if (pages !== expected) {
+      changes.push(
+        `${LICENSES_SPEC}: expects ${expected} pages, the list has ${pages} (${pageSize} a page)`,
+      );
+    }
+  }
+  const texts = Object.values(next.documents).join("\n");
+  const origins = new Set([...texts.matchAll(URL_ORIGIN)].map(([url]) => normalizeOrigin(url)));
+  const scripts = new Set([...texts.matchAll(SCRIPT_URL)].map(([url]) => url));
+  for (const file of EXPORT_BASELINES.filter((name) => existsSync(name))) {
+    const baseline = readJson(file);
+    const known = new Set(baseline.origins.map(normalizeOrigin));
+    for (const origin of [...origins].filter((item) => !known.has(item)).sort()) {
+      changes.push(`${file}: add the origin ${origin}, which a license text names`);
+    }
+    for (const url of [...scripts].filter((item) => !baseline.scriptUrls.includes(item)).sort()) {
+      changes.push(`${file}: add the script URL ${url}, which a license text names`);
+    }
+  }
+  return changes;
+}
+
+function report(current, next, carried, review, changes) {
   const before = new Set(current.entries.map((entry) => entry.id));
   const beforeByName = new Map(current.entries.map((entry) => [nameKey(entry), entry]));
   const afterNames = new Set(next.entries.map(nameKey));
@@ -465,6 +507,7 @@ function report(current, next, carried, review) {
     "",
     `Documents: ${Object.keys(current.documents).length} before, ${Object.keys(next.documents).length} after.`,
     "",
+    ...section("Change with the list, then run CI with Playwright", changes),
     ...section(
       "Carried over without evidence: check their versions against the new build",
       carried.map((entry) => entry.id),
@@ -505,7 +548,8 @@ function assemble(currentFile, jsFile, mavenFile, podsFile, outFile, reportFile)
   );
   const next = { entries, documents };
   writeJson(outFile, next);
-  const { text, added, removed, changed } = report(current, next, carried, ctx.review);
+  const changes = changesWithTheList(next);
+  const { text, added, removed, changed } = report(current, next, carried, ctx.review, changes);
   writeFileSync(reportFile, text);
   console.log(
     `assembled ${entries.length} entries (${added.length} added, ${removed.length} removed, ${changed.length} new versions, ${ctx.review.length} to review)`,
