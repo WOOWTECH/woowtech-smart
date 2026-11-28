@@ -7,6 +7,7 @@ import { spawnSync as defaultSpawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { userInfo as defaultUserInfo } from "node:os";
 import { basename } from "node:path";
+import { stripAppImageRuntimeEnv } from "@getpaseo/server/process";
 import defaultLog from "electron-log/main";
 import { withoutLoginShellDaemonTarget } from "./login-shell-daemon-target.js";
 
@@ -410,6 +411,7 @@ function resolveShellEnv({ deps, timeoutMs }: ResolveShellEnvInput): ResolvedShe
   delete shellEnv.PASEO_NODE_ENV;
   delete shellEnv.PASEO_DESKTOP_MANAGED;
   delete shellEnv.PASEO_SUPERVISED;
+  stripAppImageRuntimeEnv(shellEnv, { platform: deps.platform });
 
   deps.logger.info("[login-shell-env] start", {
     shell,

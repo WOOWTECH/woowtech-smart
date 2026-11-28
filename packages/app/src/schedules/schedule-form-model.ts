@@ -724,6 +724,7 @@ function toFormState(state: ScheduleFormState): FormState {
     modeId: state.selectedMode,
     model: state.selectedModel,
     thinkingOptionId: state.selectedThinkingOptionId,
+    systemPrompt: "",
   };
 }
 

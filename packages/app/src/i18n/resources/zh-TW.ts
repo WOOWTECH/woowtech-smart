@@ -293,6 +293,7 @@ export const zhTW: TranslationResources = {
     archived: {
       callout: "此 Agent 已封存",
       unarchive: "取消封存",
+      unarchiving: "正在取消封存...",
     },
   },
   sessions: {
@@ -653,6 +654,24 @@ export const zhTW: TranslationResources = {
         failedToLoad: "頁面載入失敗",
         invalidUrl: "瀏覽器 URL 無效",
         unsupportedProtocol: "已阻止不支援的瀏覽器 URL：{{protocol}}",
+      },
+      routing: {
+        tooltipHost: "正在通過 {{hostName}} 瀏覽。點選切換為本機瀏覽。",
+        tooltipLocal: "正在本機瀏覽。點選切換為通過 {{hostName}} 瀏覽。",
+        switchToLocal: "將瀏覽器路由從 {{hostName}} 切換為本機",
+        switchToHost: "將瀏覽器路由從本機切換為 {{hostName}}",
+      },
+      proxy: {
+        connecting: "正在連線到 {{hostName}}...",
+        reconnecting: "正在重新連線到 {{hostName}}...",
+        updateTitle: "請更新 {{hostName}} 以透過此主機瀏覽",
+        updateDescription: "此主機尚不支援瀏覽器代理。",
+        routedTitle: "路由主機不支援瀏覽器代理",
+        routedDescription: "請直接連線到此主機，或改為本機瀏覽。",
+        offlineTitle: "{{hostName}} 已離線",
+        offlineDescription: "請等待主機重新連線，或改為本機瀏覽。",
+        errorTitle: "無法連線瀏覽器代理",
+        browseLocally: "本機瀏覽",
       },
     },
     terminal: {
@@ -1891,15 +1910,16 @@ export const zhTW: TranslationResources = {
     waysToConnect: "連線方式",
     docs: "文件",
     docsAccessibility: "開啟連線文件",
-    recommended: "推薦",
     relay: {
       title: "中繼",
-      hint: "端到端加密，掃描 QR Code",
+      hint: "無需設定，端到端加密，掃描 QR Code",
     },
     tailscale: {
       hint: "透過你的 tailnet 直連，輸入位址即可",
       unavailable: "此主機未執行 Tailscale",
       install: "取得 Tailscale",
+      refresh: "重新整理",
+      refreshing: "重新整理中...",
       waiting: "正在等待此主機上的 Tailscale 啟動",
       alwaysOn: "始終開啟，因為此主機已接受 Tailscale 連線",
       socket: "已關閉，因為此主機監聽的是本機套接字",
@@ -2376,7 +2396,7 @@ export const zhTW: TranslationResources = {
     title: "設定",
     loading: "正在載入設定...",
     groups: {
-      app: "應用程式",
+      app: "此裝置",
       host: "主機",
     },
     hostPicker: {
@@ -2394,7 +2414,9 @@ export const zhTW: TranslationResources = {
     groupInfo: "關於 {{title}}",
     sections: {
       general: "通用",
+      hosts: "主機",
       chat: "聊天",
+      chatAndPanes: "聊天與面板",
       appearance: "外觀",
       sidebar: "側邊欄",
       terminal: "終端機",
@@ -2407,6 +2429,15 @@ export const zhTW: TranslationResources = {
       permissions: "權限",
       diagnostics: "診斷",
       about: "關於",
+    },
+    clientHosts: {
+      title: "已儲存的主機",
+      info: "此裝置連線的主機。這裡的名稱、圖示、徽章和連線路徑僅影響此裝置。",
+      backToHosts: "返回主機",
+      routesTitle: "此裝置的連線方式",
+      routesInfo: "此裝置連線到該主機的已儲存路徑。Paseo 會自動選擇最快的可用路徑。",
+      addRoute: "新增路徑",
+      activeRoute: "目前使用",
     },
     layout: {
       openInSidePane: {
@@ -2462,6 +2493,47 @@ export const zhTW: TranslationResources = {
     },
     notifications: {
       title: "通知",
+      enabled: {
+        label: "啟用通知",
+        description: "在此裝置上接收來自 Agent、終端機和外掛的通知",
+        pausedDescription: "此裝置上的所有通知（包括外掛通知）均已暫停",
+      },
+      events: {
+        title: "事件",
+        agentPermission: {
+          label: "Agent 需要權限",
+          description: "審批、計畫與提問",
+        },
+        agentError: {
+          label: "Agent 出錯",
+          description: "當 Agent 因錯誤停止時",
+        },
+        agentFinished: {
+          label: "Agent 已完成",
+          description: "當 Agent 完成一輪迴復時",
+        },
+        terminalNeedsInput: {
+          label: "終端機等待輸入",
+          description: "當終端機指令正在等待輸入時",
+        },
+        terminalFinished: {
+          label: "終端機指令完成",
+          description: "當終端機指令執行結束時",
+        },
+      },
+      plugins: {
+        title: "外掛",
+        enabled: {
+          label: "外掛通知",
+          description: "允許已安裝的外掛傳送通知",
+        },
+        empty: "已安裝的外掛會顯示在這裡，方便你單獨靜音",
+      },
+      legacyHostTitle: "更新主機以同步推送偏好",
+      legacyHostHint: "更新已連線的主機，以同步此裝置上的自訂推送通知偏好設定",
+      desktop: {
+        title: "系統",
+      },
       permission: "通知權限",
       refreshAccessibility: "重新整理通知權限",
       playSound: "播放聲音",
@@ -2479,6 +2551,7 @@ export const zhTW: TranslationResources = {
       projects: "專案",
       connections: "連線",
       agents: "Agent",
+      tools: "工具與提示詞",
       agentProfiles: "Agent 設定檔",
       metadata: "後設資料",
       voice: "語音",
@@ -2488,6 +2561,7 @@ export const zhTW: TranslationResources = {
       terminals: "終端機",
       plugins: "外掛",
       host: "概覽",
+      daemon: "daemon",
     },
     plugins: {
       logs: {
@@ -2637,7 +2711,7 @@ export const zhTW: TranslationResources = {
     },
     metadataGeneration: {
       title: "後設資料產生",
-      description: "選擇 Paseo 用於工作區標題、分支名稱、提交訊息和拉取請求草稿的模型",
+      description: "選擇 Paseo 用於工作區標題、分支名稱、提交訊息和拉取請求草稿的模型和指令",
       selection: "模型選擇",
       automatic: "自動",
       preferred: "手動",
@@ -2645,6 +2719,10 @@ export const zhTW: TranslationResources = {
       preferredHint: "選擇 Paseo 使用的模型",
       model: "模型",
       modelHint: "只使用此模型。如果失敗，Paseo 不會嘗試其他模型",
+      instructions: "指令",
+      instructionsHint: "應用程式於此主機上產生的所有後設資料",
+      instructionsPlaceholder:
+        "例如：使用簡體中文編寫。保持標題與提交資訊的風格一致。不要使用破折號。",
       docs: "文件",
       saveError: "無法更新後設資料產生設定",
     },
@@ -3166,6 +3244,10 @@ export const zhTW: TranslationResources = {
           delete: "刪除技能",
         },
       },
+      tools: {
+        instructionsTitle: "指令",
+        toolsTitle: "代理工具",
+      },
       orchestration: {
         title: "編排",
         unavailable: "連線到這個主機以管理編排",
@@ -3232,6 +3314,7 @@ export const zhTW: TranslationResources = {
       },
       agentProfiles: {
         sectionTitle: "Agent 設定",
+        sectionDescription: "儲存可快速選用的 Agent 設定，Agent 委派工作時也可以使用這些設定",
         unavailable: "連線到這個主機以管理 Agent 設定",
         unsupported: "此主機執行的 Daemon 尚不支援 Agent 設定",
         emptyState: "還沒有設定。新增一個以便使用儲存的供應商和模型啟動 Agent。",
@@ -3255,6 +3338,9 @@ export const zhTW: TranslationResources = {
         featuresLabel: "功能",
         featureCount: "{{count}} 個功能",
         featureCountOne: "{{count}} 個功能",
+        systemPromptLabel: "System prompt",
+        systemPromptPlaceholder: "專注於佈局、無障礙和設計 token。",
+        systemPromptHint: "僅適用於新 Agent",
         notesLabel: "適用場景",
         notesPlaceholder: "用於 UI 工作 — 元件、佈局和設計 token。",
         notesHint: "幫助 Agent 在啟動另一個 Agent 時選擇此設定。",
@@ -3292,6 +3378,7 @@ export const zhTW: TranslationResources = {
         },
       },
       daemon: {
+        runtimeTitle: "代理執行時",
         rename: {
           editLabel: "編輯標籤",
           title: "重新命名主機",
